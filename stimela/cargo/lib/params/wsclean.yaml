@@ -1,0 +1,135 @@
+base_inputs:
+  ms:
+    info: Measurement set(s)
+    writable: true
+    dtype: MS
+    required: true
+    policies:
+      positional: true
+  prefix:
+    info: Prefix of output products
+    dtype: str
+    nom_de_guerre: name
+    required: true
+    mkdir: true
+  column:
+    dtype: str
+    nom_de_guerre: data-column
+  nchan:
+    info: Channels out
+    dtype: int
+    nom_de_guerre: channels-out
+  deconvolution_channels:
+    info: Channels to use in deconvolution
+    dtype: int
+  intervals_out:
+    dtype: int
+  threads:
+    info: Threads
+    dtype: int
+    nom_de_guerre: j
+  make-psf-only:
+    info: Make PSF only
+    dtype: bool
+  weight:
+    info: "Weightmode can be: natural, uniform, briggs. Default: uniform. When using Briggs' weighting, add the robustness parameter, like: '-weight briggs 0.5'"
+    dtype: str
+    policies:
+      split: " "
+      repeat: list
+  size:
+    info: Image size in pixels (square image)
+    dtype: Union[int, Tuple[int, int]]
+    policies:
+      repeat: list
+      format_list: ["{0}", "{1}"]
+      format_list_scalar: ["{0}", "{0}"]
+  # sizes:
+  #   info: Image sizes in pixels (width, height)
+  #   dtype: Tuple[int, int]
+  #   policies:
+  #     repeat: list
+  #     format_list: ["{sizes[0]}", "{sizes[1]}"]
+  #   nom_de_guerre: size
+  multiscale:
+    dtype: bool
+  scale:
+    info: Angular pixel size
+    dtype: Union[str, float]
+    required: true
+  taper_gaussian:
+    dtype: str
+  niter:
+    info: Number of minor clean iterations
+    dtype: int
+  nmiter:
+    info: Max number of major clean iterations
+    dtype: int
+  fits_mask:
+    dtype: File
+  threshold:
+    dtype: float
+  auto_threshold:
+    dtype: float
+  auto_mask:
+    dtype: float
+  gain:
+    dtype: float
+  mgain:
+    dtype: float
+  baseline_averaging:
+    dtype: float
+  join_channels:
+    dtype: bool
+  fit_spectral_pol:
+    dtype: int
+  fit_beam:
+    dtype: bool
+  elliptical_beam:
+    dtype: bool
+  padding:
+    dtype: float
+  nwlayers:
+    dtype: int
+  nwlayers_factor:
+    dtype: float
+  save_source_list:
+    dtype: bool
+  store_imaging_weights:
+    dtype: bool
+  parallel_deconvolution:
+    dtype: int
+  parallel_gridding:
+    dtype: int
+  predict:
+    dtype: bool
+  no_update_model_required:
+    dtype: bool
+  cont:
+    dtype: bool
+    nom_de_guerre: continue 
+  subtract_model:
+    dtype:  bool
+  use_wgridder:
+    dtype: bool
+  temp_dir:
+    dtype: Directory
+  log_time:
+    dtype: bool
+  interval:
+    info: Time intervals to image
+    dtype: List[int]
+    required: false
+    policies:
+      repeat: list
+
+base_outputs:
+  msout:
+    info: Output MS
+    dtype: MS
+    implicit: "{current.ms}"
+  source_list:
+    info: Source list
+    dtype: File
+    implicit: "{current.prefix}-sources.txt"
+    must_exist: false

@@ -1,0 +1,54 @@
+name: casa_applycal
+info: "Apply calibrations solutions(s) to data"
+
+image: casa
+# versions: x, y, z     ## only needed if only a subset of the defined base image versions is supported by this cab: default is all versions
+
+#prefix: 
+#binary: applycal
+command: casa
+
+defaults:
+  _use:
+    - lib.params.casa.mssel_defaults
+
+  applymode: ""
+  docallib: false
+
+inputs:
+  # "_use" is a magic word which means include section(s). This pulls some standard parameter definitions from casa.yaml,
+  # _into the section in which the _use directive appears_. So it's like an include. 
+  _use:
+    - lib.params.casa.mssel_inputs
+  #...to which we can add more
+
+  docallib:
+    info: "Use callib or traditional cal apply parameters"
+    dtype: bool
+
+  applymode:
+    info: "Calibration mode: '' = 'calflag','calflagstrict','trial','flagonly','flagonlystrict', or 'calonly'"
+    dtype: str
+    choices: 
+      - calflag 
+      - calflagstrict 
+      - trial 
+      - flagonly 
+      - flagonlystrict 
+      - calonly
+
+outputs:
+  visout:
+    dtype: Directory
+    implicit: "{inputs.vis}"
+
+# same here, using _use to include common behaviours, but we also add an extra one for the cleanup section
+management:
+  _use: base.casa.management.common
+
+  cleanup:         
+    applycal.last: [DELETE]
+  
+  # an interesting point here is that _use implements a "deep merge". I.e. the contents of 'cleanup' here do not
+  # replace 'casa.management.common.cleanup', but are rather added to it. This is probably what we want for most 
+  # cases. If needed, we can code up a _use_shallow which implements the replace behaviour.

@@ -1,0 +1,211 @@
+name: shadems
+image: stimela/shadems
+command: shadems
+info: Rapid Measurement Set plotting with xarray-ms and datashader.
+
+defaults:
+  norm: auto
+  xcanvas: 1280
+  ycanvas: 900
+
+# default policies for parameters
+policies:
+  prefix: '--'
+  positional: false
+  repeat: list
+
+inputs:
+  ms:
+    info: Measurement set to plot
+    required: true
+    writable: true
+    dtype: MS
+    policies:
+      positional: true
+  xaxis:
+    info: 'Xaxis to plot. Can be any MS column name, also: CHAN, FREQ, CORR, ROW,
+      WAVEL, U, V, W, UV, and, for complex columns, keywords such as: ''amp'', ''phase'',
+      ''real'', ''imag''. You can also specify correlations, e.g. ''DATA:phase:XX''.
+      The order of specifiers does not matter.'
+    dtype: str
+  yaxis:
+    info: Y axis to plot. Must be given the same number of times as --xaxis.
+    dtype: str
+  aaxis:
+    info: Intensity axis. If none, plot intensity (a.k.a. alpha channel) is proportional
+      to density of points.Otherwise, a reduction function (--ared) is applied to
+      the given values, and the result is used to determine intensity.
+    dtype: str
+  ared:
+    info: Alpha axis reduction function.
+    choices:
+    - count
+    - any
+    - sum
+    - min
+    - max
+    - mean
+    - std
+    - first
+    - last
+    - mode
+    dtype: str
+  colour-by:
+    info: Colour axis. All columns and variations listed under --xaxis are available
+      for colouring by.
+    dtype: str
+  col:
+    info: Name of visibility column. Default is DATA. Two-column arithmetic is recognized.
+    dtype: str
+  noflags:
+    info: Ignore flags. Default is to honour
+    dtype: bool
+  noconj:
+    info: Do not show conjugate points in u,v plots. Default is true.
+    dtype: bool
+  xmin:
+    info: Minimum x-axis value. Default is data min.
+    dtype: float
+  xmax:
+    info: Maximum x-axis value to plot. Default is data max.
+    dtype: float
+  ymin:
+    info: Minimum y-axis value. Default is data min.
+    dtype: float
+  ymax:
+    info: Maximum y-axis value to plot. Default is data max.
+    dtype: float
+  cmin:
+    info: Minimum colouring value. Default is data-min.
+    dtype: float
+  cmax:
+    info: Maximum colouring value.  Default is data-max.
+    dtype: float
+  cnum:
+    info: Number of colours to use.
+    dtype: int
+  iter-field:
+    info: Separate plots per field. Default is combine all.
+    dtype: bool
+  iter-antenna:
+    info: Separate plots per antenna. Default is combine all.
+    dtype: bool
+  iter-spw:
+    info: Separate plots per spw. Default is combine all.
+    dtype: bool
+  iter-scan:
+    info: Separate plots per scan. Default is combine all.
+    dtype: bool
+  iter-corr:
+    info: Separate plots per correlation / Stokes. Default is combine all.
+    dtype: bool
+  ant:
+    info: Antennas to plot (comma-separated list of names). Default is all.
+    dtype: Union[str, List[str]]
+    policies:
+      repeat: ','
+  ant-num:
+    info: Antennas to plot (comma-separated list of numbers, or a [start]:[stop][:step]
+      slice, overrides --ant).
+    dtype: Union[str, List[int]]
+    policies:
+      repeat: ','
+  baseline:
+    info: Baselines to plot, as 'ant1-ant2' (comma-separated list). Default is all.
+    dtype: Union[str, List[str]]
+    policies:
+      repeat: ','
+  spw:
+    info: Spectral windows (DDIDs) to plot (comma-separated list) Default is all.
+    dtype: Union[int, List[int]]
+    policies:
+      repeat: ','
+  field:
+    info: Field ID(s) to plot (comma-separated list). Default is all.
+    dtype: Union[int, str, List[str], List[int]]
+    policies:
+      repeat: ','
+  scan:
+    info: Scans to plot (comma-separated list). Default is all.
+    dtype: Union[int, List[int]]
+    policies:
+      repeat: ','
+  corr:
+    info: Correlations or Stokes to plot, use indices or labels (comma-separated list).
+      Default is all.
+    dtype: Union[str, List[str]]
+    policies:
+      repeat: ','
+  chan:
+    info: Channel slice, as [start]:[stop][:step].  Default is to plot all.
+    dtype: str
+  xcanvas:
+    info: Canvas x-size in pixels.
+    dtype: int
+  ycanvas:
+    info: Canvas y-size in pixels.
+    dtype: int
+  norm:
+    info: Pixel scale normalization. Default is 'log' when colouring, and 'eq_hist'
+      when not.
+    choices:
+    - auto
+    - eq_hist
+    - cbrt
+    - log
+    - linear
+    dtype: str
+  cmap:
+    info: Colorcet map used without --colour-by.
+    dtype: str
+  bmap:
+    info: Colorcet map used when colouring by a continuous axis.
+    dtype: str
+  dmap:
+    info: Colorcet map used when colouring by a discrete axis.
+    dtype: str
+  spread-pix:
+    info: Dynamically spread rendered pixels to this size.
+    dtype: int
+  spread-thr:
+    info: Threshold parameter for spreading (0 to 1).
+    dtype: float
+  bgcol:
+    info: RGB hex code for background colour. Default FFFFFF (white).
+    dtype: str
+  fontsize:
+    info: Font size for all text elements.
+    dtype: float
+  suffix:
+    info: Suffix to be included in filenames.
+    dtype: str
+  png:
+    info: Output PNG name. Default is plot-{ms}{_field}{_Spw}{_Scan}{_Ant}-{label}{_alphalabel}{_colorlabel}{_suffix}.png
+    dtype: str
+  title:
+    info: Template for plot titles. Default title includes ms name, field, spw, scan,
+      antenna, plot title, alpha title and colour title.
+    dtype: str
+  xlabel:
+    info: Template for X axis labels. Default is x-axis name and unit
+    dtype: str
+  ylabel:
+    info: Template for Y axis labels. Default is y-axis name and unit
+    dtype: str
+  debug:
+    info: Enable debugging output.
+    dtype: bool
+  row-chunk-size:
+    info: Row chunk size for dask-ms. Larger chunks may or may not be faster, but
+      will certainly use more RAM.
+#    default: 100000
+    dtype: int
+  num-parallel:
+    info: Run up to N renderers in parallel. Default is serial. Use -j0 to auto-set
+      this to half the available cores.
+#    default: 1
+    dtype: int
+  profile:
+    info: Enable dask profiling output.
+#    default: false
+    dtype: bool
