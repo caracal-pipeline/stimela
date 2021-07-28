@@ -1,0 +1,99 @@
+cabs:
+  simms:
+    image: null
+    command: echo 
+    # simms
+    inputs:
+      msname:
+        dtype: str
+        required: true
+      tel:
+        dtype: str
+      dtime:
+        dtype: int
+      synthesis:
+        dtype: float
+    outputs:
+      ms:
+        dtype: MS
+        implicit: "{current.msname}"
+        must_exist: false
+        
+  cubical:
+    command: echo
+    # gocubical
+    virtual_env: 
+    # ~/.venv/cc
+    inputs:
+      ms:
+        dtype: MS
+        required: true
+        writable: true
+        nom_de_guerre: data-ms
+        must_exist: false   # for testing
+
+  wsclean:
+    image: null
+    command: echo
+    inputs:
+      ms:
+        must_exist: false  # for testing
+    outputs:
+      msout:
+        must_exist: false  # for testing
+
+  aimfast:
+    command: /bin/true ## dummy command for now, since this is just a dummy example step
+    inputs:
+      image:
+        dtype: str
+        required: true
+      dirty:
+        dtype: str
+        required: true
+
+recipe:
+  name: "demo recipe"
+  info: 'top level recipe definition'
+  aliases:
+    msname: selfcal.ms
+    telescope: makems.tel
+  defaults:
+    telescope: kat-7
+    selfcal_image_size: 1024
+  steps: 
+      makems:
+          cab: simms
+          params:
+              msname: "{recipe.msname}"
+              synthesis: 0.128
+      selfcal:
+          recipe:
+              name: "demo selfcal"
+              info: "this is a generic selfcal loop"
+              # _for:
+              #     selfcal_loop: 1,2,3     # repeat three times
+              steps:
+                  calibrate: 
+                      cab: cubical
+                      # _skip: "recipe.vars.selfcal_loop < 2"    # skip on first iteration, go straight to image
+                  image:
+                      cab: wsclean
+                      params:
+                          scale: "{recipe.scale}"
+                  evaluate:
+                      cab: aimfast
+                      params:
+                          image: "{previous.restored}"
+                          dirty: "{steps.image.dirty}"
+                      # _break_on: "self.dr_achieved"    # break out of recipe based on some output value
+              # the below formally specifies the inputs and outputs of the selfcal recipe
+              # aliases map directly to step inputs/outputs, and use their schema
+              aliases:
+                  ms: [calibrate.ms, image.ms]
+                  image_name: image.prefix
+              inputs:
+                  scale: 
+                    dtype: Union[str, float]
+              defaults:
+                  scale: 30asec
