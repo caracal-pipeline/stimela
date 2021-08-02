@@ -22,6 +22,7 @@ from . import runners
 Conditional = Optional[str]
 
 from scabha.cargo import Cargo, Cab
+from scabha.types import File, Directory, MS
 
 
 @dataclass
@@ -759,3 +760,22 @@ class Recipe(Cargo):
             Dictionary of formal outputs
         """
         return Step(recipe=self, params=params, info=f"wrapper step for recipe '{self.name}'").run()
+
+
+class PyRecipe(Recipe):
+    """ 
+        Interface to Recipe class for python recipes (not YAML recipes)
+    """
+    def __init__(self, name, dirs, backend=None, info=None, log=None):
+
+        self.backend = backend
+        self.name = name
+
+        self.inputs: Dict[str, Any] = {}
+
+        for dir_item in dirs:
+            self.inputs[dir_item] = { 
+                "dtype": Directory,
+                "default": dirs[dir_item]
+            }
+
