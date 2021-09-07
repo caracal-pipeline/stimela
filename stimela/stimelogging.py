@@ -42,6 +42,8 @@ class ConsoleColors():
     BOLD    = '\033[1m'  if sys.stdin.isatty() else ''
     DIM     = '\033[2m'  if sys.stdin.isatty() else ''
     GREEN   = '\033[92m' if sys.stdin.isatty() else ''
+    YELLOW  = '\033[93m' if sys.stdin.isatty() else ''
+    WHITE   = '\033[39m' if sys.stdin.isatty() else ''
     ENDC    = '\033[0m'  if sys.stdin.isatty() else ''
 
     BEGIN = "<COLORIZE>"
@@ -60,6 +62,7 @@ class ColorizingFormatter(logging.Formatter):
 
     def format(self, record):
         style = ConsoleColors.BOLD if hasattr(record, 'boldface') else ""
+        # print(f"{record} {dir(record)}")
         if hasattr(record, 'color'):
             style += getattr(ConsoleColors, record.color or "None", "")
         elif record.levelno >= logging.ERROR:
@@ -172,7 +175,6 @@ def setup_file_logger(log: logging.Logger, logfile: str, level: Optional[Union[i
     # does the logger need a new FileHandler created
     if current_logfile != logfile:
         log.debug(f"will switch to logfile {logfile} (previous was {current_logfile})")
-
         # remove old FH if so
         if fh is not None:
             fh.close()
@@ -216,7 +218,7 @@ def setup_file_logger(log: logging.Logger, logfile: str, level: Optional[Union[i
     return log
 
 
-def update_file_logger(log: logging.Logger, logopts: Union["StimelaLogConfig", DictConfig], nesting: int = 0, subst: Optional[SubstitutionNS] = None):
+def update_file_logger(log: logging.Logger, logopts: Union["StimelaLogConfig", DictConfig], nesting: int = 0, subst: Optional[SubstitutionNS] = None, location=[]):
     """Updates logfiles associated with given logger based on option settings
 
     Args:
@@ -224,30 +226,29 @@ def update_file_logger(log: logging.Logger, logopts: Union["StimelaLogConfig", D
         nesting (int):                                 nesting level of this logger
         logopts (Union[StimelaLogConfig, DictConfig]): config settings
         subst (Dict[str, Any]):                        dictionary of substitutions for pathnames in logopts
+        location (List[str]):                          location of this logger in the hierarchy  
 
     Returns:
         [type]: [description]
     """
-    if logopts.enable and logopts.nest > nesting:
+    from .config import StimelaLogConfig
 
+    if logopts.enable and logopts.nest >= nesting:
         path = os.path.join(logopts.dir or ".", logopts.name)
-        
-        # {}-substitutions
 
         if subst is not None:
             with forgiving_substitutions_from(subst, raise_errors=False) as context: 
-                path = context.evaluate(path, location=["log file"])
+                path = context.evaluate(path, location=location + ["log"])
                 if context.errors:
                     for err in context.errors:
-                        log.error(f"bad substitution in log file: {err}")
+                        log.error(f"bad substitution in log path: {err}")
                     return None
+
 
         # substitute non-filename characters for _
         path = re.sub(r'[^a-zA-Z0-9_./-]', '_', path)
-
         # setup the logger
         setup_file_logger(log, path, level=logopts.level, symlink=logopts.symlink)
-
     else:
         disable_file_logger(log)
 
