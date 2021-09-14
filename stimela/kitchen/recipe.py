@@ -645,8 +645,9 @@ class Recipe(Cargo):
             info = SubstitutionNS(fqname=self.fqname)
             subst._add_('info', info, nosubst=True)
             subst._add_('config', self.config, nosubst=True) 
-        subst._add_('recipe', self.make_substitition_namespace(ns=self.assign))
-        subst.recipe._merge_(params)
+
+        # subst._add_('recipe', self.make_substitition_namespace(ns=self.assign))
+        # subst.recipe._merge_(params)
 
         params = Cargo.validate_inputs(self, params, subst=subst, loosely=loosely)
         
