@@ -3,7 +3,6 @@
 cabs:
   cubical:
     command: echo # just a dummy for now 
-    virtual_env: ~/.venv/cc
     inputs:
       ms:
         dtype: str

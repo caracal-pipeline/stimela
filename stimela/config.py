@@ -165,7 +165,7 @@ def load_config(extra_configs=List[str]):
             return None
 
     # merge all cab/*/*yaml files into the config, under cab.taskname
-    cab_configs = glob.glob(f"{stimela_dir}/cargo/cabs/*.yaml")
+    cab_configs = glob.glob(f"{stimela_dir}/cargo/cab/*.yaml")
     try:
         conf.cabs = build_nested_config(conf, cab_configs, cab_schema, nameattr='name', section_name='cabs')
     except ConfigExceptionTypes as exc:
