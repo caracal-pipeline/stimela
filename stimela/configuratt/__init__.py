@@ -88,8 +88,8 @@ def resolve_config_refs(conf, name: str, *sources):
         If a _use directive names an unknown section
     """
     if isinstance(conf, DictConfig):
-        merge_sections = conf.pop("_use", None)
-        if merge_sections:
+        while "_use" in conf:
+            merge_sections = conf.pop("_use")
             if type(merge_sections) is str:
                 merge_sections = [merge_sections]
             elif not isinstance(merge_sections, Sequence):

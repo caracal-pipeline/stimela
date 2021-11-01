@@ -190,13 +190,17 @@ def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, o
                     continue
                 # dispatch output to log
                 line = _remove_ctrls(line)
-                severity = logging.WARNING if fobj is proc.stderr else logging.INFO
                 stream_name = "stderr" if fobj is proc.stderr else "stdout"
+                extra = dict(stimela_subprocess_output=(command_name, stream_name))
+                # severity = logging.WARNING if fobj is proc.stderr else logging.INFO
+                severity = logging.INFO
+                if fobj is proc.stderr:
+                    extra['color'] = 'WHITE'
                 # feed through wrangler to adjust severity and content
                 if output_wrangler is not None:
                     line, severity = output_wrangler(line, severity)
                 if line is not None:
-                    log.log(severity, line, extra=dict(stimela_subprocess_output=(command_name, stream_name)))
+                    log.log(severity, line, extra=extra)
             if timeout > 0 and time.time() > start_time + timeout:
                 log.error(f"timeout, killing {command_name} process")
                 kill_callback() if callable(kill_callback) else proc.kill()

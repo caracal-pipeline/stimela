@@ -1,5 +1,6 @@
 from collections import OrderedDict
 import dataclasses
+import itertools
 
 from yaml.error import YAMLError
 from stimela import configuratt
@@ -26,13 +27,24 @@ from stimela.config import get_config_class
     change any and all config and/or recipe settings.
     """,
     no_args_is_help=True)
-@click.option("-s", "--step", "step_names", metavar="STEP", multiple=True,
-                help="""only runs specific step(s) from the recipe. Can be given multiple times to cherry-pick steps.
-                Use [BEGIN]:[END] to specify a range of steps.""")
+@click.option("-s", "--step", "step_names", metavar="STEP(s)", multiple=True,
+                help="""only runs specific step(s) from the recipe. Use commas, or give multiple times to cherry-pick steps.
+                Use [BEGIN]:[END] to specify a range of steps. Note that enabling an individual step via this option
+                force-enables even steps with skip=true.""")
+@click.option("-t", "--tags", "tags", metavar="TAG(s)", multiple=True,
+                help="""only runs steps wth the given tags (and also steps tagged as "always"). 
+                Use commas, or give multiple times for multiple tags.""")
+@click.option("--skip-tags", "skip_tags", metavar="TAG(s)", multiple=True,
+                help="""explicitly skips steps wth the given tags. 
+                Use commas, or give multiple times for multiple tags.""")
+@click.option("-e", "--enable-step", "enable_steps", metavar="STEP(s)", multiple=True,
+                help="""Sets skip=false on the given step(s). Use commas, or give multiple times for multiple steps.""")
+@click.option("-d", "--dry-run", is_flag=True,
+                help="""Doesn't actually run anything, only prints the selected steps.""")
 @click.argument("what", metavar="filename.yml|CAB") 
 @click.argument("parameters", nargs=-1, metavar="[recipe name] [PARAM=VALUE] [X.Y.Z=FOO] ...", required=False) 
-def exxec(what: str, parameters: List[str] = [],  
-        step_names: List[str] = []):
+def exxec(what: str, parameters: List[str] = [], dry_run: bool = False, 
+    step_names: List[str] = [], tags: List[str] = [], skip_tags: List[str] = [], enable_steps: List[str] = []):
 
     log = logger()
     params = OrderedDict()
@@ -85,7 +97,15 @@ def exxec(what: str, parameters: List[str] = [],
         log.info(f"setting up cab {cabname}")
 
         # create step config by merging in settings (var=value pairs from the command line) 
-        step = Step(cab=cabname, params=params)
+        outer_step = Step(cab=cabname, params=params)
+
+        # prevalidate() is done by run() automatically if not already done, but it does set up the recipe's logger, so do it anyway
+        try:
+            outer_step.prevalidate()
+        except ScabhaBaseException as exc:
+            if not exc.logged:
+                log.error(f"pre-validation failed: {exc}")
+            sys.exit(1)
 
     else:
         if not os.path.isfile(what):
@@ -104,7 +124,7 @@ def exxec(what: str, parameters: List[str] = [],
         # anything that is not a standard config section will be treated as a recipe
         all_recipe_names = [name for name in conf if name not in stimela.CONFIG]
         if not all_recipe_names:
-            log.error(f"{what} does not contain any recipies")
+            log.error(f"{what} does not contain any recipes")
             sys.exit(2)
 
         log.info(f"{what} contains the following recipe sections: {join_quote(all_recipe_names)}")
@@ -149,10 +169,56 @@ def exxec(what: str, parameters: List[str] = [],
         if not recipe.name:
             recipe.name = recipe_name
 
-        # select substeps if so specified
+        # wrap it in an outer step and prevalidate (to set up loggers etc.)
+        recipe.fqname = recipe_name
+
+        log.info("pre-validating the recipe")
+        outer_step = Step(recipe=recipe, name=f"{recipe_name}", info=what, params=params)
+        try:
+            outer_step.prevalidate()
+        except ScabhaBaseException as exc:
+            if not exc.logged:
+                log.error(f"pre-validation failed: {exc}")
+            sys.exit(1)        
+
+        # select recipe substeps based on command line
+
+        tags = set(itertools.chain(*(tag.split(",") for tag in tags)))
+        skip_tags = set(itertools.chain(*(tag.split(",") for tag in skip_tags))) 
+        step_names = list(itertools.chain(*(step.split(',') for step in step_names)))
+        enable_steps = set(itertools.chain(*(step.split(",") for step in enable_steps)))
+
+        for name in enable_steps:
+            if name in recipe.steps:
+                recipe.enable_step(name)  # config file may have skip=True, but we force-enable here
+            else:
+                log.error(f"no such recipe step: '{name}'")
+                sys.exit(2)
+
+        # select subset based on tags/skip_tags, this will be a list of names
+        tagged_steps = set()
+
+        # if tags are given, only use steps with (tags+{"always"}-skip_tags)
+        if tags:
+            tags.add("always")
+            tags.difference_update(skip_tags)
+            for step_name, step in recipe.steps.items():
+                if (tags & step.tags):
+                    tagged_steps.add(step_name)
+            log.info(f"{len(tagged_steps)} of {len(recipe.steps)} steps selected via tags ({', '.join(tags)})")
+        # else, use steps without any tag in (skip_tags + {"never"})
+        else:
+            skip_tags.add("never")
+            for step_name, step in recipe.steps.items():
+                if not (skip_tags & step.tags):
+                    tagged_steps.add(step_name)
+            if len(recipe.steps) != len(tagged_steps):
+                log.info(f"{len(recipe.steps) - len(tagged_steps)} steps skipped due to tags ({', '.join(skip_tags)})")
+
+        # add steps explicitly enabled by --step
         if step_names:
-            restrict = []
             all_step_names = list(recipe.steps.keys())
+            step_subset = set()
             for name in step_names:
                 if ':' in name:
                     begin, end = name.split(':', 1)
@@ -172,57 +238,56 @@ def exxec(what: str, parameters: List[str] = [],
                             sys.exit(2)
                     else:
                         last = len(recipe.steps)-1
-                    restrict += all_step_names[first:last+1]
+                    step_subset.update(name for name in all_step_names[first:last+1] if name in tagged_steps)
+                # explicit step name: enable, and add to tagged_steps
                 else:
-                    for name1 in name.split(","):
-                        if name1 not in all_step_names:
-                            log.error(f"No such recipe step: '{name1}")
-                            sys.exit(2)
-                        recipe.enable_step(name1)  # config file may have skip=True, but we force-enable here
-                        restrict.append(name1)
-            recipe.restrict_steps(restrict, force_enable=False)
+                    if name not in all_step_names:
+                        log.error(f"No such recipe step: '{name}")
+                        sys.exit(2)
+                    recipe.enable_step(name)  # config file may have skip=True, but we force-enable here
+                    step_subset.add(name)
+            # specified subset becomes *the* subset
+            log.info(f"{len(step_subset)} steps selected by name")
+            tagged_steps = step_subset
 
-            if any(step.skip for step in recipe.steps.values()):
-                steps =[f"({label})" if step.skip else label for label, step in recipe.steps.items()]
-                log.warning(f"running partial recipe (skipped steps given in parentheses):")
-                log.warning(f"    {' '.join(steps)}")
+        if not tagged_steps:
+            log.info("specified tags and/or step names select no steps")
+            sys.exit(0)
 
-            # warn user if som steps remain explicitly disabled
-            if any(recipe.steps[label].skip for label in restrict):
-                log.warning("note that some steps remain explicitly skipped, you can enable them with -s")
+        # apply restrictions, if any
+        recipe.restrict_steps(tagged_steps, force_enable=False)
 
-        # wrap it in an outer step
-        recipe.fqname = recipe_name
-        step = Step(recipe=recipe, name=f"{recipe_name}", info=what, params=params)
+        steps = [name for name, step in recipe.steps.items() if not step.skip]
+        log.info(f"will run the following recipe steps:")
+        log.info(f"    {' '.join(steps)}", extra=dict(color="GREEN"))
 
-    # prevalidate() is done by run() automatically if not already done, but it does set up the receipe's logger, so do it anyway
-    try:
-        step.prevalidate()
-    except ScabhaBaseException as exc:
-        if not exc.logged:
-            log.error(f"pre-validation failed: {exc}")
-        sys.exit(1)
-    
+        # warn user if som steps remain explicitly disabled
+        if any(recipe.steps[name].skip for name in tagged_steps):
+            log.warning("note that some steps remain explicitly skipped")
+
     # in debug mode, pretty-print the recipe
     if log.isEnabledFor(logging.DEBUG):
         log.debug("---------- prevalidated step follows ----------")
-        for line in step.summary():
+        for line in outer_step.summary():
             log.debug(line)
+
+    if dry_run:
+        log.info("dry run was requested, exiting")
+        sys.exit(0)
 
     # run step
     try:
-        outputs = step.run()
+        outputs = outer_step.run()
     except ScabhaBaseException as exc:
         if not exc.logged:
-            step.log.error(f"run failed with exception: {exc}")
+            outer_step.log.error(f"run failed with exception: {exc}")
         sys.exit(1)
 
     if outputs and step.log.isEnabledFor(logging.DEBUG):
-        step.log.debug("run successful, outputs follow:")
+        outer_step.log.debug("run successful, outputs follow:")
         for name, value in outputs.items():
-            step.log.debug(f"  {name}: {value}")
+            outer_step.log.debug(f"  {name}: {value}")
     else:
-        step.log.info("run successful")
-
+        outer_step.log.info("run successful")
 
     return 0
