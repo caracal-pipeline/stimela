@@ -1,12 +1,20 @@
 import shlex
 from typing import Dict, Optional, Any
 from scabha.cargo import Cab
-from stimela import logger
+from stimela import logger, schedulers
 from stimela.utils.xrun_poll import xrun
 from stimela.exceptions import StimelaCabRuntimeError
+from stimela.schedulers import slurm
 
 
-def run(cab: Cab, log, subst: Optional[Dict[str, Any]] = None):
+def run(cab: Cab, log, subst: Optional[Dict[str, Any]] = None,
+        batch: schedulers.Batch = None):
+
+    if batch:
+        batch.__init_cab(cab, subst, log)
+        batch.submit()
+
+    #-------------------------------------------------------
     args, venv = cab.build_command_line(subst)
 
     command_name = args[0]
