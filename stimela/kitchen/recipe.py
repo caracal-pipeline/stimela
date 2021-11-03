@@ -22,8 +22,10 @@ from . import runners
 
 Conditional = Optional[str]
 
-from scabha.cargo import Cargo, Cab
+from scabha.cargo import Cargo, Cab, Batch
 from scabha.types import File, Directory, MS
+
+
 
 
 @dataclass
@@ -52,7 +54,7 @@ class Step:
         self.cargo = self.config = None
         self._prevalidated = None
         self.tags = set(self.tags)
-        # convert params into stadard dict, else lousy stuff happens when we imnsetr non-standard objects
+        # convert params into stadard dict, else lousy stuff happens when we insert non-standard objects
         if isinstance(self.params, DictConfig):
             self.params = OmegaConf.to_container(self.params)
 
@@ -175,7 +177,7 @@ class Step:
             for line in self.summary(recursive=False):
                 self.log.log(level, line, extra=extra)
 
-    def run(self, params=None, subst=None):
+    def run(self, params=None, subst=None, batch=None):
         """Runs the step"""
         self.prevalidate()
         if params is None:
@@ -231,7 +233,7 @@ class Step:
                     self.cargo._run()
                 elif type(self.cargo) is Cab:
                     self.cargo.backend = self.cargo.backend or self.backend
-                    runners.run_cab(self.cargo, log=self.log, subst=subst)
+                    runners.run_cab(self.cargo, log=self.log, subst=subst, batch=batch)
                 else:
                     raise RuntimeError("Unknown cargo type")
             except ScabhaBaseException as exc:
@@ -315,6 +317,7 @@ class Recipe(Cargo):
     # logging control, overrides opts.log.init_logname and opts.log.logname 
     init_logname: Optional[str] = None
     logname: Optional[str] = None
+    batch: Optional[Batch] = None
     
     # # if not None, do a while loop with the conditional
     # _while: Conditional = None
@@ -763,7 +766,11 @@ class Recipe(Cargo):
                 subst.recipe._merge_(step.assign)
                 # update info
                 self._prep_step(label, step, subst)
-
+                # run with batch system if scatter and Recipe.batch has been set
+                if self.for_loop.scatter:
+                    batch = self.batch
+                else:
+                    batch = None
                 # update log options again (based on assign.log which may have changed)
                 if 'log' in step.assign:
                     logopts.update(**step.assign.log)
@@ -774,7 +781,7 @@ class Recipe(Cargo):
     
                 self.log.info(f"{'skipping' if step.skip else 'running'} step '{label}'")
                 try:
-                    step_params = step.run(subst=subst.copy())  # make a copy of the subst dict since recipe might modify
+                    step_params = step.run(subst=subst.copy(), batch=batch)  # make a copy of the subst dict since recipe might modify
                 except ScabhaBaseException as exc:
                     if not exc.logged:
                         self.log.error(f"error running step '{label}': {exc}")

@@ -1,21 +1,39 @@
 import shlex
 from typing import Dict, Optional, Any
 from scabha.cargo import Cab
-from stimela import logger, schedulers
 from stimela.utils.xrun_poll import xrun
 from stimela.exceptions import StimelaCabRuntimeError
-from stimela.schedulers import slurm
+from stimela.schedulers.slurm import SlurmBatch
 
 
-def run(cab: Cab, log, subst: Optional[Dict[str, Any]] = None,
-        batch: schedulers.Batch = None):
+def run(cab: Cab, log, subst: Optional[Dict[str, Any]], batch=None):
+    """Run a cab using the native tools
+
+    Args:
+        cab (Cab): Cab instance
+        log ([type]): logger
+        subst (Optional[Dict[str, Any]]): stimela.CONFIG type file
+        batch ([type], optional): omegaConf Batch object. Defaults to None.
+
+    Raises:
+        StimelaCabRuntimeError: 
+        StimelaCabRuntimeError: 
+
+    Returns:
+    """
+
+    args, venv = cab.build_command_line(subst)
 
     if batch:
-        batch.__init_cab(cab, subst, log)
-        batch.submit()
+        batch = SlurmBatch(**batch)
+        batch.__init_cab__(cab, subst, log)
+        runcmd = "/bin/bash -c" + " ".join(args)
+        jobfile = "foo-bar.job"
+        batch.name = "foo-bar"
+        batch.submit(jobfile=jobfile, runcmd=runcmd)
 
+        return
     #-------------------------------------------------------
-    args, venv = cab.build_command_line(subst)
 
     command_name = args[0]
 
