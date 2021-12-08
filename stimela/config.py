@@ -9,13 +9,11 @@ from collections import OrderedDict
 
 from yaml.error import YAMLError
 import stimela
-from stimela import configuratt
 from stimela.exceptions import *
 
 CONFIG_FILE = os.path.expanduser("~/.config/stimela.conf")
 
-from stimela.configuratt import build_nested_config
-
+from scabha import configuratt
 from scabha.cargo import ListOrString, EmptyDictDefault, EmptyListDefault, Parameter, Cab, CabManagement 
 
 
@@ -150,7 +148,7 @@ def load_config(extra_configs=List[str]):
     # merge base/*/*yaml files into the config, under base.imagename
     base_configs = glob.glob(f"{stimela_dir}/cargo/base/*/*.yaml")
     try:
-        conf.base = build_nested_config(conf, base_configs, base_schema, nameattr='name', include_path='path', section_name='base')
+        conf.base = configuratt.load_nested(base_configs, use_sources=[conf], structured=base_schema, nameattr='name', include_path='path', location='base')
     except ConfigExceptionTypes as exc:
         log.error(f"failed to build base configuration: {exc}")
         return None
@@ -167,7 +165,7 @@ def load_config(extra_configs=List[str]):
     # merge all cab/*/*yaml files into the config, under cab.taskname
     cab_configs = glob.glob(f"{stimela_dir}/cargo/cab/*.yaml")
     try:
-        conf.cabs = build_nested_config(conf, cab_configs, cab_schema, nameattr='name', section_name='cabs')
+        conf.cabs = configuratt.load_nested(cab_configs, structured=cab_schema, nameattr='name', location='cabs', use_sources=[conf])
     except ConfigExceptionTypes as exc:
         log.error(f"failed to build cab configuration: {exc}")
         return None
