@@ -14,6 +14,7 @@ from io import TextIOBase
 
 
 class LoggerIO(TextIOBase):
+    """This is a stream class which captures text stream output into a logger, applying an optional output wrangler"""
     def __init__(self, log, command_name, stream_name, output_wrangler=None):
         self.log = log
         self.command_name = command_name
@@ -29,16 +30,44 @@ class LoggerIO(TextIOBase):
 
 
 def run(cab: Cab, log, subst: Optional[Dict[str, Any]] = None):
-    match = re.match("^\((.+)\)(.+)$", cab.command)
+    """Runs cab contents
 
+    Args:
+        cab (Cab): cab object
+        log (logger): logger to use
+        subst (Optional[Dict[str, Any]]): Substitution dict for commands etc., if any.
+
+    Returns:
+        Any: return value (e.g. exit code) of content
+    """
+
+    # commands of form "(module)function" are a Python call
+    match = re.match("^\((.+)\)(.+)$", cab.command)
     if match:
         return run_callable(match.group(1), match.group(2), cab, log, subst)
-
+    # everything else is a shell command
     else:
         return run_command(cab, log, subst)
 
 
-def run_callable(modulename, funcname, cab, log, subst: Optional[Dict[str, Any]] = None):
+def run_callable(modulename: str, funcname: str, cab: Cab, log, subst: Optional[Dict[str, Any]] = None):
+    """Runs a cab corresponding to a Python callable. Intercepts stdout/stderr into the logger.
+
+    Args:
+        modulename (str): module name to import
+        funcname (str): name of function in module to call 
+        cab (Cab): cab object
+        log (logger): logger to use
+        subst (Optional[Dict[str, Any]]): Substitution dict for commands etc., if any.
+
+    Raises:
+        StimelaCabRuntimeError: if any errors arise resolving the module or calling the function
+
+    Returns:
+        Any: return value (e.g. exit code) of content
+    """
+
+    # import module and get function object
     try:
         mod = importlib.import_module(modulename)
     except ImportError as exc:
@@ -49,16 +78,19 @@ def run_callable(modulename, funcname, cab, log, subst: Optional[Dict[str, Any]]
     if not callable(func):
         raise StimelaCabRuntimeError(f"{modulename}.{funcname} is not a valid callable", log=log)
 
+    # for functions wrapped in a @click.command decorator, get the underlying function itself
     if isinstance(func, click.Command):
-        log.info(f"invoking click command {modulename}.{funcname}()")
+        log.info(f"invoking callable {modulename}.{funcname}() (as click command)")
         func = func.callback
     else:
         log.info(f"invoking callable {modulename}.{funcname}()")
 
+    # redirect and call
+    cab.reset_runtime_status()
     try:
-        with redirect_stdout(LoggerIO(log, funcname, "stdout", output_wrangler=cab.apply_output_wranglers)):
-            with redirect_stderr(LoggerIO(log, funcname, "stderr", output_wrangler=cab.apply_output_wranglers)):
-                retval = func(**cab.params)
+        with redirect_stdout(LoggerIO(log, funcname, "stdout", output_wrangler=cab.apply_output_wranglers)), \
+                redirect_stderr(LoggerIO(log, funcname, "stderr", output_wrangler=cab.apply_output_wranglers)):
+            retval = func(**cab.params)
     except Exception as exc:
         for line in traceback.format_exception(*sys.exc_info()):
             log.error(line.rstrip())
@@ -66,29 +98,50 @@ def run_callable(modulename, funcname, cab, log, subst: Optional[Dict[str, Any]]
 
     log.info(f"{modulename}.{funcname}() returns {retval}")
 
+    # check if command was marked as failed by the output wrangler
+    if cab.runtime_status is False:
+        raise StimelaCabRuntimeError(f"{modulename}.{funcname} was marked as failed based on its output", log=log)
+
     return retval
 
 
 def run_command(cab: Cab, log, subst: Optional[Dict[str, Any]] = None):
+    """Runns command represented by cab.
+
+    Args:
+        cab (Cab): cab object
+        log (logger): logger to use
+        subst (Optional[Dict[str, Any]]): Substitution dict for commands etc., if any.
+
+    Raises:
+        StimelaCabRuntimeError: if any errors arise during the command
+
+    Returns:
+        int: return value (e.g. exit code) of command
+    """
+    # build command line from parameters
     args, venv = cab.build_command_line(subst)
 
     command_name = args[0]
 
+    # prepend virtualennv invocation, if asked
     if venv:
         args = ["/bin/bash", "--rcfile", f"{venv}/bin/activate", "-c", " ".join(shlex.quote(arg) for arg in args)]
 
     log.debug(f"command line is {args}")
     
+    # run command
     cab.reset_runtime_status()
 
     retcode = xrun(args[0], args[1:], shell=False, log=log, 
                 output_wrangler=cab.apply_output_wranglers, 
                 return_errcode=True, command_name=command_name)
 
-    # if retcode is not 0, and cab didn't declare itself a success, raise error
+    # if retcode is not zero, raise error, unless cab declared itself a success (via the wrangler)
     if retcode:
         if not cab.runtime_status:
             raise StimelaCabRuntimeError(f"{command_name} returned non-zero exit status {retcode}", log=log)
+    # if retcode is zero, check that cab didn't declare itself a failure
     else:
         if cab.runtime_status is False:
             raise StimelaCabRuntimeError(f"{command_name} was marked as failed based on its output", log=log)
