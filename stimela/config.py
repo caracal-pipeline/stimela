@@ -67,7 +67,7 @@ import stimela.backends.singularity
 import stimela.backends.podman
 import stimela.backends.native
 
-Backend = Enum("Stimela.Backend", "docker singularity podman native")
+Backend = Enum("Backend", "docker singularity podman native", module=__name__)
 
 @dataclass
 class StimelaOptions(object):

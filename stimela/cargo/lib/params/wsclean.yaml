@@ -124,10 +124,6 @@ base_inputs:
       repeat: list
 
 base_outputs:
-  msout:
-    info: Output MS
-    dtype: MS
-    implicit: "{current.ms}"
   source_list:
     info: Source list
     dtype: File

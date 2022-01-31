@@ -3,9 +3,12 @@ import os, os.path, re, logging
 from typing import Any, Tuple, List, Dict, Optional, Union
 from enum import Enum
 from dataclasses import dataclass
+
 from omegaconf import MISSING, OmegaConf, DictConfig, ListConfig
 from collections import OrderedDict
 from scabha import cargo
+from pathos.pools import ProcessPool
+from pathos.serial import SerialPool
 
 from scabha.exceptions import SubstitutionError, SubstitutionErrorList
 from stimela.config import EmptyDictDefault, EmptyListDefault, StimelaLogConfig
@@ -24,7 +27,6 @@ Conditional = Optional[str]
 
 from scabha.cargo import Cargo, Cab, Batch
 from scabha.types import File, Directory, MS
-
 
 
 
@@ -246,6 +248,7 @@ class Step:
         validated = False
         # insert output values into params for re-substitution and re-validation
         output_params = {name: value for name, value in params.items() if name in self.cargo.outputs}
+
         try:
             params = self.cargo.validate_outputs(output_params, loosely=self.skip, subst=subst)
             validated = True
@@ -657,6 +660,27 @@ class Recipe(Cargo):
         
         return params
 
+    def _link_steps(self):
+        """
+        Adds  next_step and previous_step attributes to the recipe. 
+        """
+        steps = list(self.steps.values())
+        N = len(steps)
+        # Nothing to link if only one step
+        if N == 1:
+            return
+
+        for i in range(N):
+            step = steps[i]
+            if i == 0:
+                step.next_step = steps[1]
+                step.previous_step = None
+            elif i > 0 and i < N-2:
+                step.next_step = steps[i+1]
+                step.previous_step = steps[i-1]
+            elif i == N-1:
+                step.next_step = None
+                step.previous_step = steps[i-2]
 
     def _propagate_parameter(self, name, value):
         ### OMS: not sure why I had this, why not propagae unresolveds?
@@ -735,6 +759,9 @@ class Recipe(Cargo):
         # update logfile name (since this may depend on substitutions)
         stimelogging.update_file_logger(self.log, self.logopts, nesting=self.nesting, subst=subst, location=[self.fqname])
 
+        # Harmonise before running
+        self._link_steps()
+
         self.log.info(f"running recipe '{self.name}'")
 
         # our inputs have been validated, so propagate aliases to steps. Check for missing stuff just in case
@@ -751,7 +778,38 @@ class Recipe(Cargo):
                     raise RecipeValidationError(f"recipe '{self.name}' is missing required input '{name}'", log=self.log)
 
 
+
         # iterate over for-loop values (if not looping, this is set up to [None] in advance)
+        scatter = getattr(self.for_loop, "scatter", False)
+        
+        def loop_worker(inst,step, label, subst):
+            """"
+            Needed for concurrency
+            """
+            try:
+                #step_params = step.run(subst=subst.copy(), batch=batch)  # make a copy of the subst dict since recipe might modify
+                step_params = step.run(subst=subst.copy())  # make a copy of the subst dict since recipe might modify
+            except ScabhaBaseException as exc:
+                if not exc.logged:
+                    inst.log.error(f"error running step '{label}': {exc}")
+                    exc.logged = True
+                raise
+
+            if not scatter:
+                # put step parameters into previous and steps[label] again, as they may have changed based on outputs)
+                subst.previous = step_params
+                subst.steps[label] = subst.previous
+
+            # check aliases, our outputs need to be retrieved from the step
+            for name, schema in self.outputs.items():
+                for step1, step_param_name in self._alias_list.get(name, []):
+                    if step1 is step and step_param_name in step_params:
+                        inst.params[name] = step_params[step_param_name]
+                        # clear implicit setting
+                        inst.outputs[name].implicit = None
+
+        loop_futures = []
+
         for count, iter_var in enumerate(self._for_loop_values):
 
             # if for-loop, assign new value
@@ -766,11 +824,6 @@ class Recipe(Cargo):
                 subst.recipe._merge_(step.assign)
                 # update info
                 self._prep_step(label, step, subst)
-                # run with batch system if scatter and Recipe.batch has been set
-                if self.for_loop.scatter:
-                    batch = self.batch
-                else:
-                    batch = None
                 # update log options again (based on assign.log which may have changed)
                 if 'log' in step.assign:
                     logopts.update(**step.assign.log)
@@ -780,24 +833,20 @@ class Recipe(Cargo):
                 stimelogging.update_file_logger(step.log, step.logopts, nesting=step.nesting, subst=subst, location=[step.fqname])
     
                 self.log.info(f"{'skipping' if step.skip else 'running'} step '{label}'")
-                try:
-                    step_params = step.run(subst=subst.copy(), batch=batch)  # make a copy of the subst dict since recipe might modify
-                except ScabhaBaseException as exc:
-                    if not exc.logged:
-                        self.log.error(f"error running step '{label}': {exc}")
-                        exc.logged = True
-                    raise
-                # put step parameters into previous and steps[label] again, as they may have changed based on outputs)
-                subst.previous = step_params
-                subst.steps[label] = subst.previous
+                this_args = (self,step, label, subst)
+                loop_futures.append(this_args)
 
-                # check aliases, our outputs need to be retrieved from the step
-                for name, schema in self.outputs.items():
-                    for step1, step_param_name in self._alias_list.get(name, []):
-                        if step1 is step and step_param_name in step_params:
-                            self.params[name] = step_params[step_param_name]
-                            # clear implicit setting
-                            self.outputs[name].implicit = None
+        # Transpose the list before parsing to pool.map()
+        loop_args = list(map(list, zip(*loop_futures)))
+        if scatter:
+            loop_pool = ProcessPool(nodes=3)
+            results = loop_pool.amap(loop_worker, *loop_args)
+            while not results.ready():
+                time.sleep(2)
+            results.get()
+        else:
+            loop_pool = SerialPool()
+            results = list(loop_pool.imap(loop_worker, *loop_args))
 
         self.log.info(f"recipe '{self.name}' executed successfully")
         return {name: value for name, value in self.params.items() if name in self.outputs}

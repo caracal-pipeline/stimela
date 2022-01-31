@@ -21,7 +21,7 @@ from stimela.config import get_config_class
 
 @cli.command("exec",
     help="""
-    Execute a single cab, or a recipe from a YML file. 
+    Execute a single cab, or a recipe from a YML file_pickle.PicklingError: Can't pickle <class 'types.UpdatedStimelaConfig'>: it's not found as types.UpdatedStimelaConfig. 
     If the YML files contains multiple recipes, specify the recipe name as an extra argument.
     Use PARAM=VALUE to specify parameters for the recipe or cab. You can also use X.Y.Z=FOO to
     change any and all config and/or recipe settings.
@@ -144,8 +144,10 @@ def exxec(what: str, parameters: List[str] = [], dry_run: bool = False,
         for section in conf:
             if section not in stimela.CONFIG:
                 config_fields.append((section, Optional[Recipe], dataclasses.field(default=None)))
-        dcls = dataclasses.make_dataclass("UpdatedStimelaConfig", config_fields, bases=(get_config_class(),)) 
-        config_schema = OmegaConf.structured(dcls)
+        global UpdatedStimelaConfig
+        UpdatedStimelaConfig = dataclasses.make_dataclass("UpdatedStimelaConfig", config_fields, bases=(get_config_class(),))
+        UpdatedStimelaConfig.__module__ = __name__
+        config_schema = OmegaConf.structured(UpdatedStimelaConfig)
 
         try:
             stimela.CONFIG = OmegaConf.merge(stimela.CONFIG, config_schema, conf, extra_config)
