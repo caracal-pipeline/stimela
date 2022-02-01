@@ -801,7 +801,7 @@ class Recipe(Cargo):
                 subst.steps[label] = subst.previous
 
             # check aliases, our outputs need to be retrieved from the step
-            for name, schema in self.outputs.items():
+            for name, _ in self.outputs.items():
                 for step1, step_param_name in self._alias_list.get(name, []):
                     if step1 is step and step_param_name in step_params:
                         inst.params[name] = step_params[step_param_name]
