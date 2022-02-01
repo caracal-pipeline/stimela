@@ -3,7 +3,7 @@ import dataclasses
 import itertools
 
 from yaml.error import YAMLError
-from stimela import configuratt
+from scabha import configuratt
 from scabha.exceptions import ScabhaBaseException
 from omegaconf.omegaconf import OmegaConf, OmegaConfBaseException
 from stimela.config import ConfigExceptionTypes
@@ -116,7 +116,7 @@ def exxec(what: str, parameters: List[str] = [], dry_run: bool = False,
 
         # if file contains a recipe entry, treat it as a full config (that can include cabs etc.)
         try:
-            conf = configuratt.load_using(what, stimela.CONFIG)
+            conf = configuratt.load(what, use_sources=[stimela.CONFIG])
         except ConfigExceptionTypes as exc:
             log.error(f"error loading {what}: {exc}")
             sys.exit(2)

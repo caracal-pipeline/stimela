@@ -795,7 +795,7 @@ class Recipe(Cargo):
                     exc.logged = True
                 raise
 
-            if not scatter:
+            if 1: # if not scatter:
                 # put step parameters into previous and steps[label] again, as they may have changed based on outputs)
                 subst.previous = step_params
                 subst.steps[label] = subst.previous
