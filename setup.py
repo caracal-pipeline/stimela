@@ -9,12 +9,13 @@ import glob
 requirements = ["pyyaml",
                 "nose>=1.3.7",
                 "future-fstrings",
-                "scabha @ git+https://github.com/caracal-pipeline/scabha2@master#egg=scabha-0.4.0",
+                "scabha @ git+https://github.com/caracal-pipeline/scabha2",
                 "ruamel.yaml",
                 "munch",
                 "omegaconf>=2.1pre1",
                 "click",
-                "pydantic"
+                "pydantic",
+                "pathos",
                 ],
 
 PACKAGE_NAME = "stimela"
