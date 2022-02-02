@@ -782,10 +782,22 @@ class Recipe(Cargo):
         # iterate over for-loop values (if not looping, this is set up to [None] in advance)
         scatter = getattr(self.for_loop, "scatter", False)
         
-        def loop_worker(inst,step, label, subst):
+        def loop_worker(inst, step, label, subst):
             """"
             Needed for concurrency
             """
+            # merge in variable assignments and add step params as "current" namespace
+            subst.recipe._merge_(step.assign)
+            # update info
+            inst._prep_step(label, step, subst)
+            # update log options again (based on assign.log which may have changed)
+            if 'log' in step.assign:
+                 logopts.update(**step.assign.log)
+
+            # update logfile name regardless (since this may depend on substitutions)
+            info.fqname = step.fqname
+            stimelogging.update_file_logger(step.log, step.logopts, nesting=step.nesting, subst=subst, location=[step.fqname])
+
             try:
                 #step_params = step.run(subst=subst.copy(), batch=batch)  # make a copy of the subst dict since recipe might modify
                 step_params = step.run(subst=subst.copy())  # make a copy of the subst dict since recipe might modify
@@ -795,7 +807,7 @@ class Recipe(Cargo):
                     exc.logged = True
                 raise
 
-            if 1: # if not scatter:
+            if not scatter:
                 # put step parameters into previous and steps[label] again, as they may have changed based on outputs)
                 subst.previous = step_params
                 subst.steps[label] = subst.previous
@@ -807,6 +819,9 @@ class Recipe(Cargo):
                         inst.params[name] = step_params[step_param_name]
                         # clear implicit setting
                         inst.outputs[name].implicit = None
+
+                   
+                self.log.info(f"{'skipping' if step.skip else 'running'} step '{label}'")
 
         loop_futures = []
 
@@ -820,19 +835,6 @@ class Recipe(Cargo):
                 stimelogging.update_file_logger(self.log, self.logopts, nesting=self.nesting, subst=subst, location=[self.fqname])
 
             for label, step in self.steps.items():
-                # merge in variable assignments and add step params as "current" namespace
-                subst.recipe._merge_(step.assign)
-                # update info
-                self._prep_step(label, step, subst)
-                # update log options again (based on assign.log which may have changed)
-                if 'log' in step.assign:
-                    logopts.update(**step.assign.log)
-
-                # update logfile name regardless (since this may depend on substitutions)
-                info.fqname = step.fqname
-                stimelogging.update_file_logger(step.log, step.logopts, nesting=step.nesting, subst=subst, location=[step.fqname])
-    
-                self.log.info(f"{'skipping' if step.skip else 'running'} step '{label}'")
                 this_args = (self,step, label, subst)
                 loop_futures.append(this_args)
 
