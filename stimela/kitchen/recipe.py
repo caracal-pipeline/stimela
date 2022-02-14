@@ -1,4 +1,5 @@
 import glob, time
+from multiprocessing import cpu_count
 import os, os.path, re, logging
 from typing import Any, Tuple, List, Dict, Optional, Union
 from enum import Enum
@@ -9,6 +10,7 @@ from collections import OrderedDict
 from scabha import cargo
 from pathos.pools import ProcessPool
 from pathos.serial import SerialPool
+from multiprocessing import cpu_count
 
 from scabha.exceptions import SubstitutionError, SubstitutionErrorList
 from stimela.config import EmptyDictDefault, EmptyListDefault, StimelaLogConfig
@@ -639,6 +641,7 @@ class Recipe(Cargo):
                 if not isinstance(self._for_loop_values, (list, tuple)):
                     self._for_loop_values = [self._for_loop_values]
             self.log.info(f"recipe is a for-loop with '{self.for_loop.var}' iterating over {len(self._for_loop_values)} values")
+            self.log.info(f"Loop values: {self._for_loop_values}")
             # add first value to inputs, if needed
             if self.for_loop.var in self.inputs and self._for_loop_values:
                 params[self.for_loop.var] = self._for_loop_values[0]
@@ -782,10 +785,20 @@ class Recipe(Cargo):
         # iterate over for-loop values (if not looping, this is set up to [None] in advance)
         scatter = getattr(self.for_loop, "scatter", False)
         
-        def loop_worker(inst, step, label, subst):
+        def loop_worker(inst, step, label, subst, count, iter_var):
             """"
             Needed for concurrency
             """
+
+            # if for-loop, assign new value
+            if inst.for_loop:
+                inst.log.info(f"for loop iteration {count}: {inst.for_loop.var} = {iter_var}")
+                subst.recipe[inst.for_loop.var] = inst.assign[inst.for_loop.var] = iter_var
+                # update logfile name (since this may depend on substitutions)
+                stimelogging.update_file_logger(inst.log, inst.logopts, nesting=inst.nesting, subst=subst, location=[inst.fqname])
+
+
+
             # merge in variable assignments and add step params as "current" namespace
             subst.recipe._merge_(step.assign)
             # update info
@@ -807,47 +820,40 @@ class Recipe(Cargo):
                     exc.logged = True
                 raise
 
-            if not scatter:
-                # put step parameters into previous and steps[label] again, as they may have changed based on outputs)
-                subst.previous = step_params
-                subst.steps[label] = subst.previous
+            # put step parameters into previous and steps[label] again, as they may have changed based on outputs)
+            subst.previous = step_params
+            subst.steps[label] = subst.previous
 
             # check aliases, our outputs need to be retrieved from the step
-            for name, _ in self.outputs.items():
-                for step1, step_param_name in self._alias_list.get(name, []):
+            for name, _ in inst.outputs.items():
+                for step1, step_param_name in inst._alias_list.get(name, []):
                     if step1 is step and step_param_name in step_params:
                         inst.params[name] = step_params[step_param_name]
                         # clear implicit setting
                         inst.outputs[name].implicit = None
-
                    
-                self.log.info(f"{'skipping' if step.skip else 'running'} step '{label}'")
+                inst.log.info(f"{'skipping' if step.skip else 'running'} step '{label}'")
 
         loop_futures = []
 
         for count, iter_var in enumerate(self._for_loop_values):
 
-            # if for-loop, assign new value
-            if self.for_loop:
-                self.log.info(f"for loop iteration {count}: {self.for_loop.var} = {iter_var}")
-                subst.recipe[self.for_loop.var] = self.assign[self.for_loop.var] = iter_var
-                # update logfile name (since this may depend on substitutions)
-                stimelogging.update_file_logger(self.log, self.logopts, nesting=self.nesting, subst=subst, location=[self.fqname])
 
             for label, step in self.steps.items():
-                this_args = (self,step, label, subst)
+                this_args = (self,step, label, subst, count, iter_var)
                 loop_futures.append(this_args)
 
         # Transpose the list before parsing to pool.map()
         loop_args = list(map(list, zip(*loop_futures)))
+        max_workers = getattr(self.config.opts.dist, "ncpu", cpu_count()//4)
         if scatter:
-            loop_pool = ProcessPool(nodes=3)
+            loop_pool = ProcessPool(max_workers, scatter=True)
             results = loop_pool.amap(loop_worker, *loop_args)
             while not results.ready():
-                time.sleep(2)
+                time.sleep(1)
             results.get()
         else:
-            loop_pool = SerialPool()
+            loop_pool = SerialPool(max_workers)
             results = list(loop_pool.imap(loop_worker, *loop_args))
 
         self.log.info(f"recipe '{self.name}' executed successfully")

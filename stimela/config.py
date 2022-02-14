@@ -74,6 +74,8 @@ class StimelaOptions(object):
     basename: str = "stimela/v2-"
     singularity_image_dir: str = "~/.singularity"
     log: StimelaLogConfig = StimelaLogConfig()
+    ## For distributed computes and cpu allocation
+    dist: Dict[str, Any] = EmptyDictDefault()  
 
 @dataclass
 class StimelaLibrary(object):
