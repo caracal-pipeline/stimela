@@ -14,11 +14,6 @@ defaults:
   direction: "J2000,0deg,-30deg"
 
 inputs:
-  msname:
-    info: Measurement set(s)
-    dtype: str
-    required: true
-    nom_de_guerre: name
   tel:
     dtype: str
   antennas:
@@ -43,9 +38,21 @@ inputs:
   nchan:
     info: number of channels
     dtype: int
+  type:
+    info: Type of antennas file
+    choices:
+      - ascii
+      - casa
+    default: casa
+  dec:
+    dtype: str
+    info: Declination
 
 outputs:
   ms:
-    info: Simulated MS
+    info: Measurement set to be Simulated
     dtype: MS
-    implicit: "{current.msname}"
+    required: true
+    nom_de_guerre: name
+
+
