@@ -134,6 +134,22 @@ def xrun_nolog(command, name=None, shell=True):
 
     return 0
 
+
+def dispatch_to_log(log, line, command_name, stream_name, output_wrangler):
+    # dispatch output to log
+    line = _remove_ctrls(line)
+    extra = dict(stimela_subprocess_output=(command_name, stream_name))
+    # severity = logging.WARNING if fobj is proc.stderr else logging.INFO
+    severity = logging.INFO
+    if stream_name == 'stderr':
+        extra['color'] = 'WHITE'
+    # feed through wrangler to adjust severity and content
+    if output_wrangler is not None:
+        line, severity = output_wrangler(line, severity)
+    if line is not None:
+        log.log(severity, line, extra=extra)
+
+
 def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, output_wrangler=None, shell=True, return_errcode=False, command_name=None):
     command_name = command_name or command
 
@@ -189,18 +205,9 @@ def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, o
                         break
                     continue
                 # dispatch output to log
-                line = _remove_ctrls(line)
-                stream_name = "stderr" if fobj is proc.stderr else "stdout"
-                extra = dict(stimela_subprocess_output=(command_name, stream_name))
-                # severity = logging.WARNING if fobj is proc.stderr else logging.INFO
-                severity = logging.INFO
-                if fobj is proc.stderr:
-                    extra['color'] = 'WHITE'
-                # feed through wrangler to adjust severity and content
-                if output_wrangler is not None:
-                    line, severity = output_wrangler(line, severity)
-                if line is not None:
-                    log.log(severity, line, extra=extra)
+                dispatch_to_log(log, line, command_name, 
+                                stream_name="stderr" if fobj is proc.stderr else "stdout", 
+                                output_wrangler=output_wrangler)
             if timeout > 0 and time.time() > start_time + timeout:
                 log.error(f"timeout, killing {command_name} process")
                 kill_callback() if callable(kill_callback) else proc.kill()

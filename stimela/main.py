@@ -22,7 +22,30 @@ CAB_USERNAME = stimela.CAB_USERNAME
 
 log = None
 
-@click.group()
+
+class RunExecGroup(click.Group):
+    """ Makes the run and exec commands point to the same thing
+
+    Args:
+        click (_type_): _description_
+    """
+    def get_command(self, ctx, cmd_name):
+        rv = click.Group.get_command(self, ctx, cmd_name)
+        if rv is not None:
+            return rv
+
+        alias = "exec"
+        if cmd_name == alias :  
+            return click.Group.get_command(self, ctx, "run")
+        ctx.fail("Uknown command or alias")
+
+    def resolve_command(self, ctx, args):
+        # always return the full command name
+        _, cmd, args = super().resolve_command(ctx, args)
+        return cmd.name, cmd, args
+
+
+@click.group(cls=RunExecGroup)
 @click.option('--backend', '-b', type=click.Choice(config.Backend._member_names_), 
                 help="Backend to use (for containerization).")
 @click.option('--config', '-c', 'config_files', metavar='FILE', multiple=True,
@@ -70,7 +93,7 @@ def cli(backend, config_files=[], verbose=False):
 
 
 # import commands
-from stimela.commands import exxec, images, build, push, run, save_config
+from stimela.commands import run, images, build, push, save_config
 
 ## the ones not listed above haven't been converted to click yet. They are:
-# cabs, clean, containers, kill, ps, pull, run
+# cabs, clean, containers, kill, ps, pull

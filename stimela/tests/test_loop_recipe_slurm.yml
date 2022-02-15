@@ -1,0 +1,109 @@
+
+## recipes may define or redefine or augment cabs
+cabs:
+  cubical:
+    command: echo # just a dummy for now 
+    inputs:
+      ms:
+        dtype: str
+        required: true
+
+  myclean:
+    command: echo # just a dummy for now 
+    inputs:
+      ms:
+        dtype: str
+        required: true
+      prefix:
+        dtype: str        
+
+## lib.recipes.* may be added to and invoked via _use
+lib:
+  recipes:
+    cubical_image:
+      name: "cubical_image"
+      info: 'does one step of cubical, followed by one step of imaging'
+      dirs:
+        log: logs
+      aliases:
+        ms: [calibrate.ms, image.ms]
+      steps: 
+        calibrate: 
+            cab: cubical
+        image:
+            cab: myclean
+
+    test-loop-recipe:
+      name: "test loop"
+      for_loop:
+        var: ms
+        over: ms_list
+      aliases:
+        ms: ['cubical_image_step.ms']
+      inputs:
+        ms_list:
+          dtype: List[str]
+          required: true
+      defaults:
+        ms_list: [a,b,c]
+      steps:
+        cubical_image_step:
+          recipe:
+            _use: cubical_image_loop
+
+opts:
+  log:
+    dir: logs-{config.run.datetime} 
+    nest: 3
+    symlink: logs
+
+
+## but also top-level sections are treated as recipe names
+cubical_image_loop:
+  name: "cubical_image_loop"
+  info: 'does one step of cubical, followed by one step of imaging'
+  batch:
+    scheduler: slurm
+    cpus: 4
+    mem: 4Gb
+#    email: <your email @ here>
+
+  assign:
+    dir: 
+      out: 'output'
+    x: 1
+    y: 2
+    # stage: 0
+    image-prefix: "{recipe.dir.out}/im{info.suffix}-{recipe.loop-name}/im{info.suffix}-{recipe.loop-name}"
+    loop-name: "s{recipe.loop:02d}"
+    log:
+      dir: logs-{config.run.datetime}
+      name: log-{recipe.loop-name}-{info.fqname}.txt
+
+  for_loop:
+    var: loop
+    over: [1,2,3]
+    scatter: true
+
+  aliases:
+    ms: [calibrate.ms, image-1.ms]
+
+  steps: 
+    calibrate: 
+        cab: cubical
+    image-1:
+        cab: myclean
+        params:
+          prefix: "{recipe.image-prefix}" 
+
+
+
+## ....and can be invoked via _use, see below
+loop_recipe:
+  _use: lib.recipes.test-loop-recipe
+
+  
+same_as_cubical_image_loop:
+  _use: cubical_image_loop
+
+  

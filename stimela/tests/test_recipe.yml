@@ -31,6 +31,12 @@ cabs:
         writable: true
         nom_de_guerre: data-ms
         must_exist: false   # for testing
+      jones:
+        dtype: List[str]
+        required: true
+        policies:
+          repeat: list
+    dynamic_schema: stimela.tests.test_dynschema.cubical_schema
 
   wsclean:
     image: null
@@ -76,6 +82,11 @@ recipe:
               steps:
                   calibrate: 
                       cab: cubical
+                      params:
+                        jones: [B,G]
+                        B.f_int: 1
+                        G.f_int: 1
+                        # X__f_int: 1
                       # _skip: "recipe.vars.selfcal_loop < 2"    # skip on first iteration, go straight to image
                   image:
                       cab: wsclean
