@@ -365,6 +365,12 @@ class Recipe(Cargo):
                     raise RecipeValidationError(f"'for_loop.var={self.for_loop.var}' clashes with recipe {io_label}")
         # map of aliases
         self._alias_map = None
+        # set of keys protected from assignment
+        self._protected_from_assign = set()
+
+    def protect_from_assignments(self, keys):
+        self._protected_from_assign.update(keys)
+        #self.log.debug(f"protected from assignment: {self._protected_from_assign}")
 
     def validate_assignments(self, assign, assign_based_on, location):
         # collect a list of all assignments
@@ -374,44 +380,57 @@ class Recipe(Cargo):
         for basevar, lookup_list in assign_based_on.items():
             if not isinstance(lookup_list, Mapping):
                 raise RecipeValidationError(f"{location}.{assign_based_on}.{basevar}: mapping expected")
-            for assign_list in lookup_list.values():
-                for key in assign_list:
-                    assignments[key] = f"assign_based_on.{basevar}"
-        # check that none clash
-        for key, assign_label in assignments.items():
-            for io, io_label in [(self.inputs, "input"), (self.outputs, "output")]:
-                if key in io:
-                    raise RecipeValidationError(f"'{location}.{assign_label}.{key}' clashes with an {io_label}")
+            # for assign_list in lookup_list.values():
+            #     for key in assign_list:
+            #         assignments[key] = f"assign_based_on.{basevar}"
+        # # check that none clash
+        # for key, assign_label in assignments.items():
+        #     for io, io_label in [(self.inputs, "input"), (self.outputs, "output")]:
+        #         if key in io:
+        #             raise RecipeValidationError(f"'{location}.{assign_label}.{key}' clashes with an {io_label}")
 
-    def update_assignments(self, assign, assign_based_on, params, location):
+    def update_assignments(self, assign, assign_based_on, params=None, location=""):
+        if params is None:
+            params = self.params
         for basevar, value_list in assign_based_on.items():
             # make sure the base variable is defined
             if basevar in assign:
                 value = assign[basevar]
             elif basevar in params:
                 value = params[basevar]
+            elif basevar in self.inputs_outputs and self.inputs_outputs[basevar].default is not None:
+                value = self.inputs_outputs[basevar].default
             else:
-                raise AssignmentError(f"{location}.assign_based_on.{basevar} is an unknown variable or parameter")
+                raise AssignmentError(f"{location}.assign_based_on.{basevar} is an unset variable or parameter")
             # look up list of assignments
             assignments = value_list.get(value, value_list.get('DEFAULT'))
             if assignments is None:
                 raise AssignmentError(f"{location}.assign_based_on.{basevar}: unknown value '{value}', and no default defined")
             # update assignments
             for key, value in assignments.items():
-                # vars with dots are config settings
-                if '.' in key:
-                    path = key.split('.')
-                    varname = path[-1]
-                    section = self.config
-                    for element in path[:-1]:
-                        if element in section:
-                            section = section[element]
-                        else:
-                            raise AssignmentError("{location}.assign_based_on.{basevar}: '{element}' in '{key}' is not a valid config section")
-                    section[varname] = value
-                # vars without dots are loca
+                if key in self._protected_from_assign:
+                    self.log.debug(f"skipping protected assignment {key}={value}")
                 else:
-                    self.assign[key] = value
+                    # vars with dots are config settings
+                    if '.' in key:
+                        self.log.debug(f"config assignment: {key}={value}")
+                        path = key.split('.')
+                        varname = path[-1]
+                        section = self.config
+                        for element in path[:-1]:
+                            if element in section:
+                                section = section[element]
+                            else:
+                                raise AssignmentError("{location}.assign_based_on.{basevar}: '{element}' in '{key}' is not a valid config section")
+                        section[varname] = value
+                    # vars without dots are local variables or parameters
+                    else:
+                        if key in self.inputs_outputs:
+                            self.log.debug(f"params assignment: {key}={value}")
+                            params[key] = value
+                        else:
+                            self.log.debug(f"variable assignment: {key}={value}")
+                            self.assign[key] = value
 
     @property
     def finalized(self):
@@ -624,6 +643,9 @@ class Recipe(Cargo):
         self.log.debug("prevalidating recipe")
         errors = []
 
+        # update assignments
+        self.update_assignments(self.assign, self.assign_based_on, params=params, location=self.fqname)
+
         subst = SubstitutionNS()
         info = SubstitutionNS(fqname=self.fqname)
         # mutable=False means these sub-namespaces are not subject to {}-substitutions
@@ -765,8 +787,6 @@ class Recipe(Cargo):
         ------
         RecipeValidationError
         """
-        # update assignments
-        self.update_assignments(self.assign, self.assign_based_on, self.params, self.fqname)
 
         # set up substitution namespace
         subst = SubstitutionNS()
@@ -821,14 +841,14 @@ class Recipe(Cargo):
                 # update variables
                 self.assign[self.for_loop.var] = iter_var
                 self.assign[f"{self.for_loop.var}@index"] = count
-                self.update_assignments(self.assign, self.assign_based_on, self.params, self.fqname)
+                self.update_assignments(self.assign, self.assign_based_on, self.fqname)
                 subst.recipe._merge_(self.assign)
                 # update logfile name (since this may depend on substitutions)
                 stimelogging.update_file_logger(self.log, self.logopts, nesting=self.nesting, subst=subst, location=[self.fqname])
 
             for label, step in self.steps.items():
                 # merge in variable assignments and add step params as "current" namespace
-                self.update_assignments(step.assign, step.assign_based_on, step.params, f"{self.name}.{label}")
+                self.update_assignments(step.assign, step.assign_based_on, f"{self.name}.{label}")
                 subst.recipe._merge_(step.assign)
 
                 # update info
