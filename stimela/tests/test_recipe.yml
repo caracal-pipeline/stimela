@@ -2,6 +2,8 @@ cabs:
   simms:
     image: null
     command: echo 
+    policies:
+      skip_implicits: True
     # simms
     inputs:
       msname:
@@ -41,6 +43,8 @@ cabs:
   wsclean:
     image: null
     command: echo
+    policies:
+      skip_implicits: True
     inputs:
       ms:
         must_exist: false  # for testing

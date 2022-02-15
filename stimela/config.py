@@ -65,7 +65,7 @@ import stimela.backends.singularity
 import stimela.backends.podman
 import stimela.backends.native
 
-Backend = Enum("Stimela.Backend", "docker singularity podman native")
+Backend = Enum("Backend", "docker singularity podman native", module=__name__)
 
 @dataclass
 class StimelaOptions(object):
@@ -74,6 +74,8 @@ class StimelaOptions(object):
     basename: str = "stimela/v2-"
     singularity_image_dir: str = "~/.singularity"
     log: StimelaLogConfig = StimelaLogConfig()
+    ## For distributed computes and cpu allocation
+    dist: Dict[str, Any] = EmptyDictDefault()  
 
 @dataclass
 class StimelaLibrary(object):

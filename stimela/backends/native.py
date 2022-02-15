@@ -29,7 +29,7 @@ class LoggerIO(TextIOBase):
         return len(s)
 
 
-def run(cab: Cab, log, subst: Optional[Dict[str, Any]] = None):
+def run(cab: Cab, log, subst: Optional[Dict[str, Any]] = None, batch=None):
     """Runs cab contents
 
     Args:
@@ -105,7 +105,7 @@ def run_callable(modulename: str, funcname: str, cab: Cab, log, subst: Optional[
     return retval
 
 
-def run_command(cab: Cab, log, subst: Optional[Dict[str, Any]] = None):
+def run_command(cab: Cab, log, subst: Optional[Dict[str, Any]] = None, batch=None):
     """Runns command represented by cab.
 
     Args:
@@ -121,6 +121,17 @@ def run_command(cab: Cab, log, subst: Optional[Dict[str, Any]] = None):
     """
     # build command line from parameters
     args, venv = cab.build_command_line(subst)
+
+    if batch:
+        batch = SlurmBatch(**batch)
+        batch.__init_cab__(cab, subst, log)
+        runcmd = "/bin/bash -c" + " ".join(args)
+        jobfile = "foo-bar.job"
+        batch.name = "foo-bar"
+        batch.submit(jobfile=jobfile, runcmd=runcmd)
+
+        return
+    #-------------------------------------------------------
 
     command_name = args[0]
 
