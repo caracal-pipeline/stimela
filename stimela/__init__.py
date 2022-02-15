@@ -60,6 +60,3 @@ for item in os.listdir(CAB_PATH):
 
 
 from .stimelogging import logger
-
-from stimela.kitchen.recipe import PyRecipe as Recipe
-
