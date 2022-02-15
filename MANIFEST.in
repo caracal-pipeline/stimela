@@ -3,8 +3,9 @@ include README.rst
 include CHANGES.md
 include Dockerfile
 
-recursive-include stimela/cargo/cab/ *.yml *.yaml *.json
+recursive-include stimela/cargo/cab/ *.yml *.yaml
 recursive-include stimela/cargo/base/ *.yaml *.yml Dockerfile Dockerfile.*
+recursive-include stimela/cargo/lib/ *.yaml *.yml
 recursive-include stimela/cargo/cab/simulator/src/ tdlconf.profiles
 recursive-include stimela/cargo/cab/calibrator/src/ tdlconf.profiles
 recursive-include stimela/cargo/base/base xvfb.init.d
