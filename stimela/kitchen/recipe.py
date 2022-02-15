@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from omegaconf import MISSING, OmegaConf, DictConfig, ListConfig
 from collections import OrderedDict
+from collections.abc import Mapping
 from scabha import cargo
 from pathos.pools import ProcessPool
 from pathos.serial import SerialPool
@@ -32,6 +33,8 @@ from scabha.types import File, Directory, MS
 
 
 
+
+
 @dataclass
 class Step:
     """Represents one processing step of a recipe"""
@@ -47,6 +50,9 @@ class Step:
     fqname: str = ''                                # fully-qualified name e.g. recipe_name.step_label
 
     assign: Dict[str, Any] = EmptyDictDefault()     # assigns variables when step is executed
+
+    assign_based_on: Dict[str, Any] = EmptyDictDefault()
+                                                    # assigns variables when step is executed based on value of another variable
 
     _skip: Conditional = None                       # skip this step if conditional evaluates to true
     _break_on: Conditional = None                   # break out (of parent recipe) if conditional evaluates to true
@@ -312,6 +318,9 @@ class Recipe(Cargo):
 
     assign: Dict[str, Any] = EmptyDictDefault()     # assigns variables
 
+    assign_based_on: Dict[str, Any] = EmptyDictDefault()
+                                                    # assigns variables based on values of other variables
+
     aliases: Dict[str, Any] = EmptyDictDefault()
 
     defaults: Dict[str, Any] = EmptyDictDefault()
@@ -356,11 +365,8 @@ class Recipe(Cargo):
                 steps[label] = Step(**stepconfig)
             self.steps = steps
         # check that assignments don't clash with i/o parameters
-        for assign, assign_label in [(self.assign, "assign")] + [(step.assign, f"{label}.assign") for label, step in self.steps.items()]:
-            for key in assign:
-                for io, io_label in [(self.inputs, "inputs"), (self.outputs, "outputs")]:
-                    if key in io:
-                        raise RecipeValidationError(f"'{assign_label}.{key}' clashes with recipe {io_label}")
+        self.validate_assignments(self.assign, self.assign_based_on, self.name)
+
         # check that for-loop variable does not clash
         if self.for_loop:
             for io, io_label in [(self.inputs, "inputs"), (self.outputs, "outputs")]:
@@ -368,6 +374,72 @@ class Recipe(Cargo):
                     raise RecipeValidationError(f"'for_loop.var={self.for_loop.var}' clashes with recipe {io_label}")
         # map of aliases
         self._alias_map = None
+        # set of keys protected from assignment
+        self._protected_from_assign = set()
+
+    def protect_from_assignments(self, keys):
+        self._protected_from_assign.update(keys)
+        #self.log.debug(f"protected from assignment: {self._protected_from_assign}")
+
+    def validate_assignments(self, assign, assign_based_on, location):
+        # collect a list of all assignments
+        assignments = OrderedDict()
+        for key in assign:
+            assignments[key] = "assign"
+        for basevar, lookup_list in assign_based_on.items():
+            if not isinstance(lookup_list, Mapping):
+                raise RecipeValidationError(f"{location}.{assign_based_on}.{basevar}: mapping expected")
+            # for assign_list in lookup_list.values():
+            #     for key in assign_list:
+            #         assignments[key] = f"assign_based_on.{basevar}"
+        # # check that none clash
+        # for key, assign_label in assignments.items():
+        #     for io, io_label in [(self.inputs, "input"), (self.outputs, "output")]:
+        #         if key in io:
+        #             raise RecipeValidationError(f"'{location}.{assign_label}.{key}' clashes with an {io_label}")
+
+    def update_assignments(self, assign, assign_based_on, params=None, location=""):
+        if params is None:
+            params = self.params
+        for basevar, value_list in assign_based_on.items():
+            # make sure the base variable is defined
+            if basevar in assign:
+                value = assign[basevar]
+            elif basevar in params:
+                value = params[basevar]
+            elif basevar in self.inputs_outputs and self.inputs_outputs[basevar].default is not None:
+                value = self.inputs_outputs[basevar].default
+            else:
+                raise AssignmentError(f"{location}.assign_based_on.{basevar} is an unset variable or parameter")
+            # look up list of assignments
+            assignments = value_list.get(value, value_list.get('DEFAULT'))
+            if assignments is None:
+                raise AssignmentError(f"{location}.assign_based_on.{basevar}: unknown value '{value}', and no default defined")
+            # update assignments
+            for key, value in assignments.items():
+                if key in self._protected_from_assign:
+                    self.log.debug(f"skipping protected assignment {key}={value}")
+                else:
+                    # vars with dots are config settings
+                    if '.' in key:
+                        self.log.debug(f"config assignment: {key}={value}")
+                        path = key.split('.')
+                        varname = path[-1]
+                        section = self.config
+                        for element in path[:-1]:
+                            if element in section:
+                                section = section[element]
+                            else:
+                                raise AssignmentError("{location}.assign_based_on.{basevar}: '{element}' in '{key}' is not a valid config section")
+                        section[varname] = value
+                    # vars without dots are local variables or parameters
+                    else:
+                        if key in self.inputs_outputs:
+                            self.log.debug(f"params assignment: {key}={value}")
+                            params[key] = value
+                        else:
+                            self.log.debug(f"variable assignment: {key}={value}")
+                            self.assign[key] = value
 
     @property
     def finalized(self):
@@ -491,6 +563,10 @@ class Recipe(Cargo):
                 log = stimela.logger().getChild(self.fqname)
                 log.propagate = True
 
+            # check that per-step assignments don't clash with i/o parameters
+            for label, step in self.steps.items():
+                self.validate_assignments(step.assign, step.assign_based_on, f"{fqname}.{label}")
+
             # init and/or update logger options
             logopts = (logopts if logopts is not None else config.opts.log).copy()
             if 'log' in self.assign:
@@ -575,6 +651,9 @@ class Recipe(Cargo):
         self.finalize()
         self.log.debug("prevalidating recipe")
         errors = []
+
+        # update assignments
+        self.update_assignments(self.assign, self.assign_based_on, params=params, location=self.fqname)
 
         subst = SubstitutionNS()
         info = SubstitutionNS(fqname=self.fqname)
@@ -739,21 +818,27 @@ class Recipe(Cargo):
         ------
         RecipeValidationError
         """
+
         # set up substitution namespace
         subst = SubstitutionNS()
         info = SubstitutionNS(fqname=self.fqname)
-        # mutable=False means these sub-namespaces are not subject to {}-substitutions
+        # nosubst=True means these sub-namespaces are not subject to {}-substitutions
         subst._add_('info', info, nosubst=True)
-        subst._add_('config', self.config, nosubst=True) 
         subst._add_('steps', {}, nosubst=True)
         subst._add_('previous', {}, nosubst=True)
         recipe_ns = self.make_substitition_namespace(ns=self.assign)
         subst._add_('recipe', recipe_ns)
 
+        # merge in config sections, except "recipe" which clashes with our namespace
+        for section, content in self.config.items():
+            if section != 'recipe':
+                subst._add_(section, content, nosubst=True)
+
         # add root-level recipe info
         if self.nesting <= 1:
             Recipe._root_recipe_ns = recipe_ns
         subst._add_('root', Recipe._root_recipe_ns)
+
 
         logopts = self.config.opts.log.copy()
         if 'log' in self.assign:
@@ -793,14 +878,19 @@ class Recipe(Cargo):
             # if for-loop, assign new value
             if inst.for_loop:
                 inst.log.info(f"for loop iteration {count}: {inst.for_loop.var} = {iter_var}")
-                subst.recipe[inst.for_loop.var] = inst.assign[inst.for_loop.var] = iter_var
+                # update variables
+                inst.assign[inst.for_loop.var] = iter_var
+                inst.assign[f"{inst.for_loop.var}@index"] = count
+                inst.update_assignments(inst.assign, inst.assign_based_on, inst.fqname)
+                subst.recipe._merge_(inst.assign)
                 # update logfile name (since this may depend on substitutions)
                 stimelogging.update_file_logger(inst.log, inst.logopts, nesting=inst.nesting, subst=subst, location=[inst.fqname])
 
 
-
             # merge in variable assignments and add step params as "current" namespace
+            self.update_assignments(step.assign, step.assign_based_on, f"{self.name}.{label}")
             subst.recipe._merge_(step.assign)
+            
             # update info
             inst._prep_step(label, step, subst)
             # update log options again (based on assign.log which may have changed)
@@ -837,8 +927,6 @@ class Recipe(Cargo):
         loop_futures = []
 
         for count, iter_var in enumerate(self._for_loop_values):
-
-
             for label, step in self.steps.items():
                 this_args = (self,step, label, subst, count, iter_var)
                 loop_futures.append(this_args)
@@ -853,8 +941,9 @@ class Recipe(Cargo):
                 time.sleep(1)
             results.get()
         else:
-            loop_pool = SerialPool(max_workers)
-            results = list(loop_pool.imap(loop_worker, *loop_args))
+            # loop_pool = SerialPool(max_workers)
+            # results = list(loop_pool.imap(loop_worker, *loop_args))
+            results = [loop_worker(*args) for args in loop_futures]
 
         self.log.info(f"recipe '{self.name}' executed successfully")
         return {name: value for name, value in self.params.items() if name in self.outputs}

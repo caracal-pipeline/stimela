@@ -2,6 +2,8 @@ cabs:
   simms:
     image: null
     command: echo 
+    policies:
+      skip_implicits: True
     # simms
     inputs:
       msname:
@@ -36,14 +38,20 @@ cabs:
         required: true
         policies:
           repeat: list
-    dynamic_schema: stimela.tests.test_dynschema.cubical_schema
+    dynamic_schema: stimela.tests.example_dynschema.cubical_schema
 
   wsclean:
     image: null
     command: echo
+    policies:
+      skip_implicits: True
     inputs:
       ms:
         must_exist: false  # for testing
+      dummy:
+        dtype: str
+      dummy2:
+        dtype: str
     outputs:
       msout:
         must_exist: false  # for testing
@@ -67,6 +75,27 @@ recipe:
   defaults:
     telescope: kat-7
     selfcal_image_size: 1024
+  inputs:
+    band:
+      choices: [L, UHF]
+      default: L
+
+  assign:
+    foo: bar
+
+  assign_based_on:
+    band:
+      L:
+        var1: x
+        var2: y
+        cabs.wsclean.inputs.dummy.default: 1000
+        band_label: "band1-{recipe.band}"
+      UHF:
+        var1: x1
+        var2: y1
+        cabs.wsclean.inputs.dummy.default: 2000
+        band_label: "band2-{recipe.band}"
+
   steps: 
       makems:
           cab: simms
@@ -74,6 +103,8 @@ recipe:
               msname: "{recipe.msname}"
               synthesis: 0.128
       selfcal:
+          params:
+            band_name: "{recipe.band_label}"
           recipe:
               name: "demo selfcal"
               info: "this is a generic selfcal loop"
@@ -92,6 +123,7 @@ recipe:
                       cab: wsclean
                       params:
                           scale: "{recipe.scale}"
+                          dummy2: "{recipe.band_name}"
                   evaluate:
                       cab: aimfast
                       params:
@@ -106,5 +138,7 @@ recipe:
               inputs:
                   scale: 
                     dtype: Union[str, float]
+                  band_name:
+                    dtype: str
               defaults:
                   scale: 30asec

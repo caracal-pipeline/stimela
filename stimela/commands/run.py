@@ -46,7 +46,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False,
 
     log = logger()
     params = OrderedDict()
-    dotlist = []
+    dotlist = OrderedDict()
     errcode = 0
     recipe_name = None
 
@@ -61,7 +61,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False,
             key, value = pp.split("=", 1)
             # dotlist
             if '.' in key:
-                dotlist.append(pp)
+                dotlist[key] = pp
             # else param=value
             else:
                 # parse string as yaml value
@@ -78,7 +78,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False,
     # (when loading a recipe file, we want to merge these in AFTER the recipe is loaded, because the arguments
     # might apply to the recipe)
     try:
-        extra_config = OmegaConf.from_dotlist(dotlist) if dotlist else OmegaConf.create()
+        extra_config = OmegaConf.from_dotlist(dotlist.values()) if dotlist else OmegaConf.create()
     except OmegaConfBaseException as exc:
         log.error(f"error loading command-line dotlist: {exc}")
         sys.exit(2)
@@ -171,6 +171,11 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False,
 
         # wrap it in an outer step and prevalidate (to set up loggers etc.)
         recipe.fqname = recipe_name
+
+        # protect dotlisted arguments from being assignedby recipe.assignb and recipe.assign_based_on
+        recipe.protect_from_assignments(dotlist.keys())
+        recipe.protect_from_assignments(params.keys())
+
 
         log.info("pre-validating the recipe")
         outer_step = Step(recipe=recipe, name=f"{recipe_name}", info=what, params=params)

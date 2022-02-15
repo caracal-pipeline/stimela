@@ -1,4 +1,3 @@
-# -*- coding: future_fstrings -*-
 import os, sys, re
 import inspect
 import pkg_resources
