@@ -2,6 +2,7 @@ import shlex, re
 import importlib, traceback, sys
 
 from typing import Dict, Optional, Any
+from collections import OrderedDict
 from contextlib import redirect_stderr, redirect_stdout
 
 from scabha.cargo import Cab
@@ -85,12 +86,20 @@ def run_callable(modulename: str, funcname: str, cab: Cab, log, subst: Optional[
     else:
         log.info(f"invoking callable {modulename}.{funcname}()")
 
+    args = OrderedDict()
+    for key, schema in cab.inputs_outputs.items():
+        if not schema.policies.skip:
+            if key in cab.params:
+                args[key] = cab.params
+            elif cab.get_schema_policy(schema, 'pass_missing_as_none'):
+                args[key] = None
+
     # redirect and call
     cab.reset_runtime_status()
     try:
         with redirect_stdout(LoggerIO(log, funcname, "stdout", output_wrangler=cab.apply_output_wranglers)), \
                 redirect_stderr(LoggerIO(log, funcname, "stderr", output_wrangler=cab.apply_output_wranglers)):
-            retval = func(**cab.params)
+            retval = func(**args)
     except Exception as exc:
         for line in traceback.format_exception(*sys.exc_info()):
             log.error(line.rstrip())

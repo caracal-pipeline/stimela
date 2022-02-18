@@ -544,9 +544,14 @@ class Recipe(Cargo):
         # alias becomes required if any step parameter it refers to was required and unset
         if schema.required and not have_step_param:
             existing_schema.required = True
-        # alias becomes implicit if any step parameter it refers to is defined (and it doesn't have its own default)
-        if have_step_param and alias_name not in self.defaults:
-            existing_schema.implicit = f"{step_label}.{step_param_name}"
+
+        ### OMS 16/02/2022: see https://github.com/caracal-pipeline/stimela2/issues/16
+        ### this was misguided. If an aliased parameter is set in one of the steps, it should not become implicit, i.e. the user
+        ### should still be able to override it at recipe level.
+          
+        ## alias becomes implicit if any step parameter it refers to is defined (and it doesn't have its own default)
+        ## if have_step_param and alias_name not in self.defaults:
+        ##     existing_schema.implicit = f"{step_label}.{step_param_name}"
 
         self._alias_map[step_label, step_param_name] = alias_name
         self._alias_list.setdefault(alias_name, []).append((step, step_param_name))
