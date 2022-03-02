@@ -744,6 +744,9 @@ class Recipe(Cargo):
 
         # subst._add_('recipe', self.make_substitition_namespace(ns=self.assign))
         # subst.recipe._merge_(params)
+        for name, (from_step, from_param) in self._alias_propagated_from_step.items():
+            if name not in params:
+                params[name] = from_step.cargo.params[from_param]
 
         params = Cargo.validate_inputs(self, params, subst=subst, loosely=loosely)
         
