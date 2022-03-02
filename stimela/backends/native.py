@@ -94,7 +94,7 @@ def run_callable(modulename: str, funcname: str, cab: Cab, log, subst: Optional[
     for key, schema in cab.inputs_outputs.items():
         if not schema.policies.skip:
             if key in cab.params:
-                args[key] = cab.params
+                args[key] = cab.params[key]
             elif cab.get_schema_policy(schema, 'pass_missing_as_none'):
                 args[key] = None
 
