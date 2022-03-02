@@ -546,13 +546,12 @@ class Recipe(Cargo):
         if schema.required and not have_step_param:
             existing_schema.required = True
 
-        ### OMS 16/02/2022: see https://github.com/caracal-pipeline/stimela2/issues/16
-        ### this was misguided. If an aliased parameter is set in one of the steps, it should not become implicit, i.e. the user
-        ### should still be able to override it at recipe level.
-          
-        ## alias becomes implicit if any step parameter it refers to is defined (and it doesn't have its own default)
-        ## if have_step_param and alias_name not in self.defaults:
-        ##     existing_schema.implicit = f"{step_label}.{step_param_name}"
+        ## if our alias doesn't have its own default set, and the step has something set, then we'll propagate the value
+        ## *from* the step to the recipe (for the first such step)
+        if have_step_param and alias_name not in self.defaults:
+            if alias_name not in self._alias_propagated_from_step: 
+                self._alias_propagated_from_step[alias_name] = (step, step_param_name)
+        # all other steps will have the aliased value propagated *to* them
 
         self._alias_map[step_label, step_param_name] = alias_name
         self._alias_list.setdefault(alias_name, []).append((step, step_param_name))
@@ -594,6 +593,7 @@ class Recipe(Cargo):
             # collect aliases
             self._alias_map = OrderedDict()
             self._alias_list = OrderedDict()
+            self._alias_propagated_from_step = OrderedDict()
 
             # collect from inputs and outputs
             for io in self.inputs, self.outputs:
@@ -685,7 +685,7 @@ class Recipe(Cargo):
         # merge again
         subst.recipe._merge_(self.params)
 
-        # propagate aliases up to substeps
+        # propagate aliases up to/down from substeps
         for name, value in self.params.items():
             self._propagate_parameter(name, value)
 
@@ -744,6 +744,9 @@ class Recipe(Cargo):
 
         # subst._add_('recipe', self.make_substitition_namespace(ns=self.assign))
         # subst.recipe._merge_(params)
+        for name, (from_step, from_param) in self._alias_propagated_from_step.items():
+            if name not in params:
+                params[name] = from_step.cargo.params[from_param]
 
         params = Cargo.validate_inputs(self, params, subst=subst, loosely=loosely)
         
@@ -772,13 +775,15 @@ class Recipe(Cargo):
                 step.previous_step = steps[i-2]
 
     def _propagate_parameter(self, name, value):
-        ### OMS: not sure why I had this, why not propagae unresolveds?
-        ## if type(value) is not validate.Unresolved:
+        # check if aliased parameter is to be propagated down from a step
+        from_step, from_step_param_name = self._alias_propagated_from_step.get(name, (None, None))
+        if from_step is not None:
+            if from_step_param_name in from_step.cargo.params:
+                self.params[name] = step.cargo.params[from_step_param_name]
+        
+        # propagate up to steps
         for step, step_param_name in self._alias_list.get(name, []):
-            if self.inputs_outputs[name].implicit:
-                if step_param_name in step.cargo.params:
-                    self.params[name] = step.cargo.params[name]
-            else:
+            if step is not from_step:
                 step.update_parameter(step_param_name, value)
 
     def update_parameter(self, name: str, value: Any):
@@ -908,6 +913,7 @@ class Recipe(Cargo):
             info.fqname = step.fqname
             stimelogging.update_file_logger(step.log, step.logopts, nesting=step.nesting, subst=subst, location=[step.fqname])
 
+            inst.log.info(f"{'skipping' if step.skip else 'running'} step '{label}'")
             try:
                 #step_params = step.run(subst=subst.copy(), batch=batch)  # make a copy of the subst dict since recipe might modify
                 step_params = step.run(subst=subst.copy())  # make a copy of the subst dict since recipe might modify
@@ -926,10 +932,8 @@ class Recipe(Cargo):
                 for step1, step_param_name in inst._alias_list.get(name, []):
                     if step1 is step and step_param_name in step_params:
                         inst.params[name] = step_params[step_param_name]
-                        # clear implicit setting
-                        inst.outputs[name].implicit = None
-                   
-                inst.log.info(f"{'skipping' if step.skip else 'running'} step '{label}'")
+                        # # clear implicit setting
+                        # inst.outputs[name].implicit = None
 
         loop_futures = []
 
