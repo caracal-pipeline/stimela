@@ -69,10 +69,14 @@ def run_callable(modulename: str, funcname: str, cab: Cab, log, subst: Optional[
     """
 
     # import module and get function object
+    path0 = sys.path.copy()
+    sys.path.append('.')
     try:
         mod = importlib.import_module(modulename)
     except ImportError as exc:
         raise StimelaCabRuntimeError(f"can't import {modulename}: {exc}", log=log)
+    finally:
+        sys.path = path0
 
     func = getattr(mod, funcname, None)
 

@@ -254,11 +254,9 @@ class Step:
 
         self.log.debug(f"validating outputs")
         validated = False
-        # insert output values into params for re-substitution and re-validation
-        output_params = {name: value for name, value in params.items() if name in self.cargo.outputs}
 
         try:
-            params = self.cargo.validate_outputs(output_params, loosely=self.skip, subst=subst)
+            params = self.cargo.validate_outputs(params, loosely=self.skip, subst=subst)
             validated = True
         except ScabhaBaseException as exc:
             level = logging.WARNING if self.skip else logging.ERROR
@@ -276,6 +274,9 @@ class Step:
             else:
                 self.log_summary(level, "failed outputs", color="WARNING")
                 raise
+
+        if subst is not None:
+            subst.current._merge_(params)
 
         if validated:
             self.log_summary(logging.DEBUG, "validated outputs")
@@ -739,6 +740,7 @@ class Recipe(Cargo):
             info = SubstitutionNS(fqname=self.fqname)
             subst._add_('info', info, nosubst=True)
             subst._add_('config', self.config, nosubst=True) 
+            subst._add_('recipe', self.make_substitition_namespace(ns=self.assign))
 
         # subst._add_('recipe', self.make_substitition_namespace(ns=self.assign))
         # subst.recipe._merge_(params)
