@@ -1,4 +1,5 @@
-import glob, time
+import time
+import copy
 from multiprocessing import cpu_count
 import os, os.path, re, logging
 from typing import Any, Tuple, List, Dict, Optional, Union
@@ -8,6 +9,7 @@ from dataclasses import dataclass
 from omegaconf import MISSING, OmegaConf, DictConfig, ListConfig
 from collections import OrderedDict
 from collections.abc import Mapping
+from pytest import param
 from scabha import cargo
 from pathos.pools import ProcessPool
 from pathos.serial import SerialPool
@@ -28,7 +30,7 @@ from . import runners
 
 Conditional = Optional[str]
 
-from scabha.cargo import Cargo, Cab, Batch
+from scabha.cargo import Parameter, Cargo, Cab, Batch
 from scabha.types import File, Directory, MS
 
 
@@ -290,7 +292,7 @@ class Step:
             else:
                 raise StepValidationError(f"invalid outputs: {join_quote(invalid)}", log=self.log)
 
-        return {name: value for name, value in self.cargo.params.items()}
+        return self.cargo.params
 
 @dataclass
 class ForLoopClause(object):
@@ -500,6 +502,14 @@ class Recipe(Cargo):
         """
         return self.add_step(Step(cab=cabname, params=params, info=info), label=label)
 
+    @dataclass
+    class AliasInfo(object):
+        label: str                      # step label
+        step: Step                      # step
+        param: str                      # parameter name
+        io: Dict[str, Parameter]        # points to self.inputs or self.outputs
+        from_recipe: bool = False       # if True, value propagates from recipe up to step
+        from_step: bool = False         # if True, value propagates from step down to recipe
 
     def _add_alias(self, alias_name: str, alias_target: Union[str, Tuple]):
         if type(alias_target) is str:
@@ -510,51 +520,50 @@ class Recipe(Cargo):
 
         if step is None:
             raise RecipeValidationError(f"alias '{alias_name}' refers to unknown step '{step_label}'", log=self.log)
+        # is the alias already defined
+        existing_alias = self._alias_list.get(alias_name, [None])[0]
         # find it in inputs or outputs
         input_schema = step.inputs.get(step_param_name)
         output_schema = step.outputs.get(step_param_name)
         schema = input_schema or output_schema
         if schema is None:
             raise RecipeValidationError(f"alias '{alias_name}' refers to unknown step parameter '{step_label}.{step_param_name}'", log=self.log)
-        # check that it's not an input that is already set
-        if step_param_name in step.params and input_schema:
-            raise RecipeValidationError(f"alias '{alias_name}' refers to input '{step_label}.{step_param_name}' that is already predefined", log=self.log)
-        # check that its I/O is consistent
-        if (input_schema and alias_name in self.outputs) or (output_schema and alias_name in self.inputs):
-            raise RecipeValidationError(f"alias '{alias_name}' can't refer to both an input and an output", log=self.log)
-        # see if it's already defined consistently
-        io = self.inputs if input_schema else self.outputs
-        existing_schema = io.get(alias_name)
-        if existing_schema is None:
-            io[alias_name] = schema.copy()      # make copy of schema object                  
-            existing_schema = io[alias_name]    # get reference to this copy now
-            existing_schema.required = False # will be set to True below as needed
-            existing_schema.implicit = None
-        else:
-            # if existing type was unset, set it quietly
-            if not existing_schema.dtype:
-                existing_schema.dtype = schema.dtype
-            # check if definition conflicts
-            elif schema.dtype != existing_schema.dtype:
+        # implicit inuts cannot be aliased
+        if input_schema and input_schema.implicit:
+            raise RecipeValidationError(f"alias '{alias_name}' refers to implicit input '{step_label}.{step_param_name}'", log=self.log)
+        # if alias is already defined, check for conflicts
+        if existing_alias is not None:
+            io = existing_alias.io
+            if io is self.outputs:
+                raise RecipeValidationError(f"output alias '{alias_name}' is defined more than once", log=self.log)
+            elif output_schema:
+                raise RecipeValidationError(f"alias '{alias_name}' refers to both an input and an output", log=self.log)
+            alias_schema = io[alias_name] 
+            # now we know it's a multiply-defined input, check for type consistency
+            if alias_schema.dtype != schema.dtype:
                 raise RecipeValidationError(f"alias '{alias_name}': dtype {schema.dtype} of '{step_label}.{step_param_name}' doesn't match previous dtype {existing_schema.dtype}", log=self.log)
+            
+        # else alias not yet defined, insert a schema
+        else:
+            io = self.inputs if input_schema else self.outputs
+            io[alias_name] = copy.copy(schema)
+            alias_schema = io[alias_name]      # make copy of schema object     
+
+        # if step parameter is implicit, mark the alias as implicit. Note that this only applies to outputs
+        if schema.implicit:
+            alias_schema.implicit = Unresolved(f"{step_label}.{step_param_name}")   # will be resolved when propagated from step
+            self._implicit_params.add(alias_name)
 
         # this is True if the step's parameter is defined in any way (set, default, or implicit)
         have_step_param = step_param_name in step.params or step_param_name in step.cargo.defaults or \
             schema.default is not None or schema.implicit is not None
 
-        # alias becomes required if any step parameter it refers to was required and unset
+        # alias becomes required if any step parameter it refers to was required, but wasn't already set 
         if schema.required and not have_step_param:
-            existing_schema.required = True
-
-        ## if our alias doesn't have its own default set, and the step has something set, then we'll propagate the value
-        ## *from* the step to the recipe (for the first such step)
-        if have_step_param and alias_name not in self.defaults:
-            if alias_name not in self._alias_propagated_from_step: 
-                self._alias_propagated_from_step[alias_name] = (step, step_param_name)
-        # all other steps will have the aliased value propagated *to* them
+            alias_schema.required = True
 
         self._alias_map[step_label, step_param_name] = alias_name
-        self._alias_list.setdefault(alias_name, []).append((step, step_param_name))
+        self._alias_list.setdefault(alias_name, []).append(Recipe.AliasInfo(step_label, step, step_param_name, io))
 
     def finalize(self, config=None, log=None, logopts=None, fqname=None, nesting=0):
         if not self.finalized:
@@ -593,7 +602,6 @@ class Recipe(Cargo):
             # collect aliases
             self._alias_map = OrderedDict()
             self._alias_list = OrderedDict()
-            self._alias_propagated_from_step = OrderedDict()
 
             # collect from inputs and outputs
             for io in self.inputs, self.outputs:
@@ -601,7 +609,6 @@ class Recipe(Cargo):
                     if schema.aliases:
                         if schema.dtype != "str" or schema.choices or schema.writable:
                             raise RecipeValidationError(f"alias '{name}' should not specify type, choices or writability", log=log)
-                        schema.dtype = ""       # tells _add_alias to not check
                         for alias_target in schema.aliases:
                             self._add_alias(name, alias_target)
 
@@ -675,42 +682,80 @@ class Recipe(Cargo):
         if self.for_loop is not None and self.for_loop.var in self.inputs:
             params[self.for_loop.var] = Unresolved("for-loop")
 
-        # validate our own parameters
-        try:
-            Cargo.prevalidate(self, params, subst=subst)
-        except ScabhaBaseException as exc:
-            msg = f"recipe pre-validation failed: {exc}"
-            errors.append(RecipeValidationError(msg, log=self.log))
+        # prevalidate our own parameters. This substitutes in defaults and does {}-substitutions
+        # we call this twice, potentially, so define as a function
+        def prevalidate_self():
+            try:
+                Cargo.prevalidate(self, params, subst=subst)
+            except ScabhaBaseException as exc:
+                msg = f"recipe pre-validation failed: {exc}"
+                errors.append(RecipeValidationError(msg, log=self.log))
 
-        # merge again
-        subst.recipe._merge_(self.params)
+            # merge again, since values may have changed
+            subst.recipe._merge_(self.params)
 
-        # propagate aliases up to/down from substeps
-        for name, value in self.params.items():
-            self._propagate_parameter(name, value)
+        prevalidate_self()
+
+        # propagate alias values up to substeps, except for implicit values (these only ever propagate down to us)
+        for name, aliases in self._alias_list.items():
+            if name in self.params and name not in self._implicit_params:
+                for alias in aliases:
+                    alias.from_recipe = True
+                    alias.step.update_parameter(alias.param, self.params[name])
+
+        # prevalidate step parameters 
+        # we call this twice, potentially, so define as a function
+        def prevalidate_steps():
+            for label, step in self.steps.items():
+                self._prep_step(label, step, subst)
+
+                try:
+                    step.prevalidate(subst)
+                except ScabhaBaseException as exc:
+                    if type(exc) is SubstitutionErrorList:
+                        self.log.error(f"unresolved {{}}-substitution(s):")
+                        for err in exc.errors:
+                            self.log.error(f"  {err}")
+                    msg = f"step '{label}' failed pre-validation: {exc}"
+                    errors.append(RecipeValidationError(msg, log=self.log))
+
+                subst.previous = subst.current
+                subst.steps[label] = subst.previous
+
+        prevalidate_steps()
+
+        # now check for aliases that need to be propagated up/down
+        if not errors:
+            revalidate_self = revalidate_steps = False
+            for name, aliases in self._alias_list.items():
+                # propagate up if alias is not set, or it is implicit=True (meaning it gets set from an implicit substep parameter)
+                if name not in self.params or type(self.inputs_outputs[name].implicit) is Unresolved:
+                    from_step = False
+                    for alias in aliases:
+                        # if alias is set in step but not with us, mark it as propagating down
+                        if alias.param in alias.step.params:
+                            alias.from_step = from_step = revalidate_self = True
+                            self.params[name] = alias.step.params[alias.param]
+                            # and break out, we do this for the first matching step only
+                            break
+                    # if we propagated an input value down from a step, check if we need to propagate it up to any other steps
+                    # note that this only ever applies to inputs
+                    if from_step:
+                        for alias in aliases:
+                            if not alias.from_step:
+                                alias.from_recipe = revalidate_steps = True
+                                alias.step.update_parameter(alias.param, self.params[name])
+
+            # do we or any steps need to be revalidated?
+            if revalidate_self:
+                prevalidate_self()
+            if revalidate_steps:
+                prevalidate_steps()
 
         # check for missing parameters
         if self.missing_params:
             msg = f"""recipe '{self.name}' is missing the following required parameters: {join_quote(self.missing_params)}"""
             errors.append(RecipeValidationError(msg, log=self.log))
-
-        # prevalidate step parameters 
-        for label, step in self.steps.items():
-            self._prep_step(label, step, subst)
-
-            try:
-                step.prevalidate(subst)
-            except ScabhaBaseException as exc:
-                if type(exc) is SubstitutionErrorList:
-                    self.log.error(f"unresolved {{}}-substitution(s):")
-                    for err in exc.errors:
-                        self.log.error(f"  {err}")
-                msg = f"step '{label}' failed pre-validation: {exc}"
-                errors.append(RecipeValidationError(msg, log=self.log))
-
-            subst.previous = subst.current
-            subst.steps[label] = subst.previous
-
 
         if errors:
             raise RecipeValidationError(f"{len(errors)} error(s) validating the recipe '{self.name}'", log=self.log)
@@ -742,15 +787,7 @@ class Recipe(Cargo):
             subst._add_('config', self.config, nosubst=True) 
             subst._add_('recipe', self.make_substitition_namespace(ns=self.assign))
 
-        # subst._add_('recipe', self.make_substitition_namespace(ns=self.assign))
-        # subst.recipe._merge_(params)
-        for name, (from_step, from_param) in self._alias_propagated_from_step.items():
-            if name not in params:
-                params[name] = from_step.cargo.params[from_param]
-
-        params = Cargo.validate_inputs(self, params, subst=subst, loosely=loosely)
-        
-        return params
+        return Cargo.validate_inputs(self, params, subst=subst, loosely=loosely)
 
     def _link_steps(self):
         """
@@ -773,32 +810,6 @@ class Recipe(Cargo):
             elif i == N-1:
                 step.next_step = None
                 step.previous_step = steps[i-2]
-
-    def _propagate_parameter(self, name, value):
-        # check if aliased parameter is to be propagated down from a step
-        from_step, from_step_param_name = self._alias_propagated_from_step.get(name, (None, None))
-        if from_step is not None:
-            if from_step_param_name in from_step.cargo.params:
-                self.params[name] = step.cargo.params[from_step_param_name]
-        
-        # propagate up to steps
-        for step, step_param_name in self._alias_list.get(name, []):
-            if step is not from_step:
-                step.update_parameter(step_param_name, value)
-
-    def update_parameter(self, name: str, value: Any):
-        """[summary]
-
-        Parameters
-        ----------
-        name : str
-            [description]
-        value : Any
-            [description]
-        """
-        self.params[name] = value
-        # resolved values propagate up to substeps if aliases, and propagate back if implicit
-        self._propagate_parameter(name, value)
 
     def summary(self, recursive=True):
         """Returns list of lines with a summary of the recipe state
@@ -871,8 +882,9 @@ class Recipe(Cargo):
                 if type(value) is validate.Unresolved:
                     raise RecipeValidationError(f"recipe '{self.name}' has unresolved input '{name}'", log=self.log)
                 # propagate up all aliases
-                for step, step_param_name in self._alias_list.get(name, []):
-                    step.update_parameter(step_param_name, value)
+                for alias in self._alias_list.get(name, []):
+                    if alias.from_recipe:
+                        alias.step.update_parameter(alias.param, value)
             else:
                 if schema.required: 
                     raise RecipeValidationError(f"recipe '{self.name}' is missing required input '{name}'", log=self.log)
@@ -927,14 +939,6 @@ class Recipe(Cargo):
             subst.previous = step_params
             subst.steps[label] = subst.previous
 
-            # check aliases, our outputs need to be retrieved from the step
-            for name, _ in inst.outputs.items():
-                for step1, step_param_name in inst._alias_list.get(name, []):
-                    if step1 is step and step_param_name in step_params:
-                        inst.params[name] = step_params[step_param_name]
-                        # # clear implicit setting
-                        # inst.outputs[name].implicit = None
-
         loop_futures = []
 
         for count, iter_var in enumerate(self._for_loop_values):
@@ -956,8 +960,14 @@ class Recipe(Cargo):
             # results = list(loop_pool.imap(loop_worker, *loop_args))
             results = [loop_worker(*args) for args in loop_futures]
 
+        # now check for output aliases that need to be propagated down
+        for name, aliases in self._alias_list.items():
+            for alias in aliases:
+                if alias.from_step:
+                    self.params[name] = alias.step.params[alias.param]
+
         self.log.info(f"recipe '{self.name}' executed successfully")
-        return {name: value for name, value in self.params.items() if name in self.outputs}
+        return OrderedDict((name, value) for name, value in self.params.items() if name in self.outputs)
 
 
     def run(self, **params) -> Dict[str, Any]:

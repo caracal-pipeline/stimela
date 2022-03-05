@@ -9,7 +9,7 @@ import glob
 requirements = ["pyyaml",
                 "nose>=1.3.7",
                 "future-fstrings",
-                "scabha @ git+https://github.com/caracal-pipeline/scabha2",
+                "scabha >= 0.6.1", # @ git+https://github.com/caracal-pipeline/scabha2",
                 "ruamel.yaml",
                 "munch",
                 "omegaconf>=2.1pre1",

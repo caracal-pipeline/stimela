@@ -291,7 +291,8 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False,
     if outputs and step.log.isEnabledFor(logging.DEBUG):
         outer_step.log.debug("run successful, outputs follow:")
         for name, value in outputs.items():
-            outer_step.log.debug(f"  {name}: {value}")
+            if name in recipe.outputs:
+                outer_step.log.debug(f"  {name}: {value}")
     else:
         outer_step.log.info("run successful")
 
