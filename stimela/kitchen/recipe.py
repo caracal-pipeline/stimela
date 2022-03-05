@@ -375,8 +375,8 @@ class Recipe(Cargo):
             for io, io_label in [(self.inputs, "inputs"), (self.outputs, "outputs")]:
                 if self.for_loop.var in io:
                     raise RecipeValidationError(f"'for_loop.var={self.for_loop.var}' clashes with recipe {io_label}")
-        # map of aliases
-        self._alias_map = None
+        # marked when finalized
+        self._alias_map  = None
         # set of keys protected from assignment
         self._protected_from_assign = set()
 
@@ -547,7 +547,7 @@ class Recipe(Cargo):
         else:
             io = self.inputs if input_schema else self.outputs
             io[alias_name] = copy.copy(schema)
-            alias_schema = io[alias_name]      # make copy of schema object     
+            alias_schema = io[alias_name]      # make copy of schema object
 
         # if step parameter is implicit, mark the alias as implicit. Note that this only applies to outputs
         if schema.implicit:
@@ -557,6 +557,10 @@ class Recipe(Cargo):
         # this is True if the step's parameter is defined in any way (set, default, or implicit)
         have_step_param = step_param_name in step.params or step_param_name in step.cargo.defaults or \
             schema.default is not None or schema.implicit is not None
+
+        # if the step parameter is set, mark our schema as having a default
+        if have_step_param:
+            alias_schema.default = Unresolved(f"{step_label}.{step_param_name}")
 
         # alias becomes required if any step parameter it refers to was required, but wasn't already set 
         if schema.required and not have_step_param:
@@ -620,7 +624,7 @@ class Recipe(Cargo):
             # automatically make aliases for step parameters that are unset, and don't have a default, and aren't implict 
             for label, step in self.steps.items():
                 for name, schema in step.inputs_outputs.items():
-                    if (label, name) not in self._alias_map and name not in step.params \
+                    if (label, name) not in self._alias_map and name not in step.params and name not in step.cargo.params \
                             and name not in step.cargo.defaults and schema.default is None \
                             and not schema.implicit:
                         auto_name = f"{label}_{name}"
@@ -668,6 +672,8 @@ class Recipe(Cargo):
         # update assignments
         self.update_assignments(self.assign, self.assign_based_on, params=params, location=self.fqname)
 
+        subst_outer = subst  # outer dictionary is used to prevalidate our parameters
+
         subst = SubstitutionNS()
         info = SubstitutionNS(fqname=self.fqname)
         # mutable=False means these sub-namespaces are not subject to {}-substitutions
@@ -686,7 +692,7 @@ class Recipe(Cargo):
         # we call this twice, potentially, so define as a function
         def prevalidate_self():
             try:
-                Cargo.prevalidate(self, params, subst=subst)
+                Cargo.prevalidate(self, params, subst=subst_outer)
             except ScabhaBaseException as exc:
                 msg = f"recipe pre-validation failed: {exc}"
                 errors.append(RecipeValidationError(msg, log=self.log))
@@ -695,6 +701,7 @@ class Recipe(Cargo):
             subst.recipe._merge_(self.params)
 
         prevalidate_self()
+        params = self.params
 
         # propagate alias values up to substeps, except for implicit values (these only ever propagate down to us)
         for name, aliases in self._alias_list.items():
