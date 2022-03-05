@@ -726,6 +726,7 @@ class Recipe(Cargo):
                     msg = f"step '{label}' failed pre-validation: {exc}"
                     errors.append(RecipeValidationError(msg, log=self.log))
 
+                subst.current._merge_(step.cargo.params)   # these may hav echanged in prevalidation
                 subst.previous = subst.current
                 subst.steps[label] = subst.previous
 
@@ -740,9 +741,9 @@ class Recipe(Cargo):
                     from_step = False
                     for alias in aliases:
                         # if alias is set in step but not with us, mark it as propagating down
-                        if alias.param in alias.step.params:
+                        if alias.param in alias.step.cargo.params:
                             alias.from_step = from_step = revalidate_self = True
-                            self.params[name] = alias.step.params[alias.param]
+                            self.params[name] = alias.step.cargo.params[alias.param]
                             # and break out, we do this for the first matching step only
                             break
                     # if we propagated an input value down from a step, check if we need to propagate it up to any other steps
