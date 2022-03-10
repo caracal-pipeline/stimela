@@ -66,6 +66,13 @@ cabs:
         dtype: str
         required: true
 
+opts:
+  log:
+    dir: test-logs/logs-{config.run.datetime} 
+    nest: 3
+    symlink: logs
+
+
 recipe:
   name: "demo recipe"
   info: 'top level recipe definition'

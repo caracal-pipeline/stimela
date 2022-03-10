@@ -48,7 +48,7 @@ def test_test_recipe():
 
 def test_test_loop_recipe():
     print("===== expecting an error since 'ms' parameter is missing =====")
-    retcode = os.system("stimela -v exec test_loop_recipe.yml cubical_image")
+    retcode = os.system("stimela -v exec test_loop_recipe.yml cubical_image_loop")
     assert retcode != 0
 
     print("===== expecting no errors now =====")

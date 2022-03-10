@@ -26,6 +26,11 @@ cabs:
         must_exist: false
         default: out2
         
+opts:
+  log:
+    dir: test-logs/logs-{config.run.datetime} 
+    nest: 3
+    symlink: logs
 
 recipe:
   name: "alias test recipe"

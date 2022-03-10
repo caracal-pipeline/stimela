@@ -180,7 +180,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False,
         log.info("pre-validating the recipe")
         outer_step = Step(recipe=recipe, name=f"{recipe_name}", info=what, params=params)
         try:
-            outer_step.prevalidate()
+            params = outer_step.prevalidate()
         except ScabhaBaseException as exc:
             if not exc.logged:
                 log.error(f"pre-validation failed: {exc}")
@@ -273,7 +273,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False,
     # in debug mode, pretty-print the recipe
     if log.isEnabledFor(logging.DEBUG):
         log.debug("---------- prevalidated step follows ----------")
-        for line in outer_step.summary():
+        for line in outer_step.summary(params=params):
             log.debug(line)
 
     if dry_run:
