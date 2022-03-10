@@ -51,7 +51,7 @@ def run(cab: Cab, params: Dict[str, Any], log, subst: Optional[Dict[str, Any]] =
         return run_command(cab, params, log, subst)
 
 
-def run_callable(modulename: str, funcname: str,  cab: Cab, log, params: Dict[str, Any], subst: Optional[Dict[str, Any]] = None):
+def run_callable(modulename: str, funcname: str,  cab: Cab, params: Dict[str, Any], log, subst: Optional[Dict[str, Any]] = None):
     """Runs a cab corresponding to a Python callable. Intercepts stdout/stderr into the logger.
 
     Args:
