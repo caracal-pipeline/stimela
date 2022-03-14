@@ -122,6 +122,12 @@ base_inputs:
     required: false
     policies:
       repeat: list
+  no-dirty:
+    dtype: bool
+  make-psf:
+    dtype: bool
+  simulate-noise:
+    dtype: Union[float, str]
 
 base_outputs:
   source_list:
