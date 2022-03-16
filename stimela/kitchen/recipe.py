@@ -67,8 +67,9 @@ class Step:
         # after (pre)validation, this contains parameter values
         self.validated_params = None
 
-    def summary(self, params=None, recursive=True):
-        return self.cargo and self.cargo.summary(recursive=recursive, params=params or self.validated_params or self.params)
+    def summary(self, params=None, recursive=True, ignore_missing=False):
+        return self.cargo and self.cargo.summary(recursive=recursive, 
+                                params=params or self.validated_params or self.params, ignore_missing=ignore_missing)
 
     @property
     def finalized(self):
@@ -170,12 +171,12 @@ class Step:
             raise StepValidationError(f"{self.cargo.name} has the following invalid parameters: {join_quote(self.invalid_params)}")
         return params
 
-    def log_summary(self, level, title, color=None):
+    def log_summary(self, level, title, color=None, ignore_missing=False):
         extra = dict(color=color, boldface=True)
         if self.log.isEnabledFor(level):
             self.log.log(level, f"### {title}", extra=extra)
             del extra['boldface']
-            for line in self.summary(recursive=False):
+            for line in self.summary(recursive=False, ignore_missing=ignore_missing):
                 self.log.log(level, line, extra=extra)
 
     def run(self, subst=None, batch=None):
@@ -225,7 +226,7 @@ class Step:
 
         # log inputs
         if validated and not self.skip:
-            self.log_summary(logging.INFO, "validated inputs", color="GREEN")
+            self.log_summary(logging.INFO, "validated inputs", color="GREEN", ignore_missing=True)
             if subst is not None:
                 subst.current = params
 
@@ -283,7 +284,7 @@ class Step:
             self.validated_params.update(**params)
             if subst is not None:
                 subst.current._merge_(params)
-            self.log_summary(logging.DEBUG, "validated outputs")
+            self.log_summary(logging.DEBUG, "validated outputs", ignore_missing=True)
 
         # bomb out if an output was invalid
         invalid = [name for name in self.invalid_params + self.unresolved_params if name in self.cargo.outputs]
@@ -843,11 +844,12 @@ class Recipe(Cargo):
                 step.next_step = None
                 step.previous_step = steps[i-2]
 
-    def summary(self, params: Dict[str, Any], recursive=True):
+    def summary(self, params: Dict[str, Any], recursive=True, ignore_missing=False):
         """Returns list of lines with a summary of the recipe state
         """
-        lines = [f"recipe '{self.name}':"] + [f"  {name} = {value}" for name, value in params.items()] + \
-                [f"  {name} = ???" for name in self.inputs_outputs if name not in params]
+        lines = [f"recipe '{self.name}':"] + [f"  {name} = {value}" for name, value in params.items()]
+        if not ignore_missing:
+            lines += [f"  {name} = ???" for name in self.inputs_outputs if name not in params]
         if recursive:
             lines.append("  steps:")
             for name, step in self.steps.items():
