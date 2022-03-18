@@ -5,7 +5,6 @@ cabs:
     policies:
       skip_implicits: false
       key_value: true
-    # simms
     inputs:
       a:
         dtype: str
@@ -16,6 +15,10 @@ cabs:
         dtype: str
       d:
         implicit: "d_is_implicit"
+      e:
+        dtype: str
+      f:
+        dtype: str
     outputs:
       out:
         dtype: File
@@ -39,6 +42,8 @@ recipe:
     b: [s1.b, s2.b]
     out: [s4.out] 
     out2: [s3.out2]
+    e: ['s[12].e']
+    f: ['(echo).f']
 
   steps:
     s1:

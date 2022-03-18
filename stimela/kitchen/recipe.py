@@ -1,9 +1,6 @@
-import time
-import copy
 from multiprocessing import cpu_count
-import os, os.path, re, logging
+import os, os.path, re, logging, fnmatch, copy
 from typing import Any, Tuple, List, Dict, Optional, Union
-from enum import Enum
 from dataclasses import dataclass
 from omegaconf import MISSING, OmegaConf, DictConfig, ListConfig
 from collections import OrderedDict
@@ -24,6 +21,7 @@ from scabha.validate import Unresolved, join_quote
 from scabha.substitutions import SubstitutionNS, substitutions_from 
 from scabha.cargo import Parameter, Cargo, Cab, Batch
 from scabha.types import File, Directory, MS
+
 
 from . import runners
 
@@ -514,61 +512,72 @@ class Recipe(Cargo):
 
     def _add_alias(self, alias_name: str, alias_target: Union[str, Tuple]):
         if type(alias_target) is str:
-            step_label, step_param_name = alias_target.split('.', 1)
-            step = self.steps.get(step_label)
+            step_spec, step_param_name = alias_target.split('.', 1)
+
+            # treat label as a "(cabtype)" specifier?
+            if re.match('^\(.+\)$', step_spec):
+                steps = [(label, step) for label, step in self.steps.items() if isinstance(step.cargo, Cab) and step.cab == step_spec[1:-1]]
+            # treat label as a wildcard?
+            elif any(ch in step_spec for ch in '*?['):
+                steps = [(label, step) for label, step in self.steps.items() if fnmatch.fnmatchcase(label, step_spec)]
+            # else treat label as a specific step name
+            else:
+                steps = [(step_spec, self.steps.get(step_spec))]
         else:
-            step, step_label, step_param_name = alias_target
+            step, step_spec, step_param_name = alias_target
+            steps = [(step_spec, step)]
 
-        if step is None:
-            raise RecipeValidationError(f"alias '{alias_name}' refers to unknown step '{step_label}'", log=self.log)
-        # is the alias already defined
-        existing_alias = self._alias_list.get(alias_name, [None])[0]
-        # find it in inputs or outputs
-        input_schema = step.inputs.get(step_param_name)
-        output_schema = step.outputs.get(step_param_name)
-        schema = input_schema or output_schema
-        if schema is None:
-            raise RecipeValidationError(f"alias '{alias_name}' refers to unknown step parameter '{step_label}.{step_param_name}'", log=self.log)
-        # implicit inuts cannot be aliased
-        if input_schema and input_schema.implicit:
-            raise RecipeValidationError(f"alias '{alias_name}' refers to implicit input '{step_label}.{step_param_name}'", log=self.log)
-        # if alias is already defined, check for conflicts
-        if existing_alias is not None:
-            io = existing_alias.io
-            if io is self.outputs:
-                raise RecipeValidationError(f"output alias '{alias_name}' is defined more than once", log=self.log)
-            elif output_schema:
-                raise RecipeValidationError(f"alias '{alias_name}' refers to both an input and an output", log=self.log)
-            alias_schema = io[alias_name] 
-            # now we know it's a multiply-defined input, check for type consistency
-            if alias_schema.dtype != schema.dtype:
-                raise RecipeValidationError(f"alias '{alias_name}': dtype {schema.dtype} of '{step_label}.{step_param_name}' doesn't match previous dtype {existing_schema.dtype}", log=self.log)
-            
-        # else alias not yet defined, insert a schema
-        else:
-            io = self.inputs if input_schema else self.outputs
-            io[alias_name] = copy.copy(schema)
-            alias_schema = io[alias_name]      # make copy of schema object
+        for (step_label, step) in steps:
+            if step is None:
+                raise RecipeValidationError(f"alias '{alias_name}' refers to unknown step '{step_label}'", log=self.log)
+            # is the alias already defined
+            existing_alias = self._alias_list.get(alias_name, [None])[0]
+            # find it in inputs or outputs
+            input_schema = step.inputs.get(step_param_name)
+            output_schema = step.outputs.get(step_param_name)
+            schema = input_schema or output_schema
+            if schema is None:
+                raise RecipeValidationError(f"alias '{alias_name}' refers to unknown step parameter '{step_label}.{step_param_name}'", log=self.log)
+            # implicit inuts cannot be aliased
+            if input_schema and input_schema.implicit:
+                raise RecipeValidationError(f"alias '{alias_name}' refers to implicit input '{step_label}.{step_param_name}'", log=self.log)
+            # if alias is already defined, check for conflicts
+            if existing_alias is not None:
+                io = existing_alias.io
+                if io is self.outputs:
+                    raise RecipeValidationError(f"output alias '{alias_name}' is defined more than once", log=self.log)
+                elif output_schema:
+                    raise RecipeValidationError(f"alias '{alias_name}' refers to both an input and an output", log=self.log)
+                alias_schema = io[alias_name] 
+                # now we know it's a multiply-defined input, check for type consistency
+                if alias_schema.dtype != schema.dtype:
+                    raise RecipeValidationError(f"alias '{alias_name}': dtype {schema.dtype} of '{step_label}.{step_param_name}' doesn't match previous dtype {existing_schema.dtype}", log=self.log)
+                
+            # else alias not yet defined, insert a schema
+            else:
+                io = self.inputs if input_schema else self.outputs
+                io[alias_name] = copy.copy(schema)
+                alias_schema = io[alias_name]      # make copy of schema object
 
-        # if step parameter is implicit, mark the alias as implicit. Note that this only applies to outputs
-        if schema.implicit:
-            alias_schema.implicit = Unresolved(f"{step_label}.{step_param_name}")   # will be resolved when propagated from step
-            self._implicit_params.add(alias_name)
+            # if step parameter is implicit, mark the alias as implicit. Note that this only applies to outputs
+            if schema.implicit:
+                alias_schema.implicit = Unresolved(f"{step_label}.{step_param_name}")   # will be resolved when propagated from step
+                self._implicit_params.add(alias_name)
 
-        # this is True if the step's parameter is defined in any way (set, default, or implicit)
-        have_step_param = step_param_name in step.params or step_param_name in step.cargo.defaults or \
-            schema.default is not None or schema.implicit is not None
+            # this is True if the step's parameter is defined in any way (set, default, or implicit)
+            have_step_param = step_param_name in step.params or step_param_name in step.cargo.defaults or \
+                schema.default is not None or schema.implicit is not None
 
-        # if the step parameter is set, mark our schema as having a default
-        if have_step_param:
-            alias_schema.default = DeferredAlias(f"{step_label}.{step_param_name}")
+            # if the step parameter is set, mark our schema as having a default
+            if have_step_param:
+                alias_schema.default = DeferredAlias(f"{step_label}.{step_param_name}")
 
-        # alias becomes required if any step parameter it refers to was required, but wasn't already set 
-        if schema.required and not have_step_param:
-            alias_schema.required = True
+            # alias becomes required if any step parameter it refers to was required, but wasn't already set 
+            if schema.required and not have_step_param:
+                alias_schema.required = True
 
-        self._alias_map[step_label, step_param_name] = alias_name
-        self._alias_list.setdefault(alias_name, []).append(Recipe.AliasInfo(step_label, step, step_param_name, io))
+            self._alias_map[step_label, step_param_name] = alias_name
+            self._alias_list.setdefault(alias_name, []).append(Recipe.AliasInfo(step_label, step, step_param_name, io))
 
     def finalize(self, config=None, log=None, logopts=None, fqname=None, nesting=0):
         if not self.finalized:

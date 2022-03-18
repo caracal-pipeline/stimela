@@ -28,7 +28,7 @@ def test_test_aliasing():
     assert retcode != 0 
 
     print("===== expecting no errors now =====")
-    retcode, output = run("stimela -v exec test_aliasing.yml a=1 s3_a=1 s4_a=1")
+    retcode, output = run("stimela -v exec test_aliasing.yml a=1 s3_a=1 s4_a=1 e=e f=f")
     assert retcode == 0
     print(output)
     assert verify_output(output, 
