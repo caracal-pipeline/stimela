@@ -406,11 +406,11 @@ class Recipe(Cargo):
         for basevar, value_list in assign_based_on.items():
             # make sure the base variable is defined
             if basevar in assign:
-                value = assign[basevar]
+                value = str(assign[basevar])
             elif basevar in params:
-                value = params[basevar]
+                value = str(params[basevar])
             elif basevar in self.inputs_outputs and self.inputs_outputs[basevar].default is not None:
-                value = self.inputs_outputs[basevar].default
+                value = str(self.inputs_outputs[basevar].default)
             else:
                 raise AssignmentError(f"{location}.assign_based_on.{basevar} is an unset variable or parameter")
             # look up list of assignments
