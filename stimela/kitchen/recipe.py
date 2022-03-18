@@ -560,8 +560,14 @@ class Recipe(Cargo):
             # else alias not yet defined, insert a schema
             else:
                 io = self.inputs if input_schema else self.outputs
+                # having an own default in the schema overrides the step's default
+                own_default = None
+                if alias_name in io and io[alias_name].default is not None:
+                    own_default = io[alias_name].default
                 io[alias_name] = copy.copy(schema)
                 alias_schema = io[alias_name]      # make copy of schema object
+                if own_default is not None:
+                    alias_schema.default = own_default
 
             # if step parameter is implicit, mark the alias as implicit. Note that this only applies to outputs
             if schema.implicit:
@@ -572,8 +578,8 @@ class Recipe(Cargo):
             have_step_param = step_param_name in step.params or step_param_name in step.cargo.defaults or \
                 schema.default is not None or schema.implicit is not None
 
-            # if the step parameter is set, mark our schema as having a default
-            if have_step_param:
+            # if the step parameter is set and ours isn't, mark our schema as having a default
+            if have_step_param and alias_schema.default is not None:
                 alias_schema.default = DeferredAlias(f"{step_label}.{step_param_name}")
 
             # alias becomes required if any step parameter it refers to was required, but wasn't already set 
