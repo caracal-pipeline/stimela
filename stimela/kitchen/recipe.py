@@ -511,15 +511,16 @@ class Recipe(Cargo):
         from_step: bool = False         # if True, value propagates from step down to recipe
 
     def _add_alias(self, alias_name: str, alias_target: Union[str, Tuple]):
+        wildcards = False
         if type(alias_target) is str:
             step_spec, step_param_name = alias_target.split('.', 1)
-
             # treat label as a "(cabtype)" specifier?
             if re.match('^\(.+\)$', step_spec):
                 steps = [(label, step) for label, step in self.steps.items() if isinstance(step.cargo, Cab) and step.cab == step_spec[1:-1]]
             # treat label as a wildcard?
             elif any(ch in step_spec for ch in '*?['):
                 steps = [(label, step) for label, step in self.steps.items() if fnmatch.fnmatchcase(label, step_spec)]
+                wildcards = True
             # else treat label as a specific step name
             else:
                 steps = [(step_spec, self.steps.get(step_spec))]
@@ -537,7 +538,10 @@ class Recipe(Cargo):
             output_schema = step.outputs.get(step_param_name)
             schema = input_schema or output_schema
             if schema is None:
-                raise RecipeValidationError(f"alias '{alias_name}' refers to unknown step parameter '{step_label}.{step_param_name}'", log=self.log)
+                if wildcards:
+                    continue
+                else:
+                    raise RecipeValidationError(f"alias '{alias_name}' refers to unknown step parameter '{step_label}.{step_param_name}'", log=self.log)
             # implicit inuts cannot be aliased
             if input_schema and input_schema.implicit:
                 raise RecipeValidationError(f"alias '{alias_name}' refers to implicit input '{step_label}.{step_param_name}'", log=self.log)

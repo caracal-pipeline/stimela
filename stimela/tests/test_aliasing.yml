@@ -44,6 +44,7 @@ recipe:
     out2: [s3.out2]
     e: ['s[12].e']
     f: ['(echo).f']
+    g: ['xx*.g']
 
   steps:
     s1:
