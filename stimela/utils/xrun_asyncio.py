@@ -48,7 +48,7 @@ async def xrun_impl(command, options, log=None, env=None, timeout=-1, kill_callb
                         stderr=asyncio.subprocess.PIPE)
 
     def line_dispatcher(line, stream_name):
-        dispatch_to_log(log, line, command_name, stream_name="stderr", output_wrangler=output_wrangler)
+        dispatch_to_log(log, line, command_name, stream_name, output_wrangler=output_wrangler)
 
     results = await asyncio.gather(
         asyncio.create_task(proc.wait()),
