@@ -29,7 +29,7 @@ setup(name=PACKAGE_NAME,
       url="https://github.com/ratt-ru/Stimela",
       packages=find_packages(),
       include_package_data=True,
-      python_requires='>=3.6',
+      python_requires='>=3.7',
       install_requires=requirements,
       entry_points="""
             [console_scripts]

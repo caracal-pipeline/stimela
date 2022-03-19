@@ -16,7 +16,7 @@ from stimela.exceptions import StimelaCabRuntimeError, StimelaProcessRuntimeErro
 
 CPUS = 1
 
-from .xrun_poll import xrun
+from .xrun_asyncio import xrun
 
 def assign(key, value):
     frame = inspect.currentframe().f_back
