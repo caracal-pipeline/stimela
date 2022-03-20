@@ -43,6 +43,7 @@ class ConsoleColors():
     DIM     = '\033[2m'  if sys.stdin.isatty() else ''
     GREEN   = '\033[92m' if sys.stdin.isatty() else ''
     YELLOW  = '\033[93m' if sys.stdin.isatty() else ''
+    BLUE    = '\033[94m' if sys.stdin.isatty() else ''
     WHITE   = '\033[39m' if sys.stdin.isatty() else ''
     ENDC    = '\033[0m'  if sys.stdin.isatty() else ''
 

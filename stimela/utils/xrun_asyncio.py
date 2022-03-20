@@ -54,7 +54,7 @@ def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, o
         while True:
             await asyncio.sleep(period)
             usage = psutil.cpu_percent()
-            log.info(f"Current CPU usage is {usage}%")
+            log.info(f"Current CPU usage is {usage}%", extra=dict(color="BLUE"))
 
     async def wrap_cancellable(job):
         try:
