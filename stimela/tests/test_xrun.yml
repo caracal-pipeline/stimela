@@ -62,10 +62,10 @@ recipe:
 
     # help:
     #   cab: help
-    # slp1: 
-    #   cab: sleep
-    #   params:
-    #     seconds: 5
+    slp1: 
+      cab: sleep
+      params:
+        seconds: 5
     cp:
       cab: fileops
       params:

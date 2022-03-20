@@ -16,6 +16,7 @@ requirements = ["pyyaml",
                 "click",
                 "pydantic",
                 "pathos",
+                "psutil"
                 ],
 
 PACKAGE_NAME = "stimela"

@@ -7,7 +7,7 @@ from contextlib import redirect_stderr, redirect_stdout
 
 from scabha.cargo import Cab, Parameter
 from stimela import logger
-from stimela.utils.xrun_poll import xrun, dispatch_to_log
+from stimela.utils.xrun_asyncio import xrun, dispatch_to_log
 from stimela.exceptions import StimelaCabRuntimeError
 import click
 
