@@ -135,7 +135,7 @@ def xrun_nolog(command, name=None, shell=True):
     return 0
 
 
-def dispatch_to_log(log, line, command_name, stream_name, output_wrangler):
+def dispatch_to_log(log, line, command_name, stream_name, output_wrangler, custom_console_handler=None):
     # dispatch output to log
     line = _remove_ctrls(line)
     extra = dict(stimela_subprocess_output=(command_name, stream_name))
@@ -143,6 +143,8 @@ def dispatch_to_log(log, line, command_name, stream_name, output_wrangler):
     severity = logging.INFO
     if stream_name == 'stderr':
         extra['color'] = 'WHITE'
+    if custom_console_handler is not None:
+        extra['custom_console_handler'] = custom_console_handler
     # feed through wrangler to adjust severity and content
     if output_wrangler is not None:
         line, severity = output_wrangler(line, severity)

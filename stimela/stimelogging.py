@@ -13,7 +13,11 @@ class MultiplexingHandler(logging.Handler):
         self.multiplex = True
 
     def emit(self, record):
-        handler = self.err_handler if record.levelno > logging.INFO and self.multiplex else self.info_handler
+        # does record come with its own handler? Rather use that
+        if hasattr(record, 'custom_console_handler'):
+            handler = record.custom_console_handler
+        else:
+            handler = self.err_handler if record.levelno > logging.INFO and self.multiplex else self.info_handler
         handler.emit(record)
         # ignore broken pipes, this often happens when cleaning up and exiting
         try:

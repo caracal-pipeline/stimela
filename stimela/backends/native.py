@@ -159,7 +159,7 @@ def run_command(cab: Cab, params: Dict[str, Any], log, subst: Optional[Dict[str,
 
     retcode = xrun(args[0], args[1:], shell=False, log=log, 
                 output_wrangler=cab.apply_output_wranglers, 
-                return_errcode=True, command_name=command_name)
+                return_errcode=True, command_name=command_name, progress_bar=True)
 
     # if retcode is not zero, raise error, unless cab declared itself a success (via the wrangler)
     if retcode:
