@@ -48,7 +48,7 @@ def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, o
     def render_process_status():
         cpu = psutil.cpu_percent()
         mem = psutil.virtual_memory()
-        used = round(mem.used / 2**30)
+        used = round(mem.total*mem.percent/100 / 2**30)
         total = round(mem.total / 2**30)
         return f"CPU [green]{cpu}%[/green] RAM [green]{used}[/green]/[green]{total}[/green]G"
 
