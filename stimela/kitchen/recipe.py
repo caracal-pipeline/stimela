@@ -1,5 +1,5 @@
 from multiprocessing import cpu_count
-import os, os.path, re, logging, fnmatch, copy
+import os, os.path, re, logging, fnmatch, copy, time
 from typing import Any, Tuple, List, Dict, Optional, Union
 from dataclasses import dataclass
 from omegaconf import MISSING, OmegaConf, DictConfig, ListConfig
@@ -182,116 +182,118 @@ class Step:
         if self.validated_params is None:
             self.prevalidate(self.params)
 
-        # Since prevalidation will have populated default values for potentially missing parameters, use those values
-        # For parameters that aren't missing, use whatever value that was suplied
-        params = self.validated_params.copy()
-        params.update(**self.params)
+        with stimelogging.declare_subtask(self.name) as subtask:
 
-        # # However the unresolved ones should be 
-        # params = self.validated_params
-        # for name, value in params.items():
-        #     if type(value) is Unresolved:
-        #         params[name] = self.params[name]
-        # # params = self.params
+            # Since prevalidation will have populated default values for potentially missing parameters, use those values
+            # For parameters that aren't missing, use whatever value that was suplied
+            params = self.validated_params.copy()
+            params.update(**self.params)
 
-        skip_warned = False   # becomes True when warnings are given
+            # # However the unresolved ones should be 
+            # params = self.validated_params
+            # for name, value in params.items():
+            #     if type(value) is Unresolved:
+            #         params[name] = self.params[name]
+            # # params = self.params
 
-        self.log.debug(f"validating inputs {subst and list(subst.keys())}")
-        validated = None
-        try:
-            params = self.cargo.validate_inputs(params, loosely=self.skip, subst=subst)
-            validated = True
+            skip_warned = False   # becomes True when warnings are given
 
-        except ScabhaBaseException as exc:
-            level = logging.WARNING if self.skip else logging.ERROR
-            if not exc.logged:
-                if type(exc) is SubstitutionErrorList:
-                    self.log.log(level, f"unresolved {{}}-substitution(s):")
-                    for err in exc.errors:
-                        self.log.log(level, f"  {err}")
-                else:
-                    self.log.log(level, f"error validating inputs: {exc}")
-                exc.logged = True
-            self.log_summary(level, "summary of inputs follows", color="WARNING")
-            # raise up, unless step is being skipped
-            if self.skip:
-                self.log.warning("since the step is being skipped, this is not fatal")
-                skip_warned = True
-            else:
-                raise
-
-        self.validated_params.update(**params)
-
-        # log inputs
-        if validated and not self.skip:
-            self.log_summary(logging.INFO, "validated inputs", color="GREEN", ignore_missing=True)
-            if subst is not None:
-                subst.current = params
-
-        # bomb out if some inputs failed to validate or substitutions resolve
-        if self.invalid_params or self.unresolved_params:
-            invalid = self.invalid_params + self.unresolved_params
-            if self.skip:
-                self.log.warning(f"invalid inputs: {join_quote(invalid)}")
-                if not skip_warned:
-                    self.log.warning("since the step was skipped, this is not fatal")
-                    skip_warned = True
-            else:
-                raise StepValidationError(f"invalid inputs: {join_quote(invalid)}", log=self.log)
-
-        if not self.skip:
+            self.log.debug(f"validating inputs {subst and list(subst.keys())}")
+            validated = None
             try:
-                if type(self.cargo) is Recipe:
-                    self.cargo.backend = self.cargo.backend or self.backend
-                    self.cargo._run(params)
-                elif type(self.cargo) is Cab:
-                    self.cargo.backend = self.cargo.backend or self.backend
-                    runners.run_cab(self.cargo, params, log=self.log, subst=subst, batch=batch)
-                else:
-                    raise RuntimeError("Unknown cargo type")
+                params = self.cargo.validate_inputs(params, loosely=self.skip, subst=subst)
+                validated = True
+
             except ScabhaBaseException as exc:
+                level = logging.WARNING if self.skip else logging.ERROR
                 if not exc.logged:
-                    self.log.error(f"error running step: {exc}")
+                    if type(exc) is SubstitutionErrorList:
+                        self.log.log(level, f"unresolved {{}}-substitution(s):")
+                        for err in exc.errors:
+                            self.log.log(level, f"  {err}")
+                    else:
+                        self.log.log(level, f"error validating inputs: {exc}")
                     exc.logged = True
-                raise
-
-        self.log.debug(f"validating outputs")
-        validated = False
-
-        try:
-            params = self.cargo.validate_outputs(params, loosely=self.skip, subst=subst)
-            validated = True
-        except ScabhaBaseException as exc:
-            level = logging.WARNING if self.skip else logging.ERROR
-            if not exc.logged:
-                if type(exc) is SubstitutionErrorList:
-                    self.log.log(level, f"unresolved {{}}-substitution(s):")
-                    for err in exc.errors:
-                        self.log.log(level, f"  {err}")
+                self.log_summary(level, "summary of inputs follows", color="WARNING")
+                # raise up, unless step is being skipped
+                if self.skip:
+                    self.log.warning("since the step is being skipped, this is not fatal")
+                    skip_warned = True
                 else:
-                    self.log.log(level, f"error validating outputs: {exc}")
-                exc.logged = True
-            # raise up, unless step is being skipped
-            if self.skip:
-                self.log.warning("since the step was skipped, this is not fatal")
-            else:
-                self.log_summary(level, "failed outputs", color="WARNING")
-                raise
+                    raise
 
-        if validated:
             self.validated_params.update(**params)
-            if subst is not None:
-                subst.current._merge_(params)
-            self.log_summary(logging.DEBUG, "validated outputs", ignore_missing=True)
 
-        # bomb out if an output was invalid
-        invalid = [name for name in self.invalid_params + self.unresolved_params if name in self.cargo.outputs]
-        if invalid:
-            if self.skip:
-                self.log.warning(f"invalid outputs: {join_quote(invalid)}")
-                self.log.warning("since the step was skipped, this is not fatal")
-            else:
-                raise StepValidationError(f"invalid outputs: {join_quote(invalid)}", log=self.log)
+            # log inputs
+            if validated and not self.skip:
+                self.log_summary(logging.INFO, "validated inputs", color="GREEN", ignore_missing=True)
+                if subst is not None:
+                    subst.current = params
+
+            # bomb out if some inputs failed to validate or substitutions resolve
+            if self.invalid_params or self.unresolved_params:
+                invalid = self.invalid_params + self.unresolved_params
+                if self.skip:
+                    self.log.warning(f"invalid inputs: {join_quote(invalid)}")
+                    if not skip_warned:
+                        self.log.warning("since the step was skipped, this is not fatal")
+                        skip_warned = True
+                else:
+                    raise StepValidationError(f"invalid inputs: {join_quote(invalid)}", log=self.log)
+
+            if not self.skip:
+                try:
+                    if type(self.cargo) is Recipe:
+                        self.cargo.backend = self.cargo.backend or self.backend
+                        self.cargo._run(params)
+                    elif type(self.cargo) is Cab:
+                        self.cargo.backend = self.cargo.backend or self.backend
+                        runners.run_cab(self.cargo, params, log=self.log, subst=subst, batch=batch)
+                    else:
+                        raise RuntimeError("Unknown cargo type")
+                except ScabhaBaseException as exc:
+                    if not exc.logged:
+                        self.log.error(f"error running step: {exc}")
+                        exc.logged = True
+                    raise
+
+            self.log.debug(f"validating outputs")
+            validated = False
+
+            try:
+                params = self.cargo.validate_outputs(params, loosely=self.skip, subst=subst)
+                validated = True
+            except ScabhaBaseException as exc:
+                level = logging.WARNING if self.skip else logging.ERROR
+                if not exc.logged:
+                    if type(exc) is SubstitutionErrorList:
+                        self.log.log(level, f"unresolved {{}}-substitution(s):")
+                        for err in exc.errors:
+                            self.log.log(level, f"  {err}")
+                    else:
+                        self.log.log(level, f"error validating outputs: {exc}")
+                    exc.logged = True
+                # raise up, unless step is being skipped
+                if self.skip:
+                    self.log.warning("since the step was skipped, this is not fatal")
+                else:
+                    self.log_summary(level, "failed outputs", color="WARNING")
+                    raise
+
+            if validated:
+                self.validated_params.update(**params)
+                if subst is not None:
+                    subst.current._merge_(params)
+                self.log_summary(logging.DEBUG, "validated outputs", ignore_missing=True)
+
+            # bomb out if an output was invalid
+            invalid = [name for name in self.invalid_params + self.unresolved_params if name in self.cargo.outputs]
+            if invalid:
+                if self.skip:
+                    self.log.warning(f"invalid outputs: {join_quote(invalid)}")
+                    self.log.warning("since the step was skipped, this is not fatal")
+                else:
+                    raise StepValidationError(f"invalid outputs: {join_quote(invalid)}", log=self.log)
 
         return params
 
@@ -915,7 +917,6 @@ class Recipe(Cargo):
             Recipe._root_recipe_ns = recipe_ns
         subst._add_('root', Recipe._root_recipe_ns)
 
-
         logopts = self.config.opts.log.copy()
         if 'log' in self.assign:
             logopts.update(**self.assign.log)
@@ -942,8 +943,6 @@ class Recipe(Cargo):
                 if schema.required: 
                     raise RecipeValidationError(f"recipe '{self.name}' is missing required input '{name}'", log=self.log)
 
-
-
         # iterate over for-loop values (if not looping, this is set up to [None] in advance)
         scatter = getattr(self.for_loop, "scatter", False)
         
@@ -958,6 +957,7 @@ class Recipe(Cargo):
                 # update variables
                 inst.assign[inst.for_loop.var] = iter_var
                 inst.assign[f"{inst.for_loop.var}@index"] = count
+                stimelogging.declare_subtask_attributes(**{inst.for_loop.var: f"{count+1}/{len(inst._for_loop_values)}"})
                 inst.update_assignments(inst.assign, inst.assign_based_on, inst.fqname)
                 subst.recipe._merge_(inst.assign)
                 # update logfile name (since this may depend on substitutions)

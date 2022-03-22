@@ -6,16 +6,29 @@ from yaml.error import YAMLError
 from scabha import configuratt
 from scabha.exceptions import ScabhaBaseException
 from omegaconf.omegaconf import OmegaConf, OmegaConfBaseException
+from stimela import stimelogging
 from stimela.config import ConfigExceptionTypes
 import click
 import logging
-import os.path, yaml, sys
+import os.path, yaml, sys, asyncio
 from typing import List, Optional
 import stimela
 from stimela import logger
 from stimela.main import cli
 from stimela.kitchen.recipe import Recipe, Step, join_quote
 from stimela.config import get_config_class
+
+# def print_schema_help(cargo_type, name, cargo):
+#     print(
+# f"""
+#     {cargo_type} name: {name}
+#     Info: {cargo.info}
+#     Inputs:
+# """)
+#     for name, schema in cargo.inputs:
+
+
+
 
 @cli.command("run",
     help="""
@@ -39,9 +52,11 @@ from stimela.config import get_config_class
                 help="""Sets skip=false on the given step(s). Use commas, or give multiple times for multiple steps.""")
 @click.option("-d", "--dry-run", is_flag=True,
                 help="""Doesn't actually run anything, only prints the selected steps.""")
+@click.option("-h", "--help", is_flag=True,
+                help="""Prints help on the selected runnable and its parameters, then exits.""")
 @click.argument("what", metavar="filename.yml|CAB") 
 @click.argument("parameters", nargs=-1, metavar="[recipe name] [PARAM=VALUE] [X.Y.Z=FOO] ...", required=False) 
-def run(what: str, parameters: List[str] = [], dry_run: bool = False, 
+def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool = False,
     step_names: List[str] = [], tags: List[str] = [], skip_tags: List[str] = [], enable_steps: List[str] = []):
 
     log = logger()
@@ -133,6 +148,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False,
                 sys.exit(2)
         else:
             if len(all_recipe_names) > 1: 
+                print(f"This file contains the following recipes: {', '.join(all_recipe_names)}")
                 log.error(f"multiple recipes found, please specify one on the command line")
                 sys.exit(2)
             recipe_name = all_recipe_names[0]
@@ -280,7 +296,6 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False,
         log.info("dry run was requested, exiting")
         sys.exit(0)
 
-    # run step
     try:
         outputs = outer_step.run()
     except ScabhaBaseException as exc:

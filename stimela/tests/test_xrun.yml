@@ -53,6 +53,10 @@ recipe:
   name: "demo recipe"
   info: 'top level recipe definition'
 
+  for_loop:
+    var: x
+    over: [1,2,3]
+
   steps:
     echo:
       cab: shell
@@ -66,9 +70,9 @@ recipe:
       cab: sleep
       params:
         seconds: 5
-    cp:
-      cab: fileops
-      params:
-        command: cp
-        src: a
-        dest: a
+    # cp:
+    #   cab: fileops
+    #   params:
+    #     command: cp
+    #     src: a
+    #     dest: a

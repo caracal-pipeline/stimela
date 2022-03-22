@@ -1,4 +1,4 @@
-import traceback, subprocess, errno, re, time, logging, os, sys, signal
+import traceback, subprocess, errno, re, time, logging, os, sys, signal, contextlib, datetime
 import asyncio
 import psutil
 import rich
@@ -7,6 +7,8 @@ from rich.style import Style
 from rich.table import Column
 from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn
 from rich.logging import RichHandler
+
+from stimela import stimelogging
 
 from .xrun_poll import get_stimela_logger, dispatch_to_log, xrun_nolog
 from . import StimelaCabRuntimeError, StimelaProcessRuntimeError
@@ -43,31 +45,13 @@ def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, o
 
     log.info("running " + command_line, extra=dict(stimela_subprocess_output=(command_name, "start")))
 
-    start_time = time.time()
+    with stimelogging.declare_subcommand(os.path.basename(command_name)):
 
-    def render_process_status():
-        cpu = psutil.cpu_percent()
-        mem = psutil.virtual_memory()
-        used = round(mem.total*mem.percent/100 / 2**30)
-        total = round(mem.total / 2**30)
-        return f"CPU [green]{cpu}%[/green] RAM [green]{used}[/green]/[green]{total}[/green]G"
-
-    with Progress(
-            SpinnerColumn(),
-            f"running {command_name}",
-            TimeElapsedColumn(table_column=Column(style="blue")),
-            "{task.description}",
-            refresh_per_second=2,
-            transient=True) as progress:
-
-        if progress_bar:
-            progress_task = progress.add_task(render_process_status())
-            log_handler = RichHandler(console=progress,
-                                    highlighter=rich.highlighter.NullHighlighter(),
-                                    show_level=False, show_path=False, show_time=False)
-        else:
-            progress_task = log_handler = None
-
+        start_time = datetime.datetime.now()
+        def elapsed():
+            """Returns string representing elapsed time"""
+            return str(datetime.datetime.now() - start_time).split('.', 1)[0]
+        
         loop = asyncio.get_event_loop()
         
         proc = loop.run_until_complete(
@@ -80,48 +64,36 @@ def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, o
                 line = await stream.readline()
                 line = (line.decode('utf-8') if type(line) is bytes else line).rstrip()
                 if line or not stream.at_eof():
-                    dispatch_to_log(log, line, command_name, stream_name, output_wrangler=output_wrangler, custom_console_handler=log_handler)
-
-        async def cpu_reporter_impl(period):
-            while True:
-                await asyncio.sleep(period)
-                progress_bar and progress.update(progress_task, description=render_process_status())
-                # progress.print(f"Current CPU usage is {usage}%")
-
-        async def wrap_cancellable(job):
-            try:
-                return await job 
-            except asyncio.CancelledError as exc:
-                return None
+                    dispatch_to_log(log, line, command_name, stream_name, output_wrangler=output_wrangler)
 
         async def proc_awaiter(proc, *cancellables):
             await proc.wait()
             for task in cancellables:
                 task.cancel()
 
-        reporter = asyncio.Task(cpu_reporter_impl(1))
+        reporter = asyncio.Task(stimelogging.run_process_status_update())
 
         try:
             job = asyncio.gather(
                 proc_awaiter(proc, reporter),
                 stream_reader(proc.stdout, "stdout"),
                 stream_reader(proc.stderr, "stderr"),
-                wrap_cancellable(reporter)
+                reporter
             )
             results = loop.run_until_complete(job)
             status = proc.returncode
+            log.info(f"{command_name} exited with code {status} after {elapsed()}")
         except SystemExit as exc:
             loop.run_until_complete(proc.wait())
         except KeyboardInterrupt:
-            progress.stop()
             if callable(kill_callback):
-                log.warning(f"Ctrl+C caught: shutting down {command_name} process, please give it a few moments")
+                log.warning(f"Ctrl+C caught after {elapsed()}, shutting down {command_name} process, please give it a few moments")
                 kill_callback() 
                 log.info(f"the {command_name} process was shut down successfully",
                         extra=dict(stimela_subprocess_output=(command_name, "status")))
                 loop.run_until_complete(proc.wait())
             else:
-                log.warning(f"Ctrl+C caught, interrupting {command_name} process {proc.pid}")
+                log.warning(f"Ctrl+C caught after {elapsed()}, interrupting {command_name} process {proc.pid}")
                 proc.send_signal(signal.SIGINT)
 
                 async def wait_on_process(proc):
@@ -144,13 +116,12 @@ def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, o
             raise StimelaCabRuntimeError(f"{command_name} interrupted with Ctrl+C")
 
         except Exception as exc:
-            progress.stop()
-            traceback.print_exc()
             loop.run_until_complete(proc.wait())
-            raise StimelaCabRuntimeError(f"{command_name} threw exception: {exc}'", log=log)
+            traceback.print_exc()
+            raise StimelaCabRuntimeError(f"{command_name} threw exception: {exc} after {elapsed()}'", log=log)
 
-    if status and not return_errcode:
-        raise StimelaCabRuntimeError(f"{command_name} returns error code {status}")
+        if status and not return_errcode:
+            raise StimelaCabRuntimeError(f"{command_name} returns error code {status} after {elapsed()}")
     
     return status
     

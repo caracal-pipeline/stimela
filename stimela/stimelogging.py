@@ -1,8 +1,14 @@
+import atexit
 import sys, os.path, re
 import logging
-from typing import Optional, Dict, Any, Union
+import contextlib
+from typing import Optional, Union
 from omegaconf import DictConfig
 from scabha.substitutions import SubstitutionNS, forgiving_substitutions_from
+import asyncio
+import psutil
+import rich.progress
+import rich.logging
 
 class MultiplexingHandler(logging.Handler):
     """handler to send INFO and below to stdout, everything above to stderr"""
@@ -80,6 +86,7 @@ class ColorizingFormatter(logging.Formatter):
 class SelectiveFormatter(logging.Formatter):
     """Selective formatter. if condition(record) is True, invokes other formatter"""
     def __init__(self, default_formatter, dispatch_list):
+        logging.Formatter.__init__(self)
         self._dispatch_list = dispatch_list
         self._default_formatter = default_formatter
 
@@ -93,7 +100,7 @@ class SelectiveFormatter(logging.Formatter):
 
 _logger = None
 log_console_handler = log_formatter = log_boring_formatter = log_colourful_formatter = None
-
+progress_bar = progress_task = None
 
 def is_logger_initialized():
     return _logger is not None
@@ -132,10 +139,28 @@ def logger(name="STIMELA", propagate=False, console=True, boring=False,
         log_formatter = log_boring_formatter if boring else log_colourful_formatter
 
         if console:
+            global progress_bar, progress_task
+            progress_bar = rich.progress.Progress(
+                rich.progress.SpinnerColumn(),
+                "{task.description}",
+                rich.progress.SpinnerColumn(),
+                "{task.fields[command]}",
+                rich.progress.TimeElapsedColumn(),
+                "{task.fields[cpu_info]}",
+                refresh_per_second=2,
+                transient=True)
+
+            progress_task = progress_bar.add_task("stimela", command=" ", cpu_info=" ", start=True)
+            progress_bar.__enter__()
+            atexit.register(lambda:progress_bar.__exit__(None, None, None))
+
             if "SILENT_STDERR" in os.environ and os.environ["SILENT_STDERR"].upper()=="ON":
                 log_console_handler = logging.StreamHandler(stream=sys.stdout)
             else:  
-                log_console_handler = MultiplexingHandler()
+                log_console_handler = rich.logging.RichHandler(console=progress_bar,
+                                    highlighter=rich.highlighter.NullHighlighter(),
+                                    show_level=False, show_path=False, show_time=False)
+
             log_console_handler.setFormatter(log_formatter)
             log_console_handler.setLevel(loglevel)
             _logger.addHandler(log_console_handler)
@@ -145,6 +170,56 @@ def logger(name="STIMELA", propagate=False, console=True, boring=False,
         scabha.set_logger(_logger)
 
     return _logger
+
+progress_task_names = []
+progress_task_names_orig = []
+
+@contextlib.contextmanager
+def declare_subtask(subtask_name):
+    progress_task_names.append(subtask_name)
+    progress_task_names_orig.append(subtask_name)
+    if progress_bar is not None:
+        progress_bar.update(progress_task, description='.'.join(progress_task_names))
+    try:
+        yield subtask_name
+    finally:
+        progress_task_names.pop(-1)
+        progress_task_names_orig.pop(-1)
+        if progress_bar is not None:
+            progress_bar.update(progress_task, description='.'.join(progress_task_names))
+
+def declare_subtask_attributes(**kw):
+    attrs = ','.join([f"{key} {value}" for key, value in kw.items()])
+    progress_task_names[-1] = f"{progress_task_names_orig[-1]}\[{attrs}]"
+    
+    if progress_bar is not None:
+        progress_bar.update(progress_task, description='.'.join(progress_task_names))
+
+
+@contextlib.contextmanager
+def declare_subcommand(command):
+    progress_bar and progress_bar.update(progress_task, command=command)
+    progress_bar and progress_bar.reset(progress_task)
+    try:
+        yield command
+    finally:
+        progress_bar and progress_bar.update(progress_task, command="")
+        
+
+async def run_process_status_update():
+    if progress_bar:
+        with contextlib.suppress(asyncio.CancelledError):
+            while True:
+                cpu = psutil.cpu_percent()
+                mem = psutil.virtual_memory()
+                used = round(mem.total*mem.percent/100 / 2**30)
+                total = round(mem.total / 2**30)
+                progress_bar.update(progress_task, cpu_info=f"CPU [green]{cpu}%[/green] RAM [green]{used}[/green]/[green]{total}[/green]G")
+                await asyncio.sleep(1)
+
+
+
+
 
 
 _logger_file_handlers = {}
