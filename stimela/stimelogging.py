@@ -1,5 +1,6 @@
 import atexit
 import sys, os.path, re
+from datetime import datetime
 import logging
 import contextlib
 from typing import Optional, Union
@@ -101,6 +102,7 @@ class SelectiveFormatter(logging.Formatter):
 _logger = None
 log_console_handler = log_formatter = log_boring_formatter = log_colourful_formatter = None
 progress_bar = progress_task = None
+_start_time = datetime.now()
 
 def is_logger_initialized():
     return _logger is not None
@@ -142,7 +144,8 @@ def logger(name="STIMELA", propagate=False, console=True, boring=False,
             global progress_bar, progress_task
             progress_bar = rich.progress.Progress(
                 rich.progress.SpinnerColumn(),
-                "{task.description}",
+                "[yellow]{task.fields[elapsed_time]}[/yellow]",
+                "[bold]{task.description}[/bold]",
                 rich.progress.SpinnerColumn(),
                 "{task.fields[command]}",
                 rich.progress.TimeElapsedColumn(),
@@ -150,7 +153,7 @@ def logger(name="STIMELA", propagate=False, console=True, boring=False,
                 refresh_per_second=2,
                 transient=True)
 
-            progress_task = progress_bar.add_task("stimela", command=" ", cpu_info=" ", start=True)
+            progress_task = progress_bar.add_task("stimela", command="starting", cpu_info=" ", elapsed_time="", start=True)
             progress_bar.__enter__()
             atexit.register(lambda:progress_bar.__exit__(None, None, None))
 
@@ -178,43 +181,52 @@ progress_task_names_orig = []
 def declare_subtask(subtask_name):
     progress_task_names.append(subtask_name)
     progress_task_names_orig.append(subtask_name)
-    if progress_bar is not None:
-        progress_bar.update(progress_task, description='.'.join(progress_task_names))
+    update_process_status(description='.'.join(progress_task_names))
     try:
         yield subtask_name
     finally:
         progress_task_names.pop(-1)
         progress_task_names_orig.pop(-1)
-        if progress_bar is not None:
-            progress_bar.update(progress_task, description='.'.join(progress_task_names))
+        update_process_status(progress_task, description='.'.join(progress_task_names))
 
 def declare_subtask_attributes(**kw):
     attrs = ','.join([f"{key} {value}" for key, value in kw.items()])
     progress_task_names[-1] = f"{progress_task_names_orig[-1]}\[{attrs}]"
-    
-    if progress_bar is not None:
-        progress_bar.update(progress_task, description='.'.join(progress_task_names))
+    update_process_status(description='.'.join(progress_task_names))
 
 
 @contextlib.contextmanager
 def declare_subcommand(command):
-    progress_bar and progress_bar.update(progress_task, command=command)
+    update_process_status(command=command)
     progress_bar and progress_bar.reset(progress_task)
     try:
         yield command
     finally:
-        progress_bar and progress_bar.update(progress_task, command="")
+        update_process_status(command="")
         
+def update_process_status(command=None, description=None):
+    if progress_bar is not None:
+        # elapsed time
+        elapsed = str(datetime.now() - _start_time).split('.', 1)[0]
+        # CPU and memory
+        cpu = psutil.cpu_percent()
+        mem = psutil.virtual_memory()
+        used = round(mem.total*mem.percent/100 / 2**30)
+        total = round(mem.total / 2**30)
+        updates = dict(elapsed_time=elapsed,
+                        cpu_info=f"CPU [green]{cpu}%[/green] RAM [green]{used}[/green]/[green]{total}[/green]G")
+        if command is not None:
+            updates['command'] = command
+        if description is not None:
+            updates['description'] = description
+        progress_bar.update(progress_task, **updates)
+
 
 async def run_process_status_update():
     if progress_bar:
         with contextlib.suppress(asyncio.CancelledError):
             while True:
-                cpu = psutil.cpu_percent()
-                mem = psutil.virtual_memory()
-                used = round(mem.total*mem.percent/100 / 2**30)
-                total = round(mem.total / 2**30)
-                progress_bar.update(progress_task, cpu_info=f"CPU [green]{cpu}%[/green] RAM [green]{used}[/green]/[green]{total}[/green]G")
+                update_process_status()
                 await asyncio.sleep(1)
 
 

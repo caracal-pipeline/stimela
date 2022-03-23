@@ -1,6 +1,7 @@
 from collections import OrderedDict
 import dataclasses
 import itertools
+from datetime import datetime
 
 from yaml.error import YAMLError
 from scabha import configuratt
@@ -18,16 +19,42 @@ from stimela.main import cli
 from stimela.kitchen.recipe import Recipe, Step, join_quote
 from stimela.config import get_config_class
 
-# def print_schema_help(cargo_type, name, cargo):
-#     print(
-# f"""
-#     {cargo_type} name: {name}
-#     Info: {cargo.info}
-#     Inputs:
-# """)
-#     for name, schema in cargo.inputs:
-
-
+def print_schema_help(cargo_type, name, cargo, extra_defaults={}, omit_params={}):
+    print(
+f"""
+    {cargo_type} name: {name}
+    Info: {cargo.info}
+""")
+    def print_inputs_outputs(inputs_outputs):
+        for name, schema in inputs_outputs.items():
+            line = f"        {name}: {schema.dtype}"
+            default = extra_defaults.get(name)
+            if default is None:
+                default = schema.default
+            if default is not None:
+                line += f" = {default}"
+            line += "\n"
+            if schema.info:
+                line = f"          {schema.info}\n"
+            print(line)
+    if cargo.inputs:
+        print("    Inputs:\n")
+        print_inputs_outputs(cargo.inputs)
+    else:
+        print("    Inputs: none\n")
+    if cargo.outputs:
+        print("    Outputs:\n")
+        print_inputs_outputs(cargo.outputs)
+    else:
+        print("    Outputs: none\n")
+    if type(cargo) is Recipe:
+        print("\n    Steps")
+        if any(step.skip for step in cargo.steps.values()):
+            print(" including [skipped] steps")
+        step_names = []
+        for label, step in cargo.steps.items():
+            step_names.append(f"[{label}]" if step.skip else label)
+        print(f":\n        {' '.join(step_names)}")
 
 
 @cli.command("run",
@@ -296,19 +323,23 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
         log.info("dry run was requested, exiting")
         sys.exit(0)
 
+    start_time = datetime.now()
+    def elapsed():
+        return str(datetime.now() - start_time).split('.', 1)[0]
+
     try:
         outputs = outer_step.run()
     except ScabhaBaseException as exc:
         if not exc.logged:
-            outer_step.log.error(f"run failed with exception: {exc}")
+            outer_step.log.error(f"run failed after {elapsed()} with exception: {exc}")
         sys.exit(1)
 
     if outputs and step.log.isEnabledFor(logging.DEBUG):
-        outer_step.log.debug("run successful, outputs follow:")
+        outer_step.log.debug(f"run successful after {elapsed()}, outputs follow:")
         for name, value in outputs.items():
             if name in recipe.outputs:
                 outer_step.log.debug(f"  {name}: {value}")
     else:
-        outer_step.log.info("run successful")
+        outer_step.log.info(f"run successful after {elapsed()}")
 
     return 0
