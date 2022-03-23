@@ -405,6 +405,18 @@ class Recipe(Cargo):
         #             raise RecipeValidationError(f"'{location}.{assign_label}.{key}' clashes with an {io_label}")
 
     def update_assignments(self, assign, assign_based_on, params, location=""):
+
+        def resolve_config_variable(key): 
+            path = key.split('.')
+            varname = path[-1]
+            section = self.config
+            for element in path[:-1]:
+                if element in section:
+                    section = section[element]
+                else:
+                    raise AssignmentError("{location}.assign_based_on.{basevar}: '{element}' in '{key}' is not a valid config section")
+            return section, varname
+
         for basevar, value_list in assign_based_on.items():
             # make sure the base variable is defined
             if basevar in assign:
@@ -413,8 +425,11 @@ class Recipe(Cargo):
                 value = str(params[basevar])
             elif basevar in self.inputs_outputs and self.inputs_outputs[basevar].default is not None:
                 value = str(self.inputs_outputs[basevar].default)
-            else:
-                raise AssignmentError(f"{location}.assign_based_on.{basevar} is an unset variable or parameter")
+            elif '.' in basevar:
+                section, varname = resolve_config_variable(basevar)
+                if varname not in section:
+                    raise AssignmentError(f"{location}.assign_based_on.{basevar}: is not a valid config entry")
+                value = str(section[varname])
             # look up list of assignments
             assignments = value_list.get(value, value_list.get('DEFAULT'))
             if assignments is None:
@@ -426,15 +441,7 @@ class Recipe(Cargo):
                 else:
                     # vars with dots are config settings
                     if '.' in key:
-                        self.log.debug(f"config assignment: {key}={value}")
-                        path = key.split('.')
-                        varname = path[-1]
-                        section = self.config
-                        for element in path[:-1]:
-                            if element in section:
-                                section = section[element]
-                            else:
-                                raise AssignmentError("{location}.assign_based_on.{basevar}: '{element}' in '{key}' is not a valid config section")
+                        section, varname = resolve_config_variable(key)
                         section[varname] = value
                     # vars without dots are local variables or parameters
                     else:
