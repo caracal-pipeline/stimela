@@ -79,8 +79,6 @@ f"""
                 help="""Sets skip=false on the given step(s). Use commas, or give multiple times for multiple steps.""")
 @click.option("-d", "--dry-run", is_flag=True,
                 help="""Doesn't actually run anything, only prints the selected steps.""")
-@click.option("-h", "--help", is_flag=True,
-                help="""Prints help on the selected runnable and its parameters, then exits.""")
 @click.argument("what", metavar="filename.yml|CAB") 
 @click.argument("parameters", nargs=-1, metavar="[recipe name] [PARAM=VALUE] [X.Y.Z=FOO] ...", required=False) 
 def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool = False,

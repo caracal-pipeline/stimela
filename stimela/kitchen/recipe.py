@@ -512,7 +512,7 @@ class Recipe(Cargo):
         from_recipe: bool = False       # if True, value propagates from recipe up to step
         from_step: bool = False         # if True, value propagates from step down to recipe
 
-    def _add_alias(self, alias_name: str, alias_target: Union[str, Tuple]):
+    def _add_alias(self, alias_name: str, alias_target: Union[str, Tuple], category: Optional[int] = None):
         wildcards = False
         if type(alias_target) is str:
             step_spec, step_param_name = alias_target.split('.', 1)
@@ -544,7 +544,7 @@ class Recipe(Cargo):
                     continue
                 else:
                     raise RecipeValidationError(f"alias '{alias_name}' refers to unknown step parameter '{step_label}.{step_param_name}'", log=self.log)
-            # implicit inuts cannot be aliased
+            # implicit inputs cannot be aliased
             if input_schema and input_schema.implicit:
                 raise RecipeValidationError(f"alias '{alias_name}' refers to implicit input '{step_label}.{step_param_name}'", log=self.log)
             # if alias is already defined, check for conflicts
@@ -562,14 +562,22 @@ class Recipe(Cargo):
             # else alias not yet defined, insert a schema
             else:
                 io = self.inputs if input_schema else self.outputs
-                # having an own default in the schema overrides the step's default
-                own_default = None
-                if alias_name in io and io[alias_name].default is not None:
-                    own_default = io[alias_name].default
+                # if we have a schema defined for the alias, some params must be inherited from it 
+                own_schema = io.get(alias_name)
+                # define schema based on copy of the target
                 io[alias_name] = copy.copy(schema)
-                alias_schema = io[alias_name]      # make copy of schema object
-                if own_default is not None:
-                    alias_schema.default = own_default
+                alias_schema = io[alias_name] 
+                # default set from own schema     
+                if own_schema is not None and own_schema.default is not None:
+                    alias_schema.default = own_schema.default
+                # required flag overrides, if set from our own schema
+                if own_schema is not None and own_schema.required:
+                    alias_schema.required = True
+                # category is set by argument, else from own schema, else from target
+                if category is not None:
+                    alias_schema.category = category
+                elif own_schema is not None and own_schema.category is not None:
+                    alias_schema.category = own_schema.category
 
             # if step parameter is implicit, mark the alias as implicit. Note that this only applies to outputs
             if schema.implicit:
@@ -652,7 +660,7 @@ class Recipe(Cargo):
                         auto_name = f"{label}_{name}"
                         if auto_name in self.inputs or auto_name in self.outputs:
                             raise RecipeValidationError(f"auto-generated parameter name '{auto_name}' conflicts with another name. Please define an explicit alias for this.", log=log)
-                        self._add_alias(auto_name, (step, label, name))
+                        self._add_alias(auto_name, (step, label, name), category=3)
 
             # these will be re-merged when needed again
             self._inputs_outputs = None
@@ -880,6 +888,21 @@ class Recipe(Cargo):
         return lines
 
     _root_recipe_ns = None
+
+    def rich_help(self, tree):
+        Cargo.rich_help(self, tree)
+        if self.for_loop:
+            loop_tree = tree.add("For loop:")
+            loop_tree.add(f"iterating [bold]{self.for_loop.var}[/bold] over {len(self._for_loop_values)} values")
+        steps_tree = tree.add("Steps (including [italic]skipped[/italic] steps):")
+        steps = []
+        for label, step in self.steps.items():
+            if step.skip:
+                steps.append(f"[italic]{label}[/italic]")
+            else:
+                steps.append(label)
+        steps_tree.add(", ".join(steps))
+
 
     def _run(self, params) -> Dict[str, Any]:
         """Internal recipe run method. Meant to be called from a wrapper Step object (which validates the parameters, etc.)

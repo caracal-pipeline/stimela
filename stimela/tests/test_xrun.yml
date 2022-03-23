@@ -49,9 +49,9 @@ opts:
     symlink: logs
 
 
-recipe:
+xrun_recipe:
   name: "demo recipe"
-  info: 'top level recipe definition'
+  info: 'demo recipe with loops and sleeps'
 
   for_loop:
     var: x
