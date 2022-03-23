@@ -1,5 +1,5 @@
 import glob
-import os, os.path, time, re, logging
+import os, os.path, time, re, logging, platform
 from typing import Any, List, Dict, Optional, Union
 from enum import Enum
 from dataclasses import dataclass, field
@@ -206,7 +206,7 @@ def load_config(extra_configs=List[str]):
     # add runtime info
     _ds = time.strftime("%Y%m%d")
     _ts = time.strftime("%H%M%S")
-    runtime = dict(date=_ds, time=_ts, datetime=f"{_ds}-{_ts}")
+    runtime = dict(date=_ds, time=_ts, datetime=f"{_ds}-{_ts}", node=platform.node())
 
     conf.run = OmegaConf.create(runtime)
     
