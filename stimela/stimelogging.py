@@ -189,8 +189,9 @@ def declare_subtask(subtask_name):
         progress_task_names_orig.pop(-1)
         update_process_status(progress_task, description='.'.join(progress_task_names))
 
-def declare_subtask_attributes(**kw):
-    attrs = ','.join([f"{key} {value}" for key, value in kw.items()])
+def declare_subtask_attributes(*args, **kw):
+    attrs = [str(x) for x in args] + [f"{key} {value}" for key, value in kw.items()] 
+    attrs = ', '.join(attrs)
     progress_task_names[-1] = f"{progress_task_names_orig[-1]}\[{attrs}]"
     update_process_status(description='.'.join(progress_task_names))
 

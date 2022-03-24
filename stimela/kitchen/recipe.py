@@ -997,7 +997,7 @@ class Recipe(Cargo):
                 # update variables
                 inst.assign[inst.for_loop.var] = iter_var
                 inst.assign[f"{inst.for_loop.var}@index"] = count
-                stimelogging.declare_subtask_attributes(**{inst.for_loop.var: f"{count+1}/{len(inst._for_loop_values)}"})
+                stimelogging.declare_subtask_attributes(f"{count+1}/{len(inst._for_loop_values)}")
                 inst.update_assignments(inst.assign, inst.assign_based_on, inst.fqname)
                 subst.recipe._merge_(inst.assign)
                 # update logfile name (since this may depend on substitutions)
