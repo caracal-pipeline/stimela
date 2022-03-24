@@ -669,7 +669,8 @@ class Recipe(Cargo):
                         auto_name = f"{label}_{name}"
                         if auto_name in self.inputs or auto_name in self.outputs:
                             raise RecipeValidationError(f"auto-generated parameter name '{auto_name}' conflicts with another name. Please define an explicit alias for this.", log=log)
-                        self._add_alias(auto_name, (step, label, name), category=ParameterCategory.Obscure)
+                        self._add_alias(auto_name, (step, label, name), 
+                                        category=ParameterCategory.Required if schema.required else ParameterCategory.Obscure)
 
             # these will be re-merged when needed again
             self._inputs_outputs = None
