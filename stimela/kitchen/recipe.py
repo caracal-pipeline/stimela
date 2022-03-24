@@ -5,7 +5,8 @@ from dataclasses import dataclass
 from omegaconf import MISSING, OmegaConf, DictConfig, ListConfig
 from collections import OrderedDict
 from collections.abc import Mapping
-from pytest import param
+import rich.table
+
 from scabha import cargo
 from pathos.pools import ProcessPool
 from pathos.serial import SerialPool
@@ -19,9 +20,8 @@ import scabha.exceptions
 from scabha.exceptions import SubstitutionError, SubstitutionErrorList
 from scabha.validate import Unresolved, join_quote
 from scabha.substitutions import SubstitutionNS, substitutions_from 
-from scabha.cargo import Parameter, Cargo, Cab, Batch
+from scabha.cargo import Parameter, Cargo, Cab, Batch, ParameterCategory
 from scabha.types import File, Directory, MS
-
 
 from . import runners
 
@@ -577,6 +577,8 @@ class Recipe(Cargo):
                 # default set from own schema     
                 if own_schema is not None and own_schema.default is not None:
                     alias_schema.default = own_schema.default
+                if own_schema and own_schema.info is not None:
+                    alias_schema.info = own_schema.info
                 # required flag overrides, if set from our own schema
                 if own_schema is not None and own_schema.required:
                     alias_schema.required = True
@@ -596,7 +598,7 @@ class Recipe(Cargo):
                 schema.default is not None or schema.implicit is not None
 
             # if the step parameter is set and ours isn't, mark our schema as having a default
-            if have_step_param and alias_schema.default is not None:
+            if have_step_param and alias_schema.default is None:
                 alias_schema.default = DeferredAlias(f"{step_label}.{step_param_name}")
 
             # alias becomes required if any step parameter it refers to was required, but wasn't already set 
@@ -667,7 +669,7 @@ class Recipe(Cargo):
                         auto_name = f"{label}_{name}"
                         if auto_name in self.inputs or auto_name in self.outputs:
                             raise RecipeValidationError(f"auto-generated parameter name '{auto_name}' conflicts with another name. Please define an explicit alias for this.", log=log)
-                        self._add_alias(auto_name, (step, label, name), category=3)
+                        self._add_alias(auto_name, (step, label, name), category=ParameterCategory.Obscure)
 
             # these will be re-merged when needed again
             self._inputs_outputs = None
@@ -896,19 +898,27 @@ class Recipe(Cargo):
 
     _root_recipe_ns = None
 
-    def rich_help(self, tree):
-        Cargo.rich_help(self, tree)
+    def rich_help(self, tree, max_category=ParameterCategory.Optional):
+        Cargo.rich_help(self, tree, max_category=max_category)
         if self.for_loop:
             loop_tree = tree.add("For loop:")
-            loop_tree.add(f"iterating [bold]{self.for_loop.var}[/bold] over {len(self._for_loop_values)} values")
-        steps_tree = tree.add("Steps (including [italic]skipped[/italic] steps):")
-        steps = []
-        for label, step in self.steps.items():
-            if step.skip:
-                steps.append(f"[italic]{label}[/italic]")
+            if self._for_loop_values is not None:
+                over = f"{len(self._for_loop_values)} values"
             else:
-                steps.append(label)
-        steps_tree.add(", ".join(steps))
+                over = f"[bold]{self.for_loop.over}[/bold]"
+            loop_tree.add(f"iterating [bold]{self.for_loop.var}[/bold] over {over}")
+        if self.steps:
+            have_skips = any(step.skip for step in self.steps.values())
+            steps_tree = tree.add(f"Steps ([italic]italicized[/italic] steps are skipped by default):" 
+                                if have_skips else "Steps:")
+            steps = []
+            table = rich.table.Table.grid("", "", "", padding=(0,2)) # , show_header=False, show_lines=False, box=rich.box.SIMPLE)
+            steps_tree.add(table)            
+            for label, step in self.steps.items():
+                style = "italic" if step.skip else "bold"
+                table.add_row(f"[{style}]{label}[/{style}]", step.info)
+        else:
+            steps_tree = tree.add("No recipe steps defined")
 
 
     def _run(self, params) -> Dict[str, Any]:

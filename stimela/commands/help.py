@@ -7,7 +7,7 @@ import stimela
 from scabha import configuratt
 from stimela import logger
 from stimela.main import cli
-from scabha.cargo import Cab
+from scabha.cargo import Cab, ParameterCategory
 from stimela.kitchen.recipe import Recipe, Step, join_quote
 from stimela.config import ConfigExceptionTypes
 from typing import *
@@ -16,56 +16,38 @@ from rich.table import Table
 from rich import box
 from rich import print as rich_print
 
-def print_schema_help(cargo_type, name, cargo, extra_defaults={}, omit_params={}):
-    print(
-f"""
-    {cargo_type} name: {name}
-    Info: {cargo.info}
-""")
-    def print_inputs_outputs(inputs_outputs):
-        for name, schema in inputs_outputs.items():
-            line = f"        {name}: {schema.dtype}"
-            default = extra_defaults.get(name)
-            if default is None:
-                default = schema.default
-            if default is not None:
-                line += f" = {default}"
-            line += "\n"
-            if schema.info:
-                line = f"          {schema.info}\n"
-            print(line)
-    if cargo.inputs:
-        print("    Inputs:\n")
-        print_inputs_outputs(cargo.inputs)
-    else:
-        print("    Inputs: none\n")
-    if cargo.outputs:
-        print("    Outputs:\n")
-        print_inputs_outputs(cargo.outputs)
-    else:
-        print("    Outputs: none\n")
-    if type(cargo) is Recipe:
-        print("\n    Steps")
-        if any(step.skip for step in cargo.steps.values()):
-            print(" including [skipped] steps")
-        step_names = []
-        for label, step in cargo.steps.items():
-            step_names.append(f"[{label}]" if step.skip else label)
-        print(f":\n        {' '.join(step_names)}")
-
-
 @cli.command("help",
     help="""
     Print help on a cab or a recipe.
     """)
 @click.option("do_list", "-l", "--list", is_flag=True,
                 help="""Lists the available cabs and recipes, including custom-defined ones.""")
+@click.option("-I", "--implicit", is_flag=True,
+                help="""Increases level of detail to include implicit inputs/outputs.""")
+@click.option("-O", "--obscure", is_flag=True,
+                help="""Increases level of detail to include implicit and obscure inputs/outputs.""")
+@click.option("-A", "--all", is_flag=True,
+                help="""Increases level of detail to include all inputs/outputs.""")
+@click.option("-R", "--required", is_flag=True,
+                help="""Decreases level of detail to include required inputs/outputs only.""")
 @click.argument("items", nargs=-1, metavar="filename.yml|cab name|recipe name|...") 
-def help(items: List[str] = [], do_list=False):
+def help(items: List[str] = [], do_list=False, implicit=False, obscure=False, all=False, required=False):
 
     log = logger()
     top_tree = Tree(f"stimela help {' '.join(items)}", guide_style="dim")
     found_something = False
+
+    if required:
+        max_category = ParameterCategory.Required
+    else:
+        max_category = ParameterCategory.Optional
+    if all:
+        max_category = ParameterCategory.Hidden
+    elif obscure:
+        max_category = ParameterCategory.Obscure
+    elif implicit:
+        max_category = ParameterCategory.Implicit
+        
 
     for item in items:
         # a filename -- treat it as a config
@@ -98,20 +80,20 @@ def help(items: List[str] = [], do_list=False):
             recipe_names = fnmatch.filter(stimela.CONFIG.lib.recipes.keys(), item)
             cab_names = fnmatch.filter(stimela.CONFIG.cabs.keys(), item)
             if not recipe_names and not cab_names:
-                log.error(f"'{item}' does not match any files, recipes or cab names")
+                log.error(f"'{item}' does not match any files, recipes or cab names. Try -l/--list")
                 sys.exit(2)
 
             for name in recipe_names:
                 recipe = Recipe(**stimela.CONFIG.lib.recipes[name])
-                recipe.finalize()
+                recipe.finalize(fqname=name)
                 tree = top_tree.add(f"Recipe: [bold]{name}[/bold]")
-                recipe.rich_help(tree)
+                recipe.rich_help(tree, max_category=max_category)
             
             for name in cab_names:
                 cab = Cab(**stimela.CONFIG.cabs[name])
                 cab.finalize()
                 tree = top_tree.add(f"Cab: [bold]{name}[/bold]")
-                cab.rich_help(tree)
+                cab.rich_help(tree, max_category=max_category)
 
             found_something = True
 
