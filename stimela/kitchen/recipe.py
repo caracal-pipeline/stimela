@@ -169,7 +169,7 @@ class Step:
             raise StepValidationError(f"{self.cargo.name} has the following invalid parameters: {join_quote(self.invalid_params)}")
         return params
 
-    def log_summary(self, level, title, color=None, ignore_missing=False):
+    def log_summary(self, level, title, color=None, ignore_missing=True):
         extra = dict(color=color, boldface=True)
         if self.log.isEnabledFor(level):
             self.log.log(level, f"### {title}", extra=extra)
