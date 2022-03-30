@@ -194,7 +194,7 @@ class Step:
             skip = self._skip
             if self._skip is None and subst is not None:
                 skips = dict(skip=self.skip)
-                evaluate_and_substitute(skips, subst, subst.current, location=[self.fqname], ignore_subst_errors=False)
+                skips = evaluate_and_substitute(skips, subst, subst.current, location=[self.fqname], ignore_subst_errors=False)
                 skip = skips["skip"]
 
             # Since prevalidation will have populated default values for potentially missing parameters, use those values
@@ -264,7 +264,7 @@ class Step:
                     raise
             else:
                 if self._skip is None and subst is not None:
-                    self.log.info("skipping step based on setting of '{self.skip}'")
+                    self.log.info(f"skipping step based on setting of '{self.skip}'")
                 else:
                     self.log.info("skipping step based on explicit setting")
 
