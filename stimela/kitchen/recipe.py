@@ -178,7 +178,7 @@ class Step:
     def prevalidate(self, subst: Optional[SubstitutionNS]=None):
         self.finalize()
         # validate cab or recipe
-        params = self.validated_params = self.cargo.prevalidate(self.params.copy(), subst)
+        params = self.validated_params = self.cargo.prevalidate(self.params, subst)
         self.log.debug(f"{self.cargo.name}: {len(self.missing_params)} missing, "
                         f"{len(self.invalid_params)} invalid and "
                         f"{len(self.unresolved_params)} unresolved parameters")
