@@ -271,7 +271,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
         log.info(f"    {' '.join(steps)}", extra=dict(color="GREEN"))
 
         # warn user if som steps remain explicitly disabled
-        if any(recipe.steps[name].skip for name in tagged_steps):
+        if any(recipe.steps[name]._skip for name in tagged_steps):
             log.warning("note that some steps remain explicitly skipped")
 
     # in debug mode, pretty-print the recipe

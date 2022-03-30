@@ -73,7 +73,7 @@ class Step:
         else:
             # otherwise, self._skip stays at None, and will be re-evaluated at runtime
             self._skip = None
-
+        
     def summary(self, params=None, recursive=True, ignore_missing=False):
         return self.cargo and self.cargo.summary(recursive=recursive, 
                                 params=params or self.validated_params or self.params, ignore_missing=ignore_missing)
@@ -161,6 +161,16 @@ class Step:
             # finalize the cargo
             self.cargo.finalize(config, log=log, logopts=logopts, fqname=self.fqname, nesting=nesting)
 
+            # build dictionary of defaults from cargo
+            self.defaults = {name: schema.default for name, schema in self.cargo.inputs_outputs.items() 
+                             if schema.default is not None and not isinstance(schema.default, Unresolved) }
+            self.defaults.update(**self.cargo.defaults)
+            
+            # set missing parameters from defaults
+            for name, value in self.defaults.items():
+                if name not in self.params:
+                    self.params[name] = value
+
             # set backend
             self.backend = self.backend or self.config.opts.backend
 
@@ -168,7 +178,7 @@ class Step:
     def prevalidate(self, subst: Optional[SubstitutionNS]=None):
         self.finalize()
         # validate cab or recipe
-        params = self.validated_params = self.cargo.prevalidate(self.params, subst)
+        params = self.validated_params = self.cargo.prevalidate(self.params.copy(), subst)
         self.log.debug(f"{self.cargo.name}: {len(self.missing_params)} missing, "
                         f"{len(self.invalid_params)} invalid and "
                         f"{len(self.unresolved_params)} unresolved parameters")
@@ -447,13 +457,12 @@ class Recipe(Cargo):
         # split into config and non-config assignments
         config_assign = OrderedDict((key, value) for key, value in whose.assign.items() if '.' in key)
         assign = OrderedDict((key, value) for key, value in whose.assign.items() if '.' not in key)
+        updated = False
 
-        # merge non-config assignments into ns.recipe 
+        # merge non-config assignments into ns.recipe, resolve and substitute as appropriate
         if assign:
             subst.recipe._merge_(assign)
             evaluate_and_substitute(assign, subst, subst.recipe, location=[whose.fqname], ignore_subst_errors=ignore_subst_errors)
-            # accumulate anew below
-            assign = {}
 
         # now process assign_based_on entries
         for basevar, value_list in whose.assign_based_on.items():
@@ -474,6 +483,7 @@ class Recipe(Cargo):
             assignments = value_list.get(value, value_list.get('DEFAULT'))
             if assignments is None:
                 raise AssignmentError(f"{whose.fqname}.assign_based_on.{basevar}: unknown value '{value}', and no default defined")
+            updated = True
             # update assignments (also inside ns.recipe)
             for key, value in assignments.items():
                 if key in self._protected_from_assign:
@@ -490,8 +500,8 @@ class Recipe(Cargo):
                 else:
                     config_assign[key] = value
 
-        # merge any new assignments into ns.recipe 
-        if assign:
+        # if anything changed, merge non-config assignments into ns.recipe, resolve and substitute as appropriate
+        if assign and updated:
             subst.recipe._merge_(assign)
             evaluate_and_substitute(assign, subst, subst.recipe, location=[whose.fqname], ignore_subst_errors=ignore_subst_errors)
 
@@ -828,6 +838,9 @@ class Recipe(Cargo):
         def prevalidate_steps():
             for label, step in self.steps.items():
                 self._prep_step(label, step, subst)
+                # update, since these may depend on step info
+                self.update_assignments(subst, params=params, ignore_subst_errors=True)
+                self.update_assignments(subst, whose=step, params=params, ignore_subst_errors=True)
 
                 try:
                     step_params = step.prevalidate(subst)
@@ -889,7 +902,7 @@ class Recipe(Cargo):
     def validate_for_loop(self, params, strict=False):
         # in case of for loops, get list of values to be iterated over 
         if self.for_loop is not None:
-            # if over != None (see finalize() above), list of values needs to be looked `up in inputs
+            # if over != None (see finalize() above), list of values needs to be looked up in inputs
             # if it is None, then an explicit list was supplied and is already in self._for_loop_values.
             if self.for_loop.over is not None:
                 # check that it's legal
@@ -903,7 +916,9 @@ class Recipe(Cargo):
                     raise ParameterValidationError(f"for_loop.over={self.for_loop.over} is unset")
                 if strict and isinstance(values, Unresolved):
                     raise ParameterValidationError(f"for_loop.over={self.for_loop.over} is unresolved")
-                if not isinstance(values, (list, tuple)):
+                if type(values) is ListConfig:
+                    values = list(values)
+                elif not isinstance(values, (list, tuple)):
                     values = [values]
                 if self._for_loop_values is None:
                     self.log.info(f"recipe is a for-loop with '{self.for_loop.var}' iterating over {len(values)} values")
@@ -1074,11 +1089,9 @@ class Recipe(Cargo):
                 # update variable index
                 inst.assign[f"{inst.for_loop.var}@index"] = count
                 stimelogging.declare_subtask_attributes(f"{count+1}/{len(inst._for_loop_values)}")
-                # update assignments since for-loop variable will have changed
-                self.update_assignments(subst, params=params)
 
-
-            # merge in step's assignments 
+            # update and re-evaluate assignments
+            inst.update_assignments(subst, params=params)
             inst.update_assignments(subst, whose=step, params=params)
             
             inst.log.info(f"processing step '{label}'")
