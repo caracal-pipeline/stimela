@@ -263,7 +263,10 @@ class Step:
                         exc.logged = True
                     raise
             else:
-                self.log.info("this step is being skipped")
+                if self._skip is None and subst is not None:
+                    self.log.info("skipping step based on setting of '{self.skip}'")
+                else:
+                    self.log.info("skipping step based on explicit setting")
 
             self.log.debug(f"validating outputs")
             validated = False
