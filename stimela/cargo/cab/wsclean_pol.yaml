@@ -27,44 +27,44 @@ outputs:
   dirty:
     info: Dirty images
     dtype: List[File]
-    implicit: "{current.prefix}-[0-9][0-9][0-9][0-9]-[IQUV]-dirty.fits"
+    implicit: "=GLOB({current.prefix}-[0-9][0-9][0-9][0-9]-[IQUV]-dirty.fits)"
     must_exist: false
   restored: 
     info: Restored images
     dtype: List[File]
-    implicit: "{current.prefix}-[0-9][0-9][0-9][0-9]-[IQUV]-image.fits"
+    implicit: "=GLOB({current.prefix}-[0-9][0-9][0-9][0-9]-[IQUV]-image.fits)"
     must_exist: false
   residual:
     dtype: List[File]
-    implicit: "{current.prefix}-[0-9][0-9][0-9][0-9]-[IQUV]-residual.fits"
+    implicit: "=GLOB({current.prefix}-[0-9][0-9][0-9][0-9]-[IQUV]-residual.fits)"
     must_exist: false
   model:
     info: Model images
     dtype: List[File]
-    implicit: "{current.prefix}-[0-9][0-9][0-9][0-9]-[IQUV]-model.fits"
+    implicit: "=GLOB({current.prefix}-[0-9][0-9][0-9][0-9]-[IQUV]-model.fits)"
     must_exist: false
   restored_mfs_i:
     info: Restored MFS images
     dtype: File
-    implicit: "{current.prefix}-MFS-I-image.fits"
+    implicit: "=GLOB({current.prefix}-MFS-I-image.fits)"
     must_exist: false
   restored_mfs:
     info: Restored MFS images
     dtype: List[File]
-    implicit: "{current.prefix}-MFS-[IQUV]-image.fits"
+    implicit: "=GLOB({current.prefix}-MFS-[IQUV]-image.fits)"
     must_exist: false
   residual_mfs:
     info: Residual MFS images
     dtype: List[File]
-    implicit: "{current.prefix}-MFS-[IQUV]-residual.fits"
+    implicit: "=GLOB({current.prefix}-MFS-[IQUV]-residual.fits)"
     must_exist: false
   model_mfs:
     info: Model MFS images
     dtype: List[File]
-    implicit: "{current.prefix}-MFS-[IQUV]-model.fits"
+    implicit: "=GLOB({current.prefix}-MFS-[IQUV]-model.fits)"
     must_exist: false
   dirty_mfs:
     info: Dirty MFS images
     dtype: List[File]
-    implicit: "{current.prefix}-MFS-[IQUV]-dirty.fits"
+    implicit: "=GLOB({current.prefix}-MFS-[IQUV]-dirty.fits)"
     must_exist: false
