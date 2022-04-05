@@ -103,7 +103,7 @@ def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, o
                             log.info(f"Process {proc.pid} has exited with return code {proc.returncode}")
                             break
                         if retry == 5:
-                            log.warning(f"Process {proc.pid} not exited after {retry} seconds, will tyr to terminate it")
+                            log.warning(f"Process {proc.pid} not exited after {retry} seconds, will try to terminate it")
                             proc.terminate()
                         else:
                             log.info(f"Process {proc.pid} not exited after {retry} seconds, waiting a bit longer...")
