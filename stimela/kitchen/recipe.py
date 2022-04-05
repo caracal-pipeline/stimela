@@ -543,10 +543,10 @@ class Recipe(Cargo):
                 self.log.warning(f"enabling step '{label}' which was previously marked as skipped")
             elif step._skip is not False:
                 self.log.warning(f"enabling step '{label}' which was previously marked as potentially skipped ('{self.skip}')")
-            step.skip = self._skip = False
+            step.skip = step._skip = False
         else:
             self.log.warning(f"will skip step '{label}'")
-            step.skip = self._skip = True
+            step.skip = step._skip = True
 
     def restrict_steps(self, steps: List[str], force_enable=True):
         self.finalize()
