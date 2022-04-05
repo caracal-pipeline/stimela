@@ -1,7 +1,5 @@
-# -*- coding: future_fstrings -*-
 import subprocess
 import os
-import sys
 from io import StringIO
 from stimela import utils
 import json

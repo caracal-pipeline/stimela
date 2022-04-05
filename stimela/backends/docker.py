@@ -1,4 +1,3 @@
-# -*- coding: future_fstrings -*-
 import subprocess
 import os
 import platform
@@ -11,7 +10,7 @@ import time
 import datetime
 import subprocess
 import yaml
-from typing import Any, List, Dict, Optional, Union
+from typing import Dict, Union
 from stimela.config import StimelaImage
 
 class DockerError(Exception):

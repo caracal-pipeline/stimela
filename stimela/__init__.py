@@ -1,11 +1,8 @@
-import os, sys, re
+import os
+import re
 import inspect
 import pkg_resources
-import logging
-from logging import StreamHandler
-from typing import Union, Optional
 from pathlib import Path
-from omegaconf import OmegaConf
 
 try:
     __version__ = pkg_resources.require("stimela")[0].version
