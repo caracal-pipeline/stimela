@@ -11,6 +11,7 @@ from stimela.main import cli
                 help="list in the more terse image+ID format.")
 def images(print_ids=False):
     from stimela.main import BACKEND
+    from stimela import CONFIG
     log = stimela.logger()
     available = BACKEND.available_images()
 
@@ -21,7 +22,7 @@ def images(print_ids=False):
         print(header)
         print("-"*len(header))
 
-    for _, baseinfo in context.config.base.items():
+    for _, baseinfo in CONFIG.base.items():
         name0 = name = baseinfo.name
         for version, versinfo in baseinfo.images.items():
             if name0 in available and version in available[name0]:

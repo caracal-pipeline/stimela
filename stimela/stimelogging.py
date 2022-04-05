@@ -13,6 +13,8 @@ import psutil
 import rich.progress
 import rich.logging
 
+from .config import StimelaLogConfig
+
 class MultiplexingHandler(logging.Handler):
     """handler to send INFO and below to stdout, everything above to stderr"""
     def __init__(self, info_stream=sys.stdout, err_stream=sys.stderr):
@@ -313,7 +315,7 @@ def setup_file_logger(log: logging.Logger, logfile: str, level: Optional[Union[i
     return log
 
 
-def update_file_logger(log: logging.Logger, logopts: Union["StimelaLogConfig", DictConfig], nesting: int = 0, subst: Optional[SubstitutionNS] = None, location=[]):
+def update_file_logger(log: logging.Logger, logopts: Union[StimelaLogConfig, DictConfig], nesting: int = 0, subst: Optional[SubstitutionNS] = None, location=[]):
     """Updates logfiles associated with given logger based on option settings
 
     Args:
@@ -326,7 +328,6 @@ def update_file_logger(log: logging.Logger, logopts: Union["StimelaLogConfig", D
     Returns:
         [type]: [description]
     """
-    from .config import StimelaLogConfig
 
     if logopts.enable and logopts.nest >= nesting:
         path = os.path.join(logopts.dir or ".", logopts.name)

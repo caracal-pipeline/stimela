@@ -34,7 +34,7 @@ def config(settings, save=None):
 
     # print config, if no key=value args specified
     if not settings:
-        for key, value in context.config.opts.items():
+        for key, value in CONFIG.opts.items():
             if isinstance(value, Enum):
                 value = value.name
             print(f"    {key} = {value}")
