@@ -996,9 +996,8 @@ class Recipe(Cargo):
             loop_tree.add(f"iterating [bold]{self.for_loop.var}[/bold] over {over}")
         if self.steps:
             have_skips = any(step._skip for step in self.steps.values())
-            steps_tree = tree.add(f"Steps ([italic]italicized[/italic] steps are skipped by default):" 
+            steps_tree = tree.add(f"Steps (note [italic]some steps[/italic] are skipped by default):" 
                                 if have_skips else "Steps:")
-            steps = []
             table = rich.table.Table.grid("", "", "", padding=(0,2)) # , show_header=False, show_lines=False, box=rich.box.SIMPLE)
             steps_tree.add(table)            
             for label, step in self.steps.items():

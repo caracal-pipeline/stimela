@@ -1,19 +1,20 @@
-from collections import OrderedDict
 import dataclasses
 import itertools
-from datetime import datetime
-
-from yaml.error import YAMLError
-from scabha import configuratt
-from scabha.exceptions import ScabhaBaseException
-from omegaconf.omegaconf import OmegaConf, OmegaConfBaseException
-from stimela import stimelogging
-from stimela.config import ConfigExceptionTypes
 import click
 import logging
-import os.path, yaml, sys, asyncio
+import os.path
+import yaml
+import sys
+
+from datetime import datetime
 from typing import List, Optional
+from collections import OrderedDict
+from omegaconf.omegaconf import OmegaConf, OmegaConfBaseException
+
 import stimela
+from scabha import configuratt
+from scabha.exceptions import ScabhaBaseException
+from stimela.config import ConfigExceptionTypes
 from stimela import logger
 from stimela.main import cli
 from stimela.kitchen.recipe import Recipe, Step, join_quote
