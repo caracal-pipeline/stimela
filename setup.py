@@ -9,13 +9,19 @@ import glob
 requirements = ["pyyaml",
                 "nose>=1.3.7",
                 "future-fstrings",
-                "scabha @ git+https://github.com/caracal-pipeline/scabha2",
+                "scabha >= 0.7.0", 
+                ## OMS: not a fan of this:
+                # @ git+https://github.com/caracal-pipeline/scabha2",
+                ## ...because it interferes with running scabha2 off a dev branch (i.e. if you have a local dev install of scabha,
+                ## pip install stimela will blow it away and replace with master branch...)
                 "ruamel.yaml",
                 "munch",
                 "omegaconf>=2.1pre1",
                 "click",
                 "pydantic",
                 "pathos",
+                "psutil",
+                "rich"
                 ],
 
 PACKAGE_NAME = "stimela"

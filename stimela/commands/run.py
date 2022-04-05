@@ -1,21 +1,25 @@
-from collections import OrderedDict
 import dataclasses
 import itertools
-
-from yaml.error import YAMLError
-from scabha import configuratt
-from scabha.exceptions import ScabhaBaseException
-from omegaconf.omegaconf import OmegaConf, OmegaConfBaseException
-from stimela.config import ConfigExceptionTypes
 import click
 import logging
-import os.path, yaml, sys
+import os.path
+import yaml
+import sys
+
+from datetime import datetime
 from typing import List, Optional
+from collections import OrderedDict
+from omegaconf.omegaconf import OmegaConf, OmegaConfBaseException
+
 import stimela
+from scabha import configuratt
+from scabha.exceptions import ScabhaBaseException
+from stimela.config import ConfigExceptionTypes
 from stimela import logger
 from stimela.main import cli
 from stimela.kitchen.recipe import Recipe, Step, join_quote
 from stimela.config import get_config_class
+
 
 @cli.command("run",
     help="""
@@ -41,7 +45,7 @@ from stimela.config import get_config_class
                 help="""Doesn't actually run anything, only prints the selected steps.""")
 @click.argument("what", metavar="filename.yml|CAB") 
 @click.argument("parameters", nargs=-1, metavar="[recipe name] [PARAM=VALUE] [X.Y.Z=FOO] ...", required=False) 
-def run(what: str, parameters: List[str] = [], dry_run: bool = False, 
+def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool = False,
     step_names: List[str] = [], tags: List[str] = [], skip_tags: List[str] = [], enable_steps: List[str] = []):
 
     log = logger()
@@ -133,6 +137,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False,
                 sys.exit(2)
         else:
             if len(all_recipe_names) > 1: 
+                print(f"This file contains the following recipes: {', '.join(all_recipe_names)}")
                 log.error(f"multiple recipes found, please specify one on the command line")
                 sys.exit(2)
             recipe_name = all_recipe_names[0]
@@ -180,7 +185,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False,
         log.info("pre-validating the recipe")
         outer_step = Step(recipe=recipe, name=f"{recipe_name}", info=what, params=params)
         try:
-            outer_step.prevalidate()
+            params = outer_step.prevalidate()
         except ScabhaBaseException as exc:
             if not exc.logged:
                 log.error(f"pre-validation failed: {exc}")
@@ -262,37 +267,41 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False,
         # apply restrictions, if any
         recipe.restrict_steps(tagged_steps, force_enable=False)
 
-        steps = [name for name, step in recipe.steps.items() if not step.skip]
+        steps = [name for name, step in recipe.steps.items() if not step._skip]
         log.info(f"will run the following recipe steps:")
         log.info(f"    {' '.join(steps)}", extra=dict(color="GREEN"))
 
         # warn user if som steps remain explicitly disabled
-        if any(recipe.steps[name].skip for name in tagged_steps):
+        if any(recipe.steps[name]._skip for name in tagged_steps):
             log.warning("note that some steps remain explicitly skipped")
 
     # in debug mode, pretty-print the recipe
     if log.isEnabledFor(logging.DEBUG):
         log.debug("---------- prevalidated step follows ----------")
-        for line in outer_step.summary():
+        for line in outer_step.summary(params=params):
             log.debug(line)
 
     if dry_run:
         log.info("dry run was requested, exiting")
         sys.exit(0)
 
-    # run step
+    start_time = datetime.now()
+    def elapsed():
+        return str(datetime.now() - start_time).split('.', 1)[0]
+
     try:
         outputs = outer_step.run()
     except ScabhaBaseException as exc:
         if not exc.logged:
-            outer_step.log.error(f"run failed with exception: {exc}")
+            outer_step.log.error(f"run failed after {elapsed()} with exception: {exc}")
         sys.exit(1)
 
     if outputs and step.log.isEnabledFor(logging.DEBUG):
-        outer_step.log.debug("run successful, outputs follow:")
+        outer_step.log.debug(f"run successful after {elapsed()}, outputs follow:")
         for name, value in outputs.items():
-            outer_step.log.debug(f"  {name}: {value}")
+            if name in recipe.outputs:
+                outer_step.log.debug(f"  {name}: {value}")
     else:
-        outer_step.log.info("run successful")
+        outer_step.log.info(f"run successful after {elapsed()}")
 
     return 0

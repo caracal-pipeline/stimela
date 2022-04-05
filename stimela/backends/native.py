@@ -5,9 +5,9 @@ from typing import Dict, Optional, Any
 from collections import OrderedDict
 from contextlib import redirect_stderr, redirect_stdout
 
-from scabha.cargo import Cab
+from scabha.cargo import Cab, Parameter
 from stimela import logger
-from stimela.utils.xrun_poll import xrun, dispatch_to_log
+from stimela.utils.xrun_asyncio import xrun, dispatch_to_log
 from stimela.exceptions import StimelaCabRuntimeError
 import click
 
@@ -30,7 +30,7 @@ class LoggerIO(TextIOBase):
         return len(s)
 
 
-def run(cab: Cab, log, subst: Optional[Dict[str, Any]] = None, batch=None):
+def run(cab: Cab, params: Dict[str, Any], log, subst: Optional[Dict[str, Any]] = None, batch=None):
     """Runs cab contents
 
     Args:
@@ -45,13 +45,13 @@ def run(cab: Cab, log, subst: Optional[Dict[str, Any]] = None, batch=None):
     # commands of form "(module)function" are a Python call
     match = re.match("^\((.+)\)(.+)$", cab.command)
     if match:
-        return run_callable(match.group(1), match.group(2), cab, log, subst)
+        return run_callable(match.group(1), match.group(2), cab, params, log, subst)
     # everything else is a shell command
     else:
-        return run_command(cab, log, subst)
+        return run_command(cab, params, log, subst)
 
 
-def run_callable(modulename: str, funcname: str, cab: Cab, log, subst: Optional[Dict[str, Any]] = None):
+def run_callable(modulename: str, funcname: str,  cab: Cab, params: Dict[str, Any], log, subst: Optional[Dict[str, Any]] = None):
     """Runs a cab corresponding to a Python callable. Intercepts stdout/stderr into the logger.
 
     Args:
@@ -69,10 +69,14 @@ def run_callable(modulename: str, funcname: str, cab: Cab, log, subst: Optional[
     """
 
     # import module and get function object
+    path0 = sys.path.copy()
+    sys.path.append('.')
     try:
         mod = importlib.import_module(modulename)
     except ImportError as exc:
         raise StimelaCabRuntimeError(f"can't import {modulename}: {exc}", log=log)
+    finally:
+        sys.path = path0
 
     func = getattr(mod, funcname, None)
 
@@ -89,8 +93,8 @@ def run_callable(modulename: str, funcname: str, cab: Cab, log, subst: Optional[
     args = OrderedDict()
     for key, schema in cab.inputs_outputs.items():
         if not schema.policies.skip:
-            if key in cab.params:
-                args[key] = cab.params
+            if key in params:
+                args[key] = params[key]
             elif cab.get_schema_policy(schema, 'pass_missing_as_none'):
                 args[key] = None
 
@@ -114,7 +118,7 @@ def run_callable(modulename: str, funcname: str, cab: Cab, log, subst: Optional[
     return retval
 
 
-def run_command(cab: Cab, log, subst: Optional[Dict[str, Any]] = None, batch=None):
+def run_command(cab: Cab, params: Dict[str, Any], log, subst: Optional[Dict[str, Any]] = None, batch=None):
     """Runns command represented by cab.
 
     Args:
@@ -129,11 +133,11 @@ def run_command(cab: Cab, log, subst: Optional[Dict[str, Any]] = None, batch=Non
         int: return value (e.g. exit code) of command
     """
     # build command line from parameters
-    args, venv = cab.build_command_line(subst)
+    args, venv = cab.build_command_line(params, subst)
 
     if batch:
         batch = SlurmBatch(**batch)
-        batch.__init_cab__(cab, subst, log)
+        batch.__init_cab__(cab, params, subst, log)
         runcmd = "/bin/bash -c" + " ".join(args)
         jobfile = "foo-bar.job"
         batch.name = "foo-bar"
@@ -155,7 +159,7 @@ def run_command(cab: Cab, log, subst: Optional[Dict[str, Any]] = None, batch=Non
 
     retcode = xrun(args[0], args[1:], shell=False, log=log, 
                 output_wrangler=cab.apply_output_wranglers, 
-                return_errcode=True, command_name=command_name)
+                return_errcode=True, command_name=command_name, progress_bar=True)
 
     # if retcode is not zero, raise error, unless cab declared itself a success (via the wrangler)
     if retcode:

@@ -1,0 +1,78 @@
+cabs:
+  sleep:
+    command: sleep
+    inputs:
+      seconds:
+        dtype: int
+        required: true
+        policies:
+          positional: true
+  help:
+    command: wsclean
+
+  shell:
+    command: '{current.command} {current.args}'
+    policies:
+      skip: true
+    inputs:
+      command:
+        dtype: str
+        required: true
+      args:
+        dtype: str
+        required: true
+
+  fileops:
+    command: '{current.command}'
+    policies:
+      positional: true
+    inputs:
+      command:
+        choices: 
+          - cp
+          - mv
+        policies:
+          skip: true
+      src:
+        dtype: File
+        required: true
+        must_exist: false
+      dest:
+        dtype: Union[File, Directory]
+        required: true
+        must_exist: false
+
+opts:
+  log:
+    dir: test-logs/logs-{config.run.datetime} 
+    nest: 3
+    symlink: logs
+
+
+xrun_recipe:
+  name: "demo recipe"
+  info: 'demo recipe with loops and sleeps'
+
+  for_loop:
+    var: x
+    over: [1,2,3]
+
+  steps:
+    echo:
+      cab: shell
+      params:
+        command: echo
+        args: "1 2 3 4 5"
+
+    # help:
+    #   cab: help
+    slp1: 
+      cab: sleep
+      params:
+        seconds: 5
+    # cp:
+    #   cab: fileops
+    #   params:
+    #     command: cp
+    #     src: a
+    #     dest: a

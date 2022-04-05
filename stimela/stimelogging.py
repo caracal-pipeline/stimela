@@ -1,8 +1,15 @@
+import atexit
 import sys, os.path, re
+from datetime import datetime
 import logging
-from typing import Optional, Dict, Any, Union
+import contextlib
+from typing import Optional, Union
 from omegaconf import DictConfig
 from scabha.substitutions import SubstitutionNS, forgiving_substitutions_from
+import asyncio
+import psutil
+import rich.progress
+import rich.logging
 
 class MultiplexingHandler(logging.Handler):
     """handler to send INFO and below to stdout, everything above to stderr"""
@@ -13,7 +20,11 @@ class MultiplexingHandler(logging.Handler):
         self.multiplex = True
 
     def emit(self, record):
-        handler = self.err_handler if record.levelno > logging.INFO and self.multiplex else self.info_handler
+        # does record come with its own handler? Rather use that
+        if hasattr(record, 'custom_console_handler'):
+            handler = record.custom_console_handler
+        else:
+            handler = self.err_handler if record.levelno > logging.INFO and self.multiplex else self.info_handler
         handler.emit(record)
         # ignore broken pipes, this often happens when cleaning up and exiting
         try:
@@ -43,6 +54,7 @@ class ConsoleColors():
     DIM     = '\033[2m'  if sys.stdin.isatty() else ''
     GREEN   = '\033[92m' if sys.stdin.isatty() else ''
     YELLOW  = '\033[93m' if sys.stdin.isatty() else ''
+    BLUE    = '\033[94m' if sys.stdin.isatty() else ''
     WHITE   = '\033[39m' if sys.stdin.isatty() else ''
     ENDC    = '\033[0m'  if sys.stdin.isatty() else ''
 
@@ -75,6 +87,7 @@ class ColorizingFormatter(logging.Formatter):
 class SelectiveFormatter(logging.Formatter):
     """Selective formatter. if condition(record) is True, invokes other formatter"""
     def __init__(self, default_formatter, dispatch_list):
+        logging.Formatter.__init__(self)
         self._dispatch_list = dispatch_list
         self._default_formatter = default_formatter
 
@@ -88,7 +101,8 @@ class SelectiveFormatter(logging.Formatter):
 
 _logger = None
 log_console_handler = log_formatter = log_boring_formatter = log_colourful_formatter = None
-
+progress_bar = progress_task = None
+_start_time = datetime.now()
 
 def is_logger_initialized():
     return _logger is not None
@@ -127,10 +141,29 @@ def logger(name="STIMELA", propagate=False, console=True, boring=False,
         log_formatter = log_boring_formatter if boring else log_colourful_formatter
 
         if console:
+            global progress_bar, progress_task
+            progress_bar = rich.progress.Progress(
+                rich.progress.SpinnerColumn(),
+                "[yellow]{task.fields[elapsed_time]}[/yellow]",
+                "[bold]{task.description}[/bold]",
+                rich.progress.SpinnerColumn(),
+                "{task.fields[command]}",
+                rich.progress.TimeElapsedColumn(),
+                "{task.fields[cpu_info]}",
+                refresh_per_second=2,
+                transient=True)
+
+            progress_task = progress_bar.add_task("stimela", command="starting", cpu_info=" ", elapsed_time="", start=True)
+            progress_bar.__enter__()
+            atexit.register(lambda:progress_bar.__exit__(None, None, None))
+
             if "SILENT_STDERR" in os.environ and os.environ["SILENT_STDERR"].upper()=="ON":
                 log_console_handler = logging.StreamHandler(stream=sys.stdout)
             else:  
-                log_console_handler = MultiplexingHandler()
+                log_console_handler = rich.logging.RichHandler(console=progress_bar,
+                                    highlighter=rich.highlighter.NullHighlighter(),
+                                    show_level=False, show_path=False, show_time=False)
+
             log_console_handler.setFormatter(log_formatter)
             log_console_handler.setLevel(loglevel)
             _logger.addHandler(log_console_handler)
@@ -140,6 +173,66 @@ def logger(name="STIMELA", propagate=False, console=True, boring=False,
         scabha.set_logger(_logger)
 
     return _logger
+
+progress_task_names = []
+progress_task_names_orig = []
+
+@contextlib.contextmanager
+def declare_subtask(subtask_name):
+    progress_task_names.append(subtask_name)
+    progress_task_names_orig.append(subtask_name)
+    update_process_status(description='.'.join(progress_task_names))
+    try:
+        yield subtask_name
+    finally:
+        progress_task_names.pop(-1)
+        progress_task_names_orig.pop(-1)
+        update_process_status(progress_task, description='.'.join(progress_task_names))
+
+def declare_subtask_attributes(*args, **kw):
+    attrs = [str(x) for x in args] + [f"{key} {value}" for key, value in kw.items()] 
+    attrs = ', '.join(attrs)
+    progress_task_names[-1] = f"{progress_task_names_orig[-1]}\[{attrs}]"
+    update_process_status(description='.'.join(progress_task_names))
+
+
+@contextlib.contextmanager
+def declare_subcommand(command):
+    update_process_status(command=command)
+    progress_bar and progress_bar.reset(progress_task)
+    try:
+        yield command
+    finally:
+        update_process_status(command="")
+        
+def update_process_status(command=None, description=None):
+    if progress_bar is not None:
+        # elapsed time
+        elapsed = str(datetime.now() - _start_time).split('.', 1)[0]
+        # CPU and memory
+        cpu = psutil.cpu_percent()
+        mem = psutil.virtual_memory()
+        used = round(mem.total*mem.percent/100 / 2**30)
+        total = round(mem.total / 2**30)
+        updates = dict(elapsed_time=elapsed,
+                        cpu_info=f"CPU [green]{cpu}%[/green] RAM [green]{used}[/green]/[green]{total}[/green]G")
+        if command is not None:
+            updates['command'] = command
+        if description is not None:
+            updates['description'] = description
+        progress_bar.update(progress_task, **updates)
+
+
+async def run_process_status_update():
+    if progress_bar:
+        with contextlib.suppress(asyncio.CancelledError):
+            while True:
+                update_process_status()
+                await asyncio.sleep(1)
+
+
+
+
 
 
 _logger_file_handlers = {}

@@ -1,5 +1,5 @@
 import glob
-import os, os.path, time, re, logging
+import os, os.path, time, re, logging, platform
 from typing import Any, List, Dict, Optional, Union
 from enum import Enum
 from dataclasses import dataclass, field
@@ -77,11 +77,6 @@ class StimelaOptions(object):
     ## For distributed computes and cpu allocation
     dist: Dict[str, Any] = EmptyDictDefault()  
 
-@dataclass
-class StimelaLibrary(object):
-    params: Dict[str, Any] = EmptyDictDefault()
-    recipes: Dict[str, Any] = EmptyDictDefault()
-    steps: Dict[str, Any] = EmptyDictDefault()
 
 def DefaultDirs():
     return field(default_factory=lambda:dict(indir='.', outdir='.'))
@@ -106,7 +101,6 @@ configuratt.PATH += os.environ.get("STIMELA_INCLUDE", '').split(':')
 # set to the config file that was actually found
 CONFIG_LOADED = None
 
-
 def merge_extra_config(conf, newconf):
     from stimela import logger
 
@@ -130,7 +124,14 @@ def load_config(extra_configs=List[str]):
     stimela_dir = os.path.dirname(stimela.__file__)
     from stimela.kitchen.recipe import Recipe, Cab
 
-    global StimelaConfig
+    global StimelaConfig, StimelaLibrary
+    @dataclass
+    class StimelaLibrary(object):
+        params: Dict[str, Parameter] = EmptyDictDefault()
+        recipes: Dict[str, Recipe] = EmptyDictDefault()
+        steps: Dict[str, Any] = EmptyDictDefault()
+        misc: Dict[str, Any] = EmptyDictDefault()
+
     @dataclass 
     class StimelaConfig:
         base: Dict[str, StimelaImage] = EmptyDictDefault()
@@ -206,7 +207,7 @@ def load_config(extra_configs=List[str]):
     # add runtime info
     _ds = time.strftime("%Y%m%d")
     _ts = time.strftime("%H%M%S")
-    runtime = dict(date=_ds, time=_ts, datetime=f"{_ds}-{_ts}")
+    runtime = dict(date=_ds, time=_ts, datetime=f"{_ds}-{_ts}", node=platform.node())
 
     conf.run = OmegaConf.create(runtime)
     

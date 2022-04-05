@@ -93,7 +93,7 @@ def cli(backend, config_files=[], verbose=False):
 
 
 # import commands
-from stimela.commands import run, images, build, push, save_config
+from stimela.commands import run, images, build, push, save_config, help
 
 ## the ones not listed above haven't been converted to click yet. They are:
 # cabs, clean, containers, kill, ps, pull

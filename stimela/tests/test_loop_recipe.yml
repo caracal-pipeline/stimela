@@ -23,8 +23,6 @@ lib:
     cubical_image:
       name: "cubical_image"
       info: 'does one step of cubical, followed by one step of imaging'
-      dirs:
-        log: logs
       aliases:
         ms: [calibrate.ms, image.ms]
       steps: 
@@ -53,7 +51,7 @@ lib:
 
 opts:
   log:
-    dir: logs-{config.run.datetime} 
+    dir: test-logs/logs-{config.run.datetime} 
     nest: 3
     symlink: logs
 
@@ -72,7 +70,6 @@ cubical_image_loop:
     image-prefix: "{recipe.dir.out}/im{info.suffix}-{recipe.loop-name}/im{info.suffix}-{recipe.loop-name}"
     loop-name: "s{recipe.loop:02d}"
     log:
-      dir: logs-{config.run.datetime}
       name: log-{recipe.loop-name}-{info.fqname}.txt
 
   for_loop:
@@ -85,6 +82,7 @@ cubical_image_loop:
   steps: 
     calibrate: 
         cab: cubical
+        skip: "=recipe.loop == 1"
     image-1:
         cab: myclean
         params:

@@ -1,0 +1,82 @@
+cabs:
+  echo:
+    image: null
+    command: echo 
+    policies:
+      skip_implicits: false
+      key_value: true
+    inputs:
+      a:
+        dtype: str
+        required: true
+      b:
+        dtype: str
+      c:
+        dtype: str
+      d:
+        implicit: "d_is_implicit"
+      e:
+        dtype: str
+      f:
+        dtype: str
+    outputs:
+      out:
+        dtype: File
+        implicit: "{current.a}"
+        must_exist: false
+      out2:
+        dtype: File
+        must_exist: false
+        default: out2
+        
+opts:
+  log:
+    dir: test-logs/logs-{config.run.datetime} 
+    nest: 3
+    symlink: logs
+
+recipe:
+  name: "alias test recipe"
+  aliases:
+    a: [s1.a, s2.a]
+    b: [s1.b, s2.b]
+    out: [s4.out] 
+    out2: [s3.out2]
+    e: ['s[12].e']
+    f: ['(echo).f']
+    g: ['xx*.g']
+
+  steps:
+    s1:
+      cab: echo
+      params:
+        b: 1
+        c: 2
+    s2:
+      cab: echo
+      params:
+        c: 2
+    s3:
+      cab: echo
+      params:
+        c: 2
+    s4:
+      cab: echo
+      params:
+        c: 4
+    s5:
+      recipe:
+        name: "alias sub-recipe"
+        aliases:
+          a: [ss1.a, ss2.a]
+        steps:
+          ss1:
+            cab: echo
+            params:
+              c: 2
+          ss2:
+            cab: echo
+            params:
+              c: 2
+      params:
+        a: '{info.fqname}'
