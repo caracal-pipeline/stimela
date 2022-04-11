@@ -1,5 +1,11 @@
 import stimela
-import os, re, subprocess
+import os
+import re
+import subprocess
+
+testdir = os.path.abspath(os.path.dirname(__file__))
+
+os.chdir(testdir)
 
 def run(command):
     """Runs command, returns tuple of exit code, output"""
@@ -24,7 +30,7 @@ def verify_output(output, *regexes):
 
 def test_test_aliasing():
     print("===== expecting an error since required parameters are missing =====")
-    retcode, _ = run("stimela -v exec test_aliasing.yml")
+    retcode, _ = run(f"stimela -v exec test_aliasing.yml")
     assert retcode != 0 
 
     print("===== expecting no errors now =====")
