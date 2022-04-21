@@ -540,9 +540,9 @@ class Recipe(Cargo):
             raise RecipeValidationError(f"unknown step {label}", log=self.log)
         if enable:
             if step._skip is True:
-                self.log.warning(f"enabling step '{label}' which was previously marked as skipped")
+                self.log.warning(f"enabling step '{label}' which is normally skipped")
             elif step._skip is not False:
-                self.log.warning(f"enabling step '{label}' which was previously marked as potentially skipped ('{self.skip}')")
+                self.log.warning(f"enabling step '{label}' which is normally conditionally skipped ('{step.skip}')")
             step.skip = step._skip = False
         else:
             self.log.warning(f"will skip step '{label}'")
