@@ -3,5 +3,5 @@ requires = ["setuptools", "wheel"]
 
 [project]
 name = "stimela"
-authors = [{name = "S. Makhathini", email = "sphemakh@gmail.com"}, {name = "O. Smirnov", email = "osmirnov.gmail.com"}]
+authors = [{name = "S. Makhathini", email = "sphemakh@gmail.com"}, {name = "O. Smirnov", email = "osmirnov@gmail.com"}]
 dynamic = ["version", "description"]
