@@ -645,7 +645,7 @@ class Recipe(Cargo):
                 alias_schema = io[alias_name] 
                 # now we know it's a multiply-defined input, check for type consistency
                 if alias_schema.dtype != schema.dtype:
-                    raise RecipeValidationError(f"alias '{alias_name}': dtype {schema.dtype} of '{step_label}.{step_param_name}' doesn't match previous dtype {existing_schema.dtype}", log=self.log)
+                    raise RecipeValidationError(f"alias '{alias_name}': dtype {schema.dtype} of '{step_label}.{step_param_name}' doesn't match previous dtype {alias_schema.dtype}", log=self.log)
                 
             # else alias not yet defined, insert a schema
             else:
