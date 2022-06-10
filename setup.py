@@ -9,7 +9,7 @@ import glob
 requirements = ["pyyaml",
                 "nose>=1.3.7",
                 "future-fstrings",
-                "scabha >= 0.7.0", 
+                "scabha >=2.0b1", 
                 ## OMS: not a fan of this:
                 # @ git+https://github.com/caracal-pipeline/scabha2",
                 ## ...because it interferes with running scabha2 off a dev branch (i.e. if you have a local dev install of scabha,
