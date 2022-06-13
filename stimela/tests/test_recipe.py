@@ -36,6 +36,12 @@ def test_test_aliasing():
             "DEBUG: recipe 'recipe'", 
             "DEBUG:   out: 1")
 
+def test_test_nesting():
+    print("===== expecting no errors =====")
+    retcode, output = run("stimela -v exec test_nesting.yml demo_recipe")
+    assert retcode == 0
+    print(output)
+
 
 def test_test_recipe():
     print("===== expecting an error since 'msname' parameter is missing =====")

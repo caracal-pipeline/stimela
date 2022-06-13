@@ -3,6 +3,7 @@ import os, os.path, re, logging, fnmatch, copy, time
 from typing import Any, Tuple, List, Dict, Optional, Union
 from dataclasses import dataclass
 from omegaconf import MISSING, OmegaConf, DictConfig, ListConfig
+from omegaconf.errors import OmegaConfBaseException
 from collections import OrderedDict
 from collections.abc import Mapping
 import rich.table
@@ -13,9 +14,8 @@ from pathos.serial import SerialPool
 from multiprocessing import cpu_count
 from stimela.config import EmptyDictDefault, EmptyListDefault, StimelaLogConfig
 import stimela
-from stimela import logger, stimelogging
+from stimela import logger, log_exception, stimelogging
 from stimela.exceptions import *
-from scabha import validate
 import scabha.exceptions
 from scabha.exceptions import SubstitutionError, SubstitutionErrorList
 from scabha.validate import evaluate_and_substitute, Unresolved, join_quote
@@ -35,7 +35,8 @@ class DeferredAlias(Unresolved):
 class Step:
     """Represents one processing step of a recipe"""
     cab: Optional[str] = None                       # if not None, this step is a cab and this is the cab name
-    recipe: Optional["Recipe"] = None               # if not None, this step is a nested recipe
+#    recipe: Optional["Recipe"] = None                    # if not None, this step is a nested recipe
+    recipe: Optional[Any] = None                    # if not None, this step is a nested recipe
     params: Dict[str, Any] = EmptyDictDefault()     # assigns parameter values
     info: Optional[str] = None                      # comment or info
     skip: Optional[str] = None                      # if this evaluates to True, step is skipped 
@@ -56,7 +57,7 @@ class Step:
     def __post_init__(self):
         self.fqname = self.fqname or self.name
         if bool(self.cab) == bool(self.recipe):
-            raise StepValidationError("step must specify either a cab or a nested recipe, but not both")
+            raise StepValidationError("step '{self.name}': step must specify either a cab or a nested recipe, but not both")
         self.cargo = self.config = None
         self.tags = set(self.tags)
         # convert params into stadard dict, else lousy stuff happens when we insert non-standard objects
@@ -131,17 +132,37 @@ class Step:
                 self.fqname = fqname
             self.config = config = config or stimela.CONFIG
 
-            if bool(self.cab) == bool(self.recipe):
-                raise StepValidationError("step must specify either a cab or a nested recipe, but not both")
             # if recipe, validate the recipe with our parameters
             if self.recipe:
+                # first, if it is a string, look it up in library
+                recipe_name = "nested recipe"
+                if type(self.recipe) is str:
+                    recipe_name = f"nested recipe '{self.recipe}'"
+                    # undotted name -- look in lib.recipes
+                    if '.' not in self.recipe:
+                        if self.recipe not in self.config.lib.recipes:
+                            raise StepValidationError(f"step '{self.name}': '{self.recipe}' not found in lib.recipes")
+                        self.recipe = self.config.lib.recipes[self.recipe]
+                    # dotted name -- look in config
+                    else: 
+                        section, var = resolve_dotted_reference(self.recipe, config, current=None, context=f"step '{self.name}'")
+                        if var not in section:
+                            raise StepValidationError(f"step '{self.name}': '{self.recipe}' not found")
+                        self.recipe = section[var]
+                    # self.recipe is now hopefully a DictConfig or a Recipe object, so fall through below to validate it 
                 # instantiate from omegaconf object, if needed
-                if type(self.recipe) is not Recipe:
-                    self.recipe = Recipe(**self.recipe)
+                if type(self.recipe) is DictConfig:
+                    recipe = OmegaConf.create(Recipe)
+                    try:
+                        self.recipe = Recipe(**OmegaConf.unsafe_merge(recipe, self.recipe))
+                    except OmegaConfBaseException as exc:
+                        raise StepValidationError(f"step '{self.name}': error in {recipe_name}", exc)
+                elif type(self.recipe) is not Recipe:
+                    raise StepValidationError(f"step '{self.name}': recipe field must be a string or a nested recipe, found {type(self.recipe)}")
                 self.cargo = self.recipe
             else:
                 if self.cab not in self.config.cabs:
-                    raise StepValidationError(f"unknown cab {self.cab}")
+                    raise StepValidationError(f"step '{self.name}': unknown cab {self.cab}")
                 self.cargo = Cab(**config.cabs[self.cab])
             self.cargo.name = self.name
 
@@ -183,7 +204,7 @@ class Step:
                         f"{len(self.invalid_params)} invalid and "
                         f"{len(self.unresolved_params)} unresolved parameters")
         if self.invalid_params:
-            raise StepValidationError(f"{self.cargo.name} has the following invalid parameters: {join_quote(self.invalid_params)}")
+            raise StepValidationError(f"step '{self.name}': {self.cargo.name} has the following invalid parameters: {join_quote(self.invalid_params)}")
         return params
 
     def log_summary(self, level, title, color=None, ignore_missing=True):
@@ -255,7 +276,7 @@ class Step:
                         self.log.warning("since the step was skipped, this is not fatal")
                         skip_warned = True
                 else:
-                    raise StepValidationError(f"invalid inputs: {join_quote(invalid)}", log=self.log)
+                    raise StepValidationError(f"step '{self.name}': invalid inputs: {join_quote(invalid)}", log=self.log)
 
             if not skip:
                 try:
@@ -266,11 +287,9 @@ class Step:
                         self.cargo.backend = self.cargo.backend or self.backend
                         runners.run_cab(self.cargo, params, log=self.log, subst=subst, batch=batch)
                     else:
-                        raise RuntimeError("Unknown cargo type")
+                        raise RuntimeError("step '{self.name}': unknown cargo type")
                 except ScabhaBaseException as exc:
-                    if not exc.logged:
-                        self.log.error(f"error running step: {exc}")
-                        exc.logged = True
+                    log_exception(exc)
                     raise
             else:
                 if self._skip is None and subst is not None:
@@ -328,6 +347,29 @@ class ForLoopClause(object):
     scatter: bool = False
 
 
+def resolve_dotted_reference(key, base, current, context): 
+    """helper function to look up a key like a.b.c in a nested dict-like structure"""
+    path = key.split('.')
+    if path[0]:
+        section = base
+    else:
+        if not current:
+            raise NameError(f"{context}: leading '.' not permitted here")
+        section = current
+        path = path[1:]
+        if not path:
+            raise NameError(f"{context}: '.' not permitted")
+    varname = path[-1]
+    for element in path[:-1]:
+        if not element:
+            raise NameError(f"{context}: '..' not permitted")
+        if element in section:
+            section = section[element]
+        else:
+            raise NameError(f"{context}: '{element}' in '{key}' is not a valid config section")
+    return section, varname
+
+
 
 @dataclass
 class Recipe(Cargo):
@@ -370,34 +412,40 @@ class Recipe(Cargo):
         for io in self.inputs, self.outputs:
             for name, schema in io.items():
                 if not schema:
-                    raise RecipeValidationError(f"'{name}' does not define a valid schema")
+                    raise RecipeValidationError(f"recipe '{self.name}': '{name}' does not define a valid schema")
         # check for repeated aliases
         for name, alias_list in self.aliases.items():
             if name in self.inputs_outputs:
-                raise RecipeValidationError(f"alias '{name}' also appears under inputs or outputs")
+                raise RecipeValidationError(f"recipe '{self.name}': alias '{name}' also appears under inputs or outputs")
             if type(alias_list) is str:
                 alias_list = self.aliases[name] = [alias_list]
             if not hasattr(alias_list, '__iter__') or not all(type(x) is str for x in alias_list):
-                raise RecipeValidationError(f"alias '{name}': name or list of names expected")
+                raise RecipeValidationError(f"recipe '{self.name}': alias '{name}': name or list of names expected")
             for x in alias_list:
                 if '.' not in x:
-                    raise RecipeValidationError(f"alias '{name}': invalid target '{x}' (missing dot)")
+                    raise RecipeValidationError(f"recipe '{self.name}': alias '{name}': invalid target '{x}' (missing dot)")
         # instantiate steps if needed (when creating from an omegaconf)
         if type(self.steps) is not OrderedDict:
             steps = OrderedDict()
             for label, stepconfig in self.steps.items():
                 stepconfig.name = label
                 stepconfig.fqname = f"{self.name}.{label}"
-                steps[label] = Step(**stepconfig)
+                step = OmegaConf.create(Step)
+                try:
+                    step = OmegaConf.merge(step, stepconfig)
+                    steps[label] = Step(**step)
+                except Exception as exc:
+                    raise StepValidationError(f"recipe '{self.name}': error in definition of step '{label}'", exc)
             self.steps = steps
         # check that assignments don't clash with i/o parameters
+ 
         self.validate_assignments(self.assign, self.assign_based_on, self.name)
 
         # check that for-loop variable does not clash
         if self.for_loop:
-            for io, io_label in [(self.inputs, "inputs"), (self.outputs, "outputs")]:
+            for io, io_label in [(self.inputs, "input"), (self.outputs, "output")]:
                 if self.for_loop.var in io:
-                    raise RecipeValidationError(f"'for_loop.var={self.for_loop.var}' clashes with recipe {io_label}")
+                    raise RecipeValidationError(f"recipe '{self.name}': for_loop.var={self.for_loop.var} clashes with an {io_label} parameter")
         # marked when finalized
         self._alias_map  = None
         # set of keys protected from assignment
@@ -443,16 +491,8 @@ class Recipe(Cargo):
             return
 
         def resolve_config_variable(key, base=self.config): 
-            """helper function to look up a key like a.b.c in a nested dict-like structure"""
-            path = key.split('.')
-            varname = path[-1]
-            section = base
-            for element in path[:-1]:
-                if element in section:
-                    section = section[element]
-                else:
-                    raise AssignmentError(f"{whose.fqname}.assign_based_on.{basevar}: '{element}' in '{key}' is not a valid config section")
-            return section, varname
+            return resolve_dotted_reference(key, base, current=None, 
+                                            context=f"{whose.fqname}.assign_based_on.{basevar}")
 
         # split into config and non-config assignments
         config_assign = OrderedDict((key, value) for key, value in whose.assign.items() if '.' in key)
@@ -537,7 +577,7 @@ class Recipe(Cargo):
         self.finalize()
         step = self.steps.get(label)
         if step is None:
-            raise RecipeValidationError(f"unknown step {label}", log=self.log)
+            raise RecipeValidationError(f"recipe '{self.name}': unknown step {label}", log=self.log)
         if enable:
             if step._skip is True:
                 self.log.warning(f"enabling step '{label}' which is normally skipped")
@@ -554,7 +594,7 @@ class Recipe(Cargo):
         restrict_steps = set(steps)
         unknown_steps = restrict_steps.difference(self.steps)
         if unknown_steps:
-            raise RecipeValidationError(f"unknown step(s) {join_quote(unknown_steps)}", log=self.log)
+            raise RecipeValidationError(f"recipe '{self.name}': unknown step(s) {join_quote(unknown_steps)}", log=self.log)
 
         # apply skip flags 
         for label, step in self.steps.items():
@@ -571,7 +611,7 @@ class Recipe(Cargo):
             label (str, optional): step label, auto-generated if None
         """
         if self.finalized:
-            raise DefinitionError("can't add a step to a recipe that's been finalized")
+            raise DefinitionError("recipe '{self.name}': can't add a step to a recipe that's been finalized")
 
         names = [s for s in self.steps if s.cab == step.cabname]
         label = label or f"{step.cabname}_{len(names)+1}"
@@ -620,7 +660,7 @@ class Recipe(Cargo):
 
         for (step_label, step) in steps:
             if step is None:
-                raise RecipeValidationError(f"alias '{alias_name}' refers to unknown step '{step_label}'", log=self.log)
+                raise RecipeValidationError(f"recipe '{self.name}': alias '{alias_name}' refers to unknown step '{step_label}'", log=self.log)
             # is the alias already defined
             existing_alias = self._alias_list.get(alias_name, [None])[0]
             # find it in inputs or outputs
@@ -631,21 +671,21 @@ class Recipe(Cargo):
                 if wildcards:
                     continue
                 else:
-                    raise RecipeValidationError(f"alias '{alias_name}' refers to unknown step parameter '{step_label}.{step_param_name}'", log=self.log)
+                    raise RecipeValidationError(f"recipe '{self.name}': alias '{alias_name}' refers to unknown step parameter '{step_label}.{step_param_name}'", log=self.log)
             # implicit inputs cannot be aliased
             if input_schema and input_schema.implicit:
-                raise RecipeValidationError(f"alias '{alias_name}' refers to implicit input '{step_label}.{step_param_name}'", log=self.log)
+                raise RecipeValidationError(f"recipe '{self.name}': alias '{alias_name}' refers to implicit input '{step_label}.{step_param_name}'", log=self.log)
             # if alias is already defined, check for conflicts
             if existing_alias is not None:
                 io = existing_alias.io
                 if io is self.outputs:
-                    raise RecipeValidationError(f"output alias '{alias_name}' is defined more than once", log=self.log)
+                    raise RecipeValidationError(f"recipe '{self.name}': output alias '{alias_name}' is defined more than once", log=self.log)
                 elif output_schema:
-                    raise RecipeValidationError(f"alias '{alias_name}' refers to both an input and an output", log=self.log)
+                    raise RecipeValidationError(f"recipe '{self.name}': alias '{alias_name}' refers to both an input and an output", log=self.log)
                 alias_schema = io[alias_name] 
                 # now we know it's a multiply-defined input, check for type consistency
                 if alias_schema.dtype != schema.dtype:
-                    raise RecipeValidationError(f"alias '{alias_name}': dtype {schema.dtype} of '{step_label}.{step_param_name}' doesn't match previous dtype {alias_schema.dtype}", log=self.log)
+                    raise RecipeValidationError(f"recipe '{self.name}': alias '{alias_name}': dtype {schema.dtype} of '{step_label}.{step_param_name}' doesn't match previous dtype {alias_schema.dtype}", log=self.log)
                 
             # else alias not yet defined, insert a schema
             else:
@@ -730,7 +770,7 @@ class Recipe(Cargo):
                 for name, schema in io.items():
                     if schema.aliases:
                         if schema.dtype != "str" or schema.choices or schema.writable:
-                            raise RecipeValidationError(f"alias '{name}' should not specify type, choices or writability", log=log)
+                            raise RecipeValidationError(f"recipe '{self.name}': alias '{name}' should not specify type, choices or writability", log=log)
                         for alias_target in schema.aliases:
                             self._add_alias(name, alias_target)
 
@@ -747,7 +787,7 @@ class Recipe(Cargo):
                             and not schema.implicit:
                         auto_name = f"{label}_{name}"
                         if auto_name in self.inputs or auto_name in self.outputs:
-                            raise RecipeValidationError(f"auto-generated parameter name '{auto_name}' conflicts with another name. Please define an explicit alias for this.", log=log)
+                            raise RecipeValidationError(f"recipe '{self.name}': auto-generated parameter name '{auto_name}' conflicts with another name. Please define an explicit alias for this.", log=log)
                         self._add_alias(auto_name, (step, label, name), 
                                         category=ParameterCategory.Required if schema.required else ParameterCategory.Obscure)
 
@@ -759,7 +799,7 @@ class Recipe(Cargo):
                 # if for_loop.over is a str, treat it as a required input
                 if type(self.for_loop.over) is str:
                     if self.for_loop.over not in self.inputs:
-                        raise RecipeValidationError(f"for_loop: over: '{self.for_loop.over}' is not a defined input", log=log)
+                        raise RecipeValidationError(f"recipe '{self.name}': for_loop.over={self.for_loop.over} is not a defined input", log=log)
                     # this becomes a required input
                     self.inputs[self.for_loop.over].required = True
                 # else treat it as a list of values to be iterated over (and set over=None to indicate this)
@@ -767,7 +807,7 @@ class Recipe(Cargo):
                     self._for_loop_values = list(self.for_loop.over)
                     self.for_loop.over = None
                 else:
-                    raise RecipeValidationError(f"for_loop: over is of invalid type {type(self.for_loop.over)}", log=log)
+                    raise RecipeValidationError(f"recipe '{self.name}': for_loop.over is of invalid type {type(self.for_loop.over)}", log=log)
 
                 # # insert empty loop variable
                 # if self.for_loop.var not in self.assign:
@@ -893,7 +933,7 @@ class Recipe(Cargo):
             errors.append(RecipeValidationError(msg, log=self.log))
 
         if errors:
-            raise RecipeValidationError(f"{len(errors)} error(s) validating the recipe '{self.name}'", log=self.log)
+            raise RecipeValidationError(f"recipe '{self.name}': {len(errors)} error(s) validating the recipe '{self.name}'", log=self.log)
 
         self.log.debug("recipe pre-validated")
 
@@ -911,11 +951,11 @@ class Recipe(Cargo):
                 elif self.for_loop.over in params:
                     values = params[self.for_loop.over]
                 elif self.for_loop.over not in self.inputs:
-                    raise ParameterValidationError(f"for_loop.over={self.for_loop.over} does not refer to a known parameter")
+                    raise ParameterValidationError(f"recipe '{self.name}': for_loop.over={self.for_loop.over} does not refer to a known parameter")
                 else:
-                    raise ParameterValidationError(f"for_loop.over={self.for_loop.over} is unset")
+                    raise ParameterValidationError(f"recipe '{self.name}': for_loop.over={self.for_loop.over} is unset")
                 if strict and isinstance(values, Unresolved):
-                    raise ParameterValidationError(f"for_loop.over={self.for_loop.over} is unresolved")
+                    raise ParameterValidationError(f"recipe '{self.name}': for_loop.over={self.for_loop.over} is unresolved")
                 if type(values) is ListConfig:
                     values = list(values)
                 elif not isinstance(values, (list, tuple)):
@@ -1003,6 +1043,8 @@ class Recipe(Cargo):
             for label, step in self.steps.items():
                 style = "italic" if step._skip else "bold"
                 table.add_row(f"[{style}]{label}[/{style}]", step.info)
+                if step.tags:
+                    table.add_row("", f"[italic](tags: {', '.join(step.tags)})[/italic]")
         else:
             steps_tree = tree.add("No recipe steps defined")
 

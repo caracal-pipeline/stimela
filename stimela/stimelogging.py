@@ -5,11 +5,14 @@ import logging
 import contextlib
 from typing import Optional, Union
 from omegaconf import DictConfig
+from scabha.exceptions import ScabhaBaseException
 from scabha.substitutions import SubstitutionNS, forgiving_substitutions_from
 import asyncio
 import psutil
 import rich.progress
 import rich.logging
+from rich.tree import Tree
+from rich import print as rich_print
 
 class MultiplexingHandler(logging.Handler):
     """handler to send INFO and below to stdout, everything above to stderr"""
@@ -345,4 +348,25 @@ def update_file_logger(log: logging.Logger, logopts: Union["StimelaLogConfig", D
     else:
         disable_file_logger(log)
 
+
+def log_exception(exc: Exception):
+    """Logs an exception as an error (unless it is marked as already logged), and 
+    pretty-prints it to the console.
+    """
+    log = logger()
+    def exc_message(exc1):
+        return exc1.message if isinstance(exc1, ScabhaBaseException) else str(exc1)
+
+    if isinstance(exc, ScabhaBaseException):
+        if not exc.logged:
+            log.error(exc.message)
+            exc.logged = True
+        top_tree = tree = Tree(exc_message(exc), guide_style="dim")
+        exc = exc.nested
+        while exc is not None:
+            tree = tree.add(exc_message(exc))
+            exc = exc.nested if isinstance(exc, ScabhaBaseException) else None
+        rich_print(top_tree)
+    else:
+        log.error(str(exc))
 

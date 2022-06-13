@@ -39,7 +39,7 @@ inputs:
 
 outputs:
   visout:
-    dtype: Directory
+    dtype: MS
     implicit: "{inputs.vis}"
 
 # same here, using _use to include common behaviours, but we also add an extra one for the cleanup section

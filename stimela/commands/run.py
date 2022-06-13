@@ -142,6 +142,10 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
                 sys.exit(2)
             recipe_name = all_recipe_names[0]
         
+        # merge into lib.recipes
+        for name in all_recipe_names:
+            stimela.CONFIG.lib.recipes[name] = conf[name]
+
         # merge into config, treating each section as a recipe
         config_fields = []
         for section in conf:
