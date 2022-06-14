@@ -57,7 +57,7 @@ def help(items: List[str] = [], do_list=False, implicit=False, obscure=False, al
             return recipe
         except Exception as exc:
             if not isinstance(exc, RecipeValidationError):
-                exc = RecipeValidationError(f"error in definition of recipe '{name}'", exc)
+                exc = RecipeValidationError(f"error loading recipe '{name}'", exc)
             log_exception(exc)
             sys.exit(2)
 

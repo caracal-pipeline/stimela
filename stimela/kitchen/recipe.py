@@ -288,7 +288,7 @@ class Step:
                         runners.run_cab(self.cargo, params, log=self.log, subst=subst, batch=batch)
                     else:
                         raise RuntimeError("step '{self.name}': unknown cargo type")
-                except ScabhaBaseException as exc:
+                except Exception as exc:
                     log_exception(exc)
                     raise
             else:

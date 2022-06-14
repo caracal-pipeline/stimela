@@ -15,7 +15,7 @@ import stimela
 from scabha import configuratt
 from scabha.exceptions import ScabhaBaseException
 from stimela.config import ConfigExceptionTypes
-from stimela import logger
+from stimela import logger, log_exception
 from stimela.main import cli
 from stimela.kitchen.recipe import Recipe, Step, join_quote
 from stimela.config import get_config_class
@@ -58,7 +58,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
     for pp in parameters:
         if "=" not in pp:
             if recipe_name is not None:
-                log.error(f"multiple recipe names given")
+                log_exception(f"multiple recipe names given")
                 errcode = 2
             recipe_name = pp
         else:
@@ -72,7 +72,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
                 try:
                     params[key] = yaml.safe_load(value)
                 except Exception as exc:
-                    log.error(f"error parsing '{pp}': {exc}")
+                    log_exception(f"error parsing '{pp}'", exc)
                     errcode = 2
 
     if errcode:
@@ -84,7 +84,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
     try:
         extra_config = OmegaConf.from_dotlist(dotlist.values()) if dotlist else OmegaConf.create()
     except OmegaConfBaseException as exc:
-        log.error(f"error loading command-line dotlist: {exc}")
+        log_exception(f"error loading command-line dotlist", exc)
         sys.exit(2)
 
     if what in stimela.CONFIG.cabs:
@@ -93,7 +93,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
         try:
             stimela.CONFIG = OmegaConf.merge(stimela.CONFIG, extra_config)
         except OmegaConfBaseException as exc:
-            log.error(f"error applying command-line dotlist: {exc}")
+            log_exception(f"error applying command-line dotlist", exc)
             sys.exit(2)
 
         log.info(f"setting up cab {cabname}")
@@ -105,13 +105,12 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
         try:
             outer_step.prevalidate()
         except ScabhaBaseException as exc:
-            if not exc.logged:
-                log.error(f"pre-validation failed: {exc}")
+            log_exception(exc)
             sys.exit(1)
 
     else:
         if not os.path.isfile(what):
-            log.error(f"'{what}' is neither a recipe file nor a known stimela cab")
+            log_exception(f"'{what}' is neither a recipe file nor a known stimela cab")
             sys.exit(2)
 
         log.info(f"loading recipe/config {what}")
@@ -120,33 +119,34 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
         try:
             conf = configuratt.load(what, use_sources=[stimela.CONFIG])
         except ConfigExceptionTypes as exc:
-            log.error(f"error loading {what}: {exc}")
+            log_exception(f"error loading {what}", exc)
             sys.exit(2)
 
         # anything that is not a standard config section will be treated as a recipe
         all_recipe_names = [name for name in conf if name not in stimela.CONFIG]
         if not all_recipe_names:
-            log.error(f"{what} does not contain any recipes")
+            log_exception(f"{what} does not contain any recipes")
             sys.exit(2)
 
         log.info(f"{what} contains the following recipe sections: {join_quote(all_recipe_names)}")
 
         if recipe_name:
             if recipe_name not in conf:
-                log.error(f"{what} does not contain a '{recipe_name}' section")
+                log_exception(f"{what} does not contain recipe '{recipe_name}'")
                 sys.exit(2)
         else:
             if len(all_recipe_names) > 1: 
                 print(f"This file contains the following recipes: {', '.join(all_recipe_names)}")
-                log.error(f"multiple recipes found, please specify one on the command line")
+                log_exception(f"multiple recipes found, please specify one on the command line")
                 sys.exit(2)
             recipe_name = all_recipe_names[0]
         
-        # merge into lib.recipes
+        # make validn recipe objects, and merge into lib.recipes
         for name in all_recipe_names:
             stimela.CONFIG.lib.recipes[name] = conf[name]
 
-        # merge into config, treating each section as a recipe
+        # merge into config, treating each section as a recipe. The schema of the overall config object needs
+        # to be adjusted in order to do this
         config_fields = []
         for section in conf:
             if section not in stimela.CONFIG:
@@ -158,8 +158,8 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
 
         try:
             stimela.CONFIG = OmegaConf.merge(stimela.CONFIG, config_schema, conf, extra_config)
-        except OmegaConfBaseException as exc:
-            log.error(f"error loading {what}: {exc}")
+        except Exception as exc:
+            log_exception(f"error loading {what}", exc)
             sys.exit(2)
 
         log.info(f"selected recipe is '{recipe_name}'")
@@ -169,9 +169,8 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
         kwargs.setdefault('name', recipe_name)
         try:
             recipe = Recipe(**kwargs)
-        except ScabhaBaseException as exc:
-            if not exc.logged:
-                log.error(f"error loading recipe '{recipe_name}': {exc}")
+        except Exception as exc:
+            log_exception(f"error loading recipe '{recipe_name}'", exc)
             sys.exit(2)
 
         # force name, if not set
@@ -190,9 +189,8 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
         outer_step = Step(recipe=recipe, name=f"{recipe_name}", info=what, params=params)
         try:
             params = outer_step.prevalidate()
-        except ScabhaBaseException as exc:
-            if not exc.logged:
-                log.error(f"pre-validation failed: {exc}")
+        except Exception as exc:
+            log_exception(f"pre-validation of recipe '{recipe_name}' failed", exc)
             sys.exit(1)        
 
         # select recipe substeps based on command line
@@ -206,7 +204,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
             if name in recipe.steps:
                 recipe.enable_step(name)  # config file may have skip=True, but we force-enable here
             else:
-                log.error(f"no such recipe step: '{name}'")
+                log_exception(f"no such recipe step: '{name}'")
                 sys.exit(2)
 
         # select subset based on tags/skip_tags, this will be a list of names
@@ -240,7 +238,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
                         try:
                             first = all_step_names.index(begin)
                         except ValueError as exc:
-                            log.error(f"No such recipe step: '{begin}")
+                            log_exception(f"No such recipe step: '{begin}")
                             sys.exit(2)
                     else:
                         first = 0
@@ -248,7 +246,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
                         try:
                             last = all_step_names.index(end)
                         except ValueError as exc:
-                            log.error(f"No such recipe step: '{end}")
+                            log_exception(f"No such recipe step: '{end}")
                             sys.exit(2)
                     else:
                         last = len(recipe.steps)-1
@@ -256,7 +254,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
                 # explicit step name: enable, and add to tagged_steps
                 else:
                     if name not in all_step_names:
-                        log.error(f"No such recipe step: '{name}")
+                        log_exception(f"No such recipe step: '{name}")
                         sys.exit(2)
                     recipe.enable_step(name)  # config file may have skip=True, but we force-enable here
                     step_subset.add(name)
@@ -296,8 +294,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
     try:
         outputs = outer_step.run()
     except ScabhaBaseException as exc:
-        if not exc.logged:
-            outer_step.log.error(f"run failed after {elapsed()} with exception: {exc}")
+        log_exception(f"run failed after {elapsed()}", exc)
         sys.exit(1)
 
     if outputs and step.log.isEnabledFor(logging.DEBUG):

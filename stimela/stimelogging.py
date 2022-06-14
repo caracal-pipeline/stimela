@@ -349,24 +349,35 @@ def update_file_logger(log: logging.Logger, logopts: Union["StimelaLogConfig", D
         disable_file_logger(log)
 
 
-def log_exception(exc: Exception):
-    """Logs an exception as an error (unless it is marked as already logged), and 
-    pretty-prints it to the console.
+def log_exception(*errors):
+    """Logs one or more error messages or exceptions (unless they are marked as already logged), and 
+    pretty-prints them to the console  as appropriate.
     """
-    log = logger()
-    def exc_message(exc1):
-        return exc1.message if isinstance(exc1, ScabhaBaseException) else str(exc1)
+    def exc_message(e):
+        return e.message if isinstance(e, ScabhaBaseException) else str(e)
 
-    if isinstance(exc, ScabhaBaseException):
-        if not exc.logged:
-            log.error(exc.message)
-            exc.logged = True
-        top_tree = tree = Tree(exc_message(exc), guide_style="dim")
-        exc = exc.nested
-        while exc is not None:
-            tree = tree.add(exc_message(exc))
-            exc = exc.nested if isinstance(exc, ScabhaBaseException) else None
-        rich_print(top_tree)
-    else:
-        log.error(str(exc))
+    trees = []
+    do_log = False
+    messages = []
+
+    for exc in errors:
+        if isinstance(exc, ScabhaBaseException):
+            messages.append(exc.message)
+            if not exc.logged:
+                do_log = exc.logged = True
+            tree = Tree(exc_message(exc), guide_style="dim")
+            trees.append(tree)
+            exc = exc.nested
+            while exc is not None:
+                tree = tree.add(exc_message(exc))
+                exc = exc.nested if isinstance(exc, ScabhaBaseException) else None
+        else:
+            do_log = True
+            messages.append(str(exc))
+
+    if do_log:
+        logger().error(": ".join(messages))
+
+    for tree in trees:
+        rich_print(tree)
 
