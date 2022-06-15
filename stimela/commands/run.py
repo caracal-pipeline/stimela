@@ -43,7 +43,7 @@ from stimela.config import get_config_class
                 help="""Sets skip=false on the given step(s). Use commas, or give multiple times for multiple steps.""")
 @click.option("-d", "--dry-run", is_flag=True,
                 help="""Doesn't actually run anything, only prints the selected steps.""")
-@click.argument("what", metavar="filename.yml|CAB") 
+@click.argument("what", metavar="filename.yml|cab name") 
 @click.argument("parameters", nargs=-1, metavar="[recipe name] [PARAM=VALUE] [X.Y.Z=FOO] ...", required=False) 
 def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool = False,
     step_names: List[str] = [], tags: List[str] = [], skip_tags: List[str] = [], enable_steps: List[str] = []):
@@ -91,7 +91,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
         cabname = what
 
         try:
-            stimela.CONFIG = OmegaConf.merge(stimela.CONFIG, extra_config)
+            stimela.CONFIG = OmegaConf.unsafe_merge(stimela.CONFIG, extra_config)
         except OmegaConfBaseException as exc:
             log_exception(f"error applying command-line dotlist", exc)
             sys.exit(2)
@@ -117,7 +117,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
 
         # if file contains a recipe entry, treat it as a full config (that can include cabs etc.)
         try:
-            conf = configuratt.load(what, use_sources=[stimela.CONFIG])
+            conf, _ = configuratt.load(what, use_sources=[stimela.CONFIG])
         except ConfigExceptionTypes as exc:
             log_exception(f"error loading {what}", exc)
             sys.exit(2)
@@ -157,7 +157,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
         config_schema = OmegaConf.structured(UpdatedStimelaConfig)
 
         try:
-            stimela.CONFIG = OmegaConf.merge(stimela.CONFIG, config_schema, conf, extra_config)
+            stimela.CONFIG = OmegaConf.unsafe_merge(stimela.CONFIG, config_schema, conf, extra_config)
         except Exception as exc:
             log_exception(f"error loading {what}", exc)
             sys.exit(2)

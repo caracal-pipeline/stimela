@@ -10,6 +10,7 @@ from collections import OrderedDict
 from yaml.error import YAMLError
 import stimela
 from stimela.exceptions import *
+from stimela import log_exception
 
 CONFIG_FILE = os.path.expanduser("~/.config/stimela.conf")
 
@@ -31,7 +32,7 @@ class StimelaImage:
     name: str = MISSING
     info: str = "image description"
     images: Dict[str, ImageBuildInfo] = MISSING
-    path: str = ""          # path to image definition yaml file
+    _path: Optional[str] = None   # path to image definition yaml file, if any
 
     # optional library of common parameter sets
     params: Dict[str, Any] = EmptyDictDefault()
@@ -108,7 +109,7 @@ def merge_extra_config(conf, newconf):
         for cab in newconf.cabs:
             if cab in conf.cabs:
                 logger().warning(f"changing definition of cab '{cab}'")
-    return OmegaConf.merge(conf, newconf)
+    return OmegaConf.unsafe_merge(conf, newconf)
 
 
 StimelaConfig = None
@@ -118,7 +119,7 @@ ConfigExceptionTypes = (configuratt.ConfigurattError, OmegaConfBaseException, YA
 def get_config_class():
     return StimelaConfig
 
-def load_config(extra_configs=List[str]):
+def load_config(extra_configs: List[str], verbose: bool = False, use_sys_config: bool = True):
     log = stimela.logger()
 
     stimela_dir = os.path.dirname(stimela.__file__)
@@ -141,68 +142,88 @@ def load_config(extra_configs=List[str]):
         vars: Dict[str, Any] = EmptyDictDefault()
         run:  Dict[str, Any] = EmptyDictDefault()
 
-    # start with empty structured config containing schema
-    base_schema = OmegaConf.structured(StimelaImage) 
-    cab_schema = OmegaConf.structured(Cab)
-    opts_schema = OmegaConf.structured(StimelaOptions)
-
-    conf = OmegaConf.structured(StimelaConfig)
-
-    # merge base/*/*yaml files into the config, under base.imagename
     base_configs = glob.glob(f"{stimela_dir}/cargo/base/*/*.yaml")
-    try:
-        conf.base = configuratt.load_nested(base_configs, use_sources=[conf], structured=base_schema, nameattr='name', include_path='path', location='base')
-    except ConfigExceptionTypes as exc:
-        log.error(f"failed to build base configuration: {exc}")
-        return None
+    lib_configs = glob.glob(f"{stimela_dir}/cargo/lib/params/*.yaml")
+    cab_configs = glob.glob(f"{stimela_dir}/cargo/cab/*.yaml")
+    if use_sys_config:
+        sys_configs = [config_file for config_file in CONFIG_LOCATIONS.values()
+                        if config_file and os.path.exists(config_file)]
+    else:
+        sys_configs = []
 
-    # merge base/*/*yaml files into the config, under base.imagename
-    for path in glob.glob(f"{stimela_dir}/cargo/lib/params/*.yaml"):
-        name = os.path.splitext(os.path.basename(path))[0]
+    all_configs = base_configs + lib_configs + cab_configs + sys_configs + list(extra_configs)
+
+    conf, deps = configuratt.load_cache(all_configs, verbose=verbose)
+
+    if conf is not None:
+        log.info("loaded full configuration from cache")
+    else:
+        log.info("loading configuration")
+        dependencies = set()
+
+        # start with empty structured config containing schema
+        base_schema = OmegaConf.structured(StimelaImage) 
+        cab_schema = OmegaConf.structured(Cab)
+        opts_schema = OmegaConf.structured(StimelaOptions)
+
+        conf = OmegaConf.structured(StimelaConfig)
+
+        # merge base/*/*yaml files into the config, under base.imagename
         try:
-            conf.lib.params[name] = OmegaConf.load(path)
-        except ConfigExceptionTypes as exc:
-            log.error(f"error loading {path}: {exc}")
+            conf.base, deps = configuratt.load_nested(base_configs, use_sources=[conf], structured=base_schema, 
+                                                        nameattr='name', include_path='_path', location='base', 
+                                                        use_cache=False, verbose=verbose)
+            dependencies.update(deps)
+        except Exception as exc:
+            log_exception(f"error loading base configuration", exc)
             return None
 
-    # merge all cab/*/*yaml files into the config, under cab.taskname
-    cab_configs = glob.glob(f"{stimela_dir}/cargo/cab/*.yaml")
-    try:
-        conf.cabs = configuratt.load_nested(cab_configs, structured=cab_schema, nameattr='name', location='cabs', use_sources=[conf])
-    except ConfigExceptionTypes as exc:
-        log.error(f"failed to build cab configuration: {exc}")
-        return None
-
-    conf.opts = opts_schema
-
-    def _load(conf, config_file):
-        global CONFIG_LOADED
-        log.info(f"loading config from {config_file}")
+        # merge lib/params/*yaml files into the config
         try:
-            newconf = configuratt.load_using(config_file, conf)
-            conf = merge_extra_config(conf, newconf)
-            if not CONFIG_LOADED:
-                CONFIG_LOADED = config_file
-        except ConfigExceptionTypes as exc:
-            log.error(f"error reading {config_file}: {exc}")
-        return conf
+            conf.lib.params, deps = configuratt.load_nested(lib_configs,  use_sources=[conf], 
+                                                                location='lib.params', include_path='_path') 
+            dependencies.update(deps)
+        except Exception as exc:
+            log_exception(f"error loading lib.params configuration", exc)
+            return None
 
-    # find standard config file to use
-    if not any(path.startswith("=") for path in extra_configs):
-        # merge global config into opts
-        for _, config_file in CONFIG_LOCATIONS.items():
-            if config_file and os.path.exists(config_file):
-                conf = _load(conf, config_file)
+        # merge all cab/*/*yaml files into the config, under cab.taskname
+        try:
+            conf.cabs, deps = configuratt.load_nested(cab_configs, use_sources=[conf], structured=cab_schema, 
+                                                        nameattr='name', include_path='_path', location='cabs', 
+                                                        use_cache=False, verbose=verbose)
+            dependencies.update(deps)
+        except Exception as exc:
+            log_exception(f"error loading cabs configuration", exc)
+            return None
 
-    # add local configs
-    for path in extra_configs:
-        if path.startswith("="):
-            path = path[1:]
-        log.info("loading config from {path}")
-        conf = _load(conf, config_file)
+        conf.opts = opts_schema
 
-    if not CONFIG_LOADED:
-        log.info("no configuration files, so using defaults")
+        def _load(conf, config_file):
+            global CONFIG_LOADED
+            log.info(f"loading config from {config_file}")
+            try:
+                newconf, deps = configuratt.load(config_file, use_sources=[conf], verbose=verbose, use_cache=False)
+                dependencies.update(deps)
+                conf = merge_extra_config(conf, newconf)
+                if not CONFIG_LOADED:
+                    CONFIG_LOADED = config_file
+            except ConfigExceptionTypes as exc:
+                log_exception(f"error reading {config_file}", exc)
+            return conf
+
+        # add standard configs 
+        for config_file in sys_configs:
+            conf = _load(conf, config_file)
+
+        # add local configs
+        for path in extra_configs:
+            conf = _load(conf, config_file)
+
+        if not CONFIG_LOADED:
+            log.info("no configuration files, using defaults")
+
+        configuratt.save_cache(all_configs, conf, dependencies, verbose=verbose)
 
     # add runtime info
     _ds = time.strftime("%Y%m%d")

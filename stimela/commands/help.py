@@ -69,7 +69,7 @@ def help(items: List[str] = [], do_list=False, implicit=False, obscure=False, al
 
             # if file contains a recipe entry, treat it as a full config (that can include cabs etc.)
             try:
-                conf = configuratt.load(item, use_sources=[stimela.CONFIG])
+                conf, _ = configuratt.load(item, use_sources=[stimela.CONFIG])
             except ConfigExceptionTypes as exc:
                 log.error(f"error loading {item}: {exc}")
                 sys.exit(2)
@@ -93,7 +93,7 @@ def help(items: List[str] = [], do_list=False, implicit=False, obscure=False, al
                 stimela.CONFIG.lib.recipes[name] = recipe
 
             # the rest is safe to merge into config as is
-            stimela.CONFIG = OmegaConf.merge(stimela.CONFIG, conf)
+            stimela.CONFIG = OmegaConf.unsafe_merge(stimela.CONFIG, conf)
         
         # else treat as a wildcard for recipe names or cab names
         else:

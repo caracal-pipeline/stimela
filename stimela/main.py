@@ -49,10 +49,12 @@ class RunExecGroup(click.Group):
 @click.option('--backend', '-b', type=click.Choice(config.Backend._member_names_), 
                 help="Backend to use (for containerization).")
 @click.option('--config', '-c', 'config_files', metavar='FILE', multiple=True,
-                help="Extra config file(s) to load. Prefix with '=' to override standard config files.")
+                help="Extra config file(s) to load.")
+@click.option('--no-sys-config', is_flag=True, 
+                help="Do not load standard config files.")
 @click.option('--verbose', '-v', is_flag=True, help='Be extra verbose in output.')
 @click.version_option(str(stimela.__version__))
-def cli(backend, config_files=[], verbose=False):
+def cli(backend, config_files=[], verbose=False, no_sys_config=False):
     global log
     log = stimela.logger(loglevel=logging.DEBUG if verbose else logging.INFO)
     log.info(f"starting")        # remove this eventually, but it's handy for timing things right now
@@ -65,7 +67,7 @@ def cli(backend, config_files=[], verbose=False):
     scabha.exceptions.set_logger(log)
 
     # load config files
-    stimela.CONFIG = config.load_config(extra_configs=config_files)
+    stimela.CONFIG = config.load_config(extra_configs=config_files, verbose=verbose, use_sys_config=not no_sys_config)
     if stimela.CONFIG is None:
         log.error("failed to load configuration, exiting")
         sys.exit(1)

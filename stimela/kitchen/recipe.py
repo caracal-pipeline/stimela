@@ -432,7 +432,7 @@ class Recipe(Cargo):
                 stepconfig.fqname = f"{self.name}.{label}"
                 step = OmegaConf.create(Step)
                 try:
-                    step = OmegaConf.merge(step, stepconfig)
+                    step = OmegaConf.unsafe_merge(step, stepconfig)
                     steps[label] = Step(**step)
                 except Exception as exc:
                     raise StepValidationError(f"recipe '{self.name}': error in definition of step '{label}'", exc)
