@@ -1,8 +1,7 @@
 # -*- coding: future_fstrings -*-
 import os
 import logging
-import re
-import time
+import glob
 import sys
 import click
 import stimela
@@ -49,12 +48,18 @@ class RunExecGroup(click.Group):
 @click.option('--backend', '-b', type=click.Choice(config.Backend._member_names_), 
                 help="Backend to use (for containerization).")
 @click.option('--config', '-c', 'config_files', metavar='FILE', multiple=True,
-                help="Extra config file(s) to load.")
+                help="Extra user-defined config file(s) to load.")
+@click.option('--set', '-s', 'config_dotlist', metavar='SECTION.VAR=VALUE', multiple=True,
+                help="Extra user-defined config settings to apply.")
 @click.option('--no-sys-config', is_flag=True, 
                 help="Do not load standard config files.")
+@click.option('-I', '--include', metavar="DIR", multiple=True, 
+                help="Add directory to _include paths. Can be given multiple times.")
+@click.option('--clear-cache', is_flag=True, 
+                help="Reset the configuration cache. First thing to try in case of strange configuration errors.")
 @click.option('--verbose', '-v', is_flag=True, help='Be extra verbose in output.')
 @click.version_option(str(stimela.__version__))
-def cli(backend, config_files=[], verbose=False, no_sys_config=False):
+def cli(backend, config_files=[], config_dotlist=[], include=[], verbose=False, no_sys_config=False, clear_cache=False):
     global log
     log = stimela.logger(loglevel=logging.DEBUG if verbose else logging.INFO)
     log.info(f"starting")        # remove this eventually, but it's handy for timing things right now
@@ -66,8 +71,26 @@ def cli(backend, config_files=[], verbose=False, no_sys_config=False):
     import scabha.exceptions
     scabha.exceptions.set_logger(log)
 
+    # clear cache if requested
+    from scabha import configuratt
+    configuratt.CACHEDIR = os.path.expanduser("~/.cache/stimela-configs")
+    if clear_cache:
+        if os.path.isdir(configuratt.CACHEDIR):
+            files = glob.glob(f"{configuratt.CACHEDIR}/*")
+            log.info(f"clearing {len(files)} cached config(s) from cache")
+        else:
+            files = []
+            log.info(f"no configs in cache")
+        for filename in files:
+            try:
+                os.unlink(filename)
+            except Exception as exc:
+                log.error(f"failed to remove cached config {filename}: {exc}")
+                sys.exit(1)
+
     # load config files
-    stimela.CONFIG = config.load_config(extra_configs=config_files, verbose=verbose, use_sys_config=not no_sys_config)
+    stimela.CONFIG = config.load_config(extra_configs=config_files, extra_dotlist=config_dotlist, include_paths=include,
+                                        verbose=verbose, use_sys_config=not no_sys_config)
     if stimela.CONFIG is None:
         log.error("failed to load configuration, exiting")
         sys.exit(1)

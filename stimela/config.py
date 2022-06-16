@@ -1,5 +1,5 @@
 import glob
-import os, os.path, time, re, logging, platform
+import os, os.path, time, sys, platform
 from typing import Any, List, Dict, Optional, Union
 from enum import Enum
 from dataclasses import dataclass, field
@@ -75,6 +75,8 @@ class StimelaOptions(object):
     basename: str = "stimela/v2-"
     singularity_image_dir: str = "~/.singularity"
     log: StimelaLogConfig = StimelaLogConfig()
+    ## list of paths to search with _include
+    include: List[str] = EmptyListDefault()
     ## For distributed computes and cpu allocation
     dist: Dict[str, Any] = EmptyDictDefault()  
 
@@ -97,7 +99,6 @@ if 'VIRTUAL_ENV' in os.environ:
     configuratt.PATH.append(os.environ['VIRTUAL_ENV'])
 if os.path.isdir(_STIMELA_CONFDIR):
     configuratt.PATH.append(_STIMELA_CONFDIR)
-configuratt.PATH += os.environ.get("STIMELA_INCLUDE", '').split(':')
 
 # set to the config file that was actually found
 CONFIG_LOADED = None
@@ -119,8 +120,20 @@ ConfigExceptionTypes = (configuratt.ConfigurattError, OmegaConfBaseException, YA
 def get_config_class():
     return StimelaConfig
 
-def load_config(extra_configs: List[str], verbose: bool = False, use_sys_config: bool = True):
+def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include_paths: List[str] = [],
+                verbose: bool = False, use_sys_config: bool = True):
     log = stimela.logger()
+
+    paths = [os.path.expanduser(path) for path in include_paths]
+    envpaths = os.environ.get("STIMELA_INCLUDE")
+    if envpaths:
+        paths += envpaths.split(':')
+
+    if paths:
+        log.info(f"added include paths: {' '.join(paths)}")
+        configuratt.PATH += paths
+
+    extra_cache_keys = list(extra_dotlist) + configuratt.PATH
 
     stimela_dir = os.path.dirname(stimela.__file__)
     from stimela.kitchen.recipe import Recipe, Cab
@@ -153,7 +166,7 @@ def load_config(extra_configs: List[str], verbose: bool = False, use_sys_config:
 
     all_configs = base_configs + lib_configs + cab_configs + sys_configs + list(extra_configs)
 
-    conf, deps = configuratt.load_cache(all_configs, verbose=verbose)
+    conf, deps = configuratt.load_cache(all_configs, extra_keys=extra_cache_keys, verbose=verbose) 
 
     if conf is not None:
         log.info("loaded full configuration from cache")
@@ -221,9 +234,18 @@ def load_config(extra_configs: List[str], verbose: bool = False, use_sys_config:
             conf = _load(conf, config_file)
 
         if not CONFIG_LOADED:
-            log.info("no configuration files, using defaults")
+            log.info("no user-supplied configuration files given, using defaults")
 
-        configuratt.save_cache(all_configs, conf, dependencies, verbose=verbose)
+        configuratt.save_cache(all_configs, conf, dependencies, extra_keys=extra_dotlist, verbose=verbose)
+
+    # add dotlist settings
+    if extra_dotlist:
+        try:
+            dotlist_conf = OmegaConf.from_dotlist(extra_dotlist)
+            conf = OmegaConf.unsafe_merge(conf, dotlist_conf)
+        except Exception as exc:
+            log_exception(f"error applying command-line config settings", exc)
+            return None
 
     # add runtime info
     _ds = time.strftime("%Y%m%d")
@@ -231,6 +253,11 @@ def load_config(extra_configs: List[str], verbose: bool = False, use_sys_config:
     runtime = dict(date=_ds, time=_ts, datetime=f"{_ds}-{_ts}", node=platform.node())
 
     conf.run = OmegaConf.create(runtime)
+
+    # add include paths
+    if conf.opts.include:
+        configuratt.PATH += list(conf.opts.include)
+        log.info(f"added include paths: {' '.join(conf.opts.include)}")
     
     return conf
 
