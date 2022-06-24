@@ -46,10 +46,10 @@ class Step:
     name: str = ''                                  # step's internal name
     fqname: str = ''                                # fully-qualified name e.g. recipe_name.step_label
 
-    assign: Dict[str, Any] = EmptyDictDefault()     # assigns variables when step is executed
+    assign: Dict[str, Any] = EmptyDictDefault()     # assigns recipe-level variables when step is executed
 
     assign_based_on: Dict[str, Any] = EmptyDictDefault()
-                                                    # assigns variables when step is executed based on value of another variable
+                                                    # assigns recipe-level variables when step is executed based on value of another variable
 
     # _skip: Conditional = None                       # skip this step if conditional evaluates to true
     # _break_on: Conditional = None                   # break out (of parent recipe) if conditional evaluates to true
@@ -60,7 +60,7 @@ class Step:
             raise StepValidationError("step '{self.name}': step must specify either a cab or a nested recipe, but not both")
         self.cargo = self.config = None
         self.tags = set(self.tags)
-        # convert params into stadard dict, else lousy stuff happens when we insert non-standard objects
+        # convert params into standard dict, else lousy stuff happens when we insert non-standard objects
         if isinstance(self.params, DictConfig):
             self.params = OmegaConf.to_container(self.params)
         # after (pre)validation, this contains parameter values
@@ -152,11 +152,10 @@ class Step:
                     # self.recipe is now hopefully a DictConfig or a Recipe object, so fall through below to validate it 
                 # instantiate from omegaconf object, if needed
                 if type(self.recipe) is DictConfig:
-                    recipe = OmegaConf.create(Recipe)
                     try:
-                        self.recipe = Recipe(**OmegaConf.unsafe_merge(recipe, self.recipe))
+                        self.recipe = Recipe(**OmegaConf.merge(RecipeSchema, self.recipe))
                     except OmegaConfBaseException as exc:
-                        raise StepValidationError(f"step '{self.name}': error in {recipe_name}", exc)
+                        raise StepValidationError(f"step '{self.name}': error in '{recipe_name}", exc)
                 elif type(self.recipe) is not Recipe:
                     raise StepValidationError(f"step '{self.name}': recipe field must be a string or a nested recipe, found {type(self.recipe)}")
                 self.cargo = self.recipe
@@ -165,6 +164,9 @@ class Step:
                     raise StepValidationError(f"step '{self.name}': unknown cab {self.cab}")
                 self.cargo = Cab(**config.cabs[self.cab])
             self.cargo.name = self.name
+
+            # flatten parameters
+            self.params = self.cargo.flatten_param_dict(OrderedDict(), self.params)
 
             # if logger is not provided, then init one
             if log is None:
@@ -391,8 +393,6 @@ class Recipe(Cargo):
 
     aliases: Dict[str, Any] = EmptyDictDefault()
 
-    defaults: Dict[str, Any] = EmptyDictDefault()
-
     # make recipe a for_loop-gather (i.e. parallel for loop)
     for_loop: Optional[ForLoopClause] = None
 
@@ -408,6 +408,9 @@ class Recipe(Cargo):
 
     def __post_init__ (self):
         Cargo.__post_init__(self)
+        # flatten aliases and assignments
+        self.aliases = self.flatten_param_dict(OrderedDict(), self.aliases)
+        self.assign = self.flatten_param_dict(OrderedDict(), self.assign)
         # check that schemas are valid
         for io in self.inputs, self.outputs:
             for name, schema in io.items():
@@ -430,9 +433,8 @@ class Recipe(Cargo):
             for label, stepconfig in self.steps.items():
                 stepconfig.name = label
                 stepconfig.fqname = f"{self.name}.{label}"
-                step = OmegaConf.create(Step)
                 try:
-                    step = OmegaConf.unsafe_merge(step, stepconfig)
+                    step = OmegaConf.merge(StepSchema, stepconfig)
                     steps[label] = Step(**step)
                 except Exception as exc:
                     raise StepValidationError(f"recipe '{self.name}': error in definition of step '{label}'", exc)
@@ -495,7 +497,7 @@ class Recipe(Cargo):
                                             context=f"{whose.fqname}.assign_based_on.{basevar}")
 
         # split into config and non-config assignments
-        config_assign = OrderedDict((key, value) for key, value in whose.assign.items() if '.' in key)
+        config_assign = OrderedDict((key[1:], value) for key, value in whose.assign.items() if key.startswith('.'))
         assign = OrderedDict((key, value) for key, value in whose.assign.items() if '.' not in key)
         updated = False
 
@@ -532,13 +534,13 @@ class Recipe(Cargo):
                     self.log.debug(f"params assignment: {key}={value}")
                     params[key] = value
                     subst.recipe[key] = value
-                elif '.' not in key:
+                elif key.startswith('.'):
+                    config_assign[key] = value
+                else:
                     self.log.debug(f"variable assignment: {key}={value}")
                     assign[key] = value
                     subst.recipe[key] = value
                     self.log.debug(f"variable assignment: {key}={value}")
-                else:
-                    config_assign[key] = value
 
         # if anything changed, merge non-config assignments into ns.recipe, resolve and substitute as appropriate
         if assign and updated:
@@ -548,13 +550,13 @@ class Recipe(Cargo):
         # propagate config assignments
         logopts_changed = False
         for key, value in config_assign.items():
-            # log.opt are log options
+            # log. are log options
             if key.startswith("log."):
                 self.log.debug(f"log options assignment: {key}={value}")
                 whose.logopts[key.split('.', 1)[1]] = value
                 logopts_changed = True
-            # vars with dots are config settings
-            elif '.' in key:
+            # else just config settings
+            else:
                 self.log.debug(f"config assignment: {key}={value}")
                 # change system config
                 section, varname = resolve_config_variable(key)
@@ -729,7 +731,7 @@ class Recipe(Cargo):
             self._alias_map[step_label, step_param_name] = alias_name
             self._alias_list.setdefault(alias_name, []).append(Recipe.AliasInfo(step_label, step, step_param_name, io))
 
-    def finalize(self, config=None, log=None, logopts=None, fqname=None, nesting=0):
+    def finalize(self, config=None, log=None, logopts=None, name=None, fqname=None, nesting=0):
         if not self.finalized:
             config = config or stimela.CONFIG
 
@@ -741,9 +743,6 @@ class Recipe(Cargo):
                 log = stimela.logger().getChild(self.fqname)
                 log.propagate = True
 
-            # check that per-step assignments don't clash with i/o parameters
-            for label, step in self.steps.items():
-                self.validate_assignments(step.assign, step.assign_based_on, f"{fqname}.{label}")
 
             # init and/or update logger options
             self.logopts = (logopts if logopts is not None else config.opts.log).copy()
@@ -760,6 +759,10 @@ class Recipe(Cargo):
                 step_log = log.getChild(label)
                 step_log.propagate = True
                 step.finalize(config, log=step_log, logopts=self.logopts, fqname=f"{fqname}.{label}", nesting=nesting+1)
+
+                # check that per-step assignments don't clash with i/o parameters
+                step.assign = self.flatten_param_dict(OrderedDict(), step.assign)
+                self.validate_assignments(step.assign, step.assign_based_on, f"{fqname}.{label}")
 
             # collect aliases
             self._alias_map = OrderedDict()
@@ -856,8 +859,8 @@ class Recipe(Cargo):
                 self.validate_for_loop(params, strict=False)
 
             except ScabhaBaseException as exc:
-                msg = f"recipe pre-validation failed: {exc}"
-                errors.append(RecipeValidationError(msg, log=self.log))
+                msg = f"recipe '{self.name}': {exc}"
+                errors.append(RecipeValidationError(msg))
 
             # merge again, since values may have changed
             subst.recipe._merge_(params)
@@ -890,8 +893,8 @@ class Recipe(Cargo):
                         self.log.error(f"unresolved {{}}-substitution(s):")
                         for err in exc.errors:
                             self.log.error(f"  {err}")
-                    msg = f"step '{label}' failed pre-validation: {exc}"
-                    errors.append(RecipeValidationError(msg, log=self.log))
+                    msg = f"step '{label}': {exc}"
+                    errors.append(RecipeValidationError(msg))
 
                 subst.previous = subst.current
                 subst.steps[label] = subst.previous
@@ -933,7 +936,10 @@ class Recipe(Cargo):
             errors.append(RecipeValidationError(msg, log=self.log))
 
         if errors:
-            raise RecipeValidationError(f"recipe '{self.name}': {len(errors)} error(s) validating the recipe '{self.name}'", log=self.log)
+            if len(errors) == 1:
+                raise errors[0]
+            else:
+                raise RecipeValidationError(f"recipe '{self.name}': {len(errors)} errors", errors)
 
         self.log.debug("recipe pre-validated")
 
@@ -1191,6 +1197,8 @@ class Recipe(Cargo):
     #     """
     #     return Step(recipe=self, params=params, info=f"wrapper step for recipe '{self.name}'").run()
 
+StepSchema = OmegaConf.structured(Step)
+RecipeSchema = OmegaConf.structured(Recipe)
 
 class PyRecipe(Recipe):
     """ 

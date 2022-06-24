@@ -52,6 +52,8 @@ def help(items: List[str] = [], do_list=False, implicit=False, obscure=False, al
         
     def load_recipe(name: str, section: Dict):
         try:
+            if not section.get('name'):
+                section.name = name
             recipe = Recipe(**section)
             recipe.finalize(fqname=name)
             return recipe
@@ -83,7 +85,7 @@ def help(items: List[str] = [], do_list=False, implicit=False, obscure=False, al
             for name in recipes:
                 try:
                     # cast section to Recipe and remove from loaded conf
-                    recipe = OmegaConf.create(Recipe)
+                    recipe = OmegaConf.structured(Recipe)
                     recipe = OmegaConf.unsafe_merge(recipe, conf[name])
                 except Exception as exc:
                     log.error(f"recipe '{name}': {exc}")

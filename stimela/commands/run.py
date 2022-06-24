@@ -14,11 +14,12 @@ from omegaconf.omegaconf import OmegaConf, OmegaConfBaseException
 import stimela
 from scabha import configuratt
 from scabha.exceptions import ScabhaBaseException
+import stimela.config
 from stimela.config import ConfigExceptionTypes
 from stimela import logger, log_exception
+from stimela.exceptions import RecipeValidationError
 from stimela.main import cli
-from stimela.kitchen.recipe import Recipe, Step, join_quote
-from stimela.config import get_config_class
+from stimela.kitchen.recipe import Recipe, Step, RecipeSchema, join_quote
 
 
 @cli.command("run",
@@ -128,6 +129,26 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
             log_exception(f"{what} does not contain any recipes")
             sys.exit(2)
 
+        # split content into config sections, and recipes:
+        # config secions are merged into the config namespace, while recipes go under
+        # lib.recipes
+        update_conf = OmegaConf.create()
+        for name, value in conf.items():
+            if name in stimela.CONFIG:
+                update_conf[name] = value
+            else:
+                try:
+                    stimela.CONFIG.lib.recipes[name] = OmegaConf.merge(RecipeSchema, value)
+                except Exception as exc:
+                    log_exception("error loading recipe '{name}'", exc)
+                    sys.exit(2)
+        
+        try:
+            stimela.CONFIG = OmegaConf.unsafe_merge(stimela.CONFIG, update_conf)
+        except Exception as exc:
+            log_exception("error applying configuration from {what}", exc)
+            sys.exit(2)
+
         log.info(f"{what} contains the following recipe sections: {join_quote(all_recipe_names)}")
 
         if recipe_name:
@@ -141,31 +162,10 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
                 sys.exit(2)
             recipe_name = all_recipe_names[0]
         
-        # make validn recipe objects, and merge into lib.recipes
-        for name in all_recipe_names:
-            stimela.CONFIG.lib.recipes[name] = conf[name]
-
-        # merge into config, treating each section as a recipe. The schema of the overall config object needs
-        # to be adjusted in order to do this
-        config_fields = []
-        for section in conf:
-            if section not in stimela.CONFIG:
-                config_fields.append((section, Optional[Recipe], dataclasses.field(default=None)))
-        global UpdatedStimelaConfig
-        UpdatedStimelaConfig = dataclasses.make_dataclass("UpdatedStimelaConfig", config_fields, bases=(get_config_class(),))
-        UpdatedStimelaConfig.__module__ = __name__
-        config_schema = OmegaConf.structured(UpdatedStimelaConfig)
-
-        try:
-            stimela.CONFIG = OmegaConf.unsafe_merge(stimela.CONFIG, config_schema, conf, extra_config)
-        except Exception as exc:
-            log_exception(f"error loading {what}", exc)
-            sys.exit(2)
-
         log.info(f"selected recipe is '{recipe_name}'")
 
         # create recipe object from the config
-        kwargs = dict(**stimela.CONFIG[recipe_name])
+        kwargs = dict(**stimela.CONFIG.lib.recipes[recipe_name])
         kwargs.setdefault('name', recipe_name)
         try:
             recipe = Recipe(**kwargs)

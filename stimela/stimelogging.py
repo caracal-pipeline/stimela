@@ -360,6 +360,12 @@ def log_exception(*errors):
     do_log = False
     messages = []
 
+    def add_nested(excs, tree):
+        for exc in excs:
+            subtree = tree.add(exc_message(exc))
+            if isinstance(exc, ScabhaBaseException) and exc.nested:
+                add_nested(exc.nested, subtree)
+
     for exc in errors:
         if isinstance(exc, ScabhaBaseException):
             messages.append(exc.message)
@@ -367,10 +373,8 @@ def log_exception(*errors):
                 do_log = exc.logged = True
             tree = Tree(exc_message(exc), guide_style="dim")
             trees.append(tree)
-            exc = exc.nested
-            while exc is not None:
-                tree = tree.add(exc_message(exc))
-                exc = exc.nested if isinstance(exc, ScabhaBaseException) else None
+            if exc.nested:
+                add_nested(exc.nested, tree)
         else:
             do_log = True
             messages.append(str(exc))

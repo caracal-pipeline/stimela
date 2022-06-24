@@ -113,12 +113,9 @@ def merge_extra_config(conf, newconf):
     return OmegaConf.unsafe_merge(conf, newconf)
 
 
-StimelaConfig = None
+StimelaConfigSchema = None
 
 ConfigExceptionTypes = (configuratt.ConfigurattError, OmegaConfBaseException, YAMLError)
-
-def get_config_class():
-    return StimelaConfig
 
 def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include_paths: List[str] = [],
                 verbose: bool = False, use_sys_config: bool = True):
@@ -138,11 +135,11 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
     stimela_dir = os.path.dirname(stimela.__file__)
     from stimela.kitchen.recipe import Recipe, Cab
 
-    global StimelaConfig, StimelaLibrary
+    global StimelaConfigSchema, StimelaLibrary
     @dataclass
     class StimelaLibrary(object):
-        params: Dict[str, Parameter] = EmptyDictDefault()
-        recipes: Dict[str, Recipe] = EmptyDictDefault()
+        params: Dict[str, Any] = EmptyDictDefault()
+        recipes: Dict[str, Any] = EmptyDictDefault()
         steps: Dict[str, Any] = EmptyDictDefault()
         misc: Dict[str, Any] = EmptyDictDefault()
 
@@ -150,7 +147,7 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
     class StimelaConfig:
         base: Dict[str, StimelaImage] = EmptyDictDefault()
         lib: StimelaLibrary = StimelaLibrary()
-        cabs: Dict[str, Cab] = MISSING
+        cabs: Dict[str, Cab] = EmptyDictDefault()
         opts: StimelaOptions = StimelaOptions()
         vars: Dict[str, Any] = EmptyDictDefault()
         run:  Dict[str, Any] = EmptyDictDefault()
@@ -179,7 +176,9 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
         cab_schema = OmegaConf.structured(Cab)
         opts_schema = OmegaConf.structured(StimelaOptions)
 
-        conf = OmegaConf.structured(StimelaConfig)
+        StimelaConfigSchema = OmegaConf.structured(StimelaConfig)
+
+        conf = StimelaConfigSchema.copy()
 
         # merge base/*/*yaml files into the config, under base.imagename
         try:
