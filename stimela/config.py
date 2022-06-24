@@ -235,7 +235,8 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
         if not CONFIG_LOADED:
             log.info("no user-supplied configuration files given, using defaults")
 
-        configuratt.save_cache(all_configs, conf, dependencies, extra_keys=extra_dotlist, verbose=verbose)
+        dependencies.add(__file__)  # add ourselves so as to refresh cache
+        configuratt.save_cache(all_configs, conf, dependencies, extra_keys=extra_cache_keys, verbose=verbose)
 
     # add dotlist settings
     if extra_dotlist:
