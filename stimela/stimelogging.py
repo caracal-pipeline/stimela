@@ -145,6 +145,7 @@ def logger(name="STIMELA", propagate=False, console=True, boring=False,
 
         if console:
             global progress_bar, progress_task
+            console = rich.console.Console(file=sys.stdout)
             progress_bar = rich.progress.Progress(
                 rich.progress.SpinnerColumn(),
                 "[yellow]{task.fields[elapsed_time]}[/yellow]",
@@ -154,6 +155,7 @@ def logger(name="STIMELA", propagate=False, console=True, boring=False,
                 rich.progress.TimeElapsedColumn(),
                 "{task.fields[cpu_info]}",
                 refresh_per_second=2,
+                console=console,
                 transient=True)
 
             progress_task = progress_bar.add_task("stimela", command="starting", cpu_info=" ", elapsed_time="", start=True)

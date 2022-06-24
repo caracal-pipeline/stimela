@@ -1,6 +1,11 @@
 import stimela
 import os, re, subprocess
 
+
+def callable_function(a: int, b: str):
+    print(f"callable_function({a},'{b}')")
+
+
 def run(command):
     """Runs command, returns tuple of exit code, output"""
     try:

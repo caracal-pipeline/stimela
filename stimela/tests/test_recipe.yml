@@ -66,6 +66,14 @@ cabs:
         dtype: str
         required: true
 
+  test_callable:
+    command: (stimela.tests.test_recipe)callable_function
+    inputs:
+      a:
+        dtype: int
+      b:
+        dtype: str
+
 opts:
   log:
     dir: test-logs/logs-{config.run.datetime} 
@@ -104,6 +112,12 @@ recipe:
         band_label: "band2-{recipe.band}"
 
   steps: 
+      test_callable:
+        cab: test_callable
+        params:
+          a: 1
+          b: foo
+
       makems:
           cab: simms
           params:
