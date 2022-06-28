@@ -12,16 +12,18 @@ from scabha import cargo
 from pathos.pools import ProcessPool
 from pathos.serial import SerialPool
 from multiprocessing import cpu_count
-from stimela.config import EmptyDictDefault, EmptyListDefault, StimelaLogConfig
+from stimela.config import EmptyDictDefault, EmptyListDefault
 import stimela
-from stimela import logger, log_exception, stimelogging
+from stimela import log_exception, stimelogging
 from stimela.exceptions import *
 import scabha.exceptions
 from scabha.exceptions import SubstitutionError, SubstitutionErrorList
 from scabha.validate import evaluate_and_substitute, Unresolved, join_quote
 from scabha.substitutions import SubstitutionNS, substitutions_from 
-from scabha.cargo import Parameter, Cargo, Cab, Batch, ParameterCategory
+from scabha.cargo import Parameter, Cargo, ParameterCategory
 from scabha.types import File, Directory, MS
+from .cab import Cab
+from .batch import Batch
 
 from . import runners
 
@@ -155,14 +157,17 @@ class Step:
                     try:
                         self.recipe = Recipe(**OmegaConf.merge(RecipeSchema, self.recipe))
                     except OmegaConfBaseException as exc:
-                        raise StepValidationError(f"step '{self.name}': error in '{recipe_name}", exc)
+                        raise StepValidationError(f"step '{self.name}': error in recipe '{recipe_name}", exc)
                 elif type(self.recipe) is not Recipe:
                     raise StepValidationError(f"step '{self.name}': recipe field must be a string or a nested recipe, found {type(self.recipe)}")
                 self.cargo = self.recipe
             else:
                 if self.cab not in self.config.cabs:
                     raise StepValidationError(f"step '{self.name}': unknown cab {self.cab}")
-                self.cargo = Cab(**config.cabs[self.cab])
+                try:
+                    self.cargo = Cab(**config.cabs[self.cab])
+                except Exception as exc:
+                    raise StepValidationError(f"step '{self.name}': error in cab '{self.cab}'", exc)
             self.cargo.name = self.name
 
             # flatten parameters
@@ -758,11 +763,13 @@ class Recipe(Cargo):
             for label, step in self.steps.items():
                 step_log = log.getChild(label)
                 step_log.propagate = True
-                step.finalize(config, log=step_log, logopts=self.logopts, fqname=f"{fqname}.{label}", nesting=nesting+1)
-
-                # check that per-step assignments don't clash with i/o parameters
-                step.assign = self.flatten_param_dict(OrderedDict(), step.assign)
-                self.validate_assignments(step.assign, step.assign_based_on, f"{fqname}.{label}")
+                try:
+                    step.finalize(config, log=step_log, logopts=self.logopts, fqname=f"{fqname}.{label}", nesting=nesting+1)
+                    # check that per-step assignments don't clash with i/o parameters
+                    step.assign = self.flatten_param_dict(OrderedDict(), step.assign)
+                    self.validate_assignments(step.assign, step.assign_based_on, f"{fqname}.{label}")
+                except Exception as exc:
+                    raise StepValidationError(f"error validating step '{label}'", exc)
 
             # collect aliases
             self._alias_map = OrderedDict()

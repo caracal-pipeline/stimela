@@ -190,7 +190,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
         try:
             params = outer_step.prevalidate()
         except Exception as exc:
-            log_exception(f"pre-validation of recipe '{recipe_name}' failed", exc)
+            log_exception(RecipeValidationError(f"pre-validation of recipe '{recipe_name}' failed", exc))
             sys.exit(1)        
 
         # select recipe substeps based on command line

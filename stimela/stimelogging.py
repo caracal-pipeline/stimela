@@ -361,6 +361,7 @@ def log_exception(*errors):
     trees = []
     do_log = False
     messages = []
+    nested = False
 
     def add_nested(excs, tree):
         for exc in excs:
@@ -378,12 +379,16 @@ def log_exception(*errors):
             if exc.nested:
                 add_nested(exc.nested, tree)
         else:
+            tree = Tree(exc_message(exc), guide_style="dim")
+            trees.append(tree)
             do_log = True
             messages.append(str(exc))
 
     if do_log:
         logger().error(": ".join(messages))
 
+    printfunc = progress_bar.console.print if progress_bar is not None else rich_print
+
     for tree in trees:
-        rich_print(tree)
+        printfunc(tree)
 

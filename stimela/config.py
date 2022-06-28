@@ -15,7 +15,8 @@ from stimela import log_exception
 CONFIG_FILE = os.path.expanduser("~/.config/stimela.conf")
 
 from scabha import configuratt
-from scabha.cargo import ListOrString, EmptyDictDefault, EmptyListDefault, Parameter, Cab, CabManagement 
+from scabha.cargo import ListOrString, EmptyDictDefault, EmptyListDefault
+from stimela.kitchen.cab import CabManagement 
 
 
 ## schema for a stimela image
@@ -133,7 +134,7 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
     extra_cache_keys = list(extra_dotlist) + configuratt.PATH
 
     stimela_dir = os.path.dirname(stimela.__file__)
-    from stimela.kitchen.recipe import Recipe, Cab
+    from stimela.kitchen.cab import Cab
 
     global StimelaConfigSchema, StimelaLibrary
     @dataclass
