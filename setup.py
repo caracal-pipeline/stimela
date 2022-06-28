@@ -38,12 +38,13 @@ setup(name=PACKAGE_NAME,
       author="Sphesihle Makhathini & Oleg Smirnov & RATT",
       author_email="sphemakh@gmail.com",
       url="https://github.com/caracal-pipeline/stimela2",
-      # package_dir={
-      #       "stimela": "stimela",
-      #       "scabha": "scabha",
-      #       "stimela.tests": "tests/stimela_tests"
-      # },
-      packages=find_packages(),
+      package_dir={
+            "stimela": "stimela",
+            "scabha": "scabha",
+            "scabha_tests": "tests/scabha_tests",
+            "stimela_tests": "tests/stimela_tests"
+      },
+      packages=["stimela", "scabha", "stimela_tests", "scabha_tests"],
       include_package_data=True,
       python_requires='>=3.7',
       install_requires=requirements,
