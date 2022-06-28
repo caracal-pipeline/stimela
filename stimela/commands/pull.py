@@ -35,6 +35,7 @@ def make_parser(subparsers):
 
 
 def pull(args, conf):
+    pass
 
     ## old code
 

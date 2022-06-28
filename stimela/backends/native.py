@@ -9,6 +9,7 @@ from stimela.kitchen.cab import Cab
 from stimela import logger
 from stimela.utils.xrun_asyncio import xrun, dispatch_to_log
 from stimela.exceptions import StimelaCabRuntimeError
+from stimela.schedulers.slurm import SlurmBatch
 import click
 
 from io import TextIOBase

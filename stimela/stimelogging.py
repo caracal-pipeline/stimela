@@ -316,7 +316,7 @@ def setup_file_logger(log: logging.Logger, logfile: str, level: Optional[Union[i
     return log
 
 
-def update_file_logger(log: logging.Logger, logopts: Union["StimelaLogConfig", DictConfig], nesting: int = 0, subst: Optional[SubstitutionNS] = None, location=[]):
+def update_file_logger(log: logging.Logger, logopts: DictConfig, nesting: int = 0, subst: Optional[SubstitutionNS] = None, location=[]):
     """Updates logfiles associated with given logger based on option settings
 
     Args:

@@ -14,10 +14,11 @@ def make_parser(subparsers):
 
 
 def ps(args, conf):
+    pass
 
-    log = logger.StimelaLogger(LOG_FILE)
-    log.display('processes')
-    if args.clear:
-        log.clear('processes')
-        log.write()
+    # log = logger.StimelaLogger(LOG_FILE)
+    # log.display('processes')
+    # if args.clear:
+    #     log.clear('processes')
+    #     log.write()
 
