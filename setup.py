@@ -6,28 +6,18 @@ from setuptools import setup, find_packages
 import glob
 
 
-requirements = [
-                "pyyaml",
-#                "nose>=1.3.7", #do we need nose when we do pytest?
-                "future-fstrings",
-                "omegaconf",
-                ## OMS: not a fan of this:
-                # @ git+https://github.com/caracal-pipeline/scabha2",
-                ## ...because it interferes with running scabha2 off a dev branch (i.e. if you have a local dev install of scabha,
-                ## pip install stimela will blow it away and replace with master branch...)
-
-#                "ruamel.yaml",  # do we need ruamel when we do pyyaml?
-                "munch",
-                "omegaconf>=2.1pre1",
-                "click",
-                "pyparsing",
-                "pytest",
-                "pydantic",
-                "pathos",
-                "psutil",
-                "rich",
-                "dill"
-                ],
+requirements = [  "pyyaml",
+                  "pytest",
+                  "munch",
+                  "omegaconf>=2.1",
+                  "click",
+                  "pyparsing",
+                  "pydantic",
+                  "pathos",
+                  "psutil",
+                  "rich",
+                  "dill"
+]
 
 PACKAGE_NAME = "stimela"
 __version__ = "2.0rc2"

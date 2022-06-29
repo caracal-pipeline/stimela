@@ -1,6 +1,3 @@
-# -*- coding: future_fstrings -*-
-
-
 from scabha.exceptions import ScabhaBaseException
 
 class StimelaBaseException(ScabhaBaseException):
