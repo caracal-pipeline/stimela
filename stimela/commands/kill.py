@@ -14,22 +14,3 @@ def make_parser(subparsers):
 
 def kill(args, conf):
     pass
-    # log = logger.StimelaLogger(LOG_FILE)
-
-    # for pid in args.pid:
-
-    #     found = pid in log.info['processes'].keys()
-
-    #     if not found:
-    #         print("Could not find process {0}".format(pid))
-    #         continue
-
-    #     try:
-    #         os.kill(int(pid), signal.SIGINT)
-    #     except OSError:
-    #         raise OSError(
-    #             'Process with PID {} could not be killed'.format(pid))
-
-    #     log.remove('processes', pid)
-    # log.write()
-
