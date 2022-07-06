@@ -93,13 +93,8 @@ CONFIG_LOCATIONS = OrderedDict(
     local   = _CONFIG_BASENAME,
     venv    = os.environ.get('VIRTUAL_ENV', None) and os.path.join(os.environ['VIRTUAL_ENV'], _CONFIG_BASENAME),
     stimela = os.path.isdir(_STIMELA_CONFDIR) and os.path.join(_STIMELA_CONFDIR, _CONFIG_BASENAME),
-    user    = os.path.join(os.path.os.path.expanduser("~/.config"), _CONFIG_BASENAME),
+    user    = os.path.join(os.path.expanduser("~/.config"), _CONFIG_BASENAME),
 )
-
-if 'VIRTUAL_ENV' in os.environ:
-    configuratt.PATH.append(os.environ['VIRTUAL_ENV'])
-if os.path.isdir(_STIMELA_CONFDIR):
-    configuratt.PATH.append(_STIMELA_CONFDIR)
 
 # set to the config file that was actually found
 CONFIG_LOADED = None
@@ -122,6 +117,17 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
                 verbose: bool = False, use_sys_config: bool = True):
     log = stimela.logger()
 
+    # set up include paths
+
+    # stadard system paths
+    configuratt.PATH[0:0] = [os.path.expanduser("~/lib/stimela"), "/usr/lib/stimela", "/usr/local/lib/stimela"]
+    if 'VIRTUAL_ENV' in os.environ:
+        configuratt.PATH.insert(0, os.environ['VIRTUAL_ENV'])
+        configuratt.PATH.insert(0, os.path.join(os.environ['VIRTUAL_ENV'], "lib/stimela"))
+    if os.path.isdir(_STIMELA_CONFDIR):
+        configuratt.PATH.insert(0, _STIMELA_CONFDIR)
+
+    # add paths from command line and environment variable
     paths = [os.path.expanduser(path) for path in include_paths]
     envpaths = os.environ.get("STIMELA_INCLUDE")
     if envpaths:
@@ -129,7 +135,10 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
 
     if paths:
         log.info(f"added include paths: {' '.join(paths)}")
-        configuratt.PATH += paths
+        configuratt.PATH[0:0] = paths
+
+    if verbose:
+        log.info(f"include paths are {':'.join(configuratt.PATH)}")
 
     extra_cache_keys = list(extra_dotlist) + configuratt.PATH
 
