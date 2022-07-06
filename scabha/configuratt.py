@@ -463,6 +463,7 @@ def load_nested(filelist: List[str],
                 config_class = "ConfigClass_" + uuid.uuid4().hex
             fields = [(name, typeinfo) for name in section_content.keys()]
             datacls = make_dataclass(config_class, fields)
+            # datacls.__module__ == __name__  # for pickling
             structured = OmegaConf.structured(datacls)
             section_content = OmegaConf.merge(structured, section_content)
     

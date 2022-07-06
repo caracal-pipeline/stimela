@@ -145,7 +145,7 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
     stimela_dir = os.path.dirname(stimela.__file__)
     from stimela.kitchen.cab import Cab
 
-    global StimelaConfigSchema, StimelaLibrary
+    global StimelaConfigSchema, StimelaLibrary, StimelaConfig
     @dataclass
     class StimelaLibrary(object):
         params: Dict[str, Any] = EmptyDictDefault()
