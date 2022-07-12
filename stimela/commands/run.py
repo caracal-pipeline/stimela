@@ -5,6 +5,7 @@ import logging
 import os.path
 import yaml
 import sys
+import pathlib
 
 from datetime import datetime
 from typing import List, Optional
@@ -14,6 +15,7 @@ from omegaconf.omegaconf import OmegaConf, OmegaConfBaseException
 import stimela
 from scabha import configuratt
 from scabha.exceptions import ScabhaBaseException
+from stimela import stimelogging
 import stimela.config
 from stimela.config import ConfigExceptionTypes
 from stimela import logger, log_exception
@@ -118,10 +120,11 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
 
         # if file contains a recipe entry, treat it as a full config (that can include cabs etc.)
         try:
-            conf, _ = configuratt.load(what, use_sources=[stimela.CONFIG])
+            conf, recipe_deps = configuratt.load(what, use_sources=[stimela.CONFIG])
         except ConfigExceptionTypes as exc:
             log_exception(f"error loading {what}", exc)
             sys.exit(2)
+        configuratt.add_dependency(recipe_deps, what)
 
         # anything that is not a standard config section will be treated as a recipe
         all_recipe_names = [name for name in conf if name not in stimela.CONFIG]
@@ -276,6 +279,11 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
         # warn user if som steps remain explicitly disabled
         if any(recipe.steps[name]._skip for name in tagged_steps):
             log.warning("note that some steps remain explicitly skipped")
+
+        filename = os.path.join(stimelogging.LOG_DIR, "stimela.recipe.deps")
+        recipe_deps = OmegaConf.unsafe_merge(stimela.config.CONFIG_DEPS, recipe_deps)
+        OmegaConf.save(recipe_deps, filename)
+        log.info(f"saved recipe dependencies to {filename}")
 
     # in debug mode, pretty-print the recipe
     if log.isEnabledFor(logging.DEBUG):

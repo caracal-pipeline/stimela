@@ -3,10 +3,13 @@ import logging
 import glob
 import sys
 import click
-import stimela
-from omegaconf import OmegaConf
-from stimela import config, stimelogging
+import datetime
+import pathlib
+import yaml
 from dataclasses import dataclass
+from omegaconf import OmegaConf
+import stimela
+from stimela import config, stimelogging
 
 BASE = stimela.BASE
 CAB = stimela.CAB
@@ -114,6 +117,17 @@ def cli(backend, config_files=[], config_dotlist=[], include=[], verbose=False, 
     BACKEND = getattr(stimela.backends, stimela.CONFIG.opts.backend.name)
     log.info(f"backend is {stimela.CONFIG.opts.backend.name}")
 
+    # report dependencies
+    for filename, attrs in config.CONFIG_DEPS.items():
+        attrs_str = [f"mtime: {datetime.datetime.fromtimestamp(value).strftime('%c')}" 
+                        if attr == "mtime" else f"{attr}: {value}"
+                        for attr, value in attrs.items()]
+        log.debug(f"config dependency {filename}, {', '.join(attrs_str)}")
+
+    # dump dependencies
+    filename = os.path.join(stimelogging.LOG_DIR, "stimela.config.deps")
+    OmegaConf.save(config.CONFIG_DEPS, filename)
+    log.info(f"saved config dependencies to {filename}")
 
 
 # import commands

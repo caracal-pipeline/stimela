@@ -1,6 +1,7 @@
 import atexit
 import sys, os.path, re
 from datetime import datetime
+import pathlib
 import logging
 import contextlib
 from typing import Optional, Union
@@ -106,6 +107,8 @@ _logger = None
 log_console_handler = log_formatter = log_boring_formatter = log_colourful_formatter = None
 progress_bar = progress_task = None
 _start_time = datetime.now()
+
+LOG_DIR = '.'
 
 def is_logger_initialized():
     return _logger is not None
@@ -342,9 +345,13 @@ def update_file_logger(log: logging.Logger, logopts: DictConfig, nesting: int = 
                         log.error(f"bad substitution in log path: {err}")
                     return None
 
-
         # substitute non-filename characters for _
         path = re.sub(r'[^a-zA-Z0-9_./-]', '_', path)
+
+        global LOG_DIR
+        LOG_DIR = os.path.dirname(path)
+        pathlib.Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
+
         # setup the logger
         setup_file_logger(log, path, level=logopts.level, symlink=logopts.symlink)
     else:

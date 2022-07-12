@@ -18,9 +18,7 @@ def test_includes(path=None):
     conf['nested'] = conf1
     OmegaConf.save(conf, sys.stderr)
 
-    deps = [os.path.abspath(f) for f in sorted(deps | deps1)]
-
-    print(f"Dependencies are: {', '.join(deps)}")
+    print(f"Dependencies are: {', '.join(deps)} and {', '.join(deps1)}")
 
 
 if __name__ == "__main__":

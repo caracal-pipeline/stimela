@@ -2,8 +2,11 @@ import os.path
 import importlib
 import hashlib
 import pathlib
+import datetime
 import re
+import subprocess
 import dill as pickle
+from collections import OrderedDict
 from collections.abc import Sequence
 
 import uuid
@@ -13,7 +16,7 @@ from omegaconf.omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
 from omegaconf.listconfig import ListConfig
 from omegaconf.errors import OmegaConfBaseException
-from typing import Any, List, Dict, Optional, Union, Callable
+from typing import Any, List, Dict, Optional, OrderedDict, Union, Callable
 
 from yaml.error import YAMLError
 
@@ -124,7 +127,7 @@ def _resolve_config_refs(conf, pathname: str, location: str, name: str, includes
     Tuple of (conf, dependencies)
     conf : OmegaConf object    
         This may be a new object if a _use key was resolved, or it may be the existing object
-    dependencies : set
+    dependencies : OrderedDict
         Set of filenames that were _included
 
     Raises
@@ -133,7 +136,7 @@ def _resolve_config_refs(conf, pathname: str, location: str, name: str, includes
         If a _use or _include directive is malformed
     """
     errloc = f"config error at {location or 'top level'} in {name}"
-    dependencies = set()
+    dependencies = OmegaConf.create()
 
     if isinstance(conf, DictConfig):
 
@@ -279,12 +282,57 @@ def _resolve_config_refs(conf, pathname: str, location: str, name: str, includes
 # paths to search for _include statements
 PATH = ['.']
 
+# path for cache
 CACHEDIR = os.path.expanduser("~/.cache/configuratt")
+
+# package version info stored with code dependencies
+PACKAGE_VERSION = None
 
 
 def _compute_hash(filelist, extra_keys):
     filelist = list(filelist) + list(extra_keys)
     return hashlib.md5(" ".join(filelist).encode()).hexdigest()
+
+
+_git_cache = {}
+
+def add_dependency(deps: OrderedDict, filename: str, **extra_attrs):
+    depinfo = OmegaConf.create()
+    depinfo.mtime     = os.path.getmtime(filename) 
+    depinfo.mtime_str = datetime.datetime.fromtimestamp(depinfo.mtime).strftime('%c')
+    depinfo.md5hash   = hashlib.md5(open(filename, "rb").read()).hexdigest()
+    depinfo.update(**extra_attrs)
+    deps[filename] = depinfo
+    # add git info
+    realdir = os.path.dirname(os.path.realpath(filename))
+    # check cache first
+    if realdir in _git_cache:
+        depinfo.git = _git_cache[realdir]
+    try:
+        branches = subprocess.check_output("git -c color.ui=never branch -a -v -v".split(), cwd=realdir)
+    except subprocess.CalledProcessError as exc:
+        return None
+    # use git to get the info
+    gitinfo = OmegaConf.create()
+    for line in branches.decode().split("\n"):
+        line = line.strip()
+        if line.startswith("*"):
+            gitinfo.branch = line[1:].strip()
+            break
+    # get description
+    try:
+        describe = subprocess.check_output("git describe --abbrev=16 --always --long --all".split(), cwd=realdir)
+        gitinfo.describe = describe.decode().strip()
+    except subprocess.CalledProcessError as exc:
+        pass
+    # get remote info
+    try:
+        remotes = subprocess.check_output("git remote -v".split(), cwd=realdir)
+        gitinfo.remotes = remotes.decode().strip().split('\n')
+    except subprocess.CalledProcessError as exc:
+        pass
+
+    deps[filename].git = _git_cache['git'] = gitinfo
 
 
 def load_cache(filelist: List[str], extra_keys=[], verbose=None):
@@ -308,6 +356,8 @@ def load_cache(filelist: List[str], extra_keys=[], verbose=None):
     # load cache
     try:
         conf, deps = pickle.load(open(filename, 'rb'))
+        if not isinstance(deps, DictConfig):
+            raise TypeError(f"cached deps object is of type {type(deps)}, expecting DictConfig")
     except Exception as exc:
         print(f"Error loading cached config from {filename}: {exc}. Removing the cache.")
         os.unlink(filename)
@@ -333,8 +383,7 @@ def save_cache(filelist: List[str], conf, deps, extra_keys=[], verbose=False):
     filehash = _compute_hash(filelist, extra_keys)
     filename = os.path.join(CACHEDIR, filehash)
     # add ourselves to dependencies, so that cache is cleared if implementation changes
-    deps = set(deps)
-    deps.add(__file__)
+    add_dependency(deps, __file__, version=PACKAGE_VERSION)
     pickle.dump((conf, deps), open(filename, "wb"), 2)
     if verbose:
         print(f"Caching config for {' '.join(filelist)} as {filename}")
@@ -359,16 +408,16 @@ def load(path: str, use_sources: Optional[List[DictConfig]] = [], name: Optional
     Returns:
         Tuple of (conf, dependencies)
             conf (DictConfig): config object    
-            dependencies (set): set of filenames that were _included
+            dependencies (OrderedDict): filenames that were _included
     """
     conf, deps = load_cache((path,), verbose=verbose) if use_cache else (None, None)
 
     if conf is None:
         subconf = OmegaConf.load(path)
         name = name or os.path.basename(path)
-
+        deps = OmegaConf.create()
+        add_dependency(deps, path)
         conf, deps = _resolve_config_refs(subconf, pathname=path, location=location, name=name, includes=includes, use_sources=use_sources, include_path=include_path)
-        deps.add(path)
         if use_cache:
             save_cache((path,), conf, deps, verbose=verbose)
 
@@ -424,7 +473,7 @@ def load_nested(filelist: List[str],
 
     if section_content is None:
         section_content = {} # OmegaConf.create()
-        dependencies = set()
+        dependencies = OmegaConf.create()
 
         for path in filelist:
             # load file

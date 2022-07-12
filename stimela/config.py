@@ -99,6 +99,9 @@ CONFIG_LOCATIONS = OrderedDict(
 # set to the config file that was actually found
 CONFIG_LOADED = None
 
+# set to the set of config dependencies
+CONFIG_DEPS = None
+
 def merge_extra_config(conf, newconf):
     from stimela import logger
 
@@ -117,6 +120,7 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
                 verbose: bool = False, use_sys_config: bool = True):
     log = stimela.logger()
 
+    configuratt.PACKAGE_VERSION = f"stimela=={stimela.__version__}"
     # set up include paths
 
     # stadard system paths
@@ -173,13 +177,13 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
 
     all_configs = base_configs + lib_configs + cab_configs + sys_configs + list(extra_configs)
 
-    conf, deps = configuratt.load_cache(all_configs, extra_keys=extra_cache_keys, verbose=verbose) 
+    conf, dependencies = configuratt.load_cache(all_configs, extra_keys=extra_cache_keys, verbose=verbose) 
 
     if conf is not None:
         log.info("loaded full configuration from cache")
     else:
         log.info("loading configuration")
-        dependencies = set()
+        dependencies = OmegaConf.create()
 
         # start with empty structured config containing schema
         base_schema = OmegaConf.structured(StimelaImage) 
@@ -245,7 +249,7 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
         if not CONFIG_LOADED:
             log.info("no user-supplied configuration files given, using defaults")
 
-        dependencies.add(__file__)  # add ourselves so as to refresh cache
+        configuratt.add_dependency(dependencies, __file__, version=configuratt.PACKAGE_VERSION)  # add ourselves so as to refresh cache
         configuratt.save_cache(all_configs, conf, dependencies, extra_keys=extra_cache_keys, verbose=verbose)
 
     # add dotlist settings
@@ -268,6 +272,9 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
     if conf.opts.include:
         configuratt.PATH += list(conf.opts.include)
         log.info(f"added include paths: {' '.join(conf.opts.include)}")
-    
+
+    global CONFIG_DEPS
+    CONFIG_DEPS = dependencies
+
     return conf
 
