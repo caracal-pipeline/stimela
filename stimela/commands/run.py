@@ -106,7 +106,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
 
         # prevalidate() is done by run() automatically if not already done, but it does set up the recipe's logger, so do it anyway
         try:
-            outer_step.prevalidate()
+            outer_step.prevalidate(root=True)
         except ScabhaBaseException as exc:
             log_exception(exc)
             sys.exit(1)
@@ -124,7 +124,12 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
         except ConfigExceptionTypes as exc:
             log_exception(f"error loading {what}", exc)
             sys.exit(2)
-        configuratt.add_dependency(recipe_deps, what)
+
+        # warn user if any includes failed
+        if configuratt.FAILED_OPTIONAL_INCLUDES:
+            log.warning(f"{len(configuratt.FAILED_OPTIONAL_INCLUDES)} optional includes were not found, some cabs may not be available")
+            for path, invoked_from in configuratt.FAILED_OPTIONAL_INCLUDES.items():
+                log.warning(f"    {path} (from {invoked_from})")      
 
         # anything that is not a standard config section will be treated as a recipe
         all_recipe_names = [name for name in conf if name not in stimela.CONFIG]
@@ -191,7 +196,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
         log.info("pre-validating the recipe")
         outer_step = Step(recipe=recipe, name=f"{recipe_name}", info=what, params=params)
         try:
-            params = outer_step.prevalidate()
+            params = outer_step.prevalidate(root=True)
         except Exception as exc:
             log_exception(RecipeValidationError(f"pre-validation of recipe '{recipe_name}' failed", exc))
             sys.exit(1)        
@@ -280,7 +285,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
         if any(recipe.steps[name]._skip for name in tagged_steps):
             log.warning("note that some steps remain explicitly skipped")
 
-        filename = os.path.join(stimelogging.LOG_DIR, "stimela.recipe.deps")
+        filename = os.path.join(stimelogging.get_logger_file(recipe.log) or '.', "stimela.recipe.deps")
         recipe_deps = OmegaConf.unsafe_merge(stimela.config.CONFIG_DEPS, recipe_deps)
         OmegaConf.save(recipe_deps, filename)
         log.info(f"saved recipe dependencies to {filename}")

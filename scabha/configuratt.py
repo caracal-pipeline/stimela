@@ -23,6 +23,7 @@ from yaml.error import YAMLError
 class ConfigurattError(RuntimeError):
     pass
 
+FAILED_OPTIONAL_INCLUDES = OrderedDict()
 
 def _lookup_nameseq(name_seq: List[str], source_dict: Dict):
     """Internal helper: looks up nested item ('a', 'b', 'c') in a nested dict
@@ -172,6 +173,13 @@ def _resolve_config_refs(conf, pathname: str, location: str, name: str, includes
                     for incl in include_files:
                         if not incl:
                             raise ConfigurattError(f"{errloc}: empty _include specifier")
+                        # check for flags
+                        match = re.match("^(.*)\[(.*)\]$", incl)
+                        if match:
+                            incl = match.group(1)
+                            flags = set([x.strip().lower() for x in match.group(2).split(",")])
+                        else:
+                            flags = {}
 
                         # check for (module)filename.yaml style
                         match = re.match("^\\((.+)\\)(.+)$", incl)
@@ -180,15 +188,24 @@ def _resolve_config_refs(conf, pathname: str, location: str, name: str, includes
                             try:
                                 mod = importlib.import_module(modulename)
                             except ImportError as exc:
+                                if 'optional' in flags:
+                                    FAILED_OPTIONAL_INCLUDES[incl] = pathname
+                                    continue
                                 raise ConfigurattError(f"{errloc}: _include {incl}: can't import {modulename} ({exc})")
 
                             filename = os.path.join(os.path.dirname(mod.__file__), filename)
                             if not os.path.exists(filename):
+                                if 'optional' in flags:
+                                    FAILED_OPTIONAL_INCLUDES[incl] = pathname
+                                    continue
                                 raise ConfigurattError(f"{errloc}: _include {incl}: {filename} does not exist")
 
                         # absolute path -- one candidate
                         elif os.path.isabs(incl):
                             if not os.path.exists(incl):
+                                if 'optional' in flags:
+                                    FAILED_OPTIONAL_INCLUDES[incl] = pathname
+                                    continue
                                 raise ConfigurattError(f"{errloc}: _include {incl} does not exist")
                             filename = incl
                         # relative path -- scan PATH for candidates
@@ -199,6 +216,9 @@ def _resolve_config_refs(conf, pathname: str, location: str, name: str, includes
                                 if os.path.exists(filename):
                                     break
                             else:
+                                if 'optional' in flags:
+                                    FAILED_OPTIONAL_INCLUDES[incl] = pathname
+                                    continue
                                 raise ConfigurattError(f"{errloc}: _include {incl} not found in {':'.join(paths)}")
 
                         # load included file
@@ -410,19 +430,19 @@ def load(path: str, use_sources: Optional[List[DictConfig]] = [], name: Optional
             conf (DictConfig): config object    
             dependencies (OrderedDict): filenames that were _included
     """
-    conf, deps = load_cache((path,), verbose=verbose) if use_cache else (None, None)
+    conf, dependencies = load_cache((path,), verbose=verbose) if use_cache else (None, None)
 
     if conf is None:
         subconf = OmegaConf.load(path)
         name = name or os.path.basename(path)
-        deps = OmegaConf.create()
-        add_dependency(deps, path)
+        dependencies = OmegaConf.create()
+        add_dependency(dependencies, path)
         conf, deps = _resolve_config_refs(subconf, pathname=path, location=location, name=name, includes=includes, use_sources=use_sources, include_path=include_path)
+        dependencies.update(deps)
         if use_cache:
             save_cache((path,), conf, deps, verbose=verbose)
 
-    return conf, deps
-
+    return conf, dependencies
 
 def load_nested(filelist: List[str], 
                 structured: Optional[DictConfig] = None,

@@ -239,12 +239,9 @@ async def run_process_status_update():
                 await asyncio.sleep(1)
 
 
-
-
-
-
 _logger_file_handlers = {}
 _logger_console_handlers = {}
+
 
 def has_file_logger(log: logging.Logger):
     return log.name in _logger_file_handlers
@@ -348,14 +345,18 @@ def update_file_logger(log: logging.Logger, logopts: DictConfig, nesting: int = 
         # substitute non-filename characters for _
         path = re.sub(r'[^a-zA-Z0-9_./-]', '_', path)
 
-        global LOG_DIR
-        LOG_DIR = os.path.dirname(path)
-        pathlib.Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
-
         # setup the logger
         setup_file_logger(log, path, level=logopts.level, symlink=logopts.symlink)
     else:
         disable_file_logger(log)
+
+
+def get_logger_file(log: logging.Logger):
+    """Returns filename associated with the logger, or None if not logging to file"""
+    logfile, _ = _logger_file_handlers.get(log.name, (None, None))
+    if logfile is None:
+        return None
+    return os.path.dirname(logfile)
 
 
 def log_exception(*errors):

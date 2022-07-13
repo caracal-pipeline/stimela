@@ -90,7 +90,7 @@ def nested_schema_to_dataclass(nested: Dict[str, Dict], class_name: str, bases=(
     # make dataclass based on schema contents
     nested_structure = make_dataclass(f"_{class_name}_schemas", [(name, Dict[str, Parameter]) for name in nested.keys()])
     # turn into a structured config
-    nested = OmegaConf.merge(OmegaConf.structured(nested_structure), nested)
+    nested = OmegaConf.unsafe_merge(OmegaConf.structured(nested_structure), nested)
     fields = []
 
     # convert per-section schemas into dataclasses and make list of fields for outer dataclass

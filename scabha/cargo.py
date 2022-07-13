@@ -1,3 +1,4 @@
+import dataclasses
 import re, importlib
 from typing import Any, List, Dict, Optional, Union
 from collections import OrderedDict
@@ -165,6 +166,8 @@ class Parameter(object):
 
 ParameterSchema = OmegaConf.structured(Parameter)
 
+ParameterFields = set(f.name for f in dataclasses.fields(Parameter))
+
 @dataclass
 class Cargo(object):
     name: Optional[str] = None                    # cab name (if None, use image or command name)
@@ -186,24 +189,27 @@ class Cargo(object):
     @staticmethod
     def flatten_schemas(io_dest, io, label, prefix=""):
         for name, value in io.items():
+            if name == "_subsection":
+                continue
             name = f"{prefix}{name}"
             if not isinstance(value, Parameter):
                 if not isinstance(value, (DictConfig, dict)):
                     raise SchemaError(f"{label}.{name} is not a valid schema")
-                # try to treat as Parameter
-                try:
-                    value = OmegaConf.merge(ParameterSchema, value)
-                    io_dest[name] = Parameter(**value)
-                except Exception as exc0:
-                    # try to treat as sub-schema
+                # try to treat as Parameter based on field names
+                if all(k in ParameterFields for k in value.keys()):
                     try:
-                        Cargo.flatten_schemas(io_dest, value, label=label, prefix=f"{name}.")
-                    # nested error from down the tree gets re-raises as is
-                    except NestedSchemaError as exc:
-                        raise
-                    # all other exceptios, raise a NestedScheme error up
-                    except Exception as exc:
-                        raise NestedSchemaError(f"{label}.{name} is neither a parameter definition ({exc0}) nor a nested schema ({exc}")
+                        value = OmegaConf.unsafe_merge(ParameterSchema.copy(), value)
+                        io_dest[name] = Parameter(**value)
+                    except Exception as exc0:
+                        raise SchemaError(f"{label}.{name} is not a valid parameter definition")
+                else:
+                    Cargo.flatten_schemas(io_dest, value, label=label, prefix=f"{name}.")
+                    # # nested error from down the tree gets re-raises as is
+                    # except NestedSchemaError as exc:
+                    #     raise
+                    # # all other exceptios, raise a NestedScheme error up
+                    # except Exception as exc:
+                    #     raise NestedSchemaError(f"{label}.{name} is neither a parameter definition ({exc0}) nor a nested schema ({exc}")
         return io_dest
 
     def flatten_param_dict(self, output_params, input_params, prefix=""):
@@ -265,9 +271,9 @@ class Cargo(object):
             self.config = config
             self.nesting = nesting
             self.log = log
-            self.logopts = logopts
+            self.logopts = (logopts or config.opts.log).copy()
 
-    def prevalidate(self, params: Optional[Dict[str, Any]], subst: Optional[SubstitutionNS]=None):
+    def prevalidate(self, params: Optional[Dict[str, Any]], subst: Optional[SubstitutionNS]=None, root=False):
         """Does pre-validation. 
         No parameter substitution is done, but will check for missing params and such.
         A dynamic schema, if defined, is applied at this point."""
@@ -280,7 +286,7 @@ class Cargo(object):
                 for name, schema in list(io.items()):
                     if isinstance(schema, DictConfig):
                         try:
-                            schema = OmegaConf.merge(ParameterSchema, schema)
+                            schema = OmegaConf.unsafe_merge(ParameterSchema.copy(), schema)
                         except Exception  as exc:
                             raise SchemaError(f"error in dynamic schema for parameter 'name'", exc)
                         io[name] = Parameter(**schema)

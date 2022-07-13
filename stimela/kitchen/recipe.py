@@ -155,7 +155,7 @@ class Step:
                 # instantiate from omegaconf object, if needed
                 if type(self.recipe) is DictConfig:
                     try:
-                        self.recipe = Recipe(**OmegaConf.merge(RecipeSchema, self.recipe))
+                        self.recipe = Recipe(**OmegaConf.unsafe_merge(RecipeSchema.copy(), self.recipe))
                     except OmegaConfBaseException as exc:
                         raise StepValidationError(f"step '{self.name}': error in recipe '{recipe_name}", exc)
                 elif type(self.recipe) is not Recipe:
@@ -178,14 +178,6 @@ class Step:
                 log = stimela.logger().getChild(self.fqname)
                 log.propagate = True
 
-            # init and/or update logger options
-            logopts = (logopts if logopts is not None else self.config.opts.log).copy()
-
-            # update file logging if not recipe (a recipe will do it in its finalize() anyway, with its own substitions)
-            if not self.recipe:
-                logsubst = SubstitutionNS(config=config, info=dict(fqname=self.fqname))
-                stimelogging.update_file_logger(log, logopts, nesting=nesting, subst=logsubst, location=[self.fqname])
-
             # finalize the cargo
             self.cargo.finalize(config, log=log, logopts=logopts, fqname=self.fqname, nesting=nesting)
 
@@ -203,10 +195,10 @@ class Step:
             self.backend = self.backend or self.config.opts.backend
 
 
-    def prevalidate(self, subst: Optional[SubstitutionNS]=None):
+    def prevalidate(self, subst: Optional[SubstitutionNS]=None, root=False):
         self.finalize()
         # validate cab or recipe
-        params = self.validated_params = self.cargo.prevalidate(self.params, subst)
+        params = self.validated_params = self.cargo.prevalidate(self.params, subst, root=root)
         self.log.debug(f"{self.cargo.name}: {len(self.missing_params)} missing, "
                         f"{len(self.invalid_params)} invalid and "
                         f"{len(self.unresolved_params)} unresolved parameters")
@@ -222,10 +214,13 @@ class Step:
             for line in self.summary(recursive=False, ignore_missing=ignore_missing):
                 self.log.log(level, line, extra=extra)
 
-    def run(self, subst=None, batch=None):
+    def run(self, subst=None, batch=None, parent_log=None):
         """Runs the step"""
         if self.validated_params is None:
             self.prevalidate(self.params)
+        # some messages go to the parent logger -- if not defined, default to our own logger
+        if parent_log is None:
+            parent_log = self.log
 
         with stimelogging.declare_subtask(self.name) as subtask:
             # evaluate the skip attribute (it can be a formula and/or a {}-substititon)
@@ -439,7 +434,7 @@ class Recipe(Cargo):
                 stepconfig.name = label
                 stepconfig.fqname = f"{self.name}.{label}"
                 try:
-                    step = OmegaConf.merge(StepSchema, stepconfig)
+                    step = OmegaConf.unsafe_merge(StepSchema.copy(), stepconfig)
                     steps[label] = Step(**step)
                 except Exception as exc:
                     raise StepValidationError(f"recipe '{self.name}': error in definition of step '{label}'", exc)
@@ -480,7 +475,8 @@ class Recipe(Cargo):
         #         if key in io:
         #             raise RecipeValidationError(f"'{location}.{assign_label}.{key}' clashes with an {io_label}")
 
-    def update_assignments(self, subst: SubstitutionNS, whose = None, params: Dict[str, Any] = {}, ignore_subst_errors: bool = False):
+    def update_assignments(self, subst: SubstitutionNS, whose = None, params: Dict[str, Any] = {}, 
+                            ignore_subst_errors: bool = False):
         """Updates variable assignments, using the recipe's (or a step's) 'assign' and 'assign_based_on' sections.
         Also updates the corresponding (recipe or step's) file logger.
 
@@ -488,6 +484,7 @@ class Recipe(Cargo):
             subst (SubstitutionNS): substitution namespace
             whose (Step or None): if None, use recipe's (self) assignments, else use this step's
             params (dict, optional): dictionary of parameters 
+            ignore_subst_errors (bool): ignore substitution errors (default is False)
 
         Raises:
             AssignmentError: on errors
@@ -553,13 +550,11 @@ class Recipe(Cargo):
             evaluate_and_substitute(assign, subst, subst.recipe, location=[whose.fqname], ignore_subst_errors=ignore_subst_errors)
 
         # propagate config assignments
-        logopts_changed = False
         for key, value in config_assign.items():
             # log. are log options
             if key.startswith("log."):
                 self.log.debug(f"log options assignment: {key}={value}")
                 whose.logopts[key.split('.', 1)[1]] = value
-                logopts_changed = True
             # else just config settings
             else:
                 self.log.debug(f"config assignment: {key}={value}")
@@ -570,11 +565,6 @@ class Recipe(Cargo):
                 # is a valid config entry, so it will also be look-uppable in subst
                 section, varname = resolve_config_variable(key, base=subst.config)
                 section[varname] = value
-
-        # propagate log options
-        if logopts_changed:
-            stimelogging.update_file_logger(whose.log, whose.logopts, nesting=whose.nesting, subst=subst, location=[whose.fqname])
-
 
     @property
     def finalized(self):
@@ -748,13 +738,13 @@ class Recipe(Cargo):
                 log = stimela.logger().getChild(self.fqname)
                 log.propagate = True
 
-
             # init and/or update logger options
-            self.logopts = (logopts if logopts is not None else config.opts.log).copy()
+            self.logopts = (logopts or config.opts.log).copy()
 
             # update file logger
-            logsubst = SubstitutionNS(config=config, info=dict(fqname=fqname))
-            stimelogging.update_file_logger(log, self.logopts, nesting=nesting, subst=logsubst, location=[self.fqname])
+            if nesting == 0:
+                logsubst = SubstitutionNS(config=config, info=dict(fqname=fqname))
+                stimelogging.update_file_logger(log, self.logopts, nesting=nesting, subst=logsubst, location=[self.fqname])
 
             # call Cargo's finalize method
             super().finalize(config, log=log, logopts=self.logopts, fqname=fqname, nesting=nesting)
@@ -764,7 +754,7 @@ class Recipe(Cargo):
                 step_log = log.getChild(label)
                 step_log.propagate = True
                 try:
-                    step.finalize(config, log=step_log, logopts=self.logopts, fqname=f"{fqname}.{label}", nesting=nesting+1)
+                    step.finalize(config, log=step_log, fqname=f"{fqname}.{label}", nesting=nesting+1)
                     # check that per-step assignments don't clash with i/o parameters
                     step.assign = self.flatten_param_dict(OrderedDict(), step.assign)
                     self.validate_assignments(step.assign, step.assign_based_on, f"{fqname}.{label}")
@@ -833,7 +823,7 @@ class Recipe(Cargo):
         subst.current = step.params
         subst.steps[label] = subst.current
 
-    def prevalidate(self, params: Optional[Dict[str, Any]], subst: Optional[SubstitutionNS]=None):
+    def prevalidate(self, params: Optional[Dict[str, Any]], subst: Optional[SubstitutionNS]=None, root=False):
         self.finalize()
         self.log.debug("prevalidating recipe")
         errors = []
@@ -843,7 +833,7 @@ class Recipe(Cargo):
         subst = SubstitutionNS()
         info = SubstitutionNS(fqname=self.fqname, label='', label_parts=[], suffix='')
         # mutable=False means these sub-namespaces are not subject to {}-substitutions
-        subst._add_('info', info, nosubst=True)
+        subst._add_('info', info.copy(), nosubst=True)
         subst._add_('config', self.config, nosubst=True) 
         subst._add_('steps', {}, nosubst=True)
         subst._add_('previous', {}, nosubst=True)
@@ -852,6 +842,11 @@ class Recipe(Cargo):
 
         # update assignments
         self.update_assignments(subst, params=params, ignore_subst_errors=True)
+        if root:
+            subst.root = subst.recipe
+            # update logger, since log destination may have changed
+            # but only if we're root -- for subrecipes, we ignore
+            stimelogging.update_file_logger(self.log, self.logopts, nesting=self.nesting, subst=subst, location=[self.fqname])
 
         # add for-loop variable to inputs, if expected there
         if self.for_loop is not None and self.for_loop.var in self.inputs:
@@ -891,6 +886,12 @@ class Recipe(Cargo):
                 # update, since these may depend on step info
                 self.update_assignments(subst, params=params, ignore_subst_errors=True)
                 self.update_assignments(subst, whose=step, params=params, ignore_subst_errors=True)
+                # do not update the step's logger, only do it at runtime
+                #  stimelogging.update_file_logger(step.log, step.logopts, nesting=step.nesting, subst=subst, location=[step.fqname])
+                # update our own logger, if root recipe
+                if root:
+                    subst.info = info.copy()
+                    stimelogging.update_file_logger(self.log, self.logopts, nesting=self.nesting, subst=subst, location=[self.fqname])
 
                 try:
                     step_params = step.prevalidate(subst)
@@ -1082,7 +1083,7 @@ class Recipe(Cargo):
         subst = SubstitutionNS()
         info = SubstitutionNS(fqname=self.fqname, label='', label_parts=[], suffix='')
         # nosubst=True means these sub-namespaces are not subject to {}-substitutions
-        subst._add_('info', info, nosubst=True)
+        subst._add_('info', info.copy(), nosubst=True)
         subst._add_('config', self.config, nosubst=True)
         subst._add_('steps', {}, nosubst=True)
         subst._add_('previous', {}, nosubst=True)
@@ -1101,6 +1102,7 @@ class Recipe(Cargo):
 
         # update variable assignments
         self.update_assignments(subst, params=params)
+        stimelogging.update_file_logger(self.log, self.logopts, nesting=self.nesting, subst=subst, location=[self.fqname])
 
         # Harmonise before running
         self._link_steps()
@@ -1147,6 +1149,9 @@ class Recipe(Cargo):
             # update and re-evaluate assignments
             inst.update_assignments(subst, params=params)
             inst.update_assignments(subst, whose=step, params=params)
+            stimelogging.update_file_logger(step.log, step.logopts, nesting=step.nesting, subst=subst, location=[step.fqname])
+            subst.info = info.copy()
+            stimelogging.update_file_logger(inst.log, inst.logopts, nesting=inst.nesting, subst=subst, location=[inst.fqname])
             
             inst.log.info(f"processing step '{label}'")
             try:

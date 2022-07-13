@@ -125,9 +125,9 @@ def cli(backend, config_files=[], config_dotlist=[], include=[], verbose=False, 
         log.debug(f"config dependency {filename}, {', '.join(attrs_str)}")
 
     # dump dependencies
-    filename = os.path.join(stimelogging.LOG_DIR, "stimela.config.deps")
+    log.info(f"saving config dependencies to {filename}")
+    filename = os.path.join(stimelogging.get_logger_file(log) or '.', "stimela.config.deps")
     OmegaConf.save(config.CONFIG_DEPS, filename)
-    log.info(f"saved config dependencies to {filename}")
 
 
 # import commands

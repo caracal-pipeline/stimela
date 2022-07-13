@@ -1,5 +1,5 @@
 import glob
-import os, os.path, time, sys, platform
+import os, os.path, time, sys, platform, traceback
 from typing import Any, List, Dict, Optional, Union
 from enum import Enum
 from dataclasses import dataclass, field
@@ -201,6 +201,8 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
                                                         use_cache=False, verbose=verbose)
             dependencies.update(deps)
         except Exception as exc:
+            if verbose:
+                traceback.print_exc()
             log_exception(f"error loading base configuration", exc)
             return None
 
@@ -210,6 +212,8 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
                                                                 location='lib.params', include_path='_path') 
             dependencies.update(deps)
         except Exception as exc:
+            if verbose:
+                traceback.print_exc()
             log_exception(f"error loading lib.params configuration", exc)
             return None
 
@@ -220,6 +224,8 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
                                                         use_cache=False, verbose=verbose)
             dependencies.update(deps)
         except Exception as exc:
+            if verbose:
+                traceback.print_exc()
             log_exception(f"error loading cabs configuration", exc)
             return None
 
@@ -235,6 +241,8 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
                 if not CONFIG_LOADED:
                     CONFIG_LOADED = config_file
             except ConfigExceptionTypes as exc:
+                if verbose:
+                    traceback.print_exc()
                 log_exception(f"error reading {config_file}", exc)
             return conf
 
@@ -258,6 +266,8 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
             dotlist_conf = OmegaConf.from_dotlist(extra_dotlist)
             conf = OmegaConf.unsafe_merge(conf, dotlist_conf)
         except Exception as exc:
+            if verbose:
+                traceback.print_exc()
             log_exception(f"error applying command-line config settings", exc)
             return None
 
