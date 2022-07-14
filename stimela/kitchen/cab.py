@@ -44,7 +44,7 @@ class Cab(Cargo):
     # if set, activates this virtual environment first before running the command (not much sense doing this inside the container)
     virtual_env: Optional[str] = None
 
-    # cab flavour. Deafult will run the command as a binary (inside image or virtual_env). "python" will treat the command
+    # cab flavour. Default will run the command as a binary (inside image or virtual_env). "python" will treat the command
     # as a Python package.module.function specification. 
     #   Future examples would be e.g. "casa" to treat it as a CASA task 
     flavour: Optional[str] = None  

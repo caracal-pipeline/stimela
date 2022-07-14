@@ -113,7 +113,7 @@ def help(items: List[str] = [], do_list=False, implicit=False, obscure=False, al
             
             for name in cab_names:
                 cab = Cab(**stimela.CONFIG.cabs[name])
-                cab.finalize()
+                cab.finalize(config=stimela.CONFIG)
                 tree = top_tree.add(f"Cab: [bold]{name}[/bold]")
                 cab.rich_help(tree, max_category=max_category)
 

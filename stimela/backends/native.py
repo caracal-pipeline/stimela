@@ -119,7 +119,7 @@ def run_callable(modulename: str, funcname: str,  cab: Cab, params: Dict[str, An
 
 
 def run_command(cab: Cab, params: Dict[str, Any], log, subst: Optional[Dict[str, Any]] = None, batch=None):
-    """Runns command represented by cab.
+    """Runs command represented by cab.
 
     Args:
         cab (Cab): cab object
