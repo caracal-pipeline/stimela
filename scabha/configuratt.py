@@ -439,14 +439,14 @@ def load_cache(filelist: List[str], extra_keys=[], verbose=None):
     # load cache
     try:
         conf, deps = pickle.load(open(filename, 'rb'))
-        if not isinstance(deps, DictConfig):
-            raise TypeError(f"cached deps object is of type {type(deps)}, expecting DictConfig")
+        if not isinstance(deps, ConfigDependencies):
+            raise TypeError(f"cached deps object is of type {type(deps)}, expecting ConfigDependencies")
     except Exception as exc:
         print(f"Error loading cached config from {filename}: {exc}. Removing the cache.")
         os.unlink(filename)
         return None, None
     # check that all dependencies are older than the cache
-    for f in deps:
+    for f in deps.deps.keys():
         if not os.path.exists(f):
             if verbose:
                 print(f"Dependency {f} doesn't exist, forcing reload")
