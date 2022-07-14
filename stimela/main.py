@@ -57,7 +57,7 @@ class RunExecGroup(click.Group):
                 help="Do not load standard config files.")
 @click.option('-I', '--include', metavar="DIR", multiple=True, 
                 help="Add directory to _include paths. Can be given multiple times.")
-@click.option('--clear-cache', is_flag=True, 
+@click.option('--clear-cache', '-C', is_flag=True, 
                 help="Reset the configuration cache. First thing to try in case of strange configuration errors.")
 @click.option('--verbose', '-v', is_flag=True, help='Be extra verbose in output.')
 @click.version_option(str(stimela.__version__))
@@ -118,16 +118,17 @@ def cli(backend, config_files=[], config_dotlist=[], include=[], verbose=False, 
     log.info(f"backend is {stimela.CONFIG.opts.backend.name}")
 
     # report dependencies
-    for filename, attrs in config.CONFIG_DEPS.items():
+    for filename, attrs in config.CONFIG_DEPS.deps.items():
+        attrs_items = attrs.items() if attrs else [] 
         attrs_str = [f"mtime: {datetime.datetime.fromtimestamp(value).strftime('%c')}" 
                         if attr == "mtime" else f"{attr}: {value}"
-                        for attr, value in attrs.items()]
-        log.debug(f"config dependency {filename}, {', '.join(attrs_str)}")
+                        for attr, value in attrs_items]
+        log.debug(f"config dependency {', '.join([filename] + attrs_str)}")
 
     # dump dependencies
-    log.info(f"saving config dependencies to {filename}")
     filename = os.path.join(stimelogging.get_logger_file(log) or '.', "stimela.config.deps")
-    OmegaConf.save(config.CONFIG_DEPS, filename)
+    log.info(f"saving config dependencies to {filename}")
+    config.CONFIG_DEPS.save(filename)
 
 
 # import commands

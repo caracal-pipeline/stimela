@@ -4,7 +4,9 @@ import hashlib
 import pathlib
 import datetime
 import re
+import fnmatch
 import subprocess
+from sys import exc_info
 import dill as pickle
 from collections import OrderedDict
 from collections.abc import Sequence
@@ -128,7 +130,7 @@ def _resolve_config_refs(conf, pathname: str, location: str, name: str, includes
     Tuple of (conf, dependencies)
     conf : OmegaConf object    
         This may be a new object if a _use key was resolved, or it may be the existing object
-    dependencies : OrderedDict
+    dependencies : ConfigDependencies
         Set of filenames that were _included
 
     Raises
@@ -137,7 +139,7 @@ def _resolve_config_refs(conf, pathname: str, location: str, name: str, includes
         If a _use or _include directive is malformed
     """
     errloc = f"config error at {location or 'top level'} in {name}"
-    dependencies = OmegaConf.create()
+    dependencies = ConfigDependencies()
 
     if isinstance(conf, DictConfig):
 
@@ -314,52 +316,106 @@ def _compute_hash(filelist, extra_keys):
     return hashlib.md5(" ".join(filelist).encode()).hexdigest()
 
 
-_git_cache = {}
 
-def add_dependency(deps: OrderedDict, filename: str, missing=False, **extra_attrs):
-    depinfo = OmegaConf.create()
-    depinfo.update(**extra_attrs)
-    if missing or not os.path.exists(filename):
-        depinfo.mtime     = 0 
-        depinfo.mtime_str = "n/a"
-        depinfo.md5hash   = "n/a"
-        deps[filename] = depinfo
-        return
-    depinfo.mtime     = os.path.getmtime(filename) 
-    depinfo.mtime_str = datetime.datetime.fromtimestamp(depinfo.mtime).strftime('%c')
-    depinfo.md5hash   = hashlib.md5(open(filename, "rb").read()).hexdigest()
-    depinfo.update(**extra_attrs)
-    deps[filename] = depinfo
-    # add git info
-    realdir = os.path.dirname(os.path.realpath(filename))
-    # check cache first
-    if realdir in _git_cache:
-        depinfo.git = _git_cache[realdir]
-    try:
-        branches = subprocess.check_output("git -c color.ui=never branch -a -v -v".split(), cwd=realdir)
-    except subprocess.CalledProcessError as exc:
-        return None
-    # use git to get the info
-    gitinfo = OmegaConf.create()
-    for line in branches.decode().split("\n"):
-        line = line.strip()
-        if line.startswith("*"):
-            gitinfo.branch = line[1:].strip()
-            break
-    # get description
-    try:
-        describe = subprocess.check_output("git describe --abbrev=16 --always --long --all".split(), cwd=realdir)
-        gitinfo.describe = describe.decode().strip()
-    except subprocess.CalledProcessError as exc:
-        pass
-    # get remote info
-    try:
-        remotes = subprocess.check_output("git remote -v".split(), cwd=realdir)
-        gitinfo.remotes = remotes.decode().strip().split('\n')
-    except subprocess.CalledProcessError as exc:
-        pass
+class ConfigDependencies(object):
+    _git_cache = {}
 
-    deps[filename].git = _git_cache['git'] = gitinfo
+    def __init__(self):
+        self.deps = OmegaConf.create()
+    
+    def add(self, filename: str, origin: Optional[str]=None, missing=False, **extra_attrs):
+        """Adds a file to the set of dependencies
+
+        Args:
+            filename (str): filename
+            origin (str or None): if not None, marks dependency as originating from another dependency
+            missing (bool, optional): If True, marks depndency as missing. Defaults to False.
+        """
+        filename = os.path.abspath(filename)
+        if filename in self.deps:
+            return
+        depinfo = OmegaConf.create()
+        depinfo.update(**extra_attrs)
+        if origin is not None:
+            depinfo.origin = origin
+        else:
+            if missing or not os.path.exists(filename):
+                depinfo.mtime     = 0 
+                depinfo.mtime_str = "n/a"
+                self.deps[filename] = depinfo
+                return
+            # get mtime and hash
+            depinfo.mtime     = os.path.getmtime(filename) 
+            depinfo.mtime_str = datetime.datetime.fromtimestamp(depinfo.mtime).strftime('%c')
+            if not os.path.isdir(filename):
+                depinfo.md5hash   = hashlib.md5(open(filename, "rb").read()).hexdigest()
+            # add git info
+            dirname = os.path.realpath(filename)
+            if not os.path.isdir(dirname):
+                dirname = os.path.dirname(dirname) 
+            gitinfo = self._get_git_info(dirname)
+            if gitinfo:
+                depinfo.git = gitinfo
+        self.deps[filename] = depinfo
+
+    def replace(self, globs: List[str], dirname: str, **extra_attrs):
+        remove = set()
+        for glob in globs:
+            remove.update(fnmatch.filter(self.deps, glob))
+        if remove:
+            for name in remove:
+                self.deps[name] = OmegaConf.create(dict(origin=dirname))
+        # add directory
+        if dirname not in self.deps:
+            self.add(dirname, **extra_attrs)
+
+    def update(self, other):
+        for name in other.deps:
+            if name not in self.deps:
+                self.deps[name] = other.deps[name]
+
+    def save(self, filename):
+        OmegaConf.save(self.deps, filename)
+
+    def _get_git_info(self, dirname: str):
+        """Returns git info structure for a directory, or None if not under git control
+
+        Args:
+            dirname (str): path
+
+        Returns:
+            DictConfig: directory info
+        """
+        # check cache first
+        if dirname in self._git_cache:
+            return self._git_cache[dirname]
+        try:
+            branches = subprocess.check_output("git -c color.ui=never branch -a -v -v".split(), cwd=dirname)
+        except subprocess.CalledProcessError as exc:
+            self._git_cache[dirname] = None
+            return None
+        # use git to get the info
+        gitinfo = OmegaConf.create()
+        for line in branches.decode().split("\n"):
+            line = line.strip()
+            if line.startswith("*"):
+                gitinfo.branch = line[1:].strip()
+                break
+        # get description
+        try:
+            describe = subprocess.check_output("git describe --abbrev=16 --always --long --all".split(), cwd=dirname)
+            gitinfo.describe = describe.decode().strip()
+        except subprocess.CalledProcessError as exc:
+            pass
+        # get remote info
+        try:
+            remotes = subprocess.check_output("git remote -v".split(), cwd=dirname)
+            gitinfo.remotes = remotes.decode().strip().split('\n')
+        except subprocess.CalledProcessError as exc:
+            pass
+
+        self._git_cache[dirname] = gitinfo
+        return gitinfo
 
 
 def load_cache(filelist: List[str], extra_keys=[], verbose=None):
@@ -404,21 +460,22 @@ def load_cache(filelist: List[str], extra_keys=[], verbose=None):
     return conf, deps
 
 
-def save_cache(filelist: List[str], conf, deps, extra_keys=[], verbose=False):
+def save_cache(filelist: List[str], conf, deps: ConfigDependencies, extra_keys=[], verbose=False):
     pathlib.Path(CACHEDIR).mkdir(parents=True, exist_ok=True)
     filelist = list(filelist)   # add self to dependencies
     filehash = _compute_hash(filelist, extra_keys)
     filename = os.path.join(CACHEDIR, filehash)
     # add ourselves to dependencies, so that cache is cleared if implementation changes
-    add_dependency(deps, __file__, version=PACKAGE_VERSION)
+    deps.add(__file__, version=PACKAGE_VERSION)
     pickle.dump((conf, deps), open(filename, "wb"), 2)
     if verbose:
         print(f"Caching config for {' '.join(filelist)} as {filename}")
 
 
-def load(path: str, use_sources: Optional[List[DictConfig]] = [], name: Optional[str]=None, location: Optional[str]=None, 
-          includes: bool=True, selfrefs: bool=True, include_path: str=None, 
-          use_cache: bool = True, verbose: bool = False):
+def load(path: str, use_sources: Optional[List[DictConfig]] = [], name: Optional[str]=None, 
+            location: Optional[str]=None, 
+            includes: bool=True, selfrefs: bool=True, include_path: str=None, 
+            use_cache: bool = True, verbose: bool = False):
     """Loads config file, using a previously loaded config to resolve _use references.
 
     Args:
@@ -435,19 +492,19 @@ def load(path: str, use_sources: Optional[List[DictConfig]] = [], name: Optional
     Returns:
         Tuple of (conf, dependencies)
             conf (DictConfig): config object    
-            dependencies (OrderedDict): filenames that were _included
+            dependencies (ConfigDependencies): filenames that were _included
     """
     conf, dependencies = load_cache((path,), verbose=verbose) if use_cache else (None, None)
 
     if conf is None:
         subconf = OmegaConf.load(path)
         name = name or os.path.basename(path)
-        dependencies = OmegaConf.create()
-        add_dependency(dependencies, path)
+        dependencies = ConfigDependencies()
+        dependencies.add(path)
         conf, deps = _resolve_config_refs(subconf, pathname=path, location=location, name=name, includes=includes, use_sources=use_sources, include_path=include_path)
         dependencies.update(deps)
         if use_cache:
-            save_cache((path,), conf, deps, verbose=verbose)
+            save_cache((path,), conf, dependencies, verbose=verbose)
 
     return conf, dependencies
 
@@ -500,7 +557,7 @@ def load_nested(filelist: List[str],
 
     if section_content is None:
         section_content = {} # OmegaConf.create()
-        dependencies = OmegaConf.create()
+        dependencies = ConfigDependencies()
 
         for path in filelist:
             # load file

@@ -2,6 +2,7 @@ import itertools
 import click
 import logging
 import os.path
+from numpy import deprecate
 import yaml
 import sys
 import traceback
@@ -21,6 +22,26 @@ from stimela import logger, log_exception
 from stimela.exceptions import RecipeValidationError
 from stimela.main import cli
 from stimela.kitchen.recipe import Recipe, Step, RecipeSchema, join_quote
+
+def load_recipe_file(filename: str):
+    dependencies = stimela.config.get_initial_deps()
+
+    # if file contains a recipe entry, treat it as a full config (that can include cabs etc.)
+    try:
+        conf, deps = configuratt.load(filename, use_sources=[stimela.CONFIG])
+    except ConfigExceptionTypes as exc:
+        log_exception(f"error loading {filename}", exc)
+        sys.exit(2)
+
+    # warn user if any includes failed
+    if configuratt.FAILED_OPTIONAL_INCLUDES:
+        logger().warning(f"{len(configuratt.FAILED_OPTIONAL_INCLUDES)} optional includes were not found, some cabs may not be available")
+        for path, invoked_from in configuratt.FAILED_OPTIONAL_INCLUDES.items():
+            logger().warning(f"    {path} (from {invoked_from})")
+
+    dependencies.update(deps)
+
+    return conf, dependencies
 
 
 @cli.command("run",
@@ -117,18 +138,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
 
         log.info(f"loading recipe/config {what}")
 
-        # if file contains a recipe entry, treat it as a full config (that can include cabs etc.)
-        try:
-            conf, recipe_deps = configuratt.load(what, use_sources=[stimela.CONFIG])
-        except ConfigExceptionTypes as exc:
-            log_exception(f"error loading {what}", exc)
-            sys.exit(2)
-
-        # warn user if any includes failed
-        if configuratt.FAILED_OPTIONAL_INCLUDES:
-            log.warning(f"{len(configuratt.FAILED_OPTIONAL_INCLUDES)} optional includes were not found, some cabs may not be available")
-            for path, invoked_from in configuratt.FAILED_OPTIONAL_INCLUDES.items():
-                log.warning(f"    {path} (from {invoked_from})")      
+        conf, recipe_deps = load_recipe_file(what)
 
         # anything that is not a standard config section will be treated as a recipe
         all_recipe_names = [name for name in conf if name not in stimela.CONFIG]
@@ -286,8 +296,8 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
             log.warning("note that some steps remain explicitly skipped")
 
         filename = os.path.join(stimelogging.get_logger_file(recipe.log) or '.', "stimela.recipe.deps")
-        recipe_deps = OmegaConf.unsafe_merge(stimela.config.CONFIG_DEPS, recipe_deps)
-        OmegaConf.save(recipe_deps, filename)
+        stimela.config.CONFIG_DEPS.update(recipe_deps)
+        stimela.config.CONFIG_DEPS.save(filename)
         log.info(f"saved recipe dependencies to {filename}")
 
     # in debug mode, pretty-print the recipe

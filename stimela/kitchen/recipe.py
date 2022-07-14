@@ -128,6 +128,8 @@ class Step:
     def update_parameter(self, name, value):
         self.params[name] = value
 
+    _instantiated_cabs = {}
+
     def finalize(self, config=None, log=None, logopts=None, fqname=None, nesting=0):
         if not self.finalized:
             if fqname is not None:
@@ -162,12 +164,15 @@ class Step:
                     raise StepValidationError(f"step '{self.name}': recipe field must be a string or a nested recipe, found {type(self.recipe)}")
                 self.cargo = self.recipe
             else:
-                if self.cab not in self.config.cabs:
-                    raise StepValidationError(f"step '{self.name}': unknown cab {self.cab}")
-                try:
-                    self.cargo = Cab(**config.cabs[self.cab])
-                except Exception as exc:
-                    raise StepValidationError(f"step '{self.name}': error in cab '{self.cab}'", exc)
+                if self.cab in self._instantiated_cabs:
+                    self.cargo = copy.copy(self._instantiated_cabs[self.cab])
+                else:
+                    if self.cab not in self.config.cabs:
+                        raise StepValidationError(f"step '{self.name}': unknown cab {self.cab}")
+                    try:
+                        self.cargo = self._instantiated_cabs[self.cab] = Cab(**config.cabs[self.cab])
+                    except Exception as exc:
+                        raise StepValidationError(f"step '{self.name}': error in cab '{self.cab}'", exc)
             self.cargo.name = self.name
 
             # flatten parameters

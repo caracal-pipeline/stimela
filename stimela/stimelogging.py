@@ -398,7 +398,7 @@ def log_exception(*errors):
             if exc.nested:
                 add_nested(exc.nested, tree)
         else:
-            tree = Tree("f[bold red]exc_message(exc)[/bold red]", guide_style="dim")
+            tree = Tree(f"[bold red]{exc_message(exc)}[/bold red]", guide_style="dim")
             trees.append(tree)
             do_log = True
             messages.append(str(exc))

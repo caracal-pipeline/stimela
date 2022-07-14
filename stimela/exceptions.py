@@ -1,4 +1,4 @@
-from scabha.exceptions import ScabhaBaseException
+from scabha.exceptions import *
 
 class StimelaBaseException(ScabhaBaseException):
     pass

@@ -204,12 +204,6 @@ class Cargo(object):
                         raise SchemaError(f"{label}.{name} is not a valid parameter definition")
                 else:
                     Cargo.flatten_schemas(io_dest, value, label=label, prefix=f"{name}.")
-                    # # nested error from down the tree gets re-raises as is
-                    # except NestedSchemaError as exc:
-                    #     raise
-                    # # all other exceptios, raise a NestedScheme error up
-                    # except Exception as exc:
-                    #     raise NestedSchemaError(f"{label}.{name} is neither a parameter definition ({exc0}) nor a nested schema ({exc}")
         return io_dest
 
     def flatten_param_dict(self, output_params, input_params, prefix=""):

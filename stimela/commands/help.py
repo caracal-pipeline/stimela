@@ -18,6 +18,8 @@ from stimela.kitchen.cab import Cab
 from stimela.config import ConfigExceptionTypes
 from stimela.exceptions import RecipeValidationError
 
+from .run import load_recipe_file
+
 @cli.command("help",
     help="""
     Print help on a cab or a recipe.
@@ -71,11 +73,7 @@ def help(items: List[str] = [], do_list=False, implicit=False, obscure=False, al
             log.info(f"loading recipe/config {item}")
 
             # if file contains a recipe entry, treat it as a full config (that can include cabs etc.)
-            try:
-                conf, _ = configuratt.load(item, use_sources=[stimela.CONFIG])
-            except ConfigExceptionTypes as exc:
-                log.error(f"error loading {item}: {exc}")
-                sys.exit(2)
+            conf, recipe_deps = load_recipe_file(item)
 
             # anything that is not a standard config section will be treated as a recipe
             recipes = [name for name in conf if name not in stimela.CONFIG]

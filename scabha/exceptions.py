@@ -44,6 +44,9 @@ class ScabhaBaseException(Exception):
                 log.error(message)
         self.logged = log is not None
 
+class ConfigError(ScabhaBaseException):
+    pass
+
 class SchemaError(ScabhaBaseException):
     pass
 
