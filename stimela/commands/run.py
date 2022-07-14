@@ -1,11 +1,10 @@
-import dataclasses
 import itertools
 import click
 import logging
 import os.path
 import yaml
 import sys
-import pathlib
+import traceback
 
 from datetime import datetime
 from typing import List, Optional
@@ -192,13 +191,14 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
         recipe.protect_from_assignments(dotlist.keys())
         recipe.protect_from_assignments(params.keys())
 
-
         log.info("pre-validating the recipe")
         outer_step = Step(recipe=recipe, name=f"{recipe_name}", info=what, params=params)
         try:
             params = outer_step.prevalidate(root=True)
         except Exception as exc:
             log_exception(RecipeValidationError(f"pre-validation of recipe '{recipe_name}' failed", exc))
+            for line in traceback.format_exc().split("\n"):
+                log.debug(line)
             sys.exit(1)        
 
         # select recipe substeps based on command line
@@ -306,8 +306,10 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
 
     try:
         outputs = outer_step.run()
-    except ScabhaBaseException as exc:
+    except Exception as exc:
         log_exception(f"run failed after {elapsed()}", exc)
+        for line in traceback.format_exc().split("\n"):
+            log.debug(line)
         sys.exit(1)
 
     if outputs and step.log.isEnabledFor(logging.DEBUG):

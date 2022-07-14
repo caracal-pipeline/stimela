@@ -316,8 +316,15 @@ def _compute_hash(filelist, extra_keys):
 
 _git_cache = {}
 
-def add_dependency(deps: OrderedDict, filename: str, **extra_attrs):
+def add_dependency(deps: OrderedDict, filename: str, missing=False, **extra_attrs):
     depinfo = OmegaConf.create()
+    depinfo.update(**extra_attrs)
+    if missing or not os.path.exists(filename):
+        depinfo.mtime     = 0 
+        depinfo.mtime_str = "n/a"
+        depinfo.md5hash   = "n/a"
+        deps[filename] = depinfo
+        return
     depinfo.mtime     = os.path.getmtime(filename) 
     depinfo.mtime_str = datetime.datetime.fromtimestamp(depinfo.mtime).strftime('%c')
     depinfo.md5hash   = hashlib.md5(open(filename, "rb").read()).hexdigest()

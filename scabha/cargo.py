@@ -1,5 +1,5 @@
 import dataclasses
-import re, importlib
+import re, importlib, sys
 from typing import Any, List, Dict, Optional, Union
 from collections import OrderedDict
 from enum import Enum, IntEnum
@@ -281,7 +281,10 @@ class Cargo(object):
         # update schemas, if dynamic schema is enabled
         if self._dyn_schema:
             self._inputs_outputs = None
-            self.inputs, self.outputs = self._dyn_schema(params, self.inputs, self.outputs)
+            try:
+                self.inputs, self.outputs = self._dyn_schema(params, self.inputs, self.outputs)
+            except Exception as exc:
+                raise SchemaError(f"error evaluating dynamic schema", exc) # [exc, sys.exc_info()[2]])
             for io in self.inputs, self.outputs:
                 for name, schema in list(io.items()):
                     if isinstance(schema, DictConfig):

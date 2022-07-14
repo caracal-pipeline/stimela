@@ -901,8 +901,8 @@ class Recipe(Cargo):
                         self.log.error(f"unresolved {{}}-substitution(s):")
                         for err in exc.errors:
                             self.log.error(f"  {err}")
-                    msg = f"step '{label}': {exc}"
-                    errors.append(RecipeValidationError(msg))
+                    # msg = f"step '{label}': {exc}"
+                    errors.append(RecipeValidationError(f"step '{label}'", exc))
 
                 subst.previous = subst.current
                 subst.steps[label] = subst.previous

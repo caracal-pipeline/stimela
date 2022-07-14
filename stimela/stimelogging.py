@@ -4,6 +4,8 @@ from datetime import datetime
 import pathlib
 import logging
 import contextlib
+import traceback
+from types import TracebackType
 from typing import Optional, Union
 from omegaconf import DictConfig
 from scabha.exceptions import ScabhaBaseException
@@ -369,25 +371,34 @@ def log_exception(*errors):
     trees = []
     do_log = False
     messages = []
-    nested = False
 
     def add_nested(excs, tree):
         for exc in excs:
-            subtree = tree.add(exc_message(exc))
-            if isinstance(exc, ScabhaBaseException) and exc.nested:
-                add_nested(exc.nested, subtree)
+            if isinstance(exc, Exception):
+                subtree = tree.add(f"{exc_message(exc)}")
+                # tbtree = subtree.add("Traceback:")
+                # for line in traceback.format_exception(exc):
+                #     tbtree.add(line)
+                if isinstance(exc, ScabhaBaseException) and exc.nested:
+                    add_nested(exc.nested, subtree)
+            elif type(exc) is TracebackType:
+                subtree = tree.add(f"[dim]Traceback:[/dim]")
+                for line in traceback.format_tb(exc):
+                    subtree.add(f"[dim]{line.rstrip()}[/dim]")
+            else:
+                tree.add(str(exc))
 
     for exc in errors:
         if isinstance(exc, ScabhaBaseException):
             messages.append(exc.message)
             if not exc.logged:
                 do_log = exc.logged = True
-            tree = Tree(exc_message(exc), guide_style="dim")
+            tree = Tree(f"[bold red]{exc_message(exc)}[/bold red]", guide_style="dim")
             trees.append(tree)
             if exc.nested:
                 add_nested(exc.nested, tree)
         else:
-            tree = Tree(exc_message(exc), guide_style="dim")
+            tree = Tree("f[bold red]exc_message(exc)[/bold red]", guide_style="dim")
             trees.append(tree)
             do_log = True
             messages.append(str(exc))

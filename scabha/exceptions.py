@@ -1,5 +1,7 @@
+import sys
 from typing import List, Union
 from typing import Optional as _Optional
+from types import TracebackType
 
 logger = None
 
@@ -12,10 +14,11 @@ class Error(str):
     """A string that's marked as an error"""
     pass
 
+ALWAYS_REPORT_TRACEBACK = True
 
 class ScabhaBaseException(Exception):
     def __init__(self, message: str, 
-                 nested: _Optional[Union[Exception, List[Exception]]] = None, log=None):
+                 nested: _Optional[Union[Exception, TracebackType, List[Union[Exception, TracebackType]]]] = None, log=None, tb=False):
         """Initializes exception object
 
         Args:
@@ -24,11 +27,15 @@ class ScabhaBaseException(Exception):
             log (logger): if not None, logs the exception to the given logger
         """
         self.message = message
-        if isinstance(nested, Exception):
+        # include traceback automatically?
+        if isinstance(nested, Exception) and (tb or ALWAYS_REPORT_TRACEBACK) and nested is sys.exc_info()[1]:
+            nested = [nested, sys.exc_info()[2]]
+        if isinstance(nested, (Exception, TracebackType)):
             nested = [nested]
         self.nested = nested or []
-        if nested:
-            message = f"{message}: {', '.join(map(str, nested))}"
+        nested_exc = [str(exc) for exc in self.nested if isinstance(exc, Exception)]
+        if nested_exc:
+            message = f"{message}: {', '.join(nested_exc)}"
         Exception.__init__(self, message)
         if log is not None:
             if not hasattr(log, 'error'):
