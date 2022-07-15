@@ -417,6 +417,16 @@ class ConfigDependencies(object):
         self._git_cache[dirname] = gitinfo
         return gitinfo
 
+    def get_description(self):
+        desc = OrderedDict()
+        for filename, attrs in self.deps.items():
+            attrs_items = attrs.items() if attrs else [] 
+            attrs_str = [f"mtime: {datetime.datetime.fromtimestamp(value).strftime('%c')}" 
+                            if attr == "mtime" else f"{attr}: {value}"
+                            for attr, value in attrs_items]
+            desc[filename] = attrs_str
+        return desc
+
 
 def load_cache(filelist: List[str], extra_keys=[], verbose=None):
     filehash = _compute_hash(filelist, extra_keys)
