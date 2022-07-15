@@ -118,12 +118,8 @@ def cli(backend, config_files=[], config_dotlist=[], include=[], verbose=False, 
     log.info(f"backend is {stimela.CONFIG.opts.backend.name}")
 
     # report dependencies
-    for filename, attrs in config.CONFIG_DEPS.deps.items():
-        attrs_items = attrs.items() if attrs else [] 
-        attrs_str = [f"mtime: {datetime.datetime.fromtimestamp(value).strftime('%c')}" 
-                        if attr == "mtime" else f"{attr}: {value}"
-                        for attr, value in attrs_items]
-        log.debug(f"config dependency {', '.join([filename] + attrs_str)}")
+    for filename, attrs in config.CONFIG_DEPS.get_description().items():
+        log.debug(f"config dependency {', '.join([filename] + attrs)}")
 
     # dump dependencies
     filename = os.path.join(stimelogging.get_logger_file(log) or '.', "stimela.config.deps")
