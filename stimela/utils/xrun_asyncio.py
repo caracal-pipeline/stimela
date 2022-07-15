@@ -20,7 +20,7 @@ log = None
 
 
 def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, output_wrangler=None, shell=True, 
-            return_errcode=False, command_name=None, progress_bar=False):
+            return_errcode=False, command_name=None, progress_bar=False, log_command=True):
     
     command_name = command_name or command
 
@@ -43,7 +43,8 @@ def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, o
 
     log = log or stimela.logger()
 
-    log.info("running " + command_line, extra=dict(stimela_subprocess_output=(command_name, "start")))
+    if log_command:
+        log.info("running " + command_line, extra=dict(stimela_subprocess_output=(command_name, "start")))
 
     with stimelogging.declare_subcommand(os.path.basename(command_name)):
 

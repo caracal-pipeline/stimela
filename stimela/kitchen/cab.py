@@ -87,7 +87,7 @@ class Cab(Cargo):
                 self.flavour = "binary" 
             else:
                 self.flavour = self.flavour.lower()
-            if self.flavour == "python":
+            if self.flavour == "python" or self.flavour == "python-ext":
                 if '.' in self.command:
                     self.py_module, self.py_function = self.command.rsplit('.', 1)
                 else:
@@ -159,7 +159,7 @@ class Cab(Cargo):
             venv = os.path.expanduser(venv)
             if not os.path.isfile(f"{venv}/bin/activate"):
                 raise CabValidationError(f"virtual environment {venv} doesn't exist", log=self.log)
-            self.log.debug(f"virtual envirobment is {venv}")
+            self.log.debug(f"virtual environment is {venv}")
         else:
             venv = None
 

@@ -76,7 +76,7 @@ cabs:
 
   test_callable2:
     command: stimela_tests.test_recipe.callable_function
-    flavour: python
+    flavour: python-ext
     inputs:
       a:
         dtype: int
