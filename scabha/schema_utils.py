@@ -45,6 +45,7 @@ def schema_to_dataclass(io: Dict[str, Parameter], class_name: str, bases=(), pos
             metadata['choices'] = schema.choices
         if schema.element_choices:
             metadata['element_choices'] = schema.element_choices
+        metadata['required'] = schema.required
 
         if isinstance(schema.default, MutableSequence):
             fld = field(default_factory=default_wrapper(list, schema.default),
