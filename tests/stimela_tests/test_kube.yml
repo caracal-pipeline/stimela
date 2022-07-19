@@ -13,7 +13,7 @@ cabs:
         # dask cluster settings
         dask_cluster:
           name: qc-test-cluster
-          persist: false          
+          persist: true          
           num_workers: 4
           cpu_limit: 4
           memory_limit: "16Gi"
@@ -52,4 +52,6 @@ recipe:
           dask.scheduler: distributed
           input_model.recipe: MODEL_DATA
           input_model.apply_p_jones: false
-          output.apply_p_jones_inv: false           
+          output.apply_p_jones_inv: false
+          output.gain_directory: s3://binface/gains.qc
+          output.overwrite: true        

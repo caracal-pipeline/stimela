@@ -7,7 +7,8 @@ RUN apt -y update && \
         apt install -y \
             python3-pip \
             python3-minimal \
-            python-is-python3 && \
+            python-is-python3 \
+            git && \
     apt clean
 
 

@@ -288,6 +288,7 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
             if cluster and not kube.dask_cluster.persist:
                 update_status()
                 log.info(f"stopping dask cluster {cluster_name}")
+                log.info(f"cluster logs: {cluster.get_logs()}")
                 cluster.close() 
             if podname:
                 try:
@@ -310,7 +311,8 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
 # kubectl -n rarg get pods -A
 # kubectl -n rarg delete service recipetestqcdaskcluster
 # kubectl -n rarg delete poddisruptionbudget recipetestqcdaskcluster
-
+# kubectl -n rarg port-forward service/qc-test-cluster 18787:http-dashboard
+# kubectl -n rarg logs pod_id 
 """
 https://kubernetes.dask.org/en/latest/kubecluster.html#dask_kubernetes.KubeCluster
 
