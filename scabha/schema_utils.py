@@ -45,6 +45,13 @@ def schema_to_dataclass(io: Dict[str, Parameter], class_name: str, bases=(), pos
             metadata['choices'] = schema.choices
         if schema.element_choices:
             metadata['element_choices'] = schema.element_choices
+        metadata['required'] = required = schema.required
+
+        if required and schema.default is not None:
+            raise SchemaError(
+                f"Field '{fldname}' is required but specifies a default. "
+                f"This behaviour is unsupported/ambiguous."
+            )
 
         if isinstance(schema.default, MutableSequence):
             fld = field(default_factory=default_wrapper(list, schema.default),
