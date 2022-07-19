@@ -25,8 +25,6 @@ from yaml.error import YAMLError
 class ConfigurattError(RuntimeError):
     pass
 
-FAILED_OPTIONAL_INCLUDES = OrderedDict()
-
 def _lookup_nameseq(name_seq: List[str], source_dict: Dict):
     """Internal helper: looks up nested item ('a', 'b', 'c') in a nested dict
 
@@ -102,7 +100,6 @@ def _flatten_subsections(conf, depth: int = 1, sep: str = "__"):
 
 
 def _resolve_config_refs(conf, pathname: str, location: str, name: str, includes: bool, use_sources: Optional[List[DictConfig]], 
-                        selfrefs: bool = True, 
                         include_path: Optional[str]=None):
     """Resolves cross-references ("_use" and "_include" statements) in config object
 
@@ -120,8 +117,6 @@ def _resolve_config_refs(conf, pathname: str, location: str, name: str, includes
         If True, "_include" references will be processed
     use_sources : optional list of OmegaConf objects
         one or more config object(s) in which to look up "_use" references. None to disable
-    selfrefs (bool, optional): If False, "_use" references will only be looked up in existing config.
-        If True (default), they'll also be looked up within the loaded config.
     include_path (str, optional):
         if set, path to each config file will be included in the section as element 'include_path'
 
@@ -140,6 +135,9 @@ def _resolve_config_refs(conf, pathname: str, location: str, name: str, includes
     """
     errloc = f"config error at {location or 'top level'} in {name}"
     dependencies = ConfigDependencies()
+    use_sources = list(use_sources)
+    # self-referencing enabled if first source is ourselves
+    selfrefs =  conf is use_sources[0]
 
     if isinstance(conf, DictConfig):
 
@@ -191,14 +189,18 @@ def _resolve_config_refs(conf, pathname: str, location: str, name: str, includes
                                 mod = importlib.import_module(modulename)
                             except ImportError as exc:
                                 if 'optional' in flags:
-                                    FAILED_OPTIONAL_INCLUDES[incl] = pathname
+                                    dependencies.add_fail(incl, pathname, modulename=modulename, fname=filename)
+                                    if 'warn' in flags:
+                                        print(f"Warning: unable to import module for optional include {incl}")
                                     continue
                                 raise ConfigurattError(f"{errloc}: _include {incl}: can't import {modulename} ({exc})")
 
                             filename = os.path.join(os.path.dirname(mod.__file__), filename)
                             if not os.path.exists(filename):
                                 if 'optional' in flags:
-                                    FAILED_OPTIONAL_INCLUDES[incl] = pathname
+                                    dependencies.add_fail(incl, pathname, modulename=modulename, fname=filename)
+                                    if 'warn' in flags:
+                                        print(f"Warning: unable to find optional include {incl}")
                                     continue
                                 raise ConfigurattError(f"{errloc}: _include {incl}: {filename} does not exist")
 
@@ -206,7 +208,9 @@ def _resolve_config_refs(conf, pathname: str, location: str, name: str, includes
                         elif os.path.isabs(incl):
                             if not os.path.exists(incl):
                                 if 'optional' in flags:
-                                    FAILED_OPTIONAL_INCLUDES[incl] = pathname
+                                    dependencies.add_fail(incl, pathname)
+                                    if 'warn' in flags:
+                                        print(f"Warning: unable to find optional include {incl}")
                                     continue
                                 raise ConfigurattError(f"{errloc}: _include {incl} does not exist")
                             filename = incl
@@ -219,7 +223,9 @@ def _resolve_config_refs(conf, pathname: str, location: str, name: str, includes
                                     break
                             else:
                                 if 'optional' in flags:
-                                    FAILED_OPTIONAL_INCLUDES[incl] = pathname
+                                    dependencies.add_fail(incl, pathname)
+                                    if 'warn' in flags:
+                                        print(f"Warning: unable to find optional include {incl}")
                                     continue
                                 raise ConfigurattError(f"{errloc}: _include {incl} not found in {':'.join(paths)}")
 
@@ -242,6 +248,8 @@ def _resolve_config_refs(conf, pathname: str, location: str, name: str, includes
                     
                     # merge: our section overrides anything that has been included
                     conf = OmegaConf.unsafe_merge(accum_incl_conf, conf)
+                    if selfrefs:
+                        use_sources[0] = conf
 
             # handle _use entries
             if use_sources is not None:
@@ -263,13 +271,15 @@ def _resolve_config_refs(conf, pathname: str, location: str, name: str, includes
                         base, deps = _resolve_config_refs(base, pathname=pathname, name=name, 
                                                 location=f"{location}._use" if location else "_use", 
                                                 includes=includes, 
-                                                use_sources=None if use_sources is None else ([conf] + use_sources if selfrefs else use_sources), 
+                                                use_sources=use_sources, 
                                                 include_path=include_path)
                         dependencies.update(deps)
                         if flatten:
                             _flatten_subsections(base, flatten, flatten_sep)
                         base.merge_with(conf)
                         conf = base
+                        if selfrefs:
+                            use_sources[0] = conf
 
         # recurse into content
         for key, value in conf.items_ex(resolve=False):
@@ -277,7 +287,7 @@ def _resolve_config_refs(conf, pathname: str, location: str, name: str, includes
                 value1, deps = _resolve_config_refs(value, pathname=pathname, name=name, 
                                                 location=f"{location}.{key}" if location else key, 
                                                 includes=includes, 
-                                                use_sources=None if use_sources is None else ([conf] + use_sources if selfrefs else use_sources), 
+                                                use_sources=use_sources, 
                                                 include_path=include_path)
                 dependencies.update(deps)
                 # reassigning is expensive, so only do it if there was an actual change 
@@ -292,7 +302,7 @@ def _resolve_config_refs(conf, pathname: str, location: str, name: str, includes
                 value1, deps = _resolve_config_refs(value, pathname=pathname, name=name, 
                                                 location=f"{location or ''}[{i}]", 
                                                 includes=includes, 
-                                                use_sources=None if use_sources is None else ([conf] + use_sources if selfrefs else use_sources), 
+                                                use_sources=use_sources, 
                                                 include_path=include_path)
                 dependencies.update(deps)
                 if value1 is not value:
@@ -322,6 +332,7 @@ class ConfigDependencies(object):
 
     def __init__(self):
         self.deps = OmegaConf.create()
+        self.fails = OmegaConf.create()
     
     def add(self, filename: str, origin: Optional[str]=None, missing=False, **extra_attrs):
         """Adds a file to the set of dependencies
@@ -358,6 +369,14 @@ class ConfigDependencies(object):
                 depinfo.git = gitinfo
         self.deps[filename] = depinfo
 
+    def add_fail(self, filename: str, origin: str, modulename: Optional[str] = None, fname: Optional[str] = None):
+        depinfo = OmegaConf.create(dict(
+            origin=origin,
+            modulename=modulename,
+            fname=fname
+        ))
+        self.fails[filename] = depinfo
+
     def replace(self, globs: List[str], dirname: str, **extra_attrs):
         remove = set()
         for glob in globs:
@@ -373,6 +392,7 @@ class ConfigDependencies(object):
         for name in other.deps:
             if name not in self.deps:
                 self.deps[name] = other.deps[name]
+        self.fails = OmegaConf.unsafe_merge(self.fails, other.fails)
 
     def save(self, filename):
         OmegaConf.save(self.deps, filename)
@@ -427,6 +447,32 @@ class ConfigDependencies(object):
             desc[filename] = attrs_str
         return desc
 
+    def have_deps_changed(self, mtime, verbose=False):
+        # check that all dependencies are older than the cache
+        for f in self.deps.keys():
+            if not os.path.exists(f):
+                if verbose:
+                    print(f"Dependency {f} doesn't exist, forcing reload")
+                return True
+            if os.path.getmtime(f) > mtime:
+                if verbose:
+                    print(f"Dependency {f} is newer than the cache, forcing reload")
+                return True
+        # check that previously failing includes are not now succeeding (because that's also reason to reload cache)
+        for filename, dep in self.fails.items():
+            if dep.modulename:
+                try:
+                    mod = importlib.import_module(dep.modulename)
+                    fname = os.path.join(os.path.dirname(mod.__file__), dep.fname)
+                    if os.path.exists(fname):
+                        return True
+                except ImportError as exc:
+                    pass
+            else:
+                if os.path.exists(filename):
+                    return True
+        return False
+        
 
 def load_cache(filelist: List[str], extra_keys=[], verbose=None):
     filehash = _compute_hash(filelist, extra_keys)
@@ -456,15 +502,8 @@ def load_cache(filelist: List[str], extra_keys=[], verbose=None):
         os.unlink(filename)
         return None, None
     # check that all dependencies are older than the cache
-    for f in deps.deps.keys():
-        if not os.path.exists(f):
-            if verbose:
-                print(f"Dependency {f} doesn't exist, forcing reload")
-            return None, None
-        if os.path.getmtime(f) > cache_mtime:
-            if verbose:
-                print(f"Dependency {f} is newer than the cache, forcing reload")
-            return None, None
+    if deps.have_deps_changed(cache_mtime, verbose=verbose):
+        return None, None
     if verbose:
         print(f"Loaded cached config for {' '.join(filelist)} from {filename}")    
     return conf, deps
@@ -511,6 +550,9 @@ def load(path: str, use_sources: Optional[List[DictConfig]] = [], name: Optional
         name = name or os.path.basename(path)
         dependencies = ConfigDependencies()
         dependencies.add(path)
+        use_sources = use_sources or []
+        if selfrefs:
+            use_sources.insert(0, subconf)
         conf, deps = _resolve_config_refs(subconf, pathname=path, location=location, name=name, includes=includes, use_sources=use_sources, include_path=include_path)
         dependencies.update(deps)
         if use_cache:

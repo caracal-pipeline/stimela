@@ -9,7 +9,7 @@ from scabha.cargo import Parameter, Cargo, ListOrString, ParameterPolicies, Para
 from stimela.exceptions import CabValidationError
 from scabha.exceptions import SchemaError
 from scabha.basetypes import EmptyDictDefault, EmptyListDefault
-
+import stimela
 
 ParameterPassingMechanism = Enum("ParameterPassingMechanism", "args yaml", module=__name__)
 
@@ -58,6 +58,10 @@ class Cab(Cargo):
     # default parameter conversion policies
     policies: ParameterPolicies = ParameterPolicies()
 
+    # runtime settings
+    backend: Optional['stimela.config.Backend']
+    runtime: Dict[str, Any] = EmptyDictDefault()
+
     # copy names of logging levels into wrangler actions
     wrangler_actions =  {attr: value for attr, value in logging.__dict__.items() if attr.upper() == attr and type(value) is int}
 
@@ -65,6 +69,7 @@ class Cab(Cargo):
     ACTION_SUPPRESS = wrangler_actions["SUPPRESS"] = "SUPPRESS"
     ACTION_DECLARE_SUCCESS = wrangler_actions["DECLARE_SUCCESS"] = "DECLARE_SUPPRESS"
     ACTION_DECLARE_FAILURE = wrangler_actions["DECLARE_FAILURE"] = "DECLARE_FAILURE"
+
 
     _path: Optional[str] = None   # path to image definition yaml file, if any
 
@@ -148,7 +153,7 @@ class Cab(Cargo):
         else:
             return default
 
-    def build_command_line(self, params: Dict[str, Any], subst: Optional[Dict[str, Any]] = None):
+    def build_command_line(self, params: Dict[str, Any], subst: Optional[Dict[str, Any]] = None, search=True):
         from scabha.substitutions import substitutions_from
 
         with substitutions_from(subst, raise_errors=True) as context:
@@ -167,15 +172,16 @@ class Cab(Cargo):
         command = command_line[0]
         args = command_line[1:]
         # collect command
-        if "/" not in command:
-            from scabha.proc_utils import which
-            command0 = command
-            command = which(command, extra_paths=venv and [f"{venv}/bin"])
-            if command is None:
-                raise CabValidationError(f"{command0}: not found", log=self.log)
-        else:
-            if not os.path.isfile(command) or not os.stat(command).st_mode & stat.S_IXUSR:
-                raise CabValidationError(f"{command} doesn't exist or is not executable", log=self.log)
+        if search:
+            if "/" not in command:
+                from scabha.proc_utils import which
+                command0 = command
+                command = which(command, extra_paths=venv and [f"{venv}/bin"])
+                if command is None:
+                    raise CabValidationError(f"{command0}: not found", log=self.log)
+            else:
+                if not os.path.isfile(command) or not os.stat(command).st_mode & stat.S_IXUSR:
+                    raise CabValidationError(f"{command} doesn't exist or is not executable", log=self.log)
 
         self.log.debug(f"command is {command}")
 

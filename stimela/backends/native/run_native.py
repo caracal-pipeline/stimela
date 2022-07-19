@@ -31,7 +31,8 @@ class LoggerIO(TextIOBase):
         return len(s)
 
 
-def run(cab: Cab, params: Dict[str, Any], log, subst: Optional[Dict[str, Any]] = None, batch=None):
+def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
+        log: logging.Logger, subst: Optional[Dict[str, Any]] = None, batch=None):
     """Runs cab contents
 
     Args:
@@ -50,7 +51,7 @@ def run(cab: Cab, params: Dict[str, Any], log, subst: Optional[Dict[str, Any]] =
     elif cab.flavour == "binary":
         return run_command(cab, params, log, subst)
     else:
-        raise StimelaCabRuntimeError(f"{cab.flavour} flavour cabs not yet supported by native runner")
+        raise StimelaCabRuntimeError(f"{cab.flavour} flavour cabs not yet supported by native backend")
 
 
 def run_callable(modulename: str, funcname: str,  cab: Cab, params: Dict[str, Any], log, subst: Optional[Dict[str, Any]] = None):

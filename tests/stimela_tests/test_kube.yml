@@ -1,0 +1,54 @@
+_include:
+  - omstimelation/oms-cabs.yml
+
+cabs:
+  quarticube:
+    _use: cabs.quartical
+    virtual_env: 
+    image: quartical-kubetest:local
+    backend: kubernetes
+    runtime:
+      kube:
+        namespace: rarg
+        # dask cluster settings
+        dask_cluster:
+          name: qc-test-cluster
+          persist: true  # this doesn't work yet
+          num_workers: 4
+          cpu_limit: 4
+          memory_limit: "32Gi"
+          threads_per_worker: 4          
+        # list of files to be injected into pod
+        inject_files:
+          .config/dask-ms/storage_options.json:
+            format: json
+            content:
+              key: simon
+              secret: simon123
+              client_kwargs:
+                endpoint_url: https://minio:443
+                region_name: af-cpt
+                verify: false
+        # list of command to be executed inside the pod before launching the main command
+        pre_commands:
+          - cat .config/dask-ms/storage_options.json
+
+opts:
+  log:
+    dir: test-logs/logs-{config.run.datetime} 
+    nest: 3
+    symlink: logs
+
+
+recipe:
+  name: "demo recipe"
+  info: 'top level recipe definition'
+  steps: 
+      test_qc:
+        cab: quarticube
+        params:
+          input_ms.path: s3://binface/C147.zarr
+          dask.address: qc-test-cluster:8786
+          input_model.recipe: MODEL_DATA
+          input_model.apply_p_jones: false
+          output.apply_p_jones_inv: false           

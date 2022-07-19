@@ -30,10 +30,16 @@ class ParameterValidationError(StimelaBaseException):
 class StimelaCabParameterError(StimelaBaseException):
     pass
 
+class StimelaStepExecutionError(StimelaBaseException):
+    pass
+
 class StimelaRecipeExecutionError(StimelaBaseException):
     pass
 
 class StimelaBaseImageError(StimelaBaseException):
+    pass
+
+class StimelaRuntimeError(StimelaBaseException):
     pass
 
 class StimelaCabRuntimeError(StimelaBaseException):

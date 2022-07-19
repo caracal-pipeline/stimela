@@ -6,7 +6,7 @@ import logging
 import contextlib
 import traceback
 from types import TracebackType
-from typing import Optional, Union
+from typing import Optional, OrderedDict, Union
 from omegaconf import DictConfig
 from scabha.exceptions import ScabhaBaseException
 from scabha.substitutions import SubstitutionNS, forgiving_substitutions_from
@@ -361,16 +361,31 @@ def get_logger_file(log: logging.Logger):
     return os.path.dirname(logfile)
 
 
-def log_exception(*errors):
+def log_exception(*errors, severity="error"):
     """Logs one or more error messages or exceptions (unless they are marked as already logged), and 
     pretty-prints them to the console  as appropriate.
     """
     def exc_message(e):
         return e.message if isinstance(e, ScabhaBaseException) else str(e)
 
+    if severity == "error":
+        colour = "bold red"
+        message_dispatch = logger().error
+    else:
+        colour = "yellow"
+        message_dispatch = logger().warning
+
     trees = []
     do_log = False
     messages = []
+
+    def add_dict(dd, tree):
+        for field, value in dd.items():
+            if isinstance(value, (dict, OrderedDict, DictConfig)):
+                subtree = tree.add(f"{field}:")
+                add_dict(value, subtree)
+            else:
+                tree.add(f"{field}: {value}")
 
     def add_nested(excs, tree):
         for exc in excs:
@@ -385,6 +400,8 @@ def log_exception(*errors):
                 subtree = tree.add(f"[dim]Traceback:[/dim]")
                 for line in traceback.format_tb(exc):
                     subtree.add(f"[dim]{line.rstrip()}[/dim]")
+            elif isinstance(exc, (dict, OrderedDict, DictConfig)):
+                add_dict(exc, tree)
             else:
                 tree.add(str(exc))
 
@@ -393,18 +410,18 @@ def log_exception(*errors):
             messages.append(exc.message)
             if not exc.logged:
                 do_log = exc.logged = True
-            tree = Tree(f"[bold red]{exc_message(exc)}[/bold red]", guide_style="dim")
+            tree = Tree(f"[{colour}]{exc_message(exc)}[/{colour}]", guide_style="dim")
             trees.append(tree)
             if exc.nested:
                 add_nested(exc.nested, tree)
         else:
-            tree = Tree(f"[bold red]{exc_message(exc)}[/bold red]", guide_style="dim")
+            tree = Tree(f"[{colour}]{exc_message(exc)}[/{colour}]", guide_style="dim")
             trees.append(tree)
             do_log = True
             messages.append(str(exc))
 
     if do_log:
-        logger().error(": ".join(messages))
+        message_dispatch(": ".join(messages))
 
     printfunc = progress_bar.console.print if progress_bar is not None else rich_print
 

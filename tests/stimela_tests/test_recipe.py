@@ -15,6 +15,7 @@ def callable_function(a: int, b: str):
 
 def run(command):
     """Runs command, returns tuple of exit code, output"""
+    print(f"running: {command}")
     try:
         return 0, subprocess.check_output(command, shell=True).strip().decode()
     except subprocess.CalledProcessError as exc:

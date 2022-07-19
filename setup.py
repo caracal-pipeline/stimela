@@ -19,6 +19,10 @@ requirements = [  "pyyaml",
                   "dill"
 ]
 
+extras = dict(
+      kube = [ "kubernetes", "dask-kubernetes" ]
+)
+
 PACKAGE_NAME = "stimela"
 __version__ = "2.0rc2"
 
@@ -42,6 +46,7 @@ setup(name=PACKAGE_NAME,
       include_package_data=True,
       python_requires='>=3.7',
       install_requires=requirements,
+      extras_require=extras,
       entry_points="""
             [console_scripts]
             stimela = stimela.main:cli

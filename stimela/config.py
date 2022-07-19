@@ -64,10 +64,11 @@ class StimelaLogConfig(object):
 
 import stimela.backends.docker
 import stimela.backends.singularity
+import stimela.backends.kubernetes
 import stimela.backends.podman
 import stimela.backends.native
 
-Backend = Enum("Backend", "docker singularity podman native", module=__name__)
+Backend = Enum("Backend", "docker singularity podman kubernetes native", module=__name__)
 
 @dataclass
 class StimelaOptions(object):
@@ -80,6 +81,8 @@ class StimelaOptions(object):
     include: List[str] = EmptyListDefault()
     ## For distributed computes and cpu allocation
     dist: Dict[str, Any] = EmptyDictDefault()  
+    ## Miscellaneous runtime option 
+    runtime: Dict[str, Any] = EmptyDictDefault()
 
 
 def DefaultDirs():
@@ -171,6 +174,7 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
         recipes: Dict[str, Any] = EmptyDictDefault()
         steps: Dict[str, Any] = EmptyDictDefault()
         misc: Dict[str, Any] = EmptyDictDefault()
+        wisdom: Dict[str, Any] = EmptyDictDefault()
 
     @dataclass 
     class StimelaConfig:

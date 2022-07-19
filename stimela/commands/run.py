@@ -2,7 +2,6 @@ import itertools
 import click
 import logging
 import os.path
-from numpy import deprecate
 import yaml
 import sys
 import traceback
@@ -19,7 +18,7 @@ from stimela import stimelogging
 import stimela.config
 from stimela.config import ConfigExceptionTypes
 from stimela import logger, log_exception
-from stimela.exceptions import RecipeValidationError
+from stimela.exceptions import RecipeValidationError, StimelaRuntimeError
 from stimela.main import cli
 from stimela.kitchen.recipe import Recipe, Step, RecipeSchema, join_quote
 
@@ -34,10 +33,10 @@ def load_recipe_file(filename: str):
         sys.exit(2)
 
     # warn user if any includes failed
-    if configuratt.FAILED_OPTIONAL_INCLUDES:
-        logger().warning(f"{len(configuratt.FAILED_OPTIONAL_INCLUDES)} optional includes were not found, some cabs may not be available")
-        for path, invoked_from in configuratt.FAILED_OPTIONAL_INCLUDES.items():
-            logger().warning(f"    {path} (from {invoked_from})")
+    if deps.fails:
+        logger().warning(f"{len(deps.fails)} optional includes were not found, some cabs may not be available")
+        for path, dep in deps.fails.items():
+            logger().warning(f"    {path} (from {dep.origin})")
 
     dependencies.update(deps)
 
@@ -163,7 +162,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
         try:
             stimela.CONFIG = OmegaConf.unsafe_merge(stimela.CONFIG, update_conf)
         except Exception as exc:
-            log_exception("error applying configuration from {what}", exc)
+            log_exception(f"error applying configuration from {what}", exc)
             sys.exit(2)
 
         log.info(f"{what} contains the following recipe sections: {join_quote(all_recipe_names)}")
@@ -317,7 +316,8 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
     try:
         outputs = outer_step.run()
     except Exception as exc:
-        log_exception(f"run failed after {elapsed()}", exc)
+        if not isinstance(exc, ScabhaBaseException) or not exc.logged:
+            log_exception(StimelaRuntimeError(f"run failed after {elapsed()}", exc))
         for line in traceback.format_exc().split("\n"):
             log.debug(line)
         sys.exit(1)
