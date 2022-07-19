@@ -13,7 +13,7 @@ from stimela.kitchen.cab import Cab
 from stimela.kitchen.step import Step
 from stimela.utils.xrun_asyncio import xrun, dispatch_to_log
 from stimela.exceptions import StimelaCabParameterError, StimelaCabRuntimeError, CabValidationError
-from stimela.stimelogging import log_exception, declare_subcommand, declare_subtask
+from stimela.stimelogging import log_exception, declare_subcommand, declare_subtask, update_process_status
 
 import kubernetes
 from kubernetes.client.api import core_v1_api
@@ -106,7 +106,7 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
     
     cab.reset_runtime_status()
     
-    client = cluster = podname = None
+    cluster = podname = cluster_name = None
     kube_api = get_kube_api()
 
     start_time = datetime.datetime.now()
@@ -114,22 +114,38 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
         """Returns string representing elapsed time"""
         return str(datetime.datetime.now() - (since or start_time)).split('.', 1)[0]
 
+    last_update = 0
+    def update_status():
+        nonlocal last_update
+        if time.time() - last_update >= 1:
+            update_process_status()
+            last_update = time.time()
+
+
     with declare_subtask(f"kubernetes:{os.path.basename(command_name)}"):        
         try:
             if kube.dask_cluster.num_workers:
-                with declare_subcommand("dask-cluster"):
-                    log.info(f"starting dask cluster for {command_name}")
-                    pod_spec = make_pod_spec(image=cab.image,
-                                            cpu_limit=kube.dask_cluster.cpu_limit,
-                                            memory_limit=kube.dask_cluster.memory_limit,
-                                            threads_per_worker=kube.dask_cluster.num_workers)
+                cluster_name = kube.dask_cluster.name
+                if kube.dask_cluster.persist:
+                    try:
+                        resp = kube_api.read_namespaced_service(name=cluster_name, namespace=namespace)
+                        cluster = True
+                        log.info(f"persistent dask cluster {cluster_name} appears to be up")
+                    except ApiException as exc:
+                        log.info(f"persistent dask cluster {cluster_name} is not up")
 
-                    cluster = KubeCluster(pod_spec, name=f"{fqname}.dask.cluster", namespace=namespace)
-                    cluster.scale(kube.dask_cluster.num_workers)
-                    client = Client(cluster)
-                    log.info(f"  cluster started after {elapsed()}")
-            else:
-                client = cluster = None
+                if cluster is None:
+                    with declare_subcommand("starting dask cluster"):
+                        log.info(f"starting dask cluster {cluster_name} for {command_name}")
+                        pod_spec = make_pod_spec(image=cab.image,
+                                                cpu_limit=kube.dask_cluster.cpu_limit,
+                                                memory_limit=kube.dask_cluster.memory_limit,
+                                                threads_per_worker=kube.dask_cluster.num_workers)
+
+                        cluster = KubeCluster(pod_spec, name=cluster_name, namespace=namespace, shutdown_on_close=not kube.dask_cluster.persist)
+                        update_status()
+                        cluster.scale(kube.dask_cluster.num_workers)
+                        update_status()
 
             podname = fqname.replace(".", "--").replace("_", "--") + "--" + uuid.uuid4().hex
 
@@ -156,12 +172,13 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
                 }
             }
             # start pod and wait for it to come up
-            with declare_subcommand("start-pod"):
+            with declare_subcommand("starting pod"):
                 log.info(f"starting pod {podname} for {command_name}")
                 resp = kube_api.create_namespaced_pod(body=pod_manifest, namespace=namespace)
                 log.debug(f"create_namespaced_pod({podname}): {resp}")
 
                 while True:
+                    update_status()
                     resp = kube_api.read_namespaced_pod(name=podname, namespace=namespace)
                     log.debug(f"read_namespaced_pod({podname}): {resp}")
                     if resp.status.phase != 'Pending':
@@ -182,6 +199,7 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
                             _preload_content=False)
 
                 while resp.is_open():
+                    update_status()
                     resp.update(timeout=1)
                     if resp.peek_stdout():
                         for line in resp.read_stdout().rstrip().split("\n"):
@@ -204,7 +222,7 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
 
             # inject files into pod
             if 'inject_files' in kube:
-                with declare_subcommand("inject-files"):
+                with declare_subcommand("configuring pod (inject)"):
                     for filename, injection in kube.inject_files.items_ex():
                         content = injection.content
                         formatter = _InjectedFileFormatters.get(injection.format.name)
@@ -223,7 +241,7 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
 
 
             if 'pre_commands' in kube:
-                with declare_subcommand("pre-commands"):
+                with declare_subcommand("configuring pod (pre-commands)"):
                     for pre_command in kube.pre_commands:
                         log.info(f"running pre-command '{pre_command}' in pod {podname}")
                         # calling exec and waiting for response
@@ -234,7 +252,8 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
                             log.info(f"pre-command successful after {elapsed()}") 
 
             log.info(f"running {command_name} in pod {podname}")
-            retcode = run_pod_command(args, command_name, wrangler=cab.apply_output_wranglers)
+            with declare_subcommand(os.path.basename(command_name)):
+                retcode = run_pod_command(args, command_name, wrangler=cab.apply_output_wranglers)
 
             if retcode:
                 raise StimelaCabRuntimeError(f"{command_name} returns error code {retcode} after {elapsed()}")
@@ -266,12 +285,13 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
 
         # cleanup
         finally: 
-            if client:
-                client.close()
-            if cluster:
+            if cluster and not kube.dask_cluster.persist:
+                update_status()
+                log.info(f"stopping dask cluster {cluster_name}")
                 cluster.close() 
             if podname:
                 try:
+                    update_status()
                     log.info(f"deleting pod {podname}")
                     resp = kube_api.delete_namespaced_pod(name=podname, namespace=namespace)
                     log.debug(f"delete_namespaced_pod({podname}): {resp}")
@@ -296,6 +316,8 @@ https://kubernetes.dask.org/en/latest/kubecluster.html#dask_kubernetes.KubeClust
 
 We recommend adding the --death-timeout, '60' arguments and the restartPolicy: Never attribute 
 to your worker specification. This ensures that these pods will clean themselves up if your Python process disappears unexpectedly.
+
+OMS: this should be set in the structure returned by make_pod_spec(). Seems to be set by default.
 
 https://kubernetes.dask.org/en/latest/testing.ht
 
