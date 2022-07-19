@@ -20,7 +20,7 @@ cabs:
           threads_per_worker: 4          
         # list of files to be injected into pod
         inject_files:
-          .config/dask-ms/storage_options.json:
+          ~/.config/dask-ms/storage_options.json:
             format: json
             content:
               key: simon
@@ -31,7 +31,7 @@ cabs:
                 verify: false
         # list of command to be executed inside the pod before launching the main command
         pre_commands:
-          - cat .config/dask-ms/storage_options.json
+          - cat ~/.config/dask-ms/storage_options.json
 
 opts:
   log:
