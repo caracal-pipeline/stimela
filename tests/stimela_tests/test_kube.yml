@@ -7,6 +7,7 @@ cabs:
     virtual_env: 
     image: quartical-kubetest:local
     backend: kubernetes
+    command: goquartical
     runtime:
       kube:
         namespace: rarg
@@ -17,21 +18,36 @@ cabs:
           num_workers: 4
           cpu_limit: 4
           memory_limit: "16Gi"
-          threads_per_worker: 4          
+          threads_per_worker: 4
+        # list of file/directories to be exposed
+        local_mounts:
+          cwd:
+            path: .
+          dask-storage-config:
+            path: test_dask_storage_options.json
+            dest: /.config/dask-ms/storage_options.json
+          numba-cache:
+            path: ~/.cache/numba
+            mkdir: true
+        # list of environment variables
+        env:
+          NUMBA_CACHE_DIR: ~/.cache/numba
         # list of files to be injected into pod
-        inject_files:
-          ~/.config/dask-ms/storage_options.json:
-            format: json
-            content:
-              key: simon
-              secret: simon123
-              client_kwargs:
-                endpoint_url: https://minio:443
-                region_name: af-cpt
-                verify: false
+        # inject_files:
+        #   ~/.config/dask-ms/storage_options.json:
+        #     format: json
+        #     content:
+        #       key: simon
+        #       secret: simon123
+        #       client_kwargs:
+        #         endpoint_url: https://minio:443
+        #         region_name: af-cpt
+        #         verify: false
+        
         # list of command to be executed inside the pod before launching the main command
         pre_commands:
-          - cat ~/.config/dask-ms/storage_options.json
+          - echo $HOME
+          - cat ~/.config/dask-ms/storage_options.json  # just for testing, to make sure it is mounted properly
 
 opts:
   log:

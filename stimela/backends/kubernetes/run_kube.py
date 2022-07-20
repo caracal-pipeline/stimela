@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-import logging, time, json, datetime, yaml, os.path, uuid
+import logging, time, json, datetime, yaml, os.path, uuid, pathlib
 
 from typing import Dict, List, Optional, Any
 from enum import Enum
@@ -45,12 +45,22 @@ class KubernetesFileInjection(object):
     format: InjectedFileFormats = "txt"
     content: Any = ""
 
+@dataclass 
+class KubernetesLocalMount(object):
+    path: str
+    dest: str = ""              # destination path -- same as local if empty
+    readonly: bool = False      # doesn't work yet
+    mkdir: bool = False         # create dir if missing
+
 @dataclass
 class KubernetesRuntime(object):
     namespace: str
     dask_cluster: KubernetesDaskRuntime = KubernetesDaskRuntime()
     inject_files: Dict[str, KubernetesFileInjection] = EmptyDictDefault()
     pre_commands: List[str] = EmptyListDefault()
+    local_mounts: Dict[str, KubernetesLocalMount] = EmptyDictDefault()
+    env: Dict[str, str] = EmptyDictDefault()
+    run_dir: str = "."          # directory to run inside container
 
 KubernetesRuntimeSchema = OmegaConf.structured(KubernetesRuntime)
 
@@ -121,6 +131,8 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
             update_process_status()
             last_update = time.time()
 
+    numba_cache_dir = os.path.expanduser("~/.cache/numba")
+    pathlib.Path(numba_cache_dir).mkdir(parents=True, exist_ok=True)
 
     with declare_subtask(f"kubernetes:{os.path.basename(command_name)}"):        
         try:
@@ -149,28 +161,42 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
 
             podname = fqname.replace(".", "--").replace("_", "--") + "--" + uuid.uuid4().hex
 
-            pod_manifest = {
-                'apiVersion': 'v1',
-                'kind': 'Pod',
-                'metadata': {
-                    'name': podname
-                },
-                'spec': {
-                    'containers': [{
-                        'image': cab.image,
-                        'name': podname,
-                        "args": [
-                            "/bin/sh",
-                            "-c",
-                            "while true;do date;sleep 5; done"
-                        ]
-                        #                    'command': "ls",
-                        #'args': ['ls', '-lrt', "/"]
-                        # 'command': args[0],
-                        # 'args': args[1:]
-                    }]
-                }
-            }
+            pod_manifest = dict(
+                apiVersion  =  'v1',
+                kind        =  'Pod',
+                metadata    = dict(name = podname),
+                spec        = dict(
+                    containers = [dict(   
+                            image   = cab.image,
+                            name    = podname,
+                            args    = ["/bin/sh", "-c", "while true;do date;sleep 5; done"],
+                            env     = [],
+                            securityContext = dict(
+                                    runAsNonRoot = True,
+                                    runAsUser = os.getuid(),
+                                    runAsGroup = os.getgid()
+                            ),
+                            volumeMounts = []
+                    )],
+                    volumes = []
+                )
+            )
+            # add runtime env settings
+            for name, value in kube.env.items():
+                value = os.path.expanduser(value)
+                pod_manifest['spec']['containers'][0]['env'].append(dict(name=name, value=value)) 
+            # add local mounts
+            for name, mount in kube.local_mounts.items():
+                path = os.path.abspath(os.path.expanduser(mount.path))
+                dest = os.path.abspath(os.path.expanduser(mount.dest)) if mount.dest else path
+                if not os.path.exists(path) and mount.mkdir:
+                    pathlib.Path(path).mkdir(parents=True)
+                pod_manifest['spec']['volumes'].append(dict(
+                    name = name,
+                    hostPath = dict(path=path, type='Directory' if os.path.isdir(path) else 'File')
+                ))
+                pod_manifest['spec']['containers'][0]['volumeMounts'].append(dict(name=name, mountPath=dest))
+
             # start pod and wait for it to come up
             with declare_subcommand("starting pod"):
                 log.info(f"starting pod {podname} for {command_name}")
@@ -250,6 +276,11 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
                             log.warning(f"pre-command returns exit code {retcode} after {elapsed()}")
                         else:
                             log.info(f"pre-command successful after {elapsed()}") 
+
+            # do we need to chdir
+            if kube.run_dir:
+                rundir = os.path.abspath(kube.run_dir)
+                args = ["python", "-c", f"import os,sys; os.chdir('{rundir}'); os.execlp('{args[0]}', *sys.argv[1:])"] + list(args)
 
             log.info(f"running {command_name} in pod {podname}")
             with declare_subcommand(os.path.basename(command_name)):
