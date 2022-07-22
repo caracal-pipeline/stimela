@@ -1,6 +1,5 @@
 import dataclasses
 import re, importlib, sys
-from typing import Any, List, Dict, Optional, Union
 from collections import OrderedDict
 from enum import Enum, IntEnum
 from dataclasses import dataclass
@@ -15,6 +14,7 @@ from .exceptions import NestedSchemaError, ParameterValidationError, DefinitionE
 from .validate import validate_parameters, Unresolved
 from .substitutions import SubstitutionNS
 from .basetypes import EmptyDictDefault, EmptyListDefault
+from typing import *
 from .types import *
 
 ## almost supported by omegaconf, see https://github.com/omry/omegaconf/issues/144, for now just use Any
