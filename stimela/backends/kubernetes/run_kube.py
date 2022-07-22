@@ -13,14 +13,16 @@ from stimela.kitchen.cab import Cab
 from stimela.kitchen.step import Step
 from stimela.utils.xrun_asyncio import xrun, dispatch_to_log
 from stimela.exceptions import StimelaCabParameterError, StimelaCabRuntimeError, CabValidationError
-from stimela.stimelogging import log_exception, declare_subcommand, declare_subtask, update_process_status
+from stimela.stimelogging import log_exception
+from stimela.backends import resolve_required_mounts
+# these are used to drive the status bar
+from stimela.stimelogging import declare_subcommand, declare_subtask, update_process_status
 
 import kubernetes
 from kubernetes.client.api import core_v1_api
 from kubernetes.client.rest import ApiException
 from kubernetes.stream import stream
 from dask_kubernetes import make_pod_spec, KubeCluster
-from distributed import Client
 
 @dataclass
 class KubernetesDaskRuntime(object):
@@ -49,8 +51,8 @@ class KubernetesFileInjection(object):
 class KubernetesLocalMount(object):
     path: str
     dest: str = ""              # destination path -- same as local if empty
-    readonly: bool = False      # doesn't work yet
-    mkdir: bool = False         # create dir if missing
+    readonly: bool = False      # mount as readonly, but it doesn't work (yet?)
+    mkdir: bool = False         # create dir, if it is missing
 
 @dataclass
 class KubernetesRuntime(object):
@@ -60,7 +62,7 @@ class KubernetesRuntime(object):
     pre_commands: List[str] = EmptyListDefault()
     local_mounts: Dict[str, KubernetesLocalMount] = EmptyDictDefault()
     env: Dict[str, str] = EmptyDictDefault()
-    run_dir: str = "."          # directory to run inside container
+    run_dir: str = "."          # directory to run in inside container
 
 KubernetesRuntimeSchema = OmegaConf.structured(KubernetesRuntime)
 
@@ -185,17 +187,34 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
             for name, value in kube.env.items():
                 value = os.path.expanduser(value)
                 pod_manifest['spec']['containers'][0]['env'].append(dict(name=name, value=value)) 
+            
             # add local mounts
+            def add_local_mount(name, path, dest, readonly):
+                name = name.replace("_", "-")  # sanizitze name
+                pod_manifest['spec']['volumes'].append(dict(
+                    name = name,
+                    hostPath = dict(path=path, type='Directory' if os.path.isdir(path) else 'File')
+                ))
+                pod_manifest['spec']['containers'][0]['volumeMounts'].append(dict(name=name, mountPath=dest, readOnly=readonly))
+
+            # this will accumulate mounted paths from runtime spec
+            prior_mounts = {}
+
+            # add local mounts from runtime spec
             for name, mount in kube.local_mounts.items():
                 path = os.path.abspath(os.path.expanduser(mount.path))
                 dest = os.path.abspath(os.path.expanduser(mount.dest)) if mount.dest else path
                 if not os.path.exists(path) and mount.mkdir:
                     pathlib.Path(path).mkdir(parents=True)
-                pod_manifest['spec']['volumes'].append(dict(
-                    name = name,
-                    hostPath = dict(path=path, type='Directory' if os.path.isdir(path) else 'File')
-                ))
-                pod_manifest['spec']['containers'][0]['volumeMounts'].append(dict(name=name, mountPath=dest))
+                add_local_mount(name, path, dest, mount.readonly)
+                if path == dest:
+                    prior_mounts[path] = not mount.readonly
+
+            # add local mounts to support parameters
+            req_mounts = resolve_required_mounts(params, cab.inputs, cab.outputs, prior_mounts=prior_mounts)
+            for i, (path, readwrite) in enumerate(req_mounts.items()):
+                log.info(f"adding local mount {path} (readwrite={readwrite})")
+                add_local_mount(f"automount-{i}", path, path, not readwrite)
 
             # start pod and wait for it to come up
             with declare_subcommand("starting pod"):

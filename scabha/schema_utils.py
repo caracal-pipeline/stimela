@@ -1,7 +1,7 @@
-from typing import *
 import click
 from .cargo import Parameter
-from .exceptions import SchemaError
+from typing import *
+from .types import *
 from dataclasses import make_dataclass, field
 from omegaconf import OmegaConf
 from collections import OrderedDict, MutableSet, MutableSequence, MutableMapping
@@ -26,10 +26,8 @@ def schema_to_dataclass(io: Dict[str, Parameter], class_name: str, bases=(), pos
     field2name = {}
     fields = []
     for name, schema in io.items():
-        try:
-            dtype_impl = eval(schema.dtype, globals())
-        except Exception as exc:
-            raise SchemaError(f"invalid dtype = {schema.dtype}")
+        if type(schema) is not Parameter:
+            schema = Parameter(**schema)
 
         # sanitize name: dataclass won't take hyphens or periods
         # so replace with "_" and ensure uniqueness
@@ -58,7 +56,7 @@ def schema_to_dataclass(io: Dict[str, Parameter], class_name: str, bases=(), pos
         else:
             fld = field(default=schema.default, metadata=metadata)
 
-        fields.append((fldname, dtype_impl, fld))
+        fields.append((fldname, schema._dtype, fld))
 
     namespace = None if post_init is None else dict(__post_init__=post_init)
 

@@ -29,6 +29,9 @@ cabs:
           numba-cache:
             path: ~/.cache/numba
             mkdir: true
+          root:
+            path: /etc
+            dest: /test/etc
         # list of environment variables
         env:
           NUMBA_CACHE_DIR: ~/.cache/numba
@@ -48,6 +51,7 @@ cabs:
         pre_commands:
           - echo $HOME
           - cat ~/.config/dask-ms/storage_options.json  # just for testing, to make sure it is mounted properly
+          - cat /test/etc/shadow
 
 opts:
   log:
@@ -70,4 +74,5 @@ recipe:
           input_model.apply_p_jones: false
           output.apply_p_jones_inv: false
           output.gain_directory: s3://binface/gains.qc
+          output.log_directory: test-logs/logs.qc
           output.overwrite: true        

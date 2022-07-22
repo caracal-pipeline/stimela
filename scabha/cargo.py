@@ -15,6 +15,7 @@ from .exceptions import NestedSchemaError, ParameterValidationError, DefinitionE
 from .validate import validate_parameters, Unresolved
 from .substitutions import SubstitutionNS
 from .basetypes import EmptyDictDefault, EmptyListDefault
+from .types import *
 
 ## almost supported by omegaconf, see https://github.com/omry/omegaconf/issues/144, for now just use Any
 ListOrString = Any   
@@ -153,6 +154,12 @@ class Parameter(object):
         self.default = natify(self.default)
         self.choices = natify(self.choices)
 
+        # converts string dtype into proper type object
+        # yes I know eval() is naughty but this is the best we can do for now
+        # see e.g. https://stackoverflow.com/questions/67500755/python-convert-type-hint-string-representation-from-docstring-to-actual-type-t
+        # The alternative is a non-standard API call i.e. typing._eval_type()
+        self._dtype = eval(self.dtype, globals())
+
     def get_category(self):
         """Returns category of parameter, auto-setting it if not already preset"""
         if self.category is None:
@@ -201,7 +208,7 @@ class Cargo(object):
                         value = OmegaConf.unsafe_merge(ParameterSchema.copy(), value)
                         io_dest[name] = Parameter(**value)
                     except Exception as exc0:
-                        raise SchemaError(f"{label}.{name} is not a valid parameter definition")
+                        raise SchemaError(f"{label}.{name} is not a valid parameter definition", exc0)
                 else:
                     Cargo.flatten_schemas(io_dest, value, label=label, prefix=f"{name}.")
         return io_dest

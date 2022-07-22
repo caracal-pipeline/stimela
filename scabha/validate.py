@@ -3,6 +3,7 @@ import os
 import os.path
 import yaml
 import re
+import typing
 from typing import *
 from collections import OrderedDict
 
@@ -33,6 +34,10 @@ def validate_schema(schema: Dict[str, Any]):
     """
 
     pass
+
+
+def dtype_from_str(dtype_str: str):
+    """Converts a string e.g. 'int' into a typing object"""
 
 
 def is_file_type(dtype):
@@ -145,7 +150,6 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
 
     # create dataclass from parameter schema
     validated = {}
-    dtypes = {}
     fields = []
 
     # maps parameter names to/from field names. Fields have "_" not "-"
@@ -155,11 +159,6 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
     for name, schema in schemas.items():
         value = inputs.get(name)
         if value is not None:
-            try:
-                dtypes[name] = dtype_impl = eval(schema.dtype, globals())
-            except Exception as exc:
-                raise SchemaError(f"invalid {mkname(name)}.dtype = {schema.dtype} ({exc})")
-
             # sanitize name: dataclass won't take hyphens or periods
             fldname = re.sub("\W", "_", name)
             while fldname in field2name:
@@ -167,7 +166,7 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
             field2name[fldname] = name
             name2field[name] = fldname
 
-            fields.append((fldname, dtype_impl))
+            fields.append((fldname, schema._dtype))
             
             # OmegaConf dicts/lists need to be converted to standard containers for pydantic to take them
             if isinstance(value, (ListConfig, DictConfig)):
@@ -187,7 +186,7 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
         # skip errors
         if value is None or isinstance(value, Error):
             continue
-        dtype = dtypes[name]
+        dtype = schema._dtype
 
         is_file = is_file_type(dtype)
         is_file_list = is_filelist_type(dtype)
