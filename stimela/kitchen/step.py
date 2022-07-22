@@ -5,6 +5,7 @@ from omegaconf import MISSING, OmegaConf, DictConfig, ListConfig
 from omegaconf.errors import OmegaConfBaseException
 from collections import OrderedDict
 
+from stimela import config
 from stimela.config import EmptyDictDefault, EmptyListDefault
 import stimela
 from stimela import log_exception, stimelogging
@@ -16,6 +17,30 @@ from scabha.substitutions import SubstitutionNS, substitutions_from
 from .cab import Cab
 
 Conditional = Optional[str]
+
+
+def resolve_dotted_reference(key, base, current, context): 
+    """helper function to look up a key like a.b.c in a nested dict-like structure"""
+    path = key.split('.')
+    if path[0]:
+        section = base
+    else:
+        if not current:
+            raise NameError(f"{context}: leading '.' not permitted here")
+        section = current
+        path = path[1:]
+        if not path:
+            raise NameError(f"{context}: '.' not permitted")
+    varname = path[-1]
+    for element in path[:-1]:
+        if not element:
+            raise NameError(f"{context}: '..' not permitted")
+        if element in section:
+            section = section[element]
+        else:
+            raise NameError(f"{context}: '{element}' in '{key}' is not a valid config section")
+    return section, varname
+
 
 @dataclass
 class Step:
@@ -63,6 +88,7 @@ class Step:
         else:
             # otherwise, self._skip stays at None, and will be re-evaluated at runtime
             self._skip = None
+        
         
     def summary(self, params=None, recursive=True, ignore_missing=False):
         return self.cargo and self.cargo.summary(recursive=recursive, 
@@ -133,13 +159,13 @@ class Step:
                     # undotted name -- look in lib.recipes
                     if '.' not in self.recipe:
                         if self.recipe not in self.config.lib.recipes:
-                            raise StepValidationError(f"step '{self.name}': '{self.recipe}' not found in lib.recipes")
+                            raise StepValidationError(f"recipe '{self.recipe}' not found in lib.recipes")
                         self.recipe = self.config.lib.recipes[self.recipe]
                     # dotted name -- look in config
                     else: 
                         section, var = resolve_dotted_reference(self.recipe, config, current=None, context=f"step '{self.name}'")
                         if var not in section:
-                            raise StepValidationError(f"step '{self.name}': '{self.recipe}' not found")
+                            raise StepValidationError(f"recipe '{self.recipe}' not found")
                         self.recipe = section[var]
                     # self.recipe is now hopefully a DictConfig or a Recipe object, so fall through below to validate it 
                 # instantiate from omegaconf object, if needed
@@ -147,20 +173,20 @@ class Step:
                     try:
                         self.recipe = Recipe(**OmegaConf.unsafe_merge(RecipeSchema.copy(), self.recipe))
                     except OmegaConfBaseException as exc:
-                        raise StepValidationError(f"step '{self.name}': error in recipe '{recipe_name}", exc)
+                        raise StepValidationError(f"error in recipe '{recipe_name}", exc)
                 elif type(self.recipe) is not Recipe:
-                    raise StepValidationError(f"step '{self.name}': recipe field must be a string or a nested recipe, found {type(self.recipe)}")
+                    raise StepValidationError(f"recipe field must be a string or a nested recipe, got {type(self.recipe)}")
                 self.cargo = self.recipe
             else:
                 if self.cab in self._instantiated_cabs:
                     self.cargo = copy.copy(self._instantiated_cabs[self.cab])
                 else:
                     if self.cab not in self.config.cabs:
-                        raise StepValidationError(f"step '{self.name}': unknown cab {self.cab}")
+                        raise StepValidationError(f"unknown cab '{self.cab}'")
                     try:
                         self.cargo = self._instantiated_cabs[self.cab] = Cab(**config.cabs[self.cab])
                     except Exception as exc:
-                        raise StepValidationError(f"step '{self.name}': error in cab '{self.cab}'", exc)
+                        raise StepValidationError(f"error in cab '{self.cab}'", exc)
             self.cargo.name = self.name
 
             # flatten parameters
@@ -183,6 +209,24 @@ class Step:
             for name, value in self.defaults.items():
                 if name not in self.params:
                     self.params[name] = value
+
+            # check for valid backend
+            if type(self.cargo) is Cab:
+                if self.backend is not None:
+                    self._backend = self.backend
+                    if self._backend.name not in stimela.config.AVAILABLE_BACKENDS:
+                        status = stimela.config.get_backend_status(self._backend.name)
+                        raise StepValidationError(f"backend '{self._backend.name}' is not available ({status})")
+                elif self.cargo.backend is not None:
+                    self._backend = self.cargo.backend
+                    if self._backend.name not in stimela.config.AVAILABLE_BACKENDS:
+                        status = stimela.config.get_backend_status(self._backend.name)
+                        raise StepValidationError(f"backend '{self._backend.name}' specified by cab is not available ({status})")
+                # no need to check this, it's checked at startup
+                else:
+                    self._backend =  stimela.CONFIG.opts.backend
+            else:
+                self._backend = None
 
 
 
@@ -332,36 +376,4 @@ class Step:
                     raise StepValidationError(f"invalid outputs: {join_quote(invalid)}", log=self.log)
 
         return params
-
-@dataclass
-class ForLoopClause(object):
-    # name of list variable
-    var: str 
-    # This should be the name of an input that provides a list, or a list
-    over: Any
-    # If True, this is a scatter not a loop -- things may be evaluated in parallel
-    scatter: bool = False
-
-
-def resolve_dotted_reference(key, base, current, context): 
-    """helper function to look up a key like a.b.c in a nested dict-like structure"""
-    path = key.split('.')
-    if path[0]:
-        section = base
-    else:
-        if not current:
-            raise NameError(f"{context}: leading '.' not permitted here")
-        section = current
-        path = path[1:]
-        if not path:
-            raise NameError(f"{context}: '.' not permitted")
-    varname = path[-1]
-    for element in path[:-1]:
-        if not element:
-            raise NameError(f"{context}: '..' not permitted")
-        if element in section:
-            section = section[element]
-        else:
-            raise NameError(f"{context}: '{element}' in '{key}' is not a valid config section")
-    return section, varname
 

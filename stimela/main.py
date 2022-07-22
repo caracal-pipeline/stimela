@@ -110,12 +110,21 @@ def cli(backend, config_files=[], config_dotlist=[], include=[], verbose=False, 
                     config=stimela.CONFIG))
         stimelogging.update_file_logger(log, stimela.CONFIG.opts.log, nesting=-1, subst=subst)
 
-    # set backend module
+
+    # print backends
+    log.info(f"available backends: {' '.join(config.AVAILABLE_BACKENDS)}")
+
+    # get default backend module
     global BACKEND 
     if backend:
         stimela.CONFIG.opts.backend = backend
-    BACKEND = getattr(stimela.backends, stimela.CONFIG.opts.backend.name)
-    log.info(f"backend is {stimela.CONFIG.opts.backend.name}")
+
+    if stimela.CONFIG.opts.backend.name not in config.AVAILABLE_BACKENDS:
+        status = config.get_backend_status(stimela.CONFIG.opts.backend.name)
+        log.error(f"the backend '{stimela.CONFIG.opts.backend.name}' is not available: {status}")
+        sys.exit(1)
+
+    log.info(f"default backend is {stimela.CONFIG.opts.backend.name}")
 
     # report dependencies
     for filename, attrs in config.CONFIG_DEPS.get_description().items():

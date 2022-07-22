@@ -16,6 +16,7 @@ import rich.progress
 import rich.logging
 from rich.tree import Tree
 from rich import print as rich_print
+from rich.markup import escape
 
 class MultiplexingHandler(logging.Handler):
     """handler to send INFO and below to stdout, everything above to stderr"""
@@ -366,7 +367,7 @@ def log_exception(*errors, severity="error"):
     pretty-prints them to the console  as appropriate.
     """
     def exc_message(e):
-        return e.message if isinstance(e, ScabhaBaseException) else str(e)
+        return escape(e.message if isinstance(e, ScabhaBaseException) else str(e))
 
     if severity == "error":
         colour = "bold red"
@@ -382,10 +383,10 @@ def log_exception(*errors, severity="error"):
     def add_dict(dd, tree):
         for field, value in dd.items():
             if isinstance(value, (dict, OrderedDict, DictConfig)):
-                subtree = tree.add(f"{field}:")
+                subtree = tree.add(escape(f"{field}:"))
                 add_dict(value, subtree)
             else:
-                tree.add(f"{field}: {value}")
+                tree.add(escape(f"{field}: {value}"))
 
     def add_nested(excs, tree):
         for exc in excs:
@@ -399,7 +400,7 @@ def log_exception(*errors, severity="error"):
             elif type(exc) is TracebackType:
                 subtree = tree.add(f"[dim]Traceback:[/dim]")
                 for line in traceback.format_tb(exc):
-                    subtree.add(f"[dim]{line.rstrip()}[/dim]")
+                    subtree.add(f"[dim]{escape(line.rstrip())}[/dim]")
             elif isinstance(exc, (dict, OrderedDict, DictConfig)):
                 add_dict(exc, tree)
             else:

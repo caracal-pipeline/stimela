@@ -22,7 +22,7 @@ from scabha.types import File, Directory, MS
 from .cab import Cab
 from .batch import Batch
 
-from .step import Step
+from .step import Step, resolve_dotted_reference
 
 
 class DeferredAlias(Unresolved):
@@ -39,28 +39,6 @@ class ForLoopClause(object):
     # If True, this is a scatter not a loop -- things may be evaluated in parallel
     scatter: bool = False
 
-
-def resolve_dotted_reference(key, base, current, context): 
-    """helper function to look up a key like a.b.c in a nested dict-like structure"""
-    path = key.split('.')
-    if path[0]:
-        section = base
-    else:
-        if not current:
-            raise NameError(f"{context}: leading '.' not permitted here")
-        section = current
-        path = path[1:]
-        if not path:
-            raise NameError(f"{context}: '.' not permitted")
-    varname = path[-1]
-    for element in path[:-1]:
-        if not element:
-            raise NameError(f"{context}: '..' not permitted")
-        if element in section:
-            section = section[element]
-        else:
-            raise NameError(f"{context}: '{element}' in '{key}' is not a valid config section")
-    return section, varname
 
 
 

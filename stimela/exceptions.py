@@ -3,6 +3,9 @@ from scabha.exceptions import *
 class StimelaBaseException(ScabhaBaseException):
     pass
 
+class BackendError(StimelaBaseException):
+    pass
+
 class CabValidationError(StimelaBaseException):
     pass
 

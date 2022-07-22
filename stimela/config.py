@@ -61,14 +61,28 @@ class StimelaLogConfig(object):
 
 ## overall Stimela config schema
 
-
-import stimela.backends.docker
-import stimela.backends.singularity
-import stimela.backends.kubernetes
-import stimela.backends.podman
-import stimela.backends.native
+import stimela.backends
 
 Backend = Enum("Backend", "docker singularity podman kubernetes native", module=__name__)
+
+SUPPORTED_BACKENDS = set(Backend.__members__)
+AVAILABLE_BACKENDS = {}
+BACKEND_STATUS = {}
+
+for _name in SUPPORTED_BACKENDS:
+    backend = __import__(f"stimela.backends.{_name}", fromlist=[_name])
+    if getattr(backend, 'AVAILABLE', None):
+        AVAILABLE_BACKENDS[_name] = backend
+        BACKEND_STATUS[_name] = backend.STATUS
+    else:
+        if hasattr(backend, 'STATUS'):
+            BACKEND_STATUS[_name] = backend.STATUS
+        else:
+            BACKEND_STATUS[_name] = "not implemented"
+
+def get_backend_status(name):
+    return BACKEND_STATUS.get(name, "unknown status")
+
 
 @dataclass
 class StimelaOptions(object):
