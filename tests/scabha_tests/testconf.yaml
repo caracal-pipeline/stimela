@@ -16,3 +16,8 @@ hierarchical:
 flat:
   _use: hierarchical
   _flatten: true
+
+# this is meant to inject into x.y1, the name should also show up in x.y2 via its _use of x.y1
+x:
+  y1:
+    z1: 1

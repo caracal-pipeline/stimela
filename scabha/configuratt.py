@@ -116,7 +116,7 @@ def _resolve_config_refs(conf, pathname: str, location: str, name: str, includes
     includes : bool
         If True, "_include" references will be processed
     use_sources : optional list of OmegaConf objects
-        one or more config object(s) in which to look up "_use" references. None to disable
+        one or more config object(s) in which to look up "_use" references. None to disable _use statements
     include_path (str, optional):
         if set, path to each config file will be included in the section as element 'include_path'
 
@@ -135,9 +135,8 @@ def _resolve_config_refs(conf, pathname: str, location: str, name: str, includes
     """
     errloc = f"config error at {location or 'top level'} in {name}"
     dependencies = ConfigDependencies()
-    use_sources = list(use_sources)
     # self-referencing enabled if first source is ourselves
-    selfrefs =  conf is use_sources[0]
+    selfrefs =  use_sources and conf is use_sources[0]
 
     if isinstance(conf, DictConfig):
 
@@ -529,7 +528,8 @@ def load(path: str, use_sources: Optional[List[DictConfig]] = [], name: Optional
 
     Args:
         path (str): path to config file
-        use_sources (Optional[List[DictConfig]]): list of existing configs to be used to resolve "_use" references, or None to disable
+        use_sources (Optional[List[DictConfig]]): list of existing configs to be used to resolve "_use" references, 
+                or None to disable
         name (Optional[str]): name of this config file, used for error messages
         location (Optional[str]): location where this config is being loaded (if not at root level)
         includes (bool, optional): If True (default), "_include" references will be processed
@@ -550,9 +550,9 @@ def load(path: str, use_sources: Optional[List[DictConfig]] = [], name: Optional
         name = name or os.path.basename(path)
         dependencies = ConfigDependencies()
         dependencies.add(path)
-        use_sources = use_sources or []
-        if selfrefs:
-            use_sources.insert(0, subconf)
+        # include ourself into sources, if _use is in effect, and we've enabled selfrefs
+        if use_sources is not None and selfrefs:
+            use_sources = [subconf] + list(use_sources)
         conf, deps = _resolve_config_refs(subconf, pathname=path, location=location, name=name, includes=includes, use_sources=use_sources, include_path=include_path)
         dependencies.update(deps)
         if use_cache:
