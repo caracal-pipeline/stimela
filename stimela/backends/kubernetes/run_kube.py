@@ -47,7 +47,7 @@ class KubernetesFileInjection(object):
     format: InjectedFileFormats = "txt"
     content: Any = ""
 
-@dataclass 
+@dataclass
 class KubernetesLocalMount(object):
     path: str
     dest: str = ""              # destination path -- same as local if empty
@@ -71,9 +71,9 @@ _kube_client = _kube_config = None
 def get_kube_api():
     global _kube_client
     global _kube_config
-    
+
     if _kube_config is None:
-        _kube_config = True 
+        _kube_config = True
         kubernetes.config.load_kube_config()
 
     return core_v1_api.CoreV1Api()
@@ -111,13 +111,47 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
         raise StimelaCabRuntimeError(f"runtime.kube.namespace must be set")
 
     # form up command
-    args, venv = cab.build_command_line(params, subst, search=False)
-    command_name = args[0]
-    if venv:
-        raise StimelaCabRuntimeError("kubernetes backend does not support cab.virtual_env settings")
-    
+    if cab.flavour=="binary":
+        args, venv = cab.build_command_line(params, subst, search=False)
+        command_name = args[0]
+        if venv:
+            raise StimelaCabRuntimeError("kubernetes backend does not support cab.virtual_env settings")
+    elif cab.flavour in ["python", "python-ext"]:
+        # form up arguments
+        args = []
+        for key, schema in cab.inputs_outputs.items():
+            if not schema.policies.skip:
+                if key in params:
+                    args.append(f"{key}={repr(params[key])}")
+                elif cab.get_schema_policy(schema, 'pass_missing_as_none'):
+                    args.append(f"{key}=None")
+        # form up command string
+        modulename = cab.py_module
+        funcname = cab.py_function
+        command_name = f'({modulename}){funcname}'
+        command = f"""
+import sys, os
+rundir = os.path.abspath('.')
+os.chdir(rundir)
+# sys.path.append('.')
+from {modulename} import {funcname}
+try:
+    from click import Command
+except ImportError:
+    Command = None
+if Command is not None and isinstance({funcname}, Command):
+    print("invoking callable {modulename}.{funcname}() (as click command) using external interpreter")
+else:
+    print("invoking callable {modulename}.{funcname}() using external interpreter")
+retval = {funcname}({','.join(args)})
+print("Return value is", repr(retval))
+    """
+
+    else:
+        raise StimelaCabRuntimeError(f"{cab.flavour} flavour cabs not yet supported by native backend")
+
     cab.reset_runtime_status()
-    
+
     cluster = podname = cluster_name = None
     kube_api = get_kube_api()
 
@@ -136,7 +170,7 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
     numba_cache_dir = os.path.expanduser("~/.cache/numba")
     pathlib.Path(numba_cache_dir).mkdir(parents=True, exist_ok=True)
 
-    with declare_subtask(f"kubernetes:{os.path.basename(command_name)}"):        
+    with declare_subtask(f"kubernetes:{os.path.basename(command_name)}"):
         try:
             if kube.dask_cluster.num_workers:
                 cluster_name = kube.dask_cluster.name
@@ -168,7 +202,7 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
                 kind        =  'Pod',
                 metadata    = dict(name = podname),
                 spec        = dict(
-                    containers = [dict(   
+                    containers = [dict(
                             image   = cab.image,
                             name    = podname,
                             args    = ["/bin/sh", "-c", "while true;do date;sleep 5; done"],
@@ -186,8 +220,8 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
             # add runtime env settings
             for name, value in kube.env.items():
                 value = os.path.expanduser(value)
-                pod_manifest['spec']['containers'][0]['env'].append(dict(name=name, value=value)) 
-            
+                pod_manifest['spec']['containers'][0]['env'].append(dict(name=name, value=value))
+
             # add local mounts
             def add_local_mount(name, path, dest, readonly):
                 name = name.replace("_", "-")  # sanizitze name
@@ -237,6 +271,8 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
                     command = ["/bin/sh", "-c", command]
                 has_input = bool(input)
 
+                import pdb; pdb.set_trace()
+
                 resp = stream(kube_api.connect_get_namespaced_pod_exec, podname, namespace,
                             command=command,
                             stderr=True, stdin=has_input,
@@ -248,11 +284,11 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
                     resp.update(timeout=1)
                     if resp.peek_stdout():
                         for line in resp.read_stdout().rstrip().split("\n"):
-                            dispatch_to_log(log, line, cmdname, "stdout", 
+                            dispatch_to_log(log, line, cmdname, "stdout",
                                             output_wrangler=wrangler)
                     if resp.peek_stderr():
                         for line in resp.read_stderr().rstrip().split("\n"):
-                            dispatch_to_log(log, line, cmdname, "stderr", 
+                            dispatch_to_log(log, line, cmdname, "stderr",
                                             output_wrangler=wrangler)
                     if has_input:
                         if input:
@@ -282,7 +318,7 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
                         if retcode:
                             log.warning(f"injection returns exit code {retcode} after {elapsed()}")
                         else:
-                            log.info(f"injection successful after {elapsed()}") 
+                            log.info(f"injection successful after {elapsed()}")
 
 
             if 'pre_commands' in kube:
@@ -294,12 +330,14 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
                         if retcode:
                             log.warning(f"pre-command returns exit code {retcode} after {elapsed()}")
                         else:
-                            log.info(f"pre-command successful after {elapsed()}") 
+                            log.info(f"pre-command successful after {elapsed()}")
 
             # do we need to chdir
-            if kube.run_dir:
+            if kube.run_dir and cab.flavour not in ["python","python-ext"]:
                 rundir = os.path.abspath(kube.run_dir)
                 args = ["python", "-c", f"import os,sys; os.chdir('{rundir}'); os.execlp('{args[0]}', *sys.argv[1:])"] + list(args)
+            else:
+                args = ["python", "-c", command]
 
             log.info(f"running {command_name} in pod {podname}")
             with declare_subcommand(os.path.basename(command_name)):
@@ -334,12 +372,12 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
             raise StimelaCabRuntimeError("kubernetes backend error", exc)
 
         # cleanup
-        finally: 
+        finally:
             if cluster and not kube.dask_cluster.persist:
                 update_status()
                 log.info(f"stopping dask cluster {cluster_name}")
                 log.info(f"cluster logs: {cluster.get_logs()}")
-                cluster.close() 
+                cluster.close()
             if podname:
                 try:
                     update_status()
@@ -362,17 +400,17 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
 # kubectl -n rarg delete service recipetestqcdaskcluster
 # kubectl -n rarg delete poddisruptionbudget recipetestqcdaskcluster
 # kubectl -n rarg port-forward service/qc-test-cluster 18787:http-dashboard
-# kubectl -n rarg logs pod_id 
+# kubectl -n rarg logs pod_id
 """
 https://kubernetes.dask.org/en/latest/kubecluster.html#dask_kubernetes.KubeCluster
 
-We recommend adding the --death-timeout, '60' arguments and the restartPolicy: Never attribute 
+We recommend adding the --death-timeout, '60' arguments and the restartPolicy: Never attribute
 to your worker specification. This ensures that these pods will clean themselves up if your Python process disappears unexpectedly.
 
 OMS: this should be set in the structure returned by make_pod_spec(). Seems to be set by default.
 
 https://kubernetes.dask.org/en/latest/testing.ht
 
-By default we set the --keep-cluster flag in setup.cfg which means the Kubernetes container will persist between pytest runs to 
+By default we set the --keep-cluster flag in setup.cfg which means the Kubernetes container will persist between pytest runs to
 avoid creation/teardown time. Therefore you may want to manually remove the container when you are done working on dask-kubernetes:
 """
