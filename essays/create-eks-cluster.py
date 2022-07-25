@@ -14,16 +14,17 @@ logging.basicConfig(format="%(levelname)s - %(message)s", level=logging.INFO)
 
 class EKSClusterBuilder:
     EKS_VPC_TEMPLATE = "https://amazon-eks.s3-us-west-2.amazonaws.com/cloudformation/2019-02-11/amazon-eks-vpc-sample.yaml"
-    # EKS_NODE_GROUP_TEMPLATE = "https://amazon-eks.s3-us-west-2.amazonaws.com/cloudformation/2019-02-11/amazon-eks-nodegroup.yaml"
-    EKS_NODE_GROUP_TEMPLATE = "https://s3.us-west-2.amazonaws.com/amazon-eks/cloudformation/2020-10-29/amazon-eks-nodegroup.yaml"
     EKS_CLUSTER_POLICY_ARN = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
     EKS_SERVICE_POLICY_ARN = "arn:aws:iam::aws:policy/AmazonEKSServicePolicy"
     EC2_CONTAINER_REGISTRY_READONLY_ARN = (
         "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
     )
 
-    INSTANCE_TYPE = "t2.medium"
-    NODE_IMAGE_IDS = {"af-south-1": "ami-0cfa14b35e42b97fe"}
+    # Note(sjperkins)
+    # These three need to work well together
+    EKS_NODE_GROUP_TEMPLATE = "https://amazon-eks.s3-us-west-2.amazonaws.com/cloudformation/2019-02-11/amazon-eks-nodegroup.yaml"
+    INSTANCE_TYPE = "t3.micro"
+    NODE_IMAGE_IDS = {"af-south-1": "ami-0c325adf0b41f6c10"}
 
     def __init__(self):
         self._session = boto3.Session()
@@ -34,8 +35,8 @@ class EKSClusterBuilder:
         self._eks_vpc_stack_name = "EKSVPCStack"
         self._eks_cluster_name = "EKSRARGCluster"
         self._eks_worker_stack_name = f"{self._eks_cluster_name}Workers"
-        self._node_group_min = 3
-        self._node_group_max = 5
+        self._node_group_min = 1
+        self._node_group_max = 3
         self._config_file = "kubeconfig.yaml"
         self._keypair_name = f"{self._eks_cluster_name}Key"
         self._secret_file = "secret.pem"
