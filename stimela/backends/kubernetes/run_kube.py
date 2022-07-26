@@ -272,8 +272,6 @@ print("Return value is", repr(retval))
                     command = ["/bin/sh", "-c", command]
                 has_input = bool(input)
 
-                import pdb; pdb.set_trace()
-
                 resp = stream(kube_api.connect_get_namespaced_pod_exec, podname, namespace,
                             command=command,
                             stderr=True, stdin=has_input,
