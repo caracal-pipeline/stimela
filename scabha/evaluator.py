@@ -190,6 +190,8 @@ class Evaluator(object):
         if type(value) is str and self.subst_context is not None:
             try:
                 value = self.subst_context.evaluate(value, location=self.location)
+            except (KeyError, AttributeError) as exc:
+                raise SubstitutionError(f"{value}: invalid key '{exc}'")
             except Exception as exc:
                 raise SubstitutionError(f"{value}: {exc}")
         return value
@@ -223,7 +225,11 @@ class Evaluator(object):
                     raise SubstitutionError(f"{'.'.join(self.location)}: '{'.'.join(args)}' is not defined (at '{fld}')")
                 else:
                     return UNSET('.'.join(args))
-            value = value[fld]
+            # this can still throw an error if a nested interpolation is invoked
+            try:
+                value = value[fld]
+            except (KeyError, AttributeError) as exc:
+                raise SubstitutionError(f"{'.'.join(self.location)}: '{'.'.join(args)}' is unresolved (at '{exc}')")
         return self._resolve(value)
 
     def function(self, funcname, *args):
@@ -322,7 +328,10 @@ class Evaluator(object):
                     except Exception as exc:
                         raise ParserError(f"error parsing formula '{value}' for {'.'.join(self.location)}", exc)
 
-                    return self._evaluate_result(parse_results)
+                    try:
+                        return self._evaluate_result(parse_results)
+                    except Exception as exc:
+                        raise FormulaError(f"evaulation of '{value}' failed", exc)
             return self._resolve(value)
         finally:
             self.location = self.location[:loclen]
@@ -339,6 +348,10 @@ class Evaluator(object):
                     print(f"{name}: {value} ...")
                 try:
                     new_value = self.evaluate(value, sublocation=[name])
+                except AttributeError as err:
+                    if raise_substitution_errors:
+                        raise
+                    new_value = Unresolved(errors=[err])
                 except SubstitutionError as err:
                     if raise_substitution_errors:
                         raise

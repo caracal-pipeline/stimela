@@ -127,7 +127,7 @@ def test_formulas():
         l = "=IFSET(current.f)",
         m = "=IF((previous.x+1)*previous.x == 2, previous.x == 1, previous.y == 0)",
         n = "=IF((-previous.x+1)*(previous.x) == 0, previous.x == 1, previous.y < 0)",
-        o = '=previous.zz',
+        o = '=previous.z',
         p = 'x{previous.zz}',
         q = '=LIST(current.a, current.b, current.c + 1, 0)'
         #q = '=[current.a, current.b, current.c + 1, 0]'
@@ -155,7 +155,7 @@ def test_formulas():
         assert 'l' not in r
         assert r['m'] == True
         assert r['n'] == True
-        assert type(r['o']) is Unresolved
+        assert r['o'] == 'z'
         assert type(r['p']) is Unresolved
         assert r['q'] == ["a1", "=escaped", 2, 0]
 

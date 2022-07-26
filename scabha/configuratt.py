@@ -409,7 +409,9 @@ class ConfigDependencies(object):
         if dirname in self._git_cache:
             return self._git_cache[dirname]
         try:
-            branches = subprocess.check_output("git -c color.ui=never branch -a -v -v".split(), cwd=dirname)
+            branches = subprocess.check_output("git -c color.ui=never branch -a -v -v".split(), 
+                                                cwd=dirname, 
+                                                stderr=subprocess.DEVNULL)
         except subprocess.CalledProcessError as exc:
             self._git_cache[dirname] = None
             return None

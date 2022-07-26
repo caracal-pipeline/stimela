@@ -509,6 +509,8 @@ class Recipe(Cargo):
         subst._add_('steps', {}, nosubst=True)
         subst._add_('previous', {}, nosubst=True)
         subst._add_('recipe', {})
+        if subst_outer is not None and 'root' in subst_outer:
+            subst._add_('root', subst_outer.root)
         subst.recipe._merge_(params)
 
         # update assignments
