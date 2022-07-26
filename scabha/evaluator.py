@@ -15,6 +15,8 @@ from typing import Dict, List, Any
 
 _parser = None
 
+# see https://stackoverflow.com/questions/43244861/pyparsing-infixnotation-optimization for a cleaner parser with functions
+
 def construct_parser():
     lparen = Literal("(").suppress()
     rparen = Literal(")").suppress()
@@ -32,7 +34,7 @@ def construct_parser():
 
     # identifier = Word(alphas, alphanums + "_")
     fieldname = Word(alphas + "_", alphanums + "_-@")
-    nested_field = Group(fieldname + ZeroOrMore(period + fieldname).leave_whitespace()).leave_whitespace()("namespace_lookup")
+    nested_field = Group(fieldname + OneOrMore(period + fieldname))("namespace_lookup")
 
     anyseq = CharsNotIn(",)")("constant")
 
@@ -60,6 +62,8 @@ def construct_parser():
                      Optional(comma_varg|comma_empty) + Optional(comma_varg|comma_empty) + rparen
     glob_ = GLOB + lparen + (varg|anyseq) + rparen
     exists_ = EXISTS + lparen + (varg|anyseq) + rparen
+    # glob_ = GLOB + lparen + (varg) + rparen
+    # exists_ = EXISTS + lparen + (varg) + rparen
     #list_ = LIST + lparen + delimited_list(varg, allow_trailing_delim=True) + rparen
     list_ = (LIST + lparen + varg + rparen) | \
             (LIST + lparen + varg + comma_varg + rparen) | \
@@ -88,10 +92,11 @@ def construct_parser():
             (Literal("|")("op2"), 2, opAssoc.LEFT)
         ] +
         [(Literal(x)("op2"), 2, opAssoc.LEFT) for x in ("==", "!=", ">", "<", ">=", "<=")] +
-        [(Keyword(x)("op2"), 2, opAssoc.LEFT) for x in ("in", "not in")] +
-        [   (Keyword("not")("op1"), 1, opAssoc.RIGHT),
-            (Keyword("and")("op2"), 2, opAssoc.LEFT),
-            (Keyword("or")("op2"), 2, opAssoc.LEFT)
+        [(CaselessKeyword(x)("op2"), 2, opAssoc.LEFT) for x in ("in", "not in")] +
+        [   
+            (CaselessKeyword("not")("op1"), 1, opAssoc.RIGHT),
+            (CaselessKeyword("and")("op2"), 2, opAssoc.LEFT),
+            (CaselessKeyword("or")("op2"), 2, opAssoc.LEFT)
         ]
     )
     infix = infix_notation(function | atomic_value, operators)("subexpression")
@@ -315,7 +320,7 @@ class Evaluator(object):
                     try:
                         parse_results = parse_string(value[1:])
                     except Exception as exc:
-                        raise ParserError(f"{'.'.join(self.location)}: error parsing formula ({exc})")
+                        raise ParserError(f"error parsing formula '{value}' for {'.'.join(self.location)}", exc)
 
                     return self._evaluate_result(parse_results)
             return self._resolve(value)

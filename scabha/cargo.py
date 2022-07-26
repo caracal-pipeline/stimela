@@ -20,7 +20,6 @@ from .types import *
 ## almost supported by omegaconf, see https://github.com/omry/omegaconf/issues/144, for now just use Any
 ListOrString = Any   
 
-
 Conditional = Optional[str]
 
 @dataclass 
@@ -111,7 +110,7 @@ class Parameter(object):
     element_choices: Optional[List[Any]] = None
 
     # default value
-    default: Optional[Any] = None
+    default: Any = UNSET
 
     # list of aliases for this parameter (i.e. references to other parameters whose schemas/values this parameter shares)
     aliases: Optional[List[str]] = ()
@@ -364,7 +363,7 @@ class Cargo(object):
                     default = self.defaults.get(name, schema.default)
                     if schema.implicit:
                         attrs.append(f"implicit: {schema.implicit}")
-                    if default is not None and not isinstance(default, Unresolved):
+                    if default is not UNSET and not isinstance(default, Unresolved):
                         attrs.append(f"default: {default}")
                     if schema.choices:
                         attrs.append(f"choices: {', '.join(schema.choices)}")

@@ -314,7 +314,7 @@ def _resolve_config_refs(conf, pathname: str, location: str, name: str, includes
 PATH = ['.']
 
 # path for cache
-CACHEDIR = os.path.expanduser("~/.cache/configuratt")
+CACHEDIR = os.environ.get("CONFIGURATT_CACHE_DIR") or os.path.expanduser("~/.cache/configuratt")
 
 # package version info stored with code dependencies
 PACKAGE_VERSION = None
