@@ -1,5 +1,6 @@
 import click
-from .cargo import Parameter
+from scabha.exceptions import SchemaError
+from .cargo import Parameter, UNSET
 from typing import *
 from .types import *
 from dataclasses import make_dataclass, field
@@ -45,7 +46,7 @@ def schema_to_dataclass(io: Dict[str, Parameter], class_name: str, bases=(), pos
             metadata['element_choices'] = schema.element_choices
         metadata['required'] = required = schema.required
 
-        if required and schema.default is not None:
+        if required and schema.default is not UNSET:
             raise SchemaError(
                 f"Field '{fldname}' is required but specifies a default. "
                 f"This behaviour is unsupported/ambiguous."
@@ -63,9 +64,9 @@ def schema_to_dataclass(io: Dict[str, Parameter], class_name: str, bases=(), pos
             fld = field(default_factory=default_wrapper(dict, schema.default),
                         metadata=metadata)
         elif schema.default is UNSET:
-            fld = field(metadata=metadata)
+            fld = field(default=None, metadata=metadata)
         else:
-            fld = field(schema.default, metadata=metadata)
+            fld = field(default=schema.default, metadata=metadata)
 
         fields.append((fldname, schema._dtype, fld))
 
