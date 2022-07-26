@@ -14,6 +14,8 @@ from .exceptions import NestedSchemaError, ParameterValidationError, DefinitionE
 from .validate import validate_parameters, Unresolved
 from .substitutions import SubstitutionNS
 from .basetypes import EmptyDictDefault, EmptyListDefault
+
+# need * imports from both to make eval(self.dtype, globals()) work
 from typing import *
 from .types import *
 
