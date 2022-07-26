@@ -3,7 +3,7 @@ from .cargo import Parameter
 from typing import *
 from .types import *
 from dataclasses import make_dataclass, field
-from omegaconf import OmegaConf
+from omegaconf import OmegaConf, MISSING
 from collections import OrderedDict, MutableSet, MutableSequence, MutableMapping
 
 def schema_to_dataclass(io: Dict[str, Parameter], class_name: str, bases=(), post_init: Optional[Callable] =None):
@@ -43,8 +43,17 @@ def schema_to_dataclass(io: Dict[str, Parameter], class_name: str, bases=(), pos
             metadata['choices'] = schema.choices
         if schema.element_choices:
             metadata['element_choices'] = schema.element_choices
+        metadata['required'] = required = schema.required
 
-        if isinstance(schema.default, MutableSequence):
+        if required and schema.default is not None:
+            raise SchemaError(
+                f"Field '{fldname}' is required but specifies a default. "
+                f"This behaviour is unsupported/ambiguous."
+            )
+
+        if required:
+            fld = field(default=MISSING, metadata=metadata)
+        elif isinstance(schema.default, MutableSequence):
             fld = field(default_factory=default_wrapper(list, schema.default),
                         metadata=metadata)
         elif isinstance(schema.default, MutableSet):
