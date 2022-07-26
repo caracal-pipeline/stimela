@@ -1,5 +1,11 @@
 import os.path
 
+# # marker for unset defaults
+# class UnsetClass(object):
+#     pass
+
+UNSET = "<UNSET>"
+
 class File(str):
 
     @property

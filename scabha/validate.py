@@ -17,7 +17,7 @@ from .exceptions import Error, ParameterValidationError, SchemaError, Substituti
 from .substitutions import SubstitutionNS, substitutions_from
 from .types import File, Directory, MS
 from .evaluator import Evaluator
-
+from .types import UNSET
 
 def join_quote(values):
     return "'" + "', '".join(values) + "'" if values else ""
@@ -125,7 +125,7 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
     inputs = OrderedDict((name, value) for name, value in params.items() if name in schemas)
     
     # build dict of all defaults 
-    all_defaults = {name: schema.default for name, schema in schemas.items() if schema.default is not None}
+    all_defaults = {name: schema.default for name, schema in schemas.items() if schema.default is not UNSET}
     if defaults:
         all_defaults.update(**{name: value for name, value in defaults.items() if name in schemas})
 
@@ -235,10 +235,6 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
                             if not os.path.isdir(files[0]):
                                 raise ParameterValidationError(f"'{mkname(name)}': {value} is not a directory")
                     inputs[name] = files[0]
-                    if create_dirs:
-                        dirname = os.path.dirname(files[0])
-                        if dirname:
-                            os.makedirs(dirname, exist_ok=True)
             # else make list
             else:
                 # check that files are files and dirs are dirs
@@ -249,11 +245,6 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
                     if not all(os.path.isdir(f) for f in files if os.path.exists(f)):
                         raise ParameterValidationError(f"{mkname(name)}: {value} matches non-directories")
                 inputs[name] = files
-                if create_dirs:
-                    for path in files:
-                        dirname = os.path.dirname(path)
-                        if dirname:
-                            os.makedirs(dirname, exist_ok=True)
 
     # validate
     try:   
@@ -273,9 +264,9 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
     # check for mkdir directives
     if create_dirs:
         for name, value in validated.items():
-            if schemas[name].mkdir:
+            if schemas[name].mkdir and isinstance(value, str):
                 dirname = os.path.dirname(value)
-                if dirname:
+                if dirname and not os.path.exists(dirname):
                     os.makedirs(dirname, exist_ok=True)
 
     # add in unresolved values

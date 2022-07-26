@@ -62,8 +62,10 @@ def schema_to_dataclass(io: Dict[str, Parameter], class_name: str, bases=(), pos
         elif isinstance(schema.default, MutableMapping):
             fld = field(default_factory=default_wrapper(dict, schema.default),
                         metadata=metadata)
+        elif schema.default is UNSET:
+            fld = field(metadata=metadata)
         else:
-            fld = field(default=schema.default, metadata=metadata)
+            fld = field(schema.default, metadata=metadata)
 
         fields.append((fldname, schema._dtype, fld))
 
@@ -142,9 +144,14 @@ def clickify_parameters(schemas: Dict[str, Any]):
             if schema.abbreviation:
                 optnames.append(f"-{schema.abbreviation}")
 
-            deco = click.option(*optnames, type=dtype,
-                                default=schema.default, required=schema.required, metavar=schema.metavar,
-                                help=schema.info)
+            if schema.default is UNSET:
+                deco = click.option(*optnames, type=dtype,
+                                    required=schema.required, 
+                                    metavar=schema.metavar,help=schema.info)
+            else:
+                deco = click.option(*optnames, type=dtype,
+                                    default=schema.default, required=schema.required, 
+                                    metavar=schema.metavar,help=schema.info)
 
             if decorator_chain is None:
                 decorator_chain = deco

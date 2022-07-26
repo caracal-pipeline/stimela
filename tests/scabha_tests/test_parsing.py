@@ -14,27 +14,34 @@ def test_parser():
     a = expr.parseString("IFSET(a.b)", parse_all=True)
     print(a.dump())
 
-    a = expr.parseString("a==b", parse_all=True)
-    print(a.dump())
+    # a = expr.parseString("IFSET(a.b)+IFSET(a.b)", parse_all=True)
+    # print(a.dump())
+
+    # a = expr.parseString("a.x==b.x", parse_all=True)
+    # print(a.dump())
 
 
-    a = expr.parseString("(a==0)==IF(a==0,1,2,3)", parse_all=True)
-    print(a.dump())
+    # a = expr.parseString("(a.x==0)==IF(a.x==0,1,2,3)", parse_all=True)
+    # print(a.dump())
 
-    a = expr.parseString("IFSET(a.b, (a==0)==(a==0),(a!=b))", parse_all=True)
-    print(a.dump())
+    # a = expr.parseString("IFSET(a.b, (a.x==0)==(a.x==0),(a.x!=b.x))", parse_all=True)
+    # print(a.dump())
 
-    a = expr.parse_string("IF((previous.x+1)*previous.x == 2, previous.x == 0, previous.y == 0)", parse_all=True)
+    # print("===")
+    # a = expr.parseString("a.b OR a.b", parse_all=True)
+    # print(a.dump())
 
-    expr.runTests("""
-        (a==0)
-        ((a==0)==(a==0))
-        IFSET(a.b)
-        IFSET(a.b, (a==0)==(a==0),(a!=b))
-        IF((previous.x+1)*previous.x == 2, previous.x is 0, previous.y is not 0)
-        IF((-previous.x+1)*previous.x == 0, previous.x is 0, previous.y < 0)
-        a. b
-        """)
+    # a = expr.parse_string("IF((previous.x+1)*previous.x == 2, previous.x == 0, previous.y == 0)", parse_all=True)
+
+    # expr.runTests("""
+    #     (a==0)
+    #     ((a==0)==(a==0))
+    #     IFSET(a.b)
+    #     IFSET(a.b, (a==0)==(a==0),(a!=b))
+    #     IF((previous.x+1)*previous.x == 2, previous.x is 0, previous.y is not 0)
+    #     IF((-previous.x+1)*previous.x == 0, previous.x is 0, previous.y < 0)
+    #     a.b
+    #     """)
 
 #    a = expr.parse_string("((a.x))")
     

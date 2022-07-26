@@ -18,10 +18,9 @@ from scabha.exceptions import SubstitutionError, SubstitutionErrorList
 from scabha.validate import evaluate_and_substitute, Unresolved, join_quote
 from scabha.substitutions import SubstitutionNS, substitutions_from 
 from scabha.cargo import Parameter, Cargo, ParameterCategory
-from scabha.types import File, Directory, MS
+from scabha.types import File, Directory, MS, UNSET
 from .cab import Cab
 from .batch import Batch
-
 from .step import Step, resolve_dotted_reference
 
 
@@ -183,7 +182,7 @@ class Recipe(Cargo):
             # it will be in subst.recipe if it was assigned, or is an input
             if basevar in subst.recipe:
                 value = str(subst.recipe[basevar])
-            elif basevar in self.inputs_outputs and self.inputs_outputs[basevar].default is not None:
+            elif basevar in self.inputs_outputs and self.inputs_outputs[basevar].default is not UNSET:
                 value = str(self.inputs_outputs[basevar].default)
             elif '.' in basevar:
                 section, varname = resolve_config_variable(basevar)
@@ -358,11 +357,14 @@ class Recipe(Cargo):
                 io = self.inputs if input_schema else self.outputs
                 # if we have a schema defined for the alias, some params must be inherited from it 
                 own_schema = io.get(alias_name)
-                # define schema based on copy of the target
+                # define schema based on copy of the target, but preserve default
                 io[alias_name] = copy.copy(schema)
                 alias_schema = io[alias_name] 
-                # default set from own schema     
-                if own_schema is not None and own_schema.default is not None:
+                # default set from own schema, ignoring parameter setting 
+                if own_schema is not None and own_schema.default is not UNSET:
+                    # also clear parameter setting to propagate our default
+                    if step_param_name in step.params:
+                        del step.params[step_param_name]
                     alias_schema.default = own_schema.default
                 if own_schema and own_schema.info is not None:
                     alias_schema.info = own_schema.info
@@ -382,10 +384,10 @@ class Recipe(Cargo):
 
             # this is True if the step's parameter is defined in any way (set, default, or implicit)
             have_step_param = step_param_name in step.params or step_param_name in step.cargo.defaults or \
-                schema.default is not None or schema.implicit is not None
+                alias_schema.default is not UNSET or alias_schema.implicit is not None
 
             # if the step parameter is set and ours isn't, mark our schema as having a default
-            if have_step_param and alias_schema.default is None:
+            if have_step_param and alias_schema.default is UNSET:
                 alias_schema.default = DeferredAlias(f"{step_label}.{step_param_name}")
 
             # alias becomes required if any step parameter it refers to was required, but wasn't already set 
@@ -452,7 +454,7 @@ class Recipe(Cargo):
             for label, step in self.steps.items():
                 for name, schema in step.inputs_outputs.items():
                     if (label, name) not in self._alias_map and name not in step.params  \
-                            and name not in step.cargo.defaults and schema.default is None \
+                            and name not in step.cargo.defaults and schema.default is UNSET \
                             and not schema.implicit:
                         auto_name = f"{label}_{name}"
                         if auto_name in self.inputs or auto_name in self.outputs:
@@ -765,7 +767,7 @@ class Recipe(Cargo):
                 subst._add_(section, content, nosubst=True)
 
         # add root-level recipe info
-        if self.nesting <= 1:
+        if self.nesting < 1:
             Recipe._root_recipe_ns = recipe_ns
         subst._add_('root', Recipe._root_recipe_ns)
 

@@ -14,6 +14,7 @@ import scabha.exceptions
 from scabha.exceptions import SubstitutionError, SubstitutionErrorList
 from scabha.validate import evaluate_and_substitute, Unresolved, join_quote
 from scabha.substitutions import SubstitutionNS, substitutions_from 
+from scabha.types import UNSET
 from .cab import Cab
 
 Conditional = Optional[str]
@@ -202,7 +203,7 @@ class Step:
 
             # build dictionary of defaults from cargo
             self.defaults = {name: schema.default for name, schema in self.cargo.inputs_outputs.items() 
-                             if schema.default is not None and not isinstance(schema.default, Unresolved) }
+                             if schema.default is not UNSET and not isinstance(schema.default, Unresolved) }
             self.defaults.update(**self.cargo.defaults)
             
             # set missing parameters from defaults
@@ -266,7 +267,8 @@ class Step:
             if self._skip is None and subst is not None:
                 skips = dict(skip=self.skip)
                 skips = evaluate_and_substitute(skips, subst, subst.current, location=[self.fqname], ignore_subst_errors=False)
-                skip = skips["skip"]
+                self.log.debug(f"dynamic skip attribute evaluation returns {skips}")
+                skip = skips.get("skip")
 
             # Since prevalidation will have populated default values for potentially missing parameters, use those values
             # For parameters that aren't missing, use whatever value that was suplied
@@ -293,7 +295,7 @@ class Step:
                     exc.logged = True
                 self.log_summary(level, "summary of inputs follows", color="WARNING")
                 # raise up, unless step is being skipped
-                if self.skip:
+                if skip:
                     self.log.warning("since the step is being skipped, this is not fatal")
                     skip_warned = True
                 else:
