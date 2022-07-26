@@ -129,10 +129,11 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
         modulename = cab.py_module
         funcname = cab.py_function
         command_name = f'({modulename}){funcname}'
+        # LB - why is this in an if statment below? Won't it always be the case?
+        rundir = os.path.abspath(kube.run_dir)
         command = f"""
 import sys, os
-rundir = os.path.abspath('.')
-os.chdir(rundir)
+os.chdir('{rundir}')
 # sys.path.append('.')
 from {modulename} import {funcname}
 try:
