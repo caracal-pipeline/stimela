@@ -668,8 +668,8 @@ class Recipe(Cargo):
             info = SubstitutionNS(fqname=self.fqname)
             subst._add_('info', info, nosubst=True)
             subst._add_('config', self.config, nosubst=True) 
-            subst._add_('recipe', self.make_substitition_namespace(params))
-            # 'current' points to recipe's parameters initially, 
+
+            subst.recipe = self.make_substitition_namespace(params)
             subst.current = subst.recipe
 
         return Cargo.validate_inputs(self, params, subst=subst, loosely=loosely)
@@ -736,7 +736,7 @@ class Recipe(Cargo):
             steps_tree = tree.add("No recipe steps defined")
 
 
-    def _run(self, params) -> Dict[str, Any]:
+    def _run(self, params, subst=None) -> Dict[str, Any]:
         """Internal recipe run method. Meant to be called from a wrapper Step object (which validates the parameters, etc.)
 
         Parameters
@@ -753,123 +753,134 @@ class Recipe(Cargo):
         """
 
         # set up substitution namespace
-        subst = SubstitutionNS()
+        if subst is None:
+            subst = SubstitutionNS()
+
         info = SubstitutionNS(fqname=self.fqname, label='', label_parts=[], suffix='')
         # nosubst=True means these sub-namespaces are not subject to {}-substitutions
         subst._add_('info', info.copy(), nosubst=True)
         subst._add_('config', self.config, nosubst=True)
         subst._add_('steps', {}, nosubst=True)
         subst._add_('previous', {}, nosubst=True)
+            
         recipe_ns = self.make_substitition_namespace(params)
         subst._add_('recipe', recipe_ns)
 
-        # merge in config sections, except "recipe" which clashes with our namespace
-        for section, content in self.config.items():
-            if section != 'recipe':
-                subst._add_(section, content, nosubst=True)
+        # # merge in config sections, except "recipe" which clashes with our namespace
+        # for section, content in self.config.items():
+        #     if section != 'recipe':
+        #         subst._add_(section, content, nosubst=True)
 
         # add root-level recipe info
         if self.nesting < 1:
             Recipe._root_recipe_ns = recipe_ns
         subst._add_('root', Recipe._root_recipe_ns)
 
-        # update variable assignments
-        self.update_assignments(subst, params=params)
-        stimelogging.update_file_logger(self.log, self.logopts, nesting=self.nesting, subst=subst, location=[self.fqname])
+        subst_copy = subst.copy()
 
-        # Harmonise before running
-        self._link_steps()
+        try:
+            # update variable assignments
+            self.update_assignments(subst, params=params)
+            stimelogging.update_file_logger(self.log, self.logopts, nesting=self.nesting, subst=subst, location=[self.fqname])
 
-        self.log.info(f"running recipe '{self.name}'")
+            # Harmonise before running
+            self._link_steps()
 
-        # our inputs have been validated, so propagate aliases to steps. Check for missing stuff just in case
-        for name, schema in self.inputs.items():
-            if name in params:
-                value = params[name]
-                if isinstance(value, Unresolved):
-                    raise RecipeValidationError(f"recipe '{self.name}' has unresolved input '{name}'", log=self.log)
-                # propagate up all aliases
-                for alias in self._alias_list.get(name, []):
-                    if alias.from_recipe:
-                        alias.step.update_parameter(alias.param, value)
-            else:
-                if schema.required: 
-                    raise RecipeValidationError(f"recipe '{self.name}' is missing required input '{name}'", log=self.log)
+            self.log.info(f"running recipe '{self.name}'")
 
-        # iterate over for-loop values (if not looping, this is set up to [None] in advance)
-        scatter = getattr(self.for_loop, "scatter", False)
-        
-        def loop_worker(inst, step, label, subst, count, iter_var):
-            """"
-            Needed for concurrency
-            """
-
-            # update step info
-            inst._prep_step(label, step, subst)
-
-            # if for-loop, assign new value
-            if inst.for_loop:
-                inst.log.info(f"for loop iteration {count}: {inst.for_loop.var} = {iter_var}")
-                # update variable (in params, if expected there, else in assignments)
-                if inst.for_loop.var in inst.inputs_outputs:
-                    params[inst.for_loop.var] = iter_var
+            # our inputs have been validated, so propagate aliases to steps. Check for missing stuff just in case
+            for name, schema in self.inputs.items():
+                if name in params:
+                    value = params[name]
+                    if isinstance(value, Unresolved):
+                        raise RecipeValidationError(f"recipe '{self.name}' has unresolved input '{name}'", log=self.log)
+                    # propagate up all aliases
+                    for alias in self._alias_list.get(name, []):
+                        if alias.from_recipe:
+                            alias.step.update_parameter(alias.param, value)
                 else:
-                    inst.assign[inst.for_loop.var] = iter_var
-                # update variable index
-                inst.assign[f"{inst.for_loop.var}@index"] = count
-                stimelogging.declare_subtask_attributes(f"{count+1}/{len(inst._for_loop_values)}")
+                    if schema.required: 
+                        raise RecipeValidationError(f"recipe '{self.name}' is missing required input '{name}'", log=self.log)
 
-            # update and re-evaluate assignments
-            inst.update_assignments(subst, params=params)
-            inst.update_assignments(subst, whose=step, params=params)
-            stimelogging.update_file_logger(step.log, step.logopts, nesting=step.nesting, subst=subst, location=[step.fqname])
-            subst.info = info.copy()
-            stimelogging.update_file_logger(inst.log, inst.logopts, nesting=inst.nesting, subst=subst, location=[inst.fqname])
+            # iterate over for-loop values (if not looping, this is set up to [None] in advance)
+            scatter = getattr(self.for_loop, "scatter", False)
             
-            inst.log.info(f"processing step '{label}'")
-            try:
-                #step_params = step.run(subst=subst.copy(), batch=batch)  # make a copy of the subst dict since recipe might modify
-                step_params = step.run(subst=subst.copy())  # make a copy of the subst dict since recipe might modify
-            except ScabhaBaseException as exc:
-                if not exc.logged:
-                    log_exception(StimelaStepExecutionError(f"error running step '{label}'", exc))
-                    exc.logged = True
-                raise
+            def loop_worker(inst, step, label, subst, count, iter_var):
+                """"
+                Needed for concurrency
+                """
 
-            # put step parameters into previous and steps[label] again, as they may have changed based on outputs)
-            subst.previous = step_params
-            subst.steps[label] = subst.previous
+                # update step info
+                inst._prep_step(label, step, subst)
 
-        loop_futures = []
+                # if for-loop, assign new value
+                if inst.for_loop:
+                    inst.log.info(f"for loop iteration {count}: {inst.for_loop.var} = {iter_var}")
+                    # update variable (in params, if expected there, else in assignments)
+                    if inst.for_loop.var in inst.inputs_outputs:
+                        params[inst.for_loop.var] = iter_var
+                    else:
+                        inst.assign[inst.for_loop.var] = iter_var
+                    # update variable index
+                    inst.assign[f"{inst.for_loop.var}@index"] = count
+                    stimelogging.declare_subtask_attributes(f"{count+1}/{len(inst._for_loop_values)}")
 
-        for count, iter_var in enumerate(self._for_loop_values):
-            for label, step in self.steps.items():
-                this_args = (self,step, label, subst, count, iter_var)
-                loop_futures.append(this_args)
+                # update and re-evaluate assignments
+                inst.update_assignments(subst, params=params)
+                inst.update_assignments(subst, whose=step, params=params)
+                stimelogging.update_file_logger(step.log, step.logopts, nesting=step.nesting, subst=subst, location=[step.fqname])
+                # set our info back temporarily to update log assignments
+                info_step = subst.info
+                subst.info = info.copy()
+                stimelogging.update_file_logger(inst.log, inst.logopts, nesting=inst.nesting, subst=subst, location=[inst.fqname])
+                subst.info = info_step
 
-        # Transpose the list before parsing to pool.map()
-        loop_args = list(map(list, zip(*loop_futures)))
-        max_workers = getattr(self.config.opts.dist, "ncpu", cpu_count()//4)
-        if scatter:
-            loop_pool = ProcessPool(max_workers, scatter=True)
-            results = loop_pool.amap(loop_worker, *loop_args)
-            while not results.ready():
-                time.sleep(1)
-            results.get()
-        else:
-            # loop_pool = SerialPool(max_workers)
-            # results = list(loop_pool.imap(loop_worker, *loop_args))
-            results = [loop_worker(*args) for args in loop_futures]
+                inst.log.info(f"processing step '{label}'")
+                try:
+                    #step_params = step.run(subst=subst.copy(), batch=batch)  # make a copy of the subst dict since recipe might modify
+                    step_params = step.run(subst=subst.copy())  # make a copy of the subst dict since recipe might modify
+                except ScabhaBaseException as exc:
+                    if not exc.logged:
+                        log_exception(StimelaStepExecutionError(f"error running step '{label}'", exc))
+                        exc.logged = True
+                    raise
 
-        # now check for output aliases that need to be propagated down
-        for name, aliases in self._alias_list.items():
-            for alias in aliases:
-                if alias.from_step:
-                    if alias.param in alias.step.validated_params:
-                        params[name] = alias.step.validated_params[alias.param]
+                # put step parameters into previous and steps[label] again, as they may have changed based on outputs)
+                subst.previous = step_params
+                subst.steps[label] = subst.previous
 
-        self.log.info(f"recipe '{self.name}' executed successfully")
-        return OrderedDict((name, value) for name, value in params.items() if name in self.outputs)
+            loop_futures = []
+
+            for count, iter_var in enumerate(self._for_loop_values):
+                for label, step in self.steps.items():
+                    this_args = (self,step, label, subst, count, iter_var)
+                    loop_futures.append(this_args)
+
+            # Transpose the list before parsing to pool.map()
+            loop_args = list(map(list, zip(*loop_futures)))
+            max_workers = getattr(self.config.opts.dist, "ncpu", cpu_count()//4)
+            if scatter:
+                loop_pool = ProcessPool(max_workers, scatter=True)
+                results = loop_pool.amap(loop_worker, *loop_args)
+                while not results.ready():
+                    time.sleep(1)
+                results.get()
+            else:
+                # loop_pool = SerialPool(max_workers)
+                # results = list(loop_pool.imap(loop_worker, *loop_args))
+                results = [loop_worker(*args) for args in loop_futures]
+
+            # now check for output aliases that need to be propagated down
+            for name, aliases in self._alias_list.items():
+                for alias in aliases:
+                    if alias.from_step:
+                        if alias.param in alias.step.validated_params:
+                            params[name] = alias.step.validated_params[alias.param]
+
+            self.log.info(f"recipe '{self.name}' executed successfully")
+            return OrderedDict((name, value) for name, value in params.items() if name in self.outputs)
+        finally:
+            subst.update(subst_copy)
 
 
     # def run(self, **params) -> Dict[str, Any]:

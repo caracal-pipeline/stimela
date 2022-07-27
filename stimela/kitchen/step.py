@@ -322,7 +322,7 @@ class Step:
 
             if not skip:
                 if type(self.cargo) is Recipe:
-                    self.cargo._run(params)
+                    self.cargo._run(params, subst)
                 elif type(self.cargo) is Cab:
                     if self.backend is not None:
                         backend = self.backend
