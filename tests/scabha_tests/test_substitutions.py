@@ -118,8 +118,9 @@ def test_formulas():
         c = '=previous.x',
         d = '=IFSET(previous.x)',
         e = '=IFSET(previous.x,"z",2)',
+        e1 = '=IFSET(previous.x,SELF,2)',
         f = '=IFSET(previous.xx)',
-        g = '=IFSET(previous.xx,,2)',
+        g = '=IFSET(previous.xx,SELF,2)',
         h = "=IF(previous.x, True, 'False')", 
         i = "=IF(previous.x0, True, 'False')",
         j = "=IF(previous.xx, True, 'False', 'UNSET')",
@@ -146,6 +147,7 @@ def test_formulas():
         assert r['c'] == 1
         assert r['d'] == 1 
         assert r['e'] == "z"
+        assert r['e1'] == 1
         assert 'f' not in r 
         assert r['g'] == 2
         assert r['h'] == True

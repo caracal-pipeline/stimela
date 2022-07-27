@@ -4,6 +4,8 @@ import pyparsing
 pyparsing.ParserElement.enable_packrat()
 from pyparsing import *
 from pyparsing import common
+from functools import reduce
+import operator
 
 from .substitutions import SubstitutionError, SubstitutionContext
 from .basetypes import Unresolved
@@ -25,20 +27,18 @@ def construct_parser():
     comma = Literal(",").suppress()
     period = Literal(".").suppress()
     string = (QuotedString('"') | QuotedString("'"))("constant")
-
+    UNSET = Keyword("UNSET")("unset")
+    SELF = Keyword("SELF")("self_value")
     bool_false = (Keyword("False") | Keyword("false"))("bool_false").set_parse_action(lambda:[False])
     bool_true = (Keyword("True") | Keyword("true"))("bool_true").set_parse_action(lambda:[True])
-    boolean = (bool_true | bool_false)("constant")
 
+    boolean = (bool_true | bool_false)("constant")
     number = common.number("constant")
 
-    # identifier = Word(alphas, alphanums + "_")
     fieldname = Word(alphas + "_", alphanums + "_-@")
     nested_field = Group(fieldname + OneOrMore(period + fieldname))("namespace_lookup")
-
     anyseq = CharsNotIn(",)")("constant")
 
-    UNSET = Keyword("UNSET")("unset")
     # functions
     IF = Keyword("IF")
     IFSET = Keyword("IFSET")
@@ -49,61 +49,41 @@ def construct_parser():
     # allow expression to be used recursively
     expr = Forward()
     
-    # parenthesized expression
-    subexpr = Group(lparen + expr + rparen)("subexpression")
+    # functions
+    functions = reduce(operator.or_, map(Keyword, ["IF", "IFSET", "GLOB", "EXISTS", "LIST"]))
+    # these functions take one argument, which could also be a sequence
+    anyseq_functions = reduce(operator.or_, map(Keyword, ["GLOB", "EXISTS"]))
 
-    atomic_value = (boolean | UNSET | nested_field | string | number) #("atomic_value")
-    comma_empty = Group(comma + Empty())("empty")
-    varg = expr
-    comma_varg = comma + varg
+    atomic_value = (boolean | UNSET | nested_field | string | number)
 
-    if_ = IF + lparen + varg + comma_varg + comma_varg + Optional(comma_varg) + rparen
-    ifset_ = IFSET + lparen + nested_field + Optional(comma_varg|comma_empty) + \
-                     Optional(comma_varg|comma_empty) + Optional(comma_varg|comma_empty) + rparen
-    glob_ = GLOB + lparen + (varg|anyseq) + rparen
-    exists_ = EXISTS + lparen + (varg|anyseq) + rparen
-    # glob_ = GLOB + lparen + (varg) + rparen
-    # exists_ = EXISTS + lparen + (varg) + rparen
-    #list_ = LIST + lparen + delimited_list(varg, allow_trailing_delim=True) + rparen
-    list_ = (LIST + lparen + varg + rparen) | \
-            (LIST + lparen + varg + comma_varg + rparen) | \
-            (LIST + lparen + varg + comma_varg + comma_varg + rparen) | \
-            (LIST + lparen + varg + comma_varg + comma_varg + rparen) | \
-            (LIST + lparen + varg + comma_varg + comma_varg + comma_varg + rparen) | \
-            (LIST + lparen + varg + comma_varg + comma_varg + comma_varg + comma_varg + rparen) | \
-            (LIST + lparen + varg + comma_varg + comma_varg + comma_varg + comma_varg + comma_varg + rparen) 
-
-    # function call
-    function = (list_ | ifset_ | if_ | glob_  | exists_)("function")
-    
-    # list constructor
-    #list_constructor = Group(lbrack + delimitedList(expr, ",", allow_trailing_delim=True) + rbrack)("list_constructor")
-    list_constructor = Group(lbrack + varg + comma_varg + comma_varg)("list_constructor")
-
+    function_call_anyseq = Group(anyseq_functions + lparen + anyseq + rparen)("function")
+    function_call = Group(functions + lparen + 
+                    Opt(delimited_list(expr|SELF)) + 
+                    rparen)("function")
     operators = (
-        [(Literal("**")("op2"), 2, opAssoc.LEFT)] + 
-        [(Literal(x)("op1"), 1, opAssoc.RIGHT) for x in "-+~"] + 
-        [(Literal(x)("op2"), 2, opAssoc.LEFT) for x in ("*", "//", "/", "%")] +
-        [(Literal(x)("op2"), 2, opAssoc.LEFT) for x in "+-"] +
-        [(Literal(x)("op2"), 2, opAssoc.LEFT) for x in ("<<", ">>")] +
-        [
-            (Literal("&")("op2"), 2, opAssoc.LEFT),
-            (Literal("^")("op2"), 2, opAssoc.LEFT),
-            (Literal("|")("op2"), 2, opAssoc.LEFT)
-        ] +
-        [(Literal(x)("op2"), 2, opAssoc.LEFT) for x in ("==", "!=", ">", "<", ">=", "<=")] +
-        [(CaselessKeyword(x)("op2"), 2, opAssoc.LEFT) for x in ("in", "not in")] +
-        [   
-            (CaselessKeyword("not")("op1"), 1, opAssoc.RIGHT),
-            (CaselessKeyword("and")("op2"), 2, opAssoc.LEFT),
-            (CaselessKeyword("or")("op2"), 2, opAssoc.LEFT)
-        ]
+        (Literal("**")("op2"), 2, opAssoc.LEFT), 
+        ((Literal("-")|Literal("+")|Literal("~"))
+            ("op1"), 1, opAssoc.RIGHT), 
+        ((Literal("*")|Literal("//")|Literal("/")|Literal("%"))
+            ("op2"), 2, opAssoc.LEFT),
+        ((Literal("+")|Literal("-"))
+            ("op2"), 2, opAssoc.LEFT),
+        ((Literal("<<")|Literal(">>"))
+            ("op2"), 2, opAssoc.LEFT),
+        (Literal("&")("op2"), 2, opAssoc.LEFT),
+        (Literal("^")("op2"), 2, opAssoc.LEFT),
+        (Literal("|")("op2"), 2, opAssoc.LEFT),
+        (reduce(operator.or_, map(Literal, ("==", "!=", ">", "<", ">=", "<=")))("op2"),
+            2, opAssoc.LEFT),
+        ((CaselessKeyword("in")|CaselessKeyword("not in"))("op2"), 2, opAssoc.LEFT),
+        (CaselessKeyword("not")("op1"), 1, opAssoc.RIGHT),
+        ((CaselessKeyword("and")|CaselessKeyword("or"))("op2"), 2, opAssoc.LEFT),
     )
-    infix = infix_notation(function | atomic_value, operators)("subexpression")
 
-    expr <<= function | infix | list_constructor
+    infix = infix_notation(atomic_value | function_call | function_call_anyseq | nested_field,
+                            operators)("subexpression")
 
-    # expr.setDebug()
+    expr <<= infix
 
     return expr
 
@@ -145,6 +125,10 @@ def is_empty(result):
 class UNSET(object):
     def __init__(self, name) -> None:
         self.name = name
+
+class SELF(object):
+    pass
+
 
 class Evaluator(object):
     def __init__(self,  ns: Dict[str, Any], 
@@ -201,6 +185,9 @@ class Evaluator(object):
 
     def unset(self, *args):
         return UNSET
+
+    def self_value(self, *args):
+        return SELF
 
     def constant(self, value):
         return self._resolve(value)
@@ -267,8 +254,11 @@ class Evaluator(object):
         if type(value) is UNSET:
             if is_empty(if_unset):
                 return UNSET
-            return self._evaluate_result(if_unset)
-        elif is_empty(if_set):
+            elif if_unset == 'SELF':
+                return value
+            else:
+                return self._evaluate_result(if_unset)
+        elif is_empty(if_set) or if_set == 'SELF':
             return value
         else:
             return self._evaluate_result(if_set)            
