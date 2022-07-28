@@ -85,9 +85,9 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
             recipe_name = pp
         else:
             key, value = pp.split("=", 1)
-            # dotlist
-            if '.' in key:
-                dotlist[key] = pp
+            # config.xxx= is a dotlist
+            if key.startswith("config."):
+                dotlist[key[7:]] = pp
             # else param=value
             else:
                 # parse string as yaml value
@@ -104,7 +104,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
     # (when loading a recipe file, we want to merge these in AFTER the recipe is loaded, because the arguments
     # might apply to the recipe)
     try:
-        extra_config = OmegaConf.from_dotlist(dotlist.values()) if dotlist else OmegaConf.create()
+        extra_config = OmegaConf.from_dotlist(list(dotlist.values())) if dotlist else OmegaConf.create()
     except OmegaConfBaseException as exc:
         log_exception(f"error loading command-line dotlist", exc)
         sys.exit(2)
@@ -138,6 +138,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
         log.info(f"loading recipe/config {what}")
 
         conf, recipe_deps = load_recipe_file(what)
+        conf.merge_with(extra_config)
 
         # anything that is not a standard config section will be treated as a recipe
         all_recipe_names = [name for name in conf if name not in stimela.CONFIG]

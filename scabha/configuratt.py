@@ -20,9 +20,11 @@ from omegaconf.listconfig import ListConfig
 from omegaconf.errors import OmegaConfBaseException
 from typing import Any, List, Dict, Optional, OrderedDict, Union, Callable
 
+from .exceptions import ScabhaBaseException
+
 from yaml.error import YAMLError
 
-class ConfigurattError(RuntimeError):
+class ConfigurattError(ScabhaBaseException):
     pass
 
 def _lookup_nameseq(name_seq: List[str], source_dict: Dict):
@@ -92,12 +94,47 @@ def _flatten_subsections(conf, depth: int = 1, sep: str = "__"):
     """
     subsections = [(key, value) for key, value in conf.items() if isinstance(value, DictConfig)]
     for name, subsection in subsections:
-        conf.pop(name)
+        pop_conf(name)
         if depth > 1:
             _flatten_subsections(subsection, depth-1, sep)
         for key, value in subsection.items():
             conf[f"{name}{sep}{key}"] = value
 
+
+def _scrub_subsections(conf: DictConfig, scrubs: Union[str, List[str]]):
+    """
+    Scrubs named subsections from a config.
+
+    Args:
+        conf (DictConfig): config to scrub
+        scrubs (Union[str, List[str]]): sections to remove (can include dots to remove nested sections)
+    """
+    if isinstance(scrubs, str):
+        scrubs = [scrubs]
+    
+    for scrub in scrubs:
+        if '.' in scrub:
+            name, remainder = scrub.split(".", 1)
+        else:
+            name, remainder = scrub, None
+        # apply name as pattern
+        is_pattern = '*' in name or '?' in name
+        matches = fnmatch.filter(conf.keys(), name)
+        if not matches:
+            # if no matches to pattern, it's ok, otherwise raise error
+            if is_pattern:
+                return
+            raise ConfigurattError(f"no entry matching '{name}'")
+        # recurse into or remove matching entries
+        for key in matches:
+            if remainder:
+                subconf = conf[key]
+                if type(subconf) is DictConfig:
+                    _scrub_subsections(subconf, remainder)
+                elif not is_pattern:
+                    raise ConfigurattError(f"'{name}' does not refer to a subsection")
+            else:
+                del conf[key]
 
 def _resolve_config_refs(conf, pathname: str, location: str, name: str, includes: bool, use_sources: Optional[List[DictConfig]], 
                         include_path: Optional[str]=None):
@@ -139,15 +176,22 @@ def _resolve_config_refs(conf, pathname: str, location: str, name: str, includes
     selfrefs =  use_sources and conf is use_sources[0]
 
     if isinstance(conf, DictConfig):
+        
+        # DictCOnfig doesn't support pop(), so here's a quick replacement
+        def pop_conf(key, default=None):
+            value = conf.get(key, default)
+            if key in conf:
+                del conf[key]
+            return value
 
         # since _use and _include statements can be nested, keep on processing until all are resolved        
         updated = True
         recurse = 0
-        flatten = conf.get("_flatten", 0)
-        flatten_sep = conf.get("_flatten_sep", "__")
-        for key in "_flatten", "_flatten_sep":
-            if key in conf:
-                del conf[key]
+        flatten = pop_conf("_flatten", 0)
+        flatten_sep = pop_conf("_flatten_sep", "__")
+        scrub = pop_conf("_scrub", None)
+        if isinstance(scrub, str):
+            scrub = [scrub]
         
         while updated:
             updated = False
@@ -158,9 +202,8 @@ def _resolve_config_refs(conf, pathname: str, location: str, name: str, includes
 
             # handle _include entries
             if includes:
-                include_files = conf.get("_include", None)
+                include_files = pop_conf("_include", None)
                 if include_files:
-                    del conf["_include"]
                     updated = True
                     if isinstance(include_files, str):
                         include_files = [include_files]
@@ -244,7 +287,13 @@ def _resolve_config_refs(conf, pathname: str, location: str, name: str, includes
 
                         # accumulate included config so that later includes override earlier ones
                         accum_incl_conf = OmegaConf.unsafe_merge(accum_incl_conf, incl_conf)
-                    
+
+                    if scrub:
+                        try:
+                            _scrub_subsections(accum_incl_conf, scrub)
+                        except ConfigurattError as exc:
+                            raise ConfigurattError(f"{errloc}: error scrubbing {', '.join(scrub)}", exc)
+
                     # merge: our section overrides anything that has been included
                     conf = OmegaConf.unsafe_merge(accum_incl_conf, conf)
                     if selfrefs:
@@ -252,9 +301,8 @@ def _resolve_config_refs(conf, pathname: str, location: str, name: str, includes
 
             # handle _use entries
             if use_sources is not None:
-                merge_sections = conf.get("_use", None)
+                merge_sections = pop_conf("_use", None)
                 if merge_sections:
-                    del conf["_use"]
                     updated = True
                     if type(merge_sections) is str:
                         merge_sections = [merge_sections]
@@ -275,6 +323,11 @@ def _resolve_config_refs(conf, pathname: str, location: str, name: str, includes
                         dependencies.update(deps)
                         if flatten:
                             _flatten_subsections(base, flatten, flatten_sep)
+                        if scrub:
+                            try:
+                                _scrub_subsections(base, scrub)
+                            except ConfigurattError as exc:
+                                raise ConfigurattError(f"{errloc}: error scrubbing {', '.join(scrub)}", exc)
                         base.merge_with(conf)
                         conf = base
                         if selfrefs:

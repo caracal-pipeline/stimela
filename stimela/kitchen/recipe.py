@@ -305,7 +305,9 @@ class Recipe(Cargo):
         from_recipe: bool = False       # if True, value propagates from recipe up to step
         from_step: bool = False         # if True, value propagates from step down to recipe
 
-    def _add_alias(self, alias_name: str, alias_target: Union[str, Tuple], category: Optional[int] = None):
+    def _add_alias(self, alias_name: str, alias_target: Union[str, Tuple], 
+                    category: Optional[int] = None,
+                    has_value=False):
         wildcards = False
         if type(alias_target) is str:
             step_spec, step_param_name = alias_target.split('.', 1)
@@ -376,6 +378,13 @@ class Recipe(Cargo):
                     alias_schema.category = category
                 elif own_schema is not None and own_schema.category is not None:
                     alias_schema.category = own_schema.category
+                # paramater is not required if alias target is set in step
+                if step_param_name in step.params or \
+                        step_param_name in step.cargo.defaults or \
+                        schema.default is not UNSET:
+                    alias_schema.required = False
+                    alias_schema.default = UNSET
+                    alias_schema.category = ParameterCategory.Hidden
 
             # if step parameter is implicit, mark the alias as implicit. Note that this only applies to outputs
             if schema.implicit:
@@ -453,14 +462,16 @@ class Recipe(Cargo):
             # automatically make aliases for step parameters that are unset, and don't have a default, and aren't implict 
             for label, step in self.steps.items():
                 for name, schema in step.inputs_outputs.items():
-                    if (label, name) not in self._alias_map and name not in step.params  \
-                            and name not in step.cargo.defaults and schema.default is UNSET \
-                            and not schema.implicit:
-                        auto_name = f"{label}_{name}"
+                    # does it have a value set
+                    has_value = name in step.params or name in step.cargo.defaults or \
+                                schema.default is not UNSET 
+                    if (label, name) not in self._alias_map and not schema.implicit and not has_value:
+                        auto_name = f"{label}.{name}"
                         if auto_name in self.inputs or auto_name in self.outputs:
                             raise RecipeValidationError(f"recipe '{self.name}': auto-generated parameter name '{auto_name}' conflicts with another name. Please define an explicit alias for this.", log=log)
                         self._add_alias(auto_name, (step, label, name), 
-                                        category=ParameterCategory.Required if schema.required else ParameterCategory.Obscure)
+                                        category=ParameterCategory.Required if schema.required and not has_value  
+                                        else ParameterCategory.Obscure)
 
             # these will be re-merged when needed again
             self._inputs_outputs = None
