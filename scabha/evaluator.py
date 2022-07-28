@@ -142,7 +142,7 @@ class Evaluator(object):
             '+':    lambda x: +self._evaluate_result(x),
             '-':    lambda x: -self._evaluate_result(x),
             '~':    lambda x: ~self._evaluate_result(x),
-            'not':  lambda x: ~self._evaluate_result(x)
+            'not':  lambda x: not self._evaluate_result(x)
         }
         self._BINARY_OPERATORS = {
             '**':   lambda x,y: self._evaluate_result(x) ** self._evaluate_result(y),
@@ -321,7 +321,7 @@ class Evaluator(object):
                     try:
                         return self._evaluate_result(parse_results)
                     except Exception as exc:
-                        raise FormulaError(f"evaulation of '{value}' failed", exc)
+                        raise FormulaError(f"evaluation of '{value}' failed", exc)
             return self._resolve(value)
         finally:
             self.location = self.location[:loclen]

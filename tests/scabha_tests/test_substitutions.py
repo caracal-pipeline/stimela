@@ -130,7 +130,8 @@ def test_formulas():
         n = "=IF((-previous.x+1)*(previous.x) == 0, previous.x == 1, previous.y < 0)",
         o = '=previous.z',
         p = 'x{previous.zz}',
-        q = '=LIST(current.a, current.b, current.c + 1, 0)'
+        q = '=LIST(current.a, current.b, current.c + 1, 0)',
+        r = '=not IFSET(current.a)'
         #q = '=[current.a, current.b, current.c + 1, 0]'
     )
     ns._add_("current", current)
@@ -160,7 +161,7 @@ def test_formulas():
         assert r['o'] == 'z'
         assert type(r['p']) is Unresolved
         assert r['q'] == ["a1", "=escaped", 2, 0]
-
+        assert r['r'] == False
 
 if __name__ == "__main__":
     test_subst()
