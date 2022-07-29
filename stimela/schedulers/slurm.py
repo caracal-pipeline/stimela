@@ -1,6 +1,7 @@
 import shlex
 from typing import Dict, Optional, Any 
-from scabha.cargo import Cab, Batch
+from stimela.kitchen.cab import Cab
+from stimela.kitchen.batch import Batch
 from stimela import logger
 from stimela.utils.xrun_poll import xrun
 from stimela.exceptions import StimelaCabRuntimeError
@@ -49,9 +50,9 @@ class SlurmBatch(Batch):
         # if retcode is not 0, and cab didn't declare itself a success,
         if retcode:
             if not self.cab.runtime_status:
-                raise StimelaCabRuntimeError(f"{command_name} returned non-zero exit status {retcode}", log=self.log)
+                raise StimelaCabRuntimeError(f"{runcmd} returned non-zero exit status {retcode}", log=self.log)
         else:
             if self.cab.runtime_status is False:
-                raise StimelaCabRuntimeError(f"{command_name} was marked as failed based on its output", log=self.log)
+                raise StimelaCabRuntimeError(f"{runcmd} was marked as failed based on its output", log=self.log)
 
         return retcode

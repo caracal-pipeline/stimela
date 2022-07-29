@@ -1,15 +1,19 @@
 import atexit
 import sys, os.path, re
 from datetime import datetime
+import pathlib
 import logging
 import contextlib
 from typing import Optional, Union
 from omegaconf import DictConfig
+from scabha.exceptions import ScabhaBaseException
 from scabha.substitutions import SubstitutionNS, forgiving_substitutions_from
 import asyncio
 import psutil
 import rich.progress
 import rich.logging
+from rich.tree import Tree
+from rich import print as rich_print
 
 class MultiplexingHandler(logging.Handler):
     """handler to send INFO and below to stdout, everything above to stderr"""
@@ -104,6 +108,8 @@ log_console_handler = log_formatter = log_boring_formatter = log_colourful_forma
 progress_bar = progress_task = None
 _start_time = datetime.now()
 
+LOG_DIR = '.'
+
 def is_logger_initialized():
     return _logger is not None
 
@@ -142,6 +148,7 @@ def logger(name="STIMELA", propagate=False, console=True, boring=False,
 
         if console:
             global progress_bar, progress_task
+            console = rich.console.Console(file=sys.stdout)
             progress_bar = rich.progress.Progress(
                 rich.progress.SpinnerColumn(),
                 "[yellow]{task.fields[elapsed_time]}[/yellow]",
@@ -151,6 +158,7 @@ def logger(name="STIMELA", propagate=False, console=True, boring=False,
                 rich.progress.TimeElapsedColumn(),
                 "{task.fields[cpu_info]}",
                 refresh_per_second=2,
+                console=console,
                 transient=True)
 
             progress_task = progress_bar.add_task("stimela", command="starting", cpu_info=" ", elapsed_time="", start=True)
@@ -311,7 +319,7 @@ def setup_file_logger(log: logging.Logger, logfile: str, level: Optional[Union[i
     return log
 
 
-def update_file_logger(log: logging.Logger, logopts: Union["StimelaLogConfig", DictConfig], nesting: int = 0, subst: Optional[SubstitutionNS] = None, location=[]):
+def update_file_logger(log: logging.Logger, logopts: DictConfig, nesting: int = 0, subst: Optional[SubstitutionNS] = None, location=[]):
     """Updates logfiles associated with given logger based on option settings
 
     Args:
@@ -337,12 +345,57 @@ def update_file_logger(log: logging.Logger, logopts: Union["StimelaLogConfig", D
                         log.error(f"bad substitution in log path: {err}")
                     return None
 
-
         # substitute non-filename characters for _
         path = re.sub(r'[^a-zA-Z0-9_./-]', '_', path)
+
+        global LOG_DIR
+        LOG_DIR = os.path.dirname(path)
+        pathlib.Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
+
         # setup the logger
         setup_file_logger(log, path, level=logopts.level, symlink=logopts.symlink)
     else:
         disable_file_logger(log)
 
+
+def log_exception(*errors):
+    """Logs one or more error messages or exceptions (unless they are marked as already logged), and 
+    pretty-prints them to the console  as appropriate.
+    """
+    def exc_message(e):
+        return e.message if isinstance(e, ScabhaBaseException) else str(e)
+
+    trees = []
+    do_log = False
+    messages = []
+    nested = False
+
+    def add_nested(excs, tree):
+        for exc in excs:
+            subtree = tree.add(exc_message(exc))
+            if isinstance(exc, ScabhaBaseException) and exc.nested:
+                add_nested(exc.nested, subtree)
+
+    for exc in errors:
+        if isinstance(exc, ScabhaBaseException):
+            messages.append(exc.message)
+            if not exc.logged:
+                do_log = exc.logged = True
+            tree = Tree(exc_message(exc), guide_style="dim")
+            trees.append(tree)
+            if exc.nested:
+                add_nested(exc.nested, tree)
+        else:
+            tree = Tree(exc_message(exc), guide_style="dim")
+            trees.append(tree)
+            do_log = True
+            messages.append(str(exc))
+
+    if do_log:
+        logger().error(": ".join(messages))
+
+    printfunc = progress_bar.console.print if progress_bar is not None else rich_print
+
+    for tree in trees:
+        printfunc(tree)
 

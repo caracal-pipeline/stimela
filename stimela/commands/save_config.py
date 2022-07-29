@@ -24,7 +24,6 @@ from enum import Enum
                 help="Save config file at the user level.")
 def config(settings, save=None):
     log = stimela.logger()
-    from stimela import CONFIG
     from stimela.config import CONFIG_LOADED, CONFIG_LOCATIONS
 
     if CONFIG_LOADED:
@@ -34,7 +33,7 @@ def config(settings, save=None):
 
     # print config, if no key=value args specified
     if not settings:
-        for key, value in context.config.opts.items():
+        for key, value in stimela.CONFIG.opts.items():
             if isinstance(value, Enum):
                 value = value.name
             print(f"    {key} = {value}")
@@ -45,10 +44,10 @@ def config(settings, save=None):
             log.error(f"invalid config setting '{keyvalue}', KEY=VALUE expected")
             return 2
         key, value = keyvalue.split("=", 1)
-        if key not in CONFIG.opts:
+        if key not in stimela.CONFIG.opts:
             log.error(f"unknown config key '{key}'")
             return 2
-        CONFIG.opts[key] = value
+        stimela.CONFIG.opts[key] = value
         print(f"    setting {key} = {value}")
 
     # save config if changed, or --save given
@@ -63,6 +62,6 @@ def config(settings, save=None):
         with open(output_config, "wt") as fp:
             fp.write(f"## Stimela {stimela.__version__} configuration file\n")
             fp.write(f"## Saved on {datetime.now().ctime()}\n\n")
-            OmegaConf.save(config=CONFIG.opts, f=fp)
+            OmegaConf.save(config=stimela.CONFIG.opts, f=fp)
         log.info(f"wrote configuration to {output_config}")
                 

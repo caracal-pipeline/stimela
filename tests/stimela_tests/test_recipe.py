@@ -1,5 +1,17 @@
 import stimela
-import os, re, subprocess
+import os, re, subprocess, pytest
+
+
+# Change into directory where test_recipy.py lives
+# As suggested by https://stackoverflow.com/questions/62044541/change-pytest-working-directory-to-test-case-directory
+@pytest.fixture(autouse=True)
+def change_test_dir(request, monkeypatch):
+    monkeypatch.chdir(request.fspath.dirname)
+
+
+def callable_function(a: int, b: str):
+    print(f"callable_function({a},'{b}')")
+
 
 def run(command):
     """Runs command, returns tuple of exit code, output"""
@@ -35,6 +47,12 @@ def test_test_aliasing():
             "DEBUG: ### validated outputs", 
             "DEBUG: recipe 'recipe'", 
             "DEBUG:   out: 1")
+
+def test_test_nesting():
+    print("===== expecting no errors =====")
+    retcode, output = run("stimela -v exec test_nesting.yml demo_recipe")
+    assert retcode == 0
+    print(output)
 
 
 def test_test_recipe():
