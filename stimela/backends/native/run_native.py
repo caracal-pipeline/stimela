@@ -157,8 +157,10 @@ except ImportError:
     Command = None
 if Command is not None and isinstance({funcname}, Command):
     print("invoking callable {modulename}.{funcname}() (as click command) using external interpreter")
+    {funcname} = {funcname}.callback
 else:
     print("invoking callable {modulename}.{funcname}() using external interpreter")
+
 retval = {funcname}({','.join(arguments)})
 print("Return value is", repr(retval))
     """
