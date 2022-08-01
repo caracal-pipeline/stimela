@@ -4,7 +4,7 @@ _include:
 cabs:
   quarticube:
     _use: cabs.quartical
-    virtual_env: 
+    virtual_env:
     image: quartical-kubetest:local
     backend: kubernetes
     command: goquartical
@@ -14,7 +14,7 @@ cabs:
         # dask cluster settings
         dask_cluster:
           name: qc-test-cluster
-          persist: true          
+          persist: true
           num_workers: 4
           cpu_limit: 4
           memory_limit: "16Gi"
@@ -24,8 +24,8 @@ cabs:
           cwd:
             path: .
           dask-storage-config:
-            path: test_dask_storage_options.json
-            dest: /.config/dask-ms/storage_options.json
+            path: test_dask_storage_options.yaml
+            dest: /.config/dask-ms/storage_options.yaml
           numba-cache:
             path: ~/.cache/numba
             mkdir: true
@@ -46,7 +46,7 @@ cabs:
         #         endpoint_url: https://minio:443
         #         region_name: af-cpt
         #         verify: false
-        
+
         # list of command to be executed inside the pod before launching the main command
         pre_commands:
           - echo $HOME
@@ -55,7 +55,7 @@ cabs:
 
 opts:
   log:
-    dir: test-logs/logs-{config.run.datetime} 
+    dir: test-logs/logs-{config.run.datetime}
     nest: 3
     symlink: logs
 
@@ -63,7 +63,7 @@ opts:
 recipe:
   name: "demo recipe"
   info: 'top level recipe definition'
-  steps: 
+  steps:
       test_qc:
         cab: quarticube
         params:
@@ -75,4 +75,4 @@ recipe:
           output.apply_p_jones_inv: false
           output.gain_directory: s3://binface/gains.qc
           output.log_directory: test-logs/logs.qc
-          output.overwrite: true        
+          output.overwrite: true

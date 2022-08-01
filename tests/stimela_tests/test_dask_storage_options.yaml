@@ -1,0 +1,8 @@
+storage_options:
+  s3://binface:
+    client_kwargs:
+      endpoint_url: https://minio:443
+      region_name: af-cpt
+      verify: false
+    key: simon
+    secret: simon123

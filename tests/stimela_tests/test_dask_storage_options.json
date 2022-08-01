@@ -1,9 +1,0 @@
-{
-    "key": "simon",
-    "secret": "simon123",
-    "client_kwargs": {
-        "endpoint_url": "https://minio:443",
-        "region_name": "af-cpt",
-        "verify": false
-    }
-}
