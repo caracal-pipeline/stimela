@@ -142,6 +142,10 @@ class Step:
     def update_parameter(self, name, value):
         self.params[name] = value
 
+    def unset_parameter(self, name):
+        if name in self.params:
+            del self.params[name]
+
     _instantiated_cabs = {}
 
     def finalize(self, config=None, log=None, logopts=None, fqname=None, nesting=0):
@@ -229,8 +233,6 @@ class Step:
             else:
                 self._backend = None
 
-
-
     def prevalidate(self, subst: Optional[SubstitutionNS]=None, root=False):
         self.finalize()
         # validate cab or recipe
@@ -312,7 +314,7 @@ class Step:
             # bomb out if some inputs failed to validate or substitutions resolve
             if self.invalid_params or self.unresolved_params:
                 invalid = self.invalid_params + self.unresolved_params
-                if self.skip:
+                if skip:
                     self.log.warning(f"invalid inputs: {join_quote(invalid)}")
                     if not skip_warned:
                         self.log.warning("since the step was skipped, this is not fatal")

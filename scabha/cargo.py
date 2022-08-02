@@ -102,8 +102,9 @@ class Parameter(object):
     # optonal list of arbitrary tags, used to group parameters
     tags: List[str] = EmptyListDefault()
 
-    # if True, parameter is required
-    required: bool = False
+    # If True, parameter is required. None/False, not required. 
+    # For aliases, False at recipe level will override the target setting, while the default of None won't.
+    required: Optional[bool] = None
 
     # restrict value choices, i.e. making for an option-type parameter 
     choices:  Optional[List[Any]] = ()

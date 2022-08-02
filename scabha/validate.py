@@ -125,7 +125,7 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
     inputs = OrderedDict((name, value) for name, value in params.items() if name in schemas)
     
     # build dict of all defaults 
-    all_defaults = {name: schema.default for name, schema in schemas.items() if schema.default is not UNSET}
+    all_defaults = {name: schema.default for name, schema in schemas.items() if schema.default is not UNSET and schema.default != "UNSET"}
     if defaults:
         all_defaults.update(**{name: value for name, value in defaults.items() if name in schemas})
 
@@ -144,7 +144,7 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
     # check that required args are present
     if check_required:
         missing = [mkname(name) for name, schema in schemas.items() 
-                    if schema.required and inputs.get(name) is None and name not in unresolved]
+                    if schema.required and inputs.get(name) is UNSET and name not in unresolved]
         if missing:
             raise ParameterValidationError(f"missing required parameters: {join_quote(missing)}")
 
@@ -157,8 +157,8 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
     field2name = {}
 
     for name, schema in schemas.items():
-        value = inputs.get(name)
-        if value is not None:
+        value = inputs.get(name, UNSET)
+        if value is not UNSET:
             # sanitize name: dataclass won't take hyphens or periods
             fldname = re.sub("\W", "_", name)
             while fldname in field2name:
@@ -184,7 +184,7 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
         if schema is None:
             continue
         # skip errors
-        if value is None or isinstance(value, Error):
+        if value is UNSET or isinstance(value, Error):
             continue
         dtype = schema._dtype
 
@@ -248,9 +248,12 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
 
     # validate
     try:   
-        validated = pcls(**{name2field[name]: value for name, value in inputs.items() if name in schemas and value is not None})
+        validated = pcls(**{name2field[name]: value for name, value in inputs.items() if name in schemas and value is not UNSET})
     except pydantic.ValidationError as exc:
-        errors = [f"'{'.'.join(map(str, err['loc']))}': {err['msg']}" for err in exc.errors()]
+        errors = []
+        for err  in exc.errors():
+            loc = '.'.join([field2name.get(x, x) for x in err['loc']])
+            errors.append(f"'{loc}': {err['msg']}") 
         raise ParameterValidationError(', '.join(errors))
 
     validated = {field2name[fld]: value for fld, value in dataclasses.asdict(validated).items()}

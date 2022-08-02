@@ -29,6 +29,7 @@ def construct_parser():
     string = (QuotedString('"') | QuotedString("'"))("constant")
     UNSET = Keyword("UNSET")("unset")
     SELF = Keyword("SELF")("self_value")
+    EMPTY = Keyword("EMPTY")("empty")
     bool_false = (Keyword("False") | Keyword("false"))("bool_false").set_parse_action(lambda:[False])
     bool_true = (Keyword("True") | Keyword("true"))("bool_true").set_parse_action(lambda:[True])
 
@@ -39,13 +40,6 @@ def construct_parser():
     nested_field = Group(fieldname + OneOrMore(period + fieldname))("namespace_lookup")
     anyseq = CharsNotIn(",)")("constant")
 
-    # functions
-    IF = Keyword("IF")
-    IFSET = Keyword("IFSET")
-    GLOB = Keyword("GLOB")
-    EXISTS = Keyword("EXISTS")
-    LIST = Keyword("LIST")
-
     # allow expression to be used recursively
     expr = Forward()
     
@@ -54,7 +48,7 @@ def construct_parser():
     # these functions take one argument, which could also be a sequence
     anyseq_functions = reduce(operator.or_, map(Keyword, ["GLOB", "EXISTS"]))
 
-    atomic_value = (boolean | UNSET | nested_field | string | number)
+    atomic_value = (boolean | UNSET | EMPTY | nested_field | string | number)
 
     function_call_anyseq = Group(anyseq_functions + lparen + anyseq + rparen)("function")
     function_call = Group(functions + lparen + 
@@ -119,8 +113,8 @@ def parse_string(text: str, location: List[str] = []):
 
     return parse_results
 
-def is_empty(result):
-    return result is None or (type(result) is ParseResults and result._name == "empty")
+def is_missing(result):
+    return result is None
 
 class UNSET(object):
     def __init__(self, name) -> None:
@@ -138,11 +132,15 @@ class Evaluator(object):
         self.subst_context = subst_context
         self.location = location
 
+        def _not(value):
+            value = self._evaluate_result(value, allow_unset=True)
+            return type(value) is UNSET or not value
+
         self._UNARY_OPERATORS = {
             '+':    lambda x: +self._evaluate_result(x),
             '-':    lambda x: -self._evaluate_result(x),
             '~':    lambda x: ~self._evaluate_result(x),
-            'not':  lambda x: not self._evaluate_result(x)
+            'not':  lambda x: _not(x)
         }
         self._BINARY_OPERATORS = {
             '**':   lambda x,y: self._evaluate_result(x) ** self._evaluate_result(y),
@@ -181,7 +179,7 @@ class Evaluator(object):
         return value
 
     def empty(self, *args):
-        return None
+        return ""
 
     def unset(self, *args):
         return UNSET
@@ -252,13 +250,13 @@ class Evaluator(object):
 
         value = self._evaluate_result(lookup, allow_unset=True)
         if type(value) is UNSET:
-            if is_empty(if_unset):
-                return UNSET
+            if is_missing(if_unset):
+                return False
             elif if_unset == 'SELF':
                 return value
             else:
                 return self._evaluate_result(if_unset)
-        elif is_empty(if_set) or if_set == 'SELF':
+        elif is_missing(if_set) or if_set == 'SELF':
             return value
         else:
             return self._evaluate_result(if_set)            

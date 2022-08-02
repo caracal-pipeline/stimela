@@ -371,8 +371,8 @@ class Recipe(Cargo):
                 if own_schema and own_schema.info is not None:
                     alias_schema.info = own_schema.info
                 # required flag overrides, if set from our own schema
-                if own_schema is not None and own_schema.required:
-                    alias_schema.required = True
+                if own_schema is not None and own_schema.required is not None:
+                    alias_schema.required = own_schema.required
                 # category is set by argument, else from own schema, else from target
                 if category is not None:
                     alias_schema.category = category
@@ -505,10 +505,36 @@ class Recipe(Cargo):
         subst.current = step.params
         subst.steps[label] = subst.current
 
-    def prevalidate(self, params: Optional[Dict[str, Any]], subst: Optional[SubstitutionNS]=None, root=False):
+    def _preprocess_parameters(self, params: Dict[str, Any]):
+        # split parameters into our own, and per-step, and UNSET directives
+        own_params = {}
+        unset_params = set()
+        for name, value in params.items():
+            if name in self.inputs_outputs:
+                if value == "UNSET":
+                    unset_params.add(name)
+                elif value == "EMPTY":
+                    own_params[name] = ""
+                else:
+                    own_params[name] = value
+            elif '.' not in name: 
+                raise ParameterValidationError(f"'{name}' does not refer to a known parameter")
+            else:
+                label, subname = name.split('.', 1)
+                substep = self.steps.get(label)
+                if substep is None:
+                    raise ParameterValidationError(f"'{name}' does not refer to a known parameter or a step")
+                substep.params[subname] = value
+        return own_params, unset_params
+
+
+    def prevalidate(self, params: Dict[str, Any], subst: Optional[SubstitutionNS]=None, root=False):
         self.finalize()
         self.log.debug("prevalidating recipe")
         errors = []
+
+        # split parameters into our own, and per-step, and UNSET directives
+        params,  unset_params = self._preprocess_parameters(params)
 
         subst_outer = subst  # outer dictionary is used to prevalidate our parameters
 
@@ -540,7 +566,10 @@ class Recipe(Cargo):
         # we call this twice, potentially, so define as a function
         def prevalidate_self(params):
             try:
-                params = Cargo.prevalidate(self, params, subst=subst_outer)
+                params1 = Cargo.prevalidate(self, params, subst=subst_outer)
+                # mark params that have become unset 
+                unset_params.update(set(params) - set(params1))
+                params = params1
                 # validate for-loop, if needed
                 self.validate_for_loop(params, strict=False)
 
@@ -560,6 +589,10 @@ class Recipe(Cargo):
                 for alias in aliases:
                     alias.from_recipe = True
                     alias.step.update_parameter(alias.param, params[name])
+            elif name in unset_params:
+                for alias in aliases:
+                    alias.from_recipe = True
+                    alias.step.unset_parameter(alias.param)
 
         # prevalidate step parameters 
         # we call this twice, potentially, so define as a function
@@ -671,6 +704,8 @@ class Recipe(Cargo):
             self._for_loop_values = [None]
 
     def validate_inputs(self, params: Dict[str, Any], subst: Optional[SubstitutionNS]=None, loosely=False):
+
+        params, _ = self._preprocess_parameters(params)
 
         self.validate_for_loop(params, strict=True)
 
