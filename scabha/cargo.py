@@ -198,14 +198,14 @@ class Cargo(object):
     @staticmethod
     def flatten_schemas(io_dest, io, label, prefix=""):
         for name, value in io.items():
-            if name == "_subsection":
+            if name == "subsection":
                 continue
             name = f"{prefix}{name}"
             if not isinstance(value, Parameter):
                 if not isinstance(value, (DictConfig, dict)):
                     raise SchemaError(f"{label}.{name} is not a valid schema")
                 # try to treat as Parameter based on field names
-                if all(k in ParameterFields for k in value.keys()):
+                if not (set(value.keys()) - ParameterFields):
                     try:
                         value = OmegaConf.unsafe_merge(ParameterSchema.copy(), value)
                         io_dest[name] = Parameter(**value)

@@ -1,7 +1,6 @@
 import atexit
-import sys, os.path, re
+import sys, os.path, re, copy
 from datetime import datetime
-import pathlib
 import logging
 import contextlib
 import traceback
@@ -216,6 +215,8 @@ def declare_subcommand(command):
     finally:
         update_process_status(command="")
         
+_prev_disk_io = None
+
 def update_process_status(command=None, description=None):
     if progress_bar is not None:
         # elapsed time
@@ -225,8 +226,23 @@ def update_process_status(command=None, description=None):
         mem = psutil.virtual_memory()
         used = round(mem.total*mem.percent/100 / 2**30)
         total = round(mem.total / 2**30)
+        # load
+        load, _, _ = psutil.getloadavg()
+        # get disk I/O
+        disk_io = psutil.disk_io_counters()
+        global _prev_disk_io
+        # counts = {key: value for key, value in }
+        if _prev_disk_io is not None:
+            io = {}
+            for key in 'read_bytes', 'read_count', 'read_time', 'write_bytes', 'write_count', 'write_time':
+                io[key] = getattr(disk_io, key) - getattr(_prev_disk_io, key) 
+            ioinfo = f"|R [green]{io['read_count']:-4}[/green] [green]{io['read_bytes']/2**30:2.2f}[/green]G [green]{io['read_time']:4}[/green]ms" + \
+                     f"|W [green]{io['write_count']:-4}[/green] [green]{io['write_bytes']/2**30:2.2f}[/green]G [green]{io['write_time']:4}[/green]ms " 
+        else:
+            ioinfo = ""
+        _prev_disk_io = disk_io
         updates = dict(elapsed_time=elapsed,
-                        cpu_info=f"CPU [green]{cpu}%[/green] RAM [green]{used}[/green]/[green]{total}[/green]G")
+                        cpu_info=f"CPU [green]{cpu:2.1f}%[/green]|RAM [green]{used:3}[/green]/[green]{total}[/green]G|Load [green]{load:2.1f}[/green]{ioinfo}")
         if command is not None:
             updates['command'] = command
         if description is not None:
