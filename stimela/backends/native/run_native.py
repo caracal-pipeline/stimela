@@ -26,7 +26,7 @@ class LoggerIO(TextIOBase):
     def write(self, s):
         if s != "\n":
             for line in s.rstrip().split("\n"):
-                dispatch_to_log(self.log, line, self.command_name, self.stream_name, 
+                dispatch_to_log(self.log, line, self.command_name, self.stream_name,
                                 output_wrangler=self.output_wrangler)
         return len(s)
 
@@ -59,7 +59,7 @@ def run_callable(modulename: str, funcname: str,  cab: Cab, params: Dict[str, An
 
     Args:
         modulename (str): module name to import
-        funcname (str): name of function in module to call 
+        funcname (str): name of function in module to call
         cab (Cab): cab object
         log (logger): logger to use
         subst (Optional[Dict[str, Any]]): Substitution dict for commands etc., if any.
@@ -126,7 +126,7 @@ def run_external_callable(modulename: str, funcname: str,  cab: Cab, params: Dic
 
     Args:
         modulename (str): module name to import
-        funcname (str): name of function in module to call 
+        funcname (str): name of function in module to call
         cab (Cab): cab object
         log (logger): logger to use
         subst (Optional[Dict[str, Any]]): Substitution dict for commands etc., if any.
@@ -147,7 +147,7 @@ def run_external_callable(modulename: str, funcname: str,  cab: Cab, params: Dic
                 arguments.append(f"{key}=None")
 
     # form up command string
-    command = f"""    
+    command = f"""
 import sys
 sys.path.append('.')
 from {modulename} import {funcname}
@@ -157,8 +157,10 @@ except ImportError:
     Command = None
 if Command is not None and isinstance({funcname}, Command):
     print("invoking callable {modulename}.{funcname}() (as click command) using external interpreter")
+    {funcname} = {funcname}.callback
 else:
     print("invoking callable {modulename}.{funcname}() using external interpreter")
+
 retval = {funcname}({','.join(arguments)})
 print("Return value is", repr(retval))
     """
@@ -178,7 +180,7 @@ print("Return value is", repr(retval))
     else:
         interpreter = "python"
 
-    args = [interpreter, "-c", command]    
+    args = [interpreter, "-c", command]
 
     return _run_external(args, funcname, cab, params, subst, log, log_command=False)
 
@@ -207,7 +209,7 @@ def run_command(cab: Cab, params: Dict[str, Any], log: logging.Logger, subst: Op
         args = ["/bin/bash", "--rcfile", f"{venv}/bin/activate", "-c", " ".join(shlex.quote(arg) for arg in args)]
 
     log.debug(f"command line is {args}")
-    
+
     cab.reset_runtime_status()
 
     return _run_external(args, command_name, cab, params, subst, log, batch, log_command=True)
@@ -229,8 +231,8 @@ def _run_external(args, command_name, cab, params, subst, log, batch=None, log_c
     #-------------------------------------------------------
     # run command
 
-    retcode = xrun(args[0], args[1:], shell=False, log=log, 
-                output_wrangler=cab.apply_output_wranglers, 
+    retcode = xrun(args[0], args[1:], shell=False, log=log,
+                output_wrangler=cab.apply_output_wranglers,
                 return_errcode=True, command_name=command_name, log_command=log_command)
 
     # if retcode is not zero, raise error, unless cab declared itself a success (via the wrangler)
