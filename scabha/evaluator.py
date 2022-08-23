@@ -1,4 +1,5 @@
 import glob
+from multiprocessing import allow_connection_pickling
 
 import pyparsing
 pyparsing.ParserElement.enable_packrat()
@@ -182,7 +183,7 @@ class Evaluator(object):
         return ""
 
     def unset(self, *args):
-        return UNSET
+        return UNSET("")
 
     def self_value(self, *args):
         return SELF
@@ -191,7 +192,7 @@ class Evaluator(object):
         return self._resolve(value)
 
     def subexpression(self, value):
-        return self._evaluate_result(value)
+        return self._evaluate_result(value, allow_unset=True)
     
     def list_constructor(self, *elements):
         return [self._evaluate_result(value) for value in elements]
@@ -230,7 +231,7 @@ class Evaluator(object):
         if len(args) < 3 or len(args) > 4:
             raise FormulaError(f"{'.'.join(self.location)}: IF() expects 3 or 4 arguments, got {len(args)}")
         conditional, if_true, if_false = args[:3]
-        if_unset = args[3] if len(args) == 4 else None
+        if_unset = args[3] if len(args) == 4 else UNSET("")
 
         cond = self._evaluate_result(conditional, allow_unset=if_unset is not None)
         if type(cond) is UNSET:
@@ -251,8 +252,6 @@ class Evaluator(object):
         value = self._evaluate_result(lookup, allow_unset=True)
         if type(value) is UNSET:
             if is_missing(if_unset):
-                return False
-            elif if_unset == 'SELF':
                 return value
             else:
                 return self._evaluate_result(if_unset)
@@ -317,7 +316,7 @@ class Evaluator(object):
                         raise ParserError(f"error parsing formula '{value}' for {'.'.join(self.location)}", exc)
 
                     try:
-                        return self._evaluate_result(parse_results)
+                        return self._evaluate_result(parse_results, allow_unset=True)
                     except Exception as exc:
                         raise FormulaError(f"evaluation of '{value}' failed", exc)
             return self._resolve(value)
@@ -347,7 +346,7 @@ class Evaluator(object):
                 if verbose:
                     print(f"{name}: {value} -> {new_value}")
                 # UNSET return means delete or revert to default
-                if new_value is UNSET:
+                if type(new_value) is UNSET:
                     if name in defaults:
                         params[name] = defaults[name]
                         if corresponding_ns:

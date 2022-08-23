@@ -41,7 +41,7 @@ def test_test_aliasing():
     assert retcode != 0 
 
     print("===== expecting no errors now =====")
-    retcode, output = run("stimela -v exec test_aliasing.yml a=1 s3_a=1 s4_a=1 e=e f=f")
+    retcode, output = run("stimela -v exec test_aliasing.yml a=1 s3.a=1 s4.a=1 e=e f=f")
     assert retcode == 0
     print(output)
     assert verify_output(output, 
@@ -58,11 +58,11 @@ def test_test_nesting():
 
 def test_test_recipe():
     print("===== expecting an error since 'msname' parameter is missing =====")
-    retcode = os.system("stimela -v exec test_recipe.yml selfcal_image_name=bar")
+    retcode = os.system("stimela -v exec test_recipe.yml selfcal.image_name=bar")
     assert retcode != 0 
 
     print("===== expecting no errors now =====")
-    retcode = os.system("stimela -v exec test_recipe.yml selfcal_image_name=bar msname=foo")
+    retcode = os.system("stimela -v exec test_recipe.yml selfcal.image_name=bar msname=foo")
     assert retcode == 0
 
 def test_test_loop_recipe():

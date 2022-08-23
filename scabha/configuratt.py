@@ -27,6 +27,14 @@ from yaml.error import YAMLError
 class ConfigurattError(ScabhaBaseException):
     pass
 
+# DictConfig doesn't support pop(), so here's a quick replacement
+def pop_conf(conf, key, default=None):
+    value = conf.get(key, default)
+    if key in conf:
+        del conf[key]
+    return value
+
+
 def _lookup_nameseq(name_seq: List[str], source_dict: Dict):
     """Internal helper: looks up nested item ('a', 'b', 'c') in a nested dict
 
@@ -94,7 +102,7 @@ def _flatten_subsections(conf, depth: int = 1, sep: str = "__"):
     """
     subsections = [(key, value) for key, value in conf.items() if isinstance(value, DictConfig)]
     for name, subsection in subsections:
-        pop_conf(name)
+        pop_conf(conf, name)
         if depth > 1:
             _flatten_subsections(subsection, depth-1, sep)
         for key, value in subsection.items():
@@ -177,19 +185,12 @@ def _resolve_config_refs(conf, pathname: str, location: str, name: str, includes
 
     if isinstance(conf, DictConfig):
         
-        # DictCOnfig doesn't support pop(), so here's a quick replacement
-        def pop_conf(key, default=None):
-            value = conf.get(key, default)
-            if key in conf:
-                del conf[key]
-            return value
-
         # since _use and _include statements can be nested, keep on processing until all are resolved        
         updated = True
         recurse = 0
-        flatten = pop_conf("_flatten", 0)
-        flatten_sep = pop_conf("_flatten_sep", "__")
-        scrub = pop_conf("_scrub", None)
+        flatten = pop_conf(conf, "_flatten", 0)
+        flatten_sep = pop_conf(conf, "_flatten_sep", "__")
+        scrub = pop_conf(conf, "_scrub", None)
         if isinstance(scrub, str):
             scrub = [scrub]
         
@@ -202,7 +203,7 @@ def _resolve_config_refs(conf, pathname: str, location: str, name: str, includes
 
             # handle _include entries
             if includes:
-                include_files = pop_conf("_include", None)
+                include_files = pop_conf(conf, "_include", None)
                 if include_files:
                     updated = True
                     if isinstance(include_files, str):
@@ -301,7 +302,7 @@ def _resolve_config_refs(conf, pathname: str, location: str, name: str, includes
 
             # handle _use entries
             if use_sources is not None:
-                merge_sections = pop_conf("_use", None)
+                merge_sections = pop_conf(conf, "_use", None)
                 if merge_sections:
                     updated = True
                     if type(merge_sections) is str:

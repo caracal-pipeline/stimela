@@ -98,7 +98,7 @@ recipe:
     telescope: makems.tel
   defaults:
     telescope: kat-7
-    selfcal_image_size: 1024
+    selfcal.image.size: 1024
   inputs:
     band:
       choices: [L, UHF]
