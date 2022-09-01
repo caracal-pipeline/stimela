@@ -96,7 +96,7 @@ demo_recipe:
   assign:
     a1: x
     a2: y
-    b:
+    c:
       b1: x
       b2: y
 
@@ -130,7 +130,7 @@ demo_recipe:
       params:
         b: 1
         c: 2
-        h.h1: "{recipe.b.b1}"
+        h.h1: "{recipe.c.b1}"
     s2:
       info: The quick brown fox jumps over the lazy dog. 
         The staff chief's bold gambit -- a triumphant application of the cult of the offensive to the art of courting --

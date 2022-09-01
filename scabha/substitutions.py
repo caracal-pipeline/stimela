@@ -8,6 +8,8 @@ import threading
 from .exceptions import Error, SubstitutionError, CyclicSubstitutionError
 from .basetypes import EmptyDictDefault
 
+from omegaconf import DictConfig
+
 # thanks to https://gist.github.com/bgusach/a967e0587d6e01e889fd1d776c5f3729
 def multireplace(string, replacements, ignore_case=False):
     """
@@ -98,8 +100,8 @@ class SubstitutionNS(OrderedDict):
             else:
                 old_value = super().get(name)
                 if isinstance(old_value, SubstitutionNS) and \
-                    isinstance(value, (dict, OrderedDict, SubstitutionNS)):
-                    old_value._merge_(**value)
+                    isinstance(value, (dict, OrderedDict, SubstitutionNS, DictConfig)):
+                    old_value._merge_(value)
                 else:
                     SubstitutionNS._add_(self, name, value)
 
@@ -124,7 +126,7 @@ class SubstitutionNS(OrderedDict):
             super().__setitem__(subns_name, subns)
         else:
             # a nested dict value becomes a substitution namespace automatically
-            if type(value) in (dict, OrderedDict):
+            if type(value) in (dict, OrderedDict, DictConfig):
                 value = SubstitutionNS(_nosubst_=nosubst or self._nosubst_, _name_=self._name_ + [name], **value)
             # if isinstance(value, SubstitutionNS):
             #     OrderedDict.__setattr__(v, "_props_", props)

@@ -1,3 +1,4 @@
+from cmath import exp
 from multiprocessing import cpu_count
 import os, os.path, re, logging, fnmatch, copy, time
 from typing import Any, Tuple, List, Dict, Optional, Union
@@ -78,7 +79,6 @@ class Recipe(Cargo):
         Cargo.__post_init__(self)
         # flatten aliases and assignments
         self.aliases = self.flatten_param_dict(OrderedDict(), self.aliases)
-        self.assign = self.flatten_param_dict(OrderedDict(), self.assign)
         # check that schemas are valid
         for io in self.inputs, self.outputs:
             for name, schema in io.items():
@@ -158,81 +158,107 @@ class Recipe(Cargo):
             AssignmentError: on errors
         """
         whose = whose or self
-        # short-circuit out if nothong to do
+        # short-circuit out if nothing to do
         if not whose.assign and not whose.assign_based_on:
             return
 
-        def resolve_config_variable(key, base=self.config): 
-            return resolve_dotted_reference(key, base, current=None, 
-                                            context=f"{whose.fqname}.assign_based_on.{basevar}")
+        def flatten_dict(input_dict, output_dict={},  prefix=""):
+            for name, value in input_dict.items():
+                name = f"{prefix}{name}"
+                if isinstance(value, (dict, OrderedDict, DictConfig)):
+                    flatten_dict(value, output_dict=output_dict, prefix=f"{name}.")
+                else:
+                    output_dict[name] = value
+            return output_dict
 
-        # split into config and non-config assignments
-        config_assign = OrderedDict((key[1:], value) for key, value in whose.assign.items() if key.startswith('.'))
-        assign = OrderedDict((key, value) for key, value in whose.assign.items() if '.' not in key)
-        updated = False
+        # accumulate all assignments for a final round of evaluation
+        assign = {}
 
-        # merge non-config assignments into ns.recipe, resolve and substitute as appropriate
-        if assign:
-            subst.recipe._merge_(assign)
-            evaluate_and_substitute(assign, subst, subst.recipe, location=[whose.fqname], ignore_subst_errors=ignore_subst_errors)
+        def do_assign(assignments):
+            """Helper function to process a list of assignments. Called repeatedly
+            for the assign section, and for each assign_based_on entry.
+            Substitution errors are ignored at this stage, a final round of re-evaluation with ignore=False is done at the end.
+            """
+            # flatten assignments
+            flattened = flatten_dict(assignments)
+            # drop entries protected from assignment
+            flattened = {name: value for name, value in flattened.items() if name not in self._protected_from_assign}
+            # merge into recipe namespace
+            subst.recipe._merge_(flattened)
+            # perform substitutions
+            try:
+                flattened = evaluate_and_substitute(flattened, subst, subst.recipe, location=[whose.fqname], ignore_subst_errors=True)
+            except Exception as exc:
+                raise AssignmentError(f"{whose.fqname}: error evaluating assignments", exc)
+            assign.update(flattened)
 
-        # now process assign_based_on entries
+        # perform direct assignments
+        do_assign(whose.assign)
+
+        # add assign_based_on entries to flattened_assign
         for basevar, value_list in whose.assign_based_on.items():
             # make sure the base variable is defined
+            value = None
             # it will be in subst.recipe if it was assigned, or is an input
             if basevar in subst.recipe:
                 value = str(subst.recipe[basevar])
+            # else it might be an input with a default, check for that
             elif basevar in self.inputs_outputs and self.inputs_outputs[basevar].default is not UNSET:
                 value = str(self.inputs_outputs[basevar].default)
-            elif '.' in basevar:
-                section, varname = resolve_config_variable(basevar)
-                if varname not in section:
-                    raise AssignmentError(f"{whose.fqname}.assign_based_on.{basevar}: is not a valid config entry")
-                value = str(section[varname])
+            # else see if it is a config setting
             else:
-                raise AssignmentError(f"{whose.fqname}.assign_based_on.{basevar} is not a known input or variable")
+                comps = basevar.split('.')
+                if len(comps) > 1 and comps[0] in self.config:
+                    try:
+                        value = self.config
+                        for comp in comps:
+                            value = value.get(comp)
+                    except Exception as exc:
+                        value = None
+            # nothing found? error then
+            if value is None:
+                raise AssignmentError(f"{whose.fqname}.assign_based_on.{basevar} is not a known input or variable or config item")
             # look up list of assignments
-            assignments = value_list.get(value, value_list.get('DEFAULT'))
-            if assignments is None:
-                raise AssignmentError(f"{whose.fqname}.assign_based_on.{basevar}: unknown value '{value}', and no default defined")
-            updated = True
-            # update assignments (also inside ns.recipe)
-            for key, value in assignments.items():
-                if key in self._protected_from_assign:
-                    self.log.debug(f"skipping protected assignment {key}={value}")
-                elif key in self.inputs_outputs:
-                    self.log.debug(f"params assignment: {key}={value}")
-                    params[key] = value
-                    subst.recipe[key] = value
-                elif key.startswith('.'):
-                    config_assign[key] = value
+            if value not in value_list:
+                if 'DEFAULT' not in value_list:
+                    raise AssignmentError(f"{whose.fqname}.assign_based_on.{basevar}: unknown value '{value}', and no default defined")
+                value = 'DEFAULT'
+            assignments = value_list.get(value)
+            if not isinstance(assignments, (dict, OrderedDict, DictConfig)):
+                raise AssignmentError(f"{whose.fqname}.assign_based_on.{basevar}.{value}: mapping expected, got {type(assignments)} instead")
+            # process the assignments
+            do_assign(assignments)
+
+        # do final round of substitutions
+        try:
+            assign = evaluate_and_substitute(assign, subst, subst.recipe, location=[whose.fqname], ignore_subst_errors=ignore_subst_errors)
+        except Exception as exc:
+            raise AssignmentError(f"{whose.fqname}: error evaluating assignments", exc)
+        # dispatch and reassign, since substitutions may have been performed
+        for key, value in assign.items():
+            subst.recipe[key] = value
+            if key in self.inputs_outputs:
+                self.log.debug(f"default params assignment: {key}={value}")
+                self.defaults[key] = value
+            elif key.startswith("log."):
+                if type(value) is Unresolved:
+                    self.log.debug(f"ignoring unresolved log options assignment {key}={value}")
                 else:
-                    self.log.debug(f"variable assignment: {key}={value}")
-                    assign[key] = value
-                    subst.recipe[key] = value
-                    self.log.debug(f"variable assignment: {key}={value}")
-
-        # if anything changed, merge non-config assignments into ns.recipe, resolve and substitute as appropriate
-        if assign and updated:
-            subst.recipe._merge_(assign)
-            evaluate_and_substitute(assign, subst, subst.recipe, location=[whose.fqname], ignore_subst_errors=ignore_subst_errors)
-
-        # propagate config assignments
-        for key, value in config_assign.items():
-            # log. are log options
-            if key.startswith("log."):
-                self.log.debug(f"log options assignment: {key}={value}")
-                whose.logopts[key.split('.', 1)[1]] = value
-            # else just config settings
+                    self.log.debug(f"log options assignment: {key}={value}")
+                    _, setting = key.split('.')
+                    whose.update_log_options(**{setting: value})
             else:
-                self.log.debug(f"config assignment: {key}={value}")
-                # change system config
-                section, varname = resolve_config_variable(key)
-                section[varname] = value
-                # do the same for the subst dict. Note that if the above succeeded, then key
-                # is a valid config entry, so it will also be look-uppable in subst
-                section, varname = resolve_config_variable(key, base=subst.config)
-                section[varname] = value
+                self.log.debug(f"variable assignment: {key}={value}")
+
+    def update_log_options(self, **options):
+        for setting, value in options.items():
+            try:
+                self.logopts[setting] = value
+            except Exception as exc:
+                raise AssignmentError(f"invalid {self.fqname}.log.{setting} setting", exc)
+        # propagate to children
+        for step in self.steps.values():
+            step.update_log_options(**options)
 
     @property
     def finalized(self):
@@ -406,7 +432,7 @@ class Recipe(Cargo):
             self._alias_map[step_label, step_param_name] = alias_name
             self._alias_list.setdefault(alias_name, []).append(Recipe.AliasInfo(step_label, step, step_param_name, io))
 
-    def finalize(self, config=None, log=None, logopts=None, name=None, fqname=None, nesting=0):
+    def finalize(self, config=None, log=None, name=None, fqname=None, nesting=0):
         if not self.finalized:
             config = config or stimela.CONFIG
 
@@ -419,15 +445,14 @@ class Recipe(Cargo):
                 log.propagate = True
 
             # init and/or update logger options
-            self.logopts = (logopts or config.opts.log).copy()
+            self.logopts = config.opts.log.copy()
 
             # update file logger
-            if nesting == 0:
-                logsubst = SubstitutionNS(config=config, info=dict(fqname=fqname))
-                stimelogging.update_file_logger(log, self.logopts, nesting=nesting, subst=logsubst, location=[self.fqname])
+            logsubst = SubstitutionNS(config=config, info=dict(fqname=fqname))
+            stimelogging.update_file_logger(log, self.logopts, nesting=nesting, subst=logsubst, location=[self.fqname])
 
             # call Cargo's finalize method
-            super().finalize(config, log=log, logopts=self.logopts, fqname=fqname, nesting=nesting)
+            super().finalize(config, log=log, fqname=fqname, nesting=nesting)
 
             # finalize steps
             for label, step in self.steps.items():
@@ -546,17 +571,20 @@ class Recipe(Cargo):
         subst._add_('steps', {}, nosubst=True)
         subst._add_('previous', {}, nosubst=True)
         subst._add_('recipe', {})
-        if subst_outer is not None and 'root' in subst_outer:
-            subst._add_('root', subst_outer.root)
-        subst.recipe._merge_(params)
+        if subst_outer is not None:
+            if 'root' in subst_outer:
+                subst._add_('root', subst_outer.root, nosubst=True)
+            if 'recipe' in subst_outer:
+                subst._add_('parent', subst_outer.recipe, nosubst=True)
+        subst.recipe = SubstitutionNS(**params)
+        subst.recipe.log = self.logopts
+        if root:
+            subst.root = subst.recipe
 
         # update assignments
         self.update_assignments(subst, params=params, ignore_subst_errors=True)
-        if root:
-            subst.root = subst.recipe
-            # update logger, since log destination may have changed
-            # but only if we're root -- for subrecipes, we ignore
-            stimelogging.update_file_logger(self.log, self.logopts, nesting=self.nesting, subst=subst, location=[self.fqname])
+        # this may have changed the file logger, so update
+        stimelogging.update_file_logger(self.log, self.logopts, nesting=self.nesting, subst=subst, location=[self.fqname])
 
         # add for-loop variable to inputs, if expected there
         if self.for_loop is not None and self.for_loop.var in self.inputs:
@@ -600,15 +628,10 @@ class Recipe(Cargo):
         def prevalidate_steps():
             for label, step in self.steps.items():
                 self._prep_step(label, step, subst)
-                # update, since these may depend on step info
+                # update assignments, since substitutions (info.fqname and such) may have changed
                 self.update_assignments(subst, params=params, ignore_subst_errors=True)
+                # update assignments based on step content
                 self.update_assignments(subst, whose=step, params=params, ignore_subst_errors=True)
-                # do not update the step's logger, only do it at runtime
-                #  stimelogging.update_file_logger(step.log, step.logopts, nesting=step.nesting, subst=subst, location=[step.fqname])
-                # update our own logger, if root recipe
-                if root:
-                    subst.info = info.copy()
-                    stimelogging.update_file_logger(self.log, self.logopts, nesting=self.nesting, subst=subst, location=[self.fqname])
 
                 try:
                     step_params = step.prevalidate(subst)
@@ -621,6 +644,8 @@ class Recipe(Cargo):
                     # msg = f"step '{label}': {exc}"
                     errors.append(RecipeValidationError(f"step '{label}'", exc))
 
+                # revert to recipe-level assignments
+                self.update_assignments(subst, params=params, ignore_subst_errors=True)
                 subst.previous = subst.current
                 subst.steps[label] = subst.previous
 
@@ -715,7 +740,7 @@ class Recipe(Cargo):
             subst._add_('info', info, nosubst=True)
             subst._add_('config', self.config, nosubst=True) 
 
-            subst.recipe = self.make_substitition_namespace(params)
+            subst.recipe = SubstitutionNS(**params)
             subst.current = subst.recipe
 
         return Cargo.validate_inputs(self, params, subst=subst, loosely=loosely)
@@ -799,6 +824,7 @@ class Recipe(Cargo):
         """
 
         # set up substitution namespace
+        subst_outer = subst
         if subst is None:
             subst = SubstitutionNS()
 
@@ -809,24 +835,23 @@ class Recipe(Cargo):
         subst._add_('steps', {}, nosubst=True)
         subst._add_('previous', {}, nosubst=True)
             
-        recipe_ns = self.make_substitition_namespace(params)
-        subst._add_('recipe', recipe_ns)
+        subst.recipe = SubstitutionNS(**params)
+        subst.recipe.log = self.logopts
 
-        # # merge in config sections, except "recipe" which clashes with our namespace
-        # for section, content in self.config.items():
-        #     if section != 'recipe':
-        #         subst._add_(section, content, nosubst=True)
-
-        # add root-level recipe info
-        if self.nesting < 1:
-            Recipe._root_recipe_ns = recipe_ns
-        subst._add_('root', Recipe._root_recipe_ns)
+        if subst_outer is not None:
+            if 'root' in subst_outer:
+                subst._add_('root', subst_outer.root, nosubst=True)
+            if 'recipe' in subst_outer:
+                subst._add_('parent', subst_outer.recipe, nosubst=True)
+        else:
+            subst.root = subst.recipe
 
         subst_copy = subst.copy()
 
         try:
             # update variable assignments
             self.update_assignments(subst, params=params)
+            # log options may have changed, so adjust
             stimelogging.update_file_logger(self.log, self.logopts, nesting=self.nesting, subst=subst, location=[self.fqname])
 
             # Harmonise before running
@@ -871,20 +896,21 @@ class Recipe(Cargo):
                     inst.assign[f"{inst.for_loop.var}@index"] = count
                     stimelogging.declare_subtask_attributes(f"{count+1}/{len(inst._for_loop_values)}")
 
-                # update and re-evaluate assignments
+                # reevaluate recipe level assignments (info.fqname etc. have changed)
                 inst.update_assignments(subst, params=params)
+                # evaluate step-level assignments
                 inst.update_assignments(subst, whose=step, params=params)
+                # step logger may have changed
                 stimelogging.update_file_logger(step.log, step.logopts, nesting=step.nesting, subst=subst, location=[step.fqname])
                 # set our info back temporarily to update log assignments
                 info_step = subst.info
                 subst.info = info.copy()
-                stimelogging.update_file_logger(inst.log, inst.logopts, nesting=inst.nesting, subst=subst, location=[inst.fqname])
                 subst.info = info_step
 
                 inst.log.info(f"processing step '{label}'")
                 try:
                     #step_params = step.run(subst=subst.copy(), batch=batch)  # make a copy of the subst dict since recipe might modify
-                    step_params = step.run(subst=subst.copy())  # make a copy of the subst dict since recipe might modify
+                    step_params = step.run(subst=subst.copy(), parent_log=self.log)  # make a copy of the subst dict since recipe might modify
                 except ScabhaBaseException as exc:
                     if not exc.logged:
                         log_exception(StimelaStepExecutionError(f"error running step '{label}'", exc))
@@ -894,6 +920,8 @@ class Recipe(Cargo):
                 # put step parameters into previous and steps[label] again, as they may have changed based on outputs)
                 subst.previous = step_params
                 subst.steps[label] = subst.previous
+                # revert to recipe level assignments
+                inst.update_assignments(subst, whose=inst, params=params)
 
             loop_futures = []
 

@@ -351,7 +351,7 @@ def update_file_logger(log: logging.Logger, logopts: DictConfig, nesting: int = 
     from .config import StimelaLogConfig
 
     if logopts.enable and logopts.nest >= nesting:
-        path = os.path.join(logopts.dir or ".", logopts.name)
+        path = os.path.join(logopts.dir or ".", logopts.name + logopts.ext)
 
         if subst is not None:
             with forgiving_substitutions_from(subst, raise_errors=False) as context: 

@@ -146,9 +146,20 @@ class Step:
         if name in self.params:
             del self.params[name]
 
+    def update_log_options(self, **options):
+        from .recipe import Recipe
+        for setting, value in options.items():
+            try:
+                self.logopts[setting] = value
+            except Exception as exc:
+                raise AssignmentError(f"invalid {self.fqname}.log.{setting} setting", exc)
+        # propagate to children
+        if isinstance(self.cargo, Recipe):
+            self.cargo.update_log_options(**options)
+
     _instantiated_cabs = {}
 
-    def finalize(self, config=None, log=None, logopts=None, fqname=None, nesting=0):
+    def finalize(self, config=None, log=None, fqname=None, nesting=0):
         from .recipe import Recipe, RecipeSchema
         if not self.finalized:
             if fqname is not None:
@@ -203,7 +214,7 @@ class Step:
                 log.propagate = True
 
             # finalize the cargo
-            self.cargo.finalize(config, log=log, logopts=logopts, fqname=self.fqname, nesting=nesting)
+            self.cargo.finalize(config, log=log, fqname=self.fqname, nesting=nesting)
 
             # build dictionary of defaults from cargo
             self.defaults = {name: schema.default for name, schema in self.cargo.inputs_outputs.items() 
@@ -298,7 +309,7 @@ class Step:
                 self.log_summary(level, "summary of inputs follows", color="WARNING")
                 # raise up, unless step is being skipped
                 if skip:
-                    self.log.warning("since the step is being skipped, this is not fatal")
+                    parent_log.warning("since the step is being skipped, this is not fatal")
                     skip_warned = True
                 else:
                     raise
@@ -317,7 +328,7 @@ class Step:
                 if skip:
                     self.log.warning(f"invalid inputs: {join_quote(invalid)}")
                     if not skip_warned:
-                        self.log.warning("since the step was skipped, this is not fatal")
+                        parent_log.warning("since the step was skipped, this is not fatal")
                         skip_warned = True
                 else:
                     raise StepValidationError(f"step '{self.name}': invalid inputs: {join_quote(invalid)}", log=self.log)
@@ -337,9 +348,9 @@ class Step:
                     raise RuntimeError("step '{self.name}': unknown cargo type")
             else:
                 if self._skip is None and subst is not None:
-                    self.log.info(f"skipping step based on setting of '{self.skip}'")
+                    parent_log.info(f"skipping step based on setting of '{self.skip}'")
                 else:
-                    self.log.info("skipping step based on explicit setting")
+                    parent_log.info("skipping step based on explicit setting")
 
             self.log.debug(f"validating outputs")
             validated = False
@@ -374,8 +385,8 @@ class Step:
             invalid = [name for name in self.invalid_params + self.unresolved_params if name in self.cargo.outputs]
             if invalid:
                 if skip:
-                    self.log.warning(f"invalid outputs: {join_quote(invalid)}")
-                    self.log.warning("since the step was skipped, this is not fatal")
+                    parent_log.warning(f"invalid outputs: {join_quote(invalid)}")
+                    parent_log.warning("since the step was skipped, this is not fatal")
                 else:
                     raise StepValidationError(f"invalid outputs: {join_quote(invalid)}", log=self.log)
 

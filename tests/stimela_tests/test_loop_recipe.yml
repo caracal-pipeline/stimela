@@ -70,7 +70,7 @@ cubical_image_loop:
     image-prefix: "{recipe.dir.out}/im{info.suffix}-{recipe.loop-name}/im{info.suffix}-{recipe.loop-name}"
     loop-name: "s{recipe.loop:02d}"
     log:
-      name: log-{recipe.loop-name}-{info.fqname}.txt
+      name: log-{recipe.loop-name}-{info.fqname}
 
   for_loop:
     var: loop

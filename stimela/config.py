@@ -45,8 +45,9 @@ class StimelaImage:
 @dataclass 
 class StimelaLogConfig(object):
     enable: bool = True                          
-    name: str = "log-{info.fqname}.txt"          # Default name for log file. {fqname} and {config.x.y} is substituted.
-    
+    name: str = "log-{info.fqname}"          # Default name for log file. info dict and {config.x.y} is substituted.
+    ext: str = ".txt"                        # Default extension for log file.
+ 
     dir: str = "."                               # Default directory for log files
 
     symlink: Optional[str] = None                # Will make named symlink to the log directory. A useful pattern is e.g. dir="logs-{config.run.datetime}", symlink="logs",

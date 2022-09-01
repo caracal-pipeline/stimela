@@ -267,14 +267,14 @@ class Cargo(object):
     def finalized(self):
         return self.config is not None
 
-    def finalize(self, config=None, log=None, logopts=None, fqname=None, nesting=0):
+    def finalize(self, config=None, log=None, fqname=None, nesting=0):
         if not self.finalized:
             if fqname is not None:
                 self.fqname = fqname
             self.config = config
             self.nesting = nesting
             self.log = log
-            self.logopts = (logopts or config.opts.log).copy()
+            self.logopts = config.opts.log.copy()
 
     def prevalidate(self, params: Optional[Dict[str, Any]], subst: Optional[SubstitutionNS]=None, root=False):
         """Does pre-validation. 
@@ -340,10 +340,6 @@ class Cargo(object):
         params.update(**validate_parameters(params, self.outputs, defaults=self.defaults, subst=subst, fqname=self.fqname,
                                                 check_unknowns=False, check_required=not loosely, check_exist=not loosely))
         return params
-
-    def make_substitition_namespace(self, params={}):
-        from .substitutions import SubstitutionNS
-        return SubstitutionNS(**params)
 
     def rich_help(self, tree, max_category=ParameterCategory.Optional):
         """Generates help into a rich.tree.Tree object"""

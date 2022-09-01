@@ -197,7 +197,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
         # wrap it in an outer step and prevalidate (to set up loggers etc.)
         recipe.fqname = recipe_name
 
-        # protect dotlisted arguments from being assignedby recipe.assignb and recipe.assign_based_on
+        # protect dotlisted arguments from being assignedby recipe.assign and recipe.assign_based_on
         recipe.protect_from_assignments(dotlist.keys())
         recipe.protect_from_assignments(params.keys())
 
