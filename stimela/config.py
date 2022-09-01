@@ -151,6 +151,12 @@ def get_initial_deps():
 
 def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include_paths: List[str] = [],
                 verbose: bool = False, use_sys_config: bool = True):
+
+    # # disable OmegaConf resolvers
+    # for name in "oc.create", "oc.decode", "oc.deprecated", "oc.env", "oc.select", "oc.dict.keys", "oc.dict.values":
+    #     print(f"clearing {name}")
+    #     print(OmegaConf.clear_resolver(name))
+
     log = stimela.logger()
 
     configuratt.PACKAGE_VERSION = f"stimela=={stimela.__version__}"
@@ -312,7 +318,11 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
     # add runtime info
     _ds = time.strftime("%Y%m%d")
     _ts = time.strftime("%H%M%S")
-    runtime = dict(date=_ds, time=_ts, datetime=f"{_ds}-{_ts}", node=platform.node())
+    runtime = dict(
+        date=_ds, 
+        time=_ts, datetime=f"{_ds}-{_ts}", 
+        node=platform.node(), 
+        env={key: value.replace('${', '\${') for key, value in os.environ.items()})
 
     conf.run = OmegaConf.create(runtime)
 
