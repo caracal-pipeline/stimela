@@ -33,6 +33,9 @@ class ParameterValidationError(StimelaBaseException):
 class StimelaCabParameterError(StimelaBaseException):
     pass
 
+class StimelaCabError(StimelaBaseException):
+    pass
+
 class StimelaStepExecutionError(StimelaBaseException):
     pass
 

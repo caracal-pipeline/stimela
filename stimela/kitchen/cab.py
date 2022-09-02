@@ -156,14 +156,18 @@ class Cab(Cargo):
     def build_command_line(self, params: Dict[str, Any], subst: Optional[Dict[str, Any]] = None, search=True):
         from scabha.substitutions import substitutions_from
 
-        with substitutions_from(subst, raise_errors=True) as context:
-            venv = context.evaluate(self.virtual_env, location=["virtual_env"])
-            command = context.evaluate(self.command, location=["command"])
+        try:
+            with substitutions_from(subst, raise_errors=True) as context:
+                venv = context.evaluate(self.virtual_env, location=["virtual_env"])
+                command = context.evaluate(self.command, location=["command"])
+        except Exception as exc:
+            raise CabValidationError(f"error constructing cab command", exc)
+
 
         if venv:
             venv = os.path.expanduser(venv)
             if not os.path.isfile(f"{venv}/bin/activate"):
-                raise CabValidationError(f"virtual environment {venv} doesn't exist", log=self.log)
+                raise CabValidationError(f"virtual environment {venv} doesn't exist")
             self.log.debug(f"virtual environment is {venv}")
         else:
             venv = None
@@ -181,7 +185,7 @@ class Cab(Cargo):
                     raise CabValidationError(f"{command0}: not found", log=self.log)
             else:
                 if not os.path.isfile(command) or not os.stat(command).st_mode & stat.S_IXUSR:
-                    raise CabValidationError(f"{command} doesn't exist or is not executable", log=self.log)
+                    raise CabValidationError(f"{command} doesn't exist or is not executable")
 
         self.log.debug(f"command is {command}")
 

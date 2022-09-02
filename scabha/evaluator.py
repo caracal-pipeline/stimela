@@ -183,7 +183,7 @@ class Evaluator(object):
         return ""
 
     def unset(self, *args):
-        return UNSET("")
+        return UNSET
 
     def self_value(self, *args):
         return SELF
@@ -252,7 +252,7 @@ class Evaluator(object):
         value = self._evaluate_result(lookup, allow_unset=True)
         if type(value) is UNSET:
             if is_missing(if_unset):
-                return value
+                return UNSET
             else:
                 return self._evaluate_result(if_unset)
         elif is_missing(if_set) or if_set == 'SELF':
@@ -346,7 +346,7 @@ class Evaluator(object):
                 if verbose:
                     print(f"{name}: {value} -> {new_value}")
                 # UNSET return means delete or revert to default
-                if type(new_value) is UNSET:
+                if new_value is UNSET:
                     if name in defaults:
                         params[name] = defaults[name]
                         if corresponding_ns:
