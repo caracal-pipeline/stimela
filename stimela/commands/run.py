@@ -40,6 +40,12 @@ def load_recipe_file(filename: str):
 
     dependencies.update(deps)
 
+    # check for missing requirements
+    missing = configuratt.check_requirements(conf, [stimela.CONFIG], strict=True)
+    for (loc, name, _) in missing:
+        logger().warning(f"optional config section '{loc}' omitted due to missing requirement '{name}'")
+
+
     return conf, dependencies
 
 

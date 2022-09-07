@@ -159,7 +159,7 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
 
     log = stimela.logger()
 
-    configuratt.PACKAGE_VERSION = f"stimela=={stimela.__version__}"
+    configuratt.common.PACKAGE_VERSION = f"stimela=={stimela.__version__}"
     # set up include paths
 
     # stadard system paths
@@ -295,7 +295,7 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
 
         # add local configs
         for path in extra_configs:
-            conf = _load(conf, config_file)
+            conf = _load(conf, path)
 
         if not CONFIG_LOADED:
             log.info("no user-supplied configuration files given, using defaults")
@@ -333,6 +333,11 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
 
     global CONFIG_DEPS
     CONFIG_DEPS = dependencies
+
+    # check for missing requirements
+    missing = configuratt.check_requirements(conf, [], strict=True)
+    for (loc, name, _) in missing:
+        log.warn(f"optional config section '{loc}' omitted due to unmet requirement '{name}'")
 
     return conf
 

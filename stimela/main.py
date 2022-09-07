@@ -73,22 +73,11 @@ def cli(backend, config_files=[], config_dotlist=[], include=[], verbose=False, 
     import scabha.exceptions
     scabha.exceptions.set_logger(log)
 
+    import scabha.configuratt.cache
+    scabha.configuratt.cache.set_cache_dir(os.path.expanduser("~/.cache/stimela-configs"))
     # clear cache if requested
-    from scabha import configuratt
-    configuratt.CACHEDIR = os.path.expanduser("~/.cache/stimela-configs")
     if clear_cache:
-        if os.path.isdir(configuratt.CACHEDIR):
-            files = glob.glob(f"{configuratt.CACHEDIR}/*")
-            log.info(f"clearing {len(files)} cached config(s) from cache")
-        else:
-            files = []
-            log.info(f"no configs in cache")
-        for filename in files:
-            try:
-                os.unlink(filename)
-            except Exception as exc:
-                log.error(f"failed to remove cached config {filename}: {exc}")
-                sys.exit(1)
+        scabha.configuratt.cache.clear_cache(log)
 
     # load config files
     stimela.CONFIG = config.load_config(extra_configs=config_files, extra_dotlist=config_dotlist, include_paths=include,
