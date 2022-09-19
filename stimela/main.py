@@ -72,6 +72,8 @@ def cli(backend, config_files=[], config_dotlist=[], include=[], verbose=False, 
     # use this logger for exceptions
     import scabha.exceptions
     scabha.exceptions.set_logger(log)
+    if verbose:
+        scabha.exceptions.ALWAYS_REPORT_TRACEBACK = True
 
     import scabha.configuratt.cache
     scabha.configuratt.cache.set_cache_dir(os.path.expanduser("~/.cache/stimela-configs"))

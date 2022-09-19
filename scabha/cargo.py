@@ -83,8 +83,8 @@ class ParameterPolicies(object):
     pass_missing_as_none: Optional[bool] = None
 
 
-
-# used to classify parameters. Purely for cosmetic and help purposes
+# This is used to classify parameters, for cosmetic and help purposes.
+# Usually set automatically based on whether a parameter is required, whether a default is provided, etc.
 ParameterCategory = IntEnum("ParameterCategory", 
                             dict(Required=0, Optional=1, Implicit=2, Obscure=3, Hidden=4),
                             module=__name__)
@@ -337,6 +337,11 @@ class Cargo(object):
         If loosely is True, then doesn't check for required parameters, and doesn't check for files to exist etc.
         """
         assert(self.finalized)
+        # update implicits that weren't marked as unresolved
+        for name in self._implicit_params:
+            impl = self.inputs_outputs[name].implicit
+            if type(impl) is not Unresolved:
+                params[name] = self.inputs_outputs[name].implicit
         params.update(**validate_parameters(params, self.outputs, defaults=self.defaults, subst=subst, fqname=self.fqname,
                                                 check_unknowns=False, check_required=not loosely, check_exist=not loosely))
         return params

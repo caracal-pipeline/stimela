@@ -19,10 +19,10 @@ base_inputs:
     info: Channels out
     dtype: int
     nom_de_guerre: channels-out
-  deconvolution_channels:
+  deconvolution-channels:
     info: Channels to use in deconvolution
     dtype: int
-  intervals_out:
+  intervals-out:
     dtype: int
   threads:
     info: Threads
@@ -38,26 +38,20 @@ base_inputs:
       split: " "
       repeat: list
   size:
-    info: Image size in pixels (square image)
+    info: Image size in pixels
     dtype: Union[int, Tuple[int, int]]
+    required: true
     policies:
       repeat: list
       format_list: ["{0}", "{1}"]
       format_list_scalar: ["{0}", "{0}"]
-  # sizes:
-  #   info: Image sizes in pixels (width, height)
-  #   dtype: Tuple[int, int]
-  #   policies:
-  #     repeat: list
-  #     format_list: ["{sizes[0]}", "{sizes[1]}"]
-  #   nom_de_guerre: size
   multiscale:
     dtype: bool
   scale:
     info: Angular pixel size
     dtype: Union[str, float]
     required: true
-  taper_gaussian:
+  taper-gaussian:
     dtype: str
   niter:
     info: Number of minor clean iterations
@@ -65,56 +59,56 @@ base_inputs:
   nmiter:
     info: Max number of major clean iterations
     dtype: int
-  fits_mask:
+  fits-mask:
     dtype: File
   threshold:
     dtype: float
-  auto_threshold:
+  auto-threshold:
     dtype: float
-  auto_mask:
+  auto-mask:
     dtype: float
   gain:
     dtype: float
   mgain:
     dtype: float
-  baseline_averaging:
+  baseline-averaging:
     dtype: float
-  join_channels:
+  join-channels:
     dtype: bool
-  fit_spectral_pol:
+  fit-spectral-pol:
     dtype: int
-  fit_beam:
+  fit-beam:
     dtype: bool
-  elliptical_beam:
+  elliptical-beam:
     dtype: bool
   padding:
     dtype: float
   nwlayers:
     dtype: int
-  nwlayers_factor:
+  nwlayers-factor:
     dtype: float
-  save_source_list:
+  save-source-list:
     dtype: bool
-  store_imaging_weights:
+  store-imaging-weights:
     dtype: bool
-  parallel_deconvolution:
+  parallel-deconvolution:
     dtype: int
-  parallel_gridding:
+  parallel-gridding:
     dtype: int
   predict:
     dtype: bool
-  no_update_model_required:
+  no-update-model-required:
     dtype: bool
   cont:
     dtype: bool
     nom_de_guerre: continue 
-  subtract_model:
+  subtract-model:
     dtype:  bool
-  use_wgridder:
+  use-wgridder:
     dtype: bool
   temp_dir:
     dtype: Directory
-  log_time:
+  log-time:
     dtype: bool
   interval:
     info: Time intervals to image
@@ -130,7 +124,7 @@ base_inputs:
     dtype: Union[float, str]
 
 base_outputs:
-  source_list:
+  source-list:
     info: Source list
     dtype: File
     implicit: "{current.prefix}-sources.txt"

@@ -65,7 +65,7 @@ def evaluate_and_substitute(inputs: Dict[str, Any],
                     errors += value.errors
             # check for substitution errors
             if errors:
-                raise SubstitutionErrorList(*errors)
+                raise SubstitutionErrorList("unresolved {}-substitutions", errors)
     return inputs
 
 
@@ -77,7 +77,7 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
                         check_required=True,
                         check_exist=True,
                         create_dirs=False,
-                        ignore_subst_errors=False
+                        ignore_subst_errors=False,
                         ) -> Dict[str, Any]:
     """Validates a dict of parameter values against a given schema 
 
@@ -132,10 +132,14 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
     # update missing inputs from defaults
     inputs.update(**{name: value for name, value in all_defaults.items() if name not in inputs})
 
+    # update implicit values
+    #  
+
     # perform substitution
     if subst is not None:
         inputs = evaluate_and_substitute(inputs, subst, subst.current, defaults=all_defaults, 
-                                        ignore_subst_errors=ignore_subst_errors, location=[fqname])
+                                        ignore_subst_errors=ignore_subst_errors, 
+                                        location=[fqname])
 
     # split inputs into unresolved substitutions, and proper inputs
     unresolved = {name: value for name, value in inputs.items() if isinstance(value, Unresolved)}
@@ -253,8 +257,11 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
         errors = []
         for err  in exc.errors():
             loc = '.'.join([field2name.get(x, x) for x in err['loc']])
-            errors.append(f"'{loc}': {err['msg']}") 
-        raise ParameterValidationError(', '.join(errors))
+            if loc in inputs:
+                errors.append(f"{loc} = {inputs[loc]}: {err['msg']}") 
+            else:
+                errors.append(f"{loc}: {err['msg']}") 
+        raise ParameterValidationError("parameter(s) failed to validate", errors)
 
     validated = {field2name[fld]: value for fld, value in dataclasses.asdict(validated).items()}
 

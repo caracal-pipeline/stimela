@@ -59,7 +59,7 @@ def _lookup_name(name: str, *sources: List[Dict]):
         result = _lookup_nameseq(name_seq, source)
         if result is not None:
             return result
-    raise NameError(f"unknown key {name}")
+    raise ConfigurattError(f"unknown key {name}")
 
 
 def _flatten_subsections(conf, depth: int = 1, sep: str = "__"):
@@ -166,6 +166,8 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
 
     if isinstance(conf, DictConfig):
         
+        ## NB: perhaps have _use and _include take effect at the point they're inserted?
+        ## also add an _all statement to insert a section into all section that follow
         # since _use and _include statements can be nested, keep on processing until all are resolved        
         updated = True
         recurse = 0
@@ -329,12 +331,6 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                 # reassigning is expensive, so only do it if there was an actual change 
                 if value1 is not value:
                     conf[key] = value1
-
-        # # rescan requirements
-        # # nah nah wasteful and confusing
-        # # how about we tag includes (using the flags), and make _contingent on tags?
-
-        # dependencies.scan_requirements(conf, location, pathname)
                     
     # recurse into lists
     elif isinstance(conf, ListConfig):

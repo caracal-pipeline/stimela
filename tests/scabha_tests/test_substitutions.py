@@ -3,7 +3,7 @@ import traceback
 from scabha.exceptions import SubstitutionError
 from scabha.substitutions import *
 from omegaconf import OmegaConf 
-from scabha.evaluator import Evaluator
+from scabha.evaluator import UNSET, Evaluator
 from scabha.validate import Unresolved
 
 def test_subst():
@@ -131,8 +131,8 @@ def test_formulas():
         o = '=previous.z',
         p = 'x{previous.zz}',
         q = '=LIST(current.a, current.b, current.c + 1, 0)',
-        r = '=not IFSET(current.a)'
-        #q = '=[current.a, current.b, current.c + 1, 0]'
+        r = '=not IFSET(current.a)',
+        s = '=current.c + current.c + current.c'
     )
     ns._add_("current", current)
     
@@ -153,8 +153,8 @@ def test_formulas():
         assert r['g'] == 2
         assert r['h'] == True
         assert r['i'] == 'False'
-        assert r['j'] == "UNSET"
-        assert r['k'] == r['j']
+        assert 'j' not in r
+        assert type(r['k']) is UNSET
         assert 'l' not in r
         assert r['m'] == True
         assert r['n'] == True

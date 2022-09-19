@@ -324,7 +324,8 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
         outputs = outer_step.run()
     except Exception as exc:
         if not isinstance(exc, ScabhaBaseException) or not exc.logged:
-            log_exception(StimelaRuntimeError(f"run failed after {elapsed()}", exc))
+            log_exception(StimelaRuntimeError(f"run failed after {elapsed()}", exc, 
+                tb=not isinstance(exc, ScabhaBaseException)))
         for line in traceback.format_exc().split("\n"):
             log.debug(line)
         sys.exit(1)

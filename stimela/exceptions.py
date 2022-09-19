@@ -27,9 +27,6 @@ class RecipeValidationError(StimelaBaseException):
 class CabValidationError(StimelaBaseException):
     pass
 
-class ParameterValidationError(StimelaBaseException):
-    pass
-
 class StimelaCabParameterError(StimelaBaseException):
     pass
 

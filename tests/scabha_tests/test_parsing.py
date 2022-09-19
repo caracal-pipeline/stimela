@@ -8,11 +8,17 @@ def test_parser():
 
     expr = construct_parser()
 
-    a = expr.parseString("a.b", parse_all=True)
-    print(a.dump())
-
-    a = expr.parseString("IFSET(a.b)", parse_all=True)
-    print(a.dump())
+    for string in [
+            "a.b + b.c - c.d",
+            "a.b + b.c * c.d",
+            "a.b + -b.c",
+            "a.b", 
+            "IFSET(a.b)",
+                ]:
+        print(f"\n\n\n=====================\nExpression: {string}\n")
+        a = expr.parseString(string, parse_all=True)
+        print(f"\n\n\n{a.getName()}")
+        print(a.dump())
 
     # a = expr.parseString("IFSET(a.b)+IFSET(a.b)", parse_all=True)
     # print(a.dump())

@@ -336,10 +336,16 @@ class Recipe(Cargo):
                     has_value=False):
         wildcards = False
         if type(alias_target) is str:
+            # $$ maps to full name, and $ maps to last element of name
+            alias_target = alias_target.replace("$$", alias_name)
+            alias_target = alias_target.replace("$", alias_name.rsplit('.', 1)[-1])
             step_spec, step_param_name = alias_target.split('.', 1)
             # treat label as a "(cabtype)" specifier?
             if re.match('^\(.+\)$', step_spec):
-                steps = [(label, step) for label, step in self.steps.items() if isinstance(step.cargo, Cab) and step.cab == step_spec[1:-1]]
+                steps = [(label, step) for label, step in self.steps.items() 
+                        if (isinstance(step.cargo, Cab) and step.cab == step_spec[1:-1]) or
+                            (isinstance(step.cargo, Recipe) and step.recipe == step_spec[1:-1])]
+                wildcards = True
             # treat label as a wildcard?
             elif any(ch in step_spec for ch in '*?['):
                 steps = [(label, step) for label, step in self.steps.items() if fnmatch.fnmatchcase(label, step_spec)]
@@ -360,11 +366,13 @@ class Recipe(Cargo):
             input_schema = step.inputs.get(step_param_name)
             output_schema = step.outputs.get(step_param_name)
             schema = input_schema or output_schema
+            # if the step was matched by a wildcard, and it doesn't have such a parameter in the schema, or else if it is
+            # already explicitly specified, then we don't alias it 
+            if wildcards and (schema is None or step_param_name in step.params):
+                continue                    
+            # no a wildcard, but parameter not defined? This is an error
             if schema is None:
-                if wildcards:
-                    continue
-                else:
-                    raise RecipeValidationError(f"recipe '{self.name}': alias '{alias_name}' refers to unknown step parameter '{step_label}.{step_param_name}'", log=self.log)
+                raise RecipeValidationError(f"recipe '{self.name}': alias '{alias_name}' refers to unknown step parameter '{step_label}.{step_param_name}'", log=self.log)
             # implicit inputs cannot be aliased
             if input_schema and input_schema.implicit:
                 raise RecipeValidationError(f"recipe '{self.name}': alias '{alias_name}' refers to implicit input '{step_label}.{step_param_name}'", log=self.log)
@@ -379,37 +387,41 @@ class Recipe(Cargo):
                 # now we know it's a multiply-defined input, check for type consistency
                 if alias_schema.dtype != schema.dtype:
                     raise RecipeValidationError(f"recipe '{self.name}': alias '{alias_name}': dtype {schema.dtype} of '{step_label}.{step_param_name}' doesn't match previous dtype {alias_schema.dtype}", log=self.log)
-                
+                orig_schema = self._orig_alias_schema[alias_name]
             # else alias not yet defined, insert a schema
             else:
+                # get recipe's original schema for the parameter
                 io = self.inputs if input_schema else self.outputs
                 # if we have a schema defined for the alias, some params must be inherited from it 
-                own_schema = io.get(alias_name)
+                orig_schema = io.get(alias_name)
+                self._orig_alias_schema[alias_name] = orig_schema
                 # define schema based on copy of the target, but preserve default
                 io[alias_name] = copy.copy(schema)
                 alias_schema = io[alias_name] 
+                # check that 
                 # default set from own schema, ignoring parameter setting 
-                if own_schema is not None and own_schema.default is not UNSET:
+                if orig_schema is not None and orig_schema.default is not UNSET:
                     # also clear parameter setting to propagate our default
                     if step_param_name in step.params:
                         del step.params[step_param_name]
-                    alias_schema.default = own_schema.default
-                if own_schema and own_schema.info is not None:
-                    alias_schema.info = own_schema.info
+                    alias_schema.default = orig_schema.default
+                if orig_schema and orig_schema.info:
+                    alias_schema.info = orig_schema.info
                 # required flag overrides, if set from our own schema
-                if own_schema is not None and own_schema.required is not None:
-                    alias_schema.required = own_schema.required
+                if orig_schema is not None and orig_schema.required is not None:
+                    alias_schema.required = orig_schema.required
                 # category is set by argument, else from own schema, else from target
                 if category is not None:
                     alias_schema.category = category
-                elif own_schema is not None and own_schema.category is not None:
-                    alias_schema.category = own_schema.category
-                # paramater is not required if alias target is set in step
+                elif orig_schema is not None and orig_schema.category is not None:
+                    alias_schema.category = orig_schema.category
+                # parameter is not required if alias target is set in step
                 if step_param_name in step.params or \
                         step_param_name in step.cargo.defaults or \
                         schema.default is not UNSET:
                     alias_schema.required = False
                     alias_schema.default = UNSET
+                    # mark it as hidden -- no need to expose parameters that are internally set this way
                     alias_schema.category = ParameterCategory.Hidden
 
             # if step parameter is implicit, mark the alias as implicit. Note that this only applies to outputs
@@ -425,11 +437,12 @@ class Recipe(Cargo):
             if have_step_param and alias_schema.default is UNSET:
                 alias_schema.default = DeferredAlias(f"{step_label}.{step_param_name}")
 
-            # alias becomes required if any step parameter it refers to was required, but wasn't already set 
-            if schema.required and not have_step_param:
+            # alias becomes required if any step parameter it refers to is required and not set, unless
+            # the original schema forces a required value
+            if schema.required and not have_step_param and (orig_schema is None or orig_schema.required is None):
                 alias_schema.required = True
 
-            self._alias_map[step_label, step_param_name] = alias_name
+            self._alias_map[step_label, step_param_name] = alias_name, orig_schema
             self._alias_list.setdefault(alias_name, []).append(Recipe.AliasInfo(step_label, step, step_param_name, io))
 
     def finalize(self, config=None, log=None, name=None, fqname=None, nesting=0):
@@ -464,18 +477,21 @@ class Recipe(Cargo):
                     step.assign = self.flatten_param_dict(OrderedDict(), step.assign)
                     self.validate_assignments(step.assign, step.assign_based_on, f"{fqname}.{label}")
                 except Exception as exc:
-                    raise StepValidationError(f"error validating step '{label}'", exc)
+                    raise StepValidationError(f"error validating step '{label}'", exc, 
+                                tb=not isinstance(exc, ScabhaBaseException))
 
             # collect aliases
             self._alias_map = OrderedDict()
             self._alias_list = OrderedDict()
+            self._orig_alias_schema = OrderedDict()
 
             # collect from inputs and outputs
             for io in self.inputs, self.outputs:
                 for name, schema in io.items():
                     if schema.aliases:
-                        if schema.dtype != "str" or schema.choices or schema.writable:
-                            raise RecipeValidationError(f"recipe '{self.name}': alias '{name}' should not specify type, choices or writability", log=log)
+                        ## NB skip this check, allow aliases to override
+                        # if schema.dtype != "str" or schema.choices or schema.writable:
+                        #     raise RecipeValidationError(f"recipe '{self.name}': alias '{name}' should not specify type, choices or writability", log=log)
                         for alias_target in schema.aliases:
                             self._add_alias(name, alias_target)
 
@@ -570,16 +586,22 @@ class Recipe(Cargo):
         subst._add_('config', self.config, nosubst=True) 
         subst._add_('steps', {}, nosubst=True)
         subst._add_('previous', {}, nosubst=True)
-        subst._add_('recipe', {})
+        subst.recipe = SubstitutionNS(**params)
+        subst.recipe.log = self.logopts
+        if root:
+            subst.root = subst.recipe
+
         if subst_outer is not None:
             if 'root' in subst_outer:
                 subst._add_('root', subst_outer.root, nosubst=True)
             if 'recipe' in subst_outer:
                 subst._add_('parent', subst_outer.recipe, nosubst=True)
-        subst.recipe = SubstitutionNS(**params)
-        subst.recipe.log = self.logopts
-        if root:
-            subst.root = subst.recipe
+        else:
+            subst_outer = SubstitutionNS()
+            subst_outer._add_('info', info.copy(), nosubst=True)
+            subst_outer._add_('config', self.config, nosubst=True) 
+            subst_outer._add_('config', self.config, nosubst=True) 
+            subst_outer.current = subst.recipe
 
         # update assignments
         self.update_assignments(subst, params=params, ignore_subst_errors=True)
@@ -602,8 +624,9 @@ class Recipe(Cargo):
                 self.validate_for_loop(params, strict=False)
 
             except ScabhaBaseException as exc:
-                msg = f"recipe '{self.name}': {exc}"
-                errors.append(RecipeValidationError(msg))
+                errors.append(exc)
+            except Exception as exc:
+                errors.append(RecipeValidationError("recipe failed prevalidation", exc, tb=True))
 
             # merge again, since values may have changed
             subst.recipe._merge_(params)
@@ -637,12 +660,9 @@ class Recipe(Cargo):
                     step_params = step.prevalidate(subst)
                     subst.current._merge_(step_params)   # these may have changed in prevalidation
                 except ScabhaBaseException as exc:
-                    if type(exc) is SubstitutionErrorList:
-                        self.log.error(f"unresolved {{}}-substitution(s):")
-                        for err in exc.errors:
-                            self.log.error(f"  {err}")
-                    # msg = f"step '{label}': {exc}"
-                    errors.append(RecipeValidationError(f"step '{label}'", exc))
+                    errors.append(RecipeValidationError(f"step '{label}' failed prevalidation", exc))
+                except Exception as exc:
+                    errors.append(RecipeValidationError(f"step '{label}' failed prevalidation", exc, tb=True))
 
                 # revert to recipe-level assignments
                 self.update_assignments(subst, params=params, ignore_subst_errors=True)
@@ -682,8 +702,9 @@ class Recipe(Cargo):
         # check for missing parameters
         missing_params = [name for name, schema in self.inputs_outputs.items() if schema.required and name not in params]
         if missing_params:
-            msg = f"""recipe '{self.name}' is missing the following required parameters: {join_quote(missing_params)}"""
-            errors.append(RecipeValidationError(msg, log=self.log))
+            n = len(missing_params)
+            msg = f"""recipe is missing {n} required parameter{'s' if n>1 else ''}:"""
+            errors.append(RecipeValidationError(msg, missing_params))
 
         if errors:
             if len(errors) == 1:
@@ -908,6 +929,8 @@ class Recipe(Cargo):
                 subst.info = info_step
 
                 inst.log.info(f"processing step '{label}'")
+                if step.info:
+                    inst.log.info(f"  ({step.info})", extra=dict(color="GREEN", boldface=True))
                 try:
                     #step_params = step.run(subst=subst.copy(), batch=batch)  # make a copy of the subst dict since recipe might modify
                     step_params = step.run(subst=subst.copy(), parent_log=self.log)  # make a copy of the subst dict since recipe might modify
@@ -950,6 +973,12 @@ class Recipe(Cargo):
                     if alias.from_step:
                         if alias.param in alias.step.validated_params:
                             params[name] = alias.step.validated_params[alias.param]
+
+            subst.current = subst.recipe
+            
+            # # evaluate implicit outputs
+            # implicits = {name: schema.implcit for name, schema in self.outputs if schema.implicit}
+            # params.update(**evaluate_and_substitute(implicits, subst, subst.current, location=self.fqname))
 
             self.log.info(f"recipe '{self.name}' executed successfully")
             return OrderedDict((name, value) for name, value in params.items() if name in self.outputs)

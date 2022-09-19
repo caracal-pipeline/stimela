@@ -4,7 +4,6 @@ command: wsclean
 info: WSClean imager
 
 defaults:
-  weight: "briggs 0."
   column: DATA
 
 policies:
@@ -28,7 +27,7 @@ outputs:
     dtype: List[File]
     implicit: "=GLOB({current.prefix}-[0-9][0-9][0-9][0-9]-image.fits)"
     must_exist: false
-  restored_timeint: 
+  restored-timeint: 
     info: Restored images per time interval
     dtype: List[File]
     implicit: "=GLOB({current.prefix}-t[0-9][0-9][0-9][0-9]-image.fits)"
@@ -42,22 +41,22 @@ outputs:
     dtype: List[File]
     implicit: "=GLOB({current.prefix}-[0-9][0-9][0-9][0-9]-model.fits)"
     must_exist: false
-  restored_mfs:
+  restored-mfs:
     info: Restored MFS image
     dtype: File
     implicit: "{current.prefix}-MFS-image.fits"
     must_exist: false
-  residual_mfs:
+  residual-mfs:
     info: Residual MFS image
     dtype: File
     implicit: "{current.prefix}-MFS-residual.fits"
     must_exist: false
-  model_mfs:
+  model-mfs:
     info: Model MFS image
     dtype: File
     implicit: "{current.prefix}-MFS-model.fits"
     must_exist: false
-  dirty_mfs:
+  dirty-mfs:
     info: Dirty MFS image
     dtype: File
     implicit: "{current.prefix}-MFS-dirty.fits"

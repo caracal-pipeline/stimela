@@ -71,8 +71,10 @@ class Step:
 
     def __post_init__(self):
         self.fqname = self.fqname or self.name
+        if not bool(self.cab)and not bool(self.recipe):
+            raise StepValidationError(f"step '{self.name}': step must specify either a cab or a nested recipe")
         if bool(self.cab) == bool(self.recipe):
-            raise StepValidationError("step '{self.name}': step must specify either a cab or a nested recipe, but not both")
+            raise StepValidationError(f"step '{self.name}': step can't specify both a cab and a nested recipe")
         self.cargo = self.config = None
         self.tags = set(self.tags)
         # convert params into standard dict, else lousy stuff happens when we insert non-standard objects
@@ -200,7 +202,8 @@ class Step:
                     if self.cab not in self.config.cabs:
                         raise StepValidationError(f"unknown cab '{self.cab}'")
                     try:
-                        self.cargo = self._instantiated_cabs[self.cab] = Cab(**config.cabs[self.cab])
+                        self._instantiated_cabs[self.cab] = Cab(**config.cabs[self.cab])
+                        self.cargo = copy.copy(self._instantiated_cabs[self.cab])
                     except Exception as exc:
                         raise StepValidationError(f"error in cab '{self.cab}'", exc)
             self.cargo.name = self.name
@@ -256,10 +259,9 @@ class Step:
         return params
 
     def log_summary(self, level, title, color=None, ignore_missing=True):
-        extra = dict(color=color, boldface=True)
+        extra = dict(color=color)
         if self.log.isEnabledFor(level):
             self.log.log(level, f"### {title}", extra=extra)
-            del extra['boldface']
             for line in self.summary(recursive=False, ignore_missing=ignore_missing):
                 self.log.log(level, line, extra=extra)
 
