@@ -14,7 +14,7 @@ def EmptyListDefault():
 @dataclass
 class Unresolved(object):
     value: str = ""
-    errors: List[Exception] = EmptyListDefault
+    errors: List[Exception] = EmptyListDefault()
 
     def __post_init__(self):
         if not self.value:

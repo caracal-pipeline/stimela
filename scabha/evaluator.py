@@ -22,7 +22,7 @@ _parser = None
 # see https://stackoverflow.com/questions/43244861/pyparsing-infixnotation-optimization for a cleaner parser with functions
 
 def _not_operator(value):
-    return type(value) is UNSET or not value
+    return value is UNSET or type(value) is UNSET or not value
 
 _UNARY_OPERATORS = {
     '+':    lambda x: +x,
@@ -79,7 +79,10 @@ class UnaryHandler(ResultsHandler):
         self.allow_unset = (op == 'not')
     
     def evaluate(self, evaluator):
-        return self._op(evaluator._evaluate_result(self.arg, allow_unset=self.allow_unset))
+        arg = evaluator._evaluate_result(self.arg, allow_unset=self.allow_unset)
+        if type(arg) is UNSET:
+            return arg
+        return self._op(arg)
 
     def dump(self):
         return f"UnaryHandler({self.op}\n   {self.arg})"
@@ -93,9 +96,13 @@ class BinaryHandler(ResultsHandler):
         self.allow_unset = False
     
     def evaluate(self, evaluator):
-        return self._op(
-            evaluator._evaluate_result(self.arg1, allow_unset=self.allow_unset),
-            evaluator._evaluate_result(self.arg2, allow_unset=self.allow_unset))
+        arg1, arg2 =    evaluator._evaluate_result(self.arg1, allow_unset=self.allow_unset), \
+                        evaluator._evaluate_result(self.arg2, allow_unset=self.allow_unset)
+        if type(arg1) is UNSET:
+            return arg1
+        if type(arg2) is UNSET:
+            return arg2
+        return self._op(arg1, arg2)
 
     def dump(self):
         return f"BinaryHandler({self.arg1},\n   {self.op},\n{self.arg2})"
@@ -292,9 +299,8 @@ def parse_string(text: str, location: List[str] = []):
 def is_missing(result):
     return result is None
 
-class UNSET(object):
-    def __init__(self, name) -> None:
-        self.name = name
+class UNSET(Unresolved):
+    pass
 
 class SELF(object):
     pass
@@ -303,10 +309,12 @@ class SELF(object):
 class Evaluator(object):
     def __init__(self,  ns: Dict[str, Any], 
                         subst_context: typing.Optional[SubstitutionContext] = None, 
+                        allow_unresolved: bool = False,
                         location: List[str] = []):
         self.ns = ns
         self.subst_context = subst_context
         self.location = location
+        self.allow_unresolved = allow_unresolved
 
     def _resolve(self, value):
         if type(value) is str:
@@ -375,7 +383,12 @@ class Evaluator(object):
             if not hasattr(self, method):
                 raise ParserError(f"{'.'.join(self.location)}: don't know how to deal with an element of type '{method}'")
 
-            value = getattr(self, method)(*parse_result)
+            try:
+                value = getattr(self, method)(*parse_result)
+            except SubstitutionError as exc:
+                if allow_unset:
+                    return UNSET(exc)
+                raise
 
         if type(value) is UNSET and not allow_unset:
             raise SubstitutionError(f"{'.'.join(self.location)}: '{value.name}' is not defined")

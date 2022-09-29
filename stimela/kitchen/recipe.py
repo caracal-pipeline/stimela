@@ -983,7 +983,9 @@ class Recipe(Cargo):
             self.log.info(f"recipe '{self.name}' executed successfully")
             return OrderedDict((name, value) for name, value in params.items() if name in self.outputs)
         finally:
+            steps = subst.steps
             subst.update(subst_copy)
+            subst.steps = steps
 
 
     # def run(self, **params) -> Dict[str, Any]:

@@ -324,11 +324,13 @@ class Step:
                 if subst is not None:
                     subst.current = params
 
-            # bomb out if some inputs failed to validate or substitutions resolve
-            if self.invalid_params or self.unresolved_params:
+            ## check for (a) invalid params (b) unresolved inputs (c) unresolved outputs, except explicit ones 
+            invalid = self.invalid_params + \
+                    [name for name in self.unresolved_params if name in self.cargo.inputs or not self.cargo.outputs[name].implicit]
+            if invalid:
                 invalid = self.invalid_params + self.unresolved_params
                 if skip:
-                    self.log.warning(f"invalid inputs: {join_quote(invalid)}")
+                    self.log.warning(f"invalid inputs/outputs: {join_quote(invalid)}")
                     if not skip_warned:
                         parent_log.warning("since the step was skipped, this is not fatal")
                         skip_warned = True
