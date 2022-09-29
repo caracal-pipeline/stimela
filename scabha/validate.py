@@ -258,10 +258,10 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
         for err  in exc.errors():
             loc = '.'.join([field2name.get(x, x) for x in err['loc']])
             if loc in inputs:
-                errors.append(f"{loc} = {inputs[loc]}: {err['msg']}") 
+                errors.append(ParameterValidationError(f"{loc} = {inputs[loc]}: {err['msg']}")) 
             else:
-                errors.append(f"{loc}: {err['msg']}") 
-        raise ParameterValidationError("parameter(s) failed to validate", errors)
+                errors.append(ParameterValidationError(f"{loc}: {err['msg']}")) 
+        raise ParameterValidationError(f"{len(errors)} parameter(s) failed validation:", errors)
 
     validated = {field2name[fld]: value for fld, value in dataclasses.asdict(validated).items()}
 

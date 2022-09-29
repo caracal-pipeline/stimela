@@ -265,6 +265,9 @@ class Step:
             for line in self.summary(recursive=False, ignore_missing=ignore_missing):
                 self.log.log(level, line, extra=extra)
 
+    def log_exception(self, exc, severity="error"):
+        log_exception(exc, severity=severity, log=self.log)
+
     def run(self, subst=None, batch=None, parent_log=None):
         """Runs the step"""
         from .recipe import Recipe
@@ -299,14 +302,15 @@ class Step:
                 validated = True
 
             except ScabhaBaseException as exc:
+                severity = "warning" if skip else "error"
                 level = logging.WARNING if skip else logging.ERROR
                 if not exc.logged:
                     if type(exc) is SubstitutionErrorList:
-                        self.log.log(level, f"unresolved {{}}-substitution(s):")
-                        for err in exc.errors:
-                            self.log.log(level, f"  {err}")
+                        self.log_exception(StepValidationError(f"unresolved {{}}-substitution(s) in inputs:", exc.errors), severity=severity)
+                        # for err in exc.errors:
+                        #     self.log.log(level, f"  {err}")
                     else:
-                        self.log.log(level, f"error validating inputs: {exc}")
+                        self.log_exception(StepValidationError(f"error validating inputs:", exc), severity=severity)
                     exc.logged = True
                 self.log_summary(level, "summary of inputs follows", color="WARNING")
                 # raise up, unless step is being skipped
@@ -363,14 +367,15 @@ class Step:
                 params = self.cargo.validate_outputs(params, loosely=skip, subst=subst)
                 validated = True
             except ScabhaBaseException as exc:
+                severity = "warning" if skip else "error"
                 level = logging.WARNING if self.skip else logging.ERROR
                 if not exc.logged:
                     if type(exc) is SubstitutionErrorList:
-                        self.log.log(level, f"unresolved {{}}-substitution(s):")
-                        for err in exc.errors:
-                            self.log.log(level, f"  {err}")
+                        self.log_exception(StepValidationError(f"unresolved {{}}-substitution(s) in inputs:", exc.errors), severity=severity)
+                        # for err in exc.errors:
+                        #     self.log.log(level, f"  {err}")
                     else:
-                        self.log.log(level, f"error validating outputs: {exc}")
+                        self.log_exception(StepValidationError(f"error validating outputs:", exc), severity=severity)
                     exc.logged = True
                 # raise up, unless step is being skipped
                 if skip:

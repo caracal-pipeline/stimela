@@ -43,7 +43,7 @@ lib:
           dtype: List[str]
           required: true
       defaults:
-        ms_list: [a,b,c]
+        ms_list: =GLOB(*ms)
       steps:
         cubical_image_step:
           recipe:

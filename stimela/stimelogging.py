@@ -378,7 +378,7 @@ def get_logger_file(log: logging.Logger):
     return os.path.dirname(logfile)
 
 
-def log_exception(*errors, severity="error"):
+def log_exception(*errors, severity="error", log=None):
     """Logs one or more error messages or exceptions (unless they are marked as already logged), and 
     pretty-prints them to the console  as appropriate.
     """
@@ -387,10 +387,10 @@ def log_exception(*errors, severity="error"):
 
     if severity == "error":
         colour = "bold red"
-        message_dispatch = logger().error
+        message_dispatch = (log or logger()).error
     else:
         colour = "yellow"
-        message_dispatch = logger().warning
+        message_dispatch = (log or logger()).warning
 
     trees = []
     do_log = False

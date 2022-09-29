@@ -741,10 +741,10 @@ class Recipe(Cargo):
                     self.log.info(f"recipe is a for-loop with '{self.for_loop.var}' iterating over {len(values)} values")
                     self.log.info(f"Loop values: {values}")
                 self._for_loop_values = values
-            if self.for_loop.var in self.inputs:
-                params[self.for_loop.var] = self._for_loop_values[0]
-            else:
-                self.assign[self.for_loop.var] = self._for_loop_values[0]
+            # if self.for_loop.var in self.inputs:
+            #     params[self.for_loop.var] = self._for_loop_values[0]
+            # else:
+            #     self.assign[self.for_loop.var] = self._for_loop_values[0]
         # else fake a single-value list
         else:
             self._for_loop_values = [None]
@@ -752,8 +752,6 @@ class Recipe(Cargo):
     def validate_inputs(self, params: Dict[str, Any], subst: Optional[SubstitutionNS]=None, loosely=False):
 
         params, _ = self._preprocess_parameters(params)
-
-        self.validate_for_loop(params, strict=True)
 
         if subst is None:
             subst = SubstitutionNS()
@@ -764,7 +762,18 @@ class Recipe(Cargo):
             subst.recipe = SubstitutionNS(**params)
             subst.current = subst.recipe
 
-        return Cargo.validate_inputs(self, params, subst=subst, loosely=loosely)
+        params = Cargo.validate_inputs(self, params, subst=subst, loosely=loosely)
+
+        self.validate_for_loop(params, strict=True)
+
+        # in case of a for-loop, assign first iterant
+        if self.for_loop is not None:
+            if self.for_loop.var in self.inputs:
+                params[self.for_loop.var] = self._for_loop_values[0]
+            else:
+                self.assign[self.for_loop.var] = self._for_loop_values[0]
+
+        return params
 
     def _link_steps(self):
         """
