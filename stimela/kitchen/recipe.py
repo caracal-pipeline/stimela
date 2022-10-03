@@ -600,7 +600,6 @@ class Recipe(Cargo):
             subst_outer = SubstitutionNS()
             subst_outer._add_('info', info.copy(), nosubst=True)
             subst_outer._add_('config', self.config, nosubst=True) 
-            subst_outer._add_('config', self.config, nosubst=True) 
             subst_outer.current = subst.recipe
 
         # update assignments
@@ -712,6 +711,8 @@ class Recipe(Cargo):
             else:
                 raise RecipeValidationError(f"recipe '{self.name}': {len(errors)} errors", errors)
 
+        self._prevalidated_steps = subst.steps
+
         self.log.debug("recipe pre-validated")
 
         return params
@@ -761,6 +762,9 @@ class Recipe(Cargo):
 
             subst.recipe = SubstitutionNS(**params)
             subst.current = subst.recipe
+
+        if 'current' in subst:
+            subst.current._add_('steps', self._prevalidated_steps, nosubst=True)
 
         params = Cargo.validate_inputs(self, params, subst=subst, loosely=loosely)
 
@@ -867,6 +871,7 @@ class Recipe(Cargo):
             
         subst.recipe = SubstitutionNS(**params)
         subst.recipe.log = self.logopts
+        subst.recipe._add_('steps', subst.steps, nosubst=True)
 
         if subst_outer is not None:
             if 'root' in subst_outer:
@@ -994,7 +999,7 @@ class Recipe(Cargo):
         finally:
             steps = subst.steps
             subst.update(subst_copy)
-            subst.steps = steps
+            subst.current.steps = steps
 
 
     # def run(self, **params) -> Dict[str, Any]:
