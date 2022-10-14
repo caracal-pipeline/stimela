@@ -4,7 +4,8 @@ from .cargo import Parameter
 from .exceptions import SchemaError
 from dataclasses import make_dataclass, field
 from omegaconf import OmegaConf
-from collections import OrderedDict, MutableSet, MutableSequence, MutableMapping
+from collections import OrderedDict
+from collections.abc import MutableSet, MutableSequence, MutableMapping
 
 def schema_to_dataclass(io: Dict[str, Parameter], class_name: str, bases=(), post_init: Optional[Callable] =None):
     """Converts a scabha schema to a dataclass.
