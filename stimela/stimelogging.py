@@ -168,7 +168,7 @@ def logger(name="STIMELA", propagate=False, console=True, boring=False,
             if "SILENT_STDERR" in os.environ and os.environ["SILENT_STDERR"].upper()=="ON":
                 log_console_handler = logging.StreamHandler(stream=sys.stdout)
             else:  
-                log_console_handler = rich.logging.RichHandler(console=progress_bar,
+                log_console_handler = rich.logging.RichHandler(console=console,
                                     highlighter=rich.highlighter.NullHighlighter(),
                                     show_level=False, show_path=False, show_time=False)
 
