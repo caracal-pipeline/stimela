@@ -1,21 +1,19 @@
-import atexit
 import sys, os.path, re, copy
-from datetime import datetime
 import logging
-import contextlib
 import traceback
 from types import TracebackType
 from typing import Optional, OrderedDict, Union
 from omegaconf import DictConfig
 from scabha.exceptions import ScabhaBaseException
 from scabha.substitutions import SubstitutionNS, forgiving_substitutions_from
-import asyncio
-import psutil
 import rich.progress
 import rich.logging
 from rich.tree import Tree
 from rich import print as rich_print
 from rich.markup import escape
+
+from . import task_stats
+from .task_stats import declare_subtask, declare_subtask_attributes, declare_subcommand, update_process_status, run_process_status_update
 
 class MultiplexingHandler(logging.Handler):
     """handler to send INFO and below to stdout, everything above to stderr"""
@@ -107,8 +105,6 @@ class SelectiveFormatter(logging.Formatter):
 
 _logger = None
 log_console_handler = log_formatter = log_boring_formatter = log_colourful_formatter = None
-progress_bar = progress_task = None
-_start_time = datetime.now()
 
 LOG_DIR = '.'
 
@@ -149,28 +145,12 @@ def logger(name="STIMELA", propagate=False, console=True, boring=False,
         log_formatter = log_boring_formatter if boring else log_colourful_formatter
 
         if console:
-            global progress_bar, progress_task
-            console = rich.console.Console(file=sys.stdout)
-            progress_bar = rich.progress.Progress(
-                rich.progress.SpinnerColumn(),
-                "[yellow]{task.fields[elapsed_time]}[/yellow]",
-                "[bold]{task.description}[/bold]",
-                rich.progress.SpinnerColumn(),
-                "{task.fields[command]}",
-                rich.progress.TimeElapsedColumn(),
-                "{task.fields[cpu_info]}",
-                refresh_per_second=2,
-                console=console,
-                transient=True)
-
-            progress_task = progress_bar.add_task("stimela", command="starting", cpu_info=" ", elapsed_time="", start=True)
-            progress_bar.__enter__()
-            atexit.register(lambda:progress_bar.__exit__(None, None, None))
+            progress_bar, progress_console = task_stats.init_progress_bar()
 
             if "SILENT_STDERR" in os.environ and os.environ["SILENT_STDERR"].upper()=="ON":
                 log_console_handler = logging.StreamHandler(stream=sys.stdout)
             else:  
-                log_console_handler = rich.logging.RichHandler(console=progress_bar,
+                log_console_handler = rich.logging.RichHandler(console=progress_console,
                                     highlighter=rich.highlighter.NullHighlighter(),
                                     show_level=False, show_path=False, show_time=False)
 
@@ -183,80 +163,6 @@ def logger(name="STIMELA", propagate=False, console=True, boring=False,
         scabha.set_logger(_logger)
 
     return _logger
-
-progress_task_names = []
-progress_task_names_orig = []
-
-@contextlib.contextmanager
-def declare_subtask(subtask_name):
-    progress_task_names.append(subtask_name)
-    progress_task_names_orig.append(subtask_name)
-    update_process_status(description='.'.join(progress_task_names))
-    try:
-        yield subtask_name
-    finally:
-        progress_task_names.pop(-1)
-        progress_task_names_orig.pop(-1)
-        update_process_status(progress_task, description='.'.join(progress_task_names))
-
-def declare_subtask_attributes(*args, **kw):
-    attrs = [str(x) for x in args] + [f"{key} {value}" for key, value in kw.items()] 
-    attrs = ', '.join(attrs)
-    progress_task_names[-1] = f"{progress_task_names_orig[-1]}\[{attrs}]"
-    update_process_status(description='.'.join(progress_task_names))
-
-
-@contextlib.contextmanager
-def declare_subcommand(command):
-    update_process_status(command=command)
-    progress_bar and progress_bar.reset(progress_task)
-    try:
-        yield command
-    finally:
-        update_process_status(command="")
-        
-_prev_disk_io = None
-
-def update_process_status(command=None, description=None):
-    if progress_bar is not None:
-        # elapsed time
-        elapsed = str(datetime.now() - _start_time).split('.', 1)[0]
-        # CPU and memory
-        cpu = psutil.cpu_percent()
-        mem = psutil.virtual_memory()
-        used = round(mem.total*mem.percent/100 / 2**30)
-        total = round(mem.total / 2**30)
-        # load
-        load, _, _ = psutil.getloadavg()
-        # get disk I/O
-        disk_io = psutil.disk_io_counters()
-        global _prev_disk_io
-        # counts = {key: value for key, value in }
-        if _prev_disk_io is not None:
-            io = {}
-            for key in 'read_bytes', 'read_count', 'read_time', 'write_bytes', 'write_count', 'write_time':
-                io[key] = getattr(disk_io, key) - getattr(_prev_disk_io, key) 
-            ioinfo = f"|R [green]{io['read_count']:-4}[/green] [green]{io['read_bytes']/2**30:2.2f}[/green]G [green]{io['read_time']:4}[/green]ms" + \
-                     f"|W [green]{io['write_count']:-4}[/green] [green]{io['write_bytes']/2**30:2.2f}[/green]G [green]{io['write_time']:4}[/green]ms " 
-        else:
-            ioinfo = ""
-        _prev_disk_io = disk_io
-        updates = dict(elapsed_time=elapsed,
-                        cpu_info=f"CPU [green]{cpu:2.1f}%[/green]|RAM [green]{used:3}[/green]/[green]{total}[/green]G|Load [green]{load:2.1f}[/green]{ioinfo}")
-        if command is not None:
-            updates['command'] = command
-        if description is not None:
-            updates['description'] = description
-        progress_bar.update(progress_task, **updates)
-
-
-async def run_process_status_update():
-    if progress_bar:
-        with contextlib.suppress(asyncio.CancelledError):
-            while True:
-                update_process_status()
-                await asyncio.sleep(1)
-
 
 _logger_file_handlers = {}
 _logger_console_handlers = {}
@@ -440,8 +346,9 @@ def log_exception(*errors, severity="error", log=None):
     if do_log:
         message_dispatch(": ".join(messages))
 
-    printfunc = progress_bar.console.print if progress_bar is not None else rich_print
+    printfunc = task_stats.progress_bar.console.print if task_stats.progress_bar is not None else rich_print
 
     for tree in trees:
         printfunc(tree)
+
 
