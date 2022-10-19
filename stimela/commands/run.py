@@ -21,6 +21,7 @@ from stimela import logger, log_exception
 from stimela.exceptions import RecipeValidationError, StimelaRuntimeError
 from stimela.main import cli
 from stimela.kitchen.recipe import Recipe, Step, RecipeSchema, join_quote
+from stimela import task_stats
 
 def load_recipe_file(filename: str):
     dependencies = stimela.config.get_initial_deps()
@@ -71,9 +72,11 @@ def load_recipe_file(filename: str):
                 help="""Sets skip=false on the given step(s). Use commas, or give multiple times for multiple steps.""")
 @click.option("-d", "--dry-run", is_flag=True,
                 help="""Doesn't actually run anything, only prints the selected steps.""")
+@click.option("-p", "--profile", is_flag=True,
+                help="""Collect and print per-step profiling stats.""")
 @click.argument("what", metavar="filename.yml|cab name") 
 @click.argument("parameters", nargs=-1, metavar="[recipe name] [PARAM=VALUE] [X.Y.Z=FOO] ...", required=False) 
-def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool = False,
+def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: bool = False,
     step_names: List[str] = [], tags: List[str] = [], skip_tags: List[str] = [], enable_steps: List[str] = []):
 
     log = logger()
@@ -328,6 +331,9 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
                 tb=not isinstance(exc, ScabhaBaseException)))
         for line in traceback.format_exc().split("\n"):
             log.debug(line)
+        task_stats.save_profiling_stats(outer_step.log)
+        if profile or stimela.CONFIG.opts.print_profile:
+            task_stats.print_profiling_stats()
         sys.exit(1)
 
     if outputs and step.log.isEnabledFor(logging.DEBUG):
@@ -337,5 +343,9 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
                 outer_step.log.debug(f"  {name}: {value}")
     else:
         outer_step.log.info(f"run successful after {elapsed()}")
+
+    task_stats.save_profiling_stats(outer_step.log)
+    if profile or stimela.CONFIG.opts.print_profile:
+        task_stats.print_profiling_stats()
 
     return 0

@@ -98,6 +98,8 @@ class StimelaOptions(object):
     dist: Dict[str, Any] = EmptyDictDefault()  
     ## Miscellaneous runtime option 
     runtime: Dict[str, Any] = EmptyDictDefault()
+    ## Profiling options
+    print_profile: bool = True
 
 
 def DefaultDirs():
