@@ -8,9 +8,10 @@
 
 
 import stimela
+from datetime import date
 
 project = 'stimela'
-copyright = '2022, Sphesihle Makhathini, Oleg Smirnov and RATT'
+copyright = f'{date.today().year}, Sphesihle Makhathini, Oleg Smirnov and RATT'
 
 author = stimela.__author__
 release = stimela.__version__
@@ -24,7 +25,7 @@ extensions = []
 templates_path = ['_templates']
 exclude_patterns = []
 
-language = 'ls -lrt'
+language = 'en'
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
@@ -45,13 +46,11 @@ extensions = [
     "sphinx.ext.doctest",
     "sphinx.ext.intersphinx",
     "sphinx.ext.extlinks",
-    "numpydoc",
 ]
 
 # The suffix(es) of source filenames.
 # You can specify multiple suffix as a list of string:
 #
-# source_suffix = ['.rst', '.md']
 source_suffix = ".rst"
 
 # The master toctree document.
