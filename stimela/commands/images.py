@@ -22,7 +22,7 @@ def images(print_ids=False):
         print(header)
         print("-"*len(header))
 
-    for _, baseinfo in CONFIG.base.items():
+    for _, baseinfo in stimela.CONFIG.base.items():
         name0 = name = baseinfo.name
         for version, versinfo in baseinfo.images.items():
             if name0 in available and version in available[name0]:

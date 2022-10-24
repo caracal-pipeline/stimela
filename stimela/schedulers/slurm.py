@@ -1,6 +1,12 @@
 import shlex
 from typing import Dict, Optional, Any 
+<<<<<<< HEAD
 from scabha.cargo import Cab, Batch
+=======
+from stimela.kitchen.cab import Cab
+from stimela.kitchen.batch import Batch
+from stimela import logger
+>>>>>>> baf2145a284e929e10ebbf2363169b5621f18bb0
 from stimela.utils.xrun_poll import xrun
 from stimela.exceptions import StimelaCabRuntimeError
 import subprocess

@@ -55,4 +55,4 @@ for item in os.listdir(CAB_PATH):
             CAB.append(item)
 
 
-from .stimelogging import logger
+from .stimelogging import logger, log_exception

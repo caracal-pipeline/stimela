@@ -1,20 +1,22 @@
 import fnmatch
 import os, sys
 import click
-from omegaconf import OmegaConf
-
-import stimela
-from scabha import configuratt
-from stimela import logger
-from stimela.main import cli
-from scabha.cargo import Cab, ParameterCategory
-from stimela.kitchen.recipe import Recipe, Step, join_quote
-from stimela.config import ConfigExceptionTypes
 from typing import *
 from rich.tree import Tree
 from rich.table import Table
 from rich import box
 from rich import print as rich_print
+from omegaconf import OmegaConf
+
+import stimela
+from scabha import configuratt
+from stimela import logger, log_exception
+from stimela.main import cli
+from scabha.cargo import ParameterCategory
+from stimela.kitchen.recipe import Recipe
+from stimela.kitchen.cab import Cab
+from stimela.config import ConfigExceptionTypes
+from stimela.exceptions import RecipeValidationError
 
 @cli.command("help",
     help="""
@@ -36,6 +38,7 @@ def help(items: List[str] = [], do_list=False, implicit=False, obscure=False, al
     log = logger()
     top_tree = Tree(f"stimela help {' '.join(items)}", guide_style="dim")
     found_something = False
+    default_recipe = None
 
     if required:
         max_category = ParameterCategory.Required
@@ -48,6 +51,19 @@ def help(items: List[str] = [], do_list=False, implicit=False, obscure=False, al
     elif implicit:
         max_category = ParameterCategory.Implicit
         
+    def load_recipe(name: str, section: Dict):
+        try:
+            if not section.get('name'):
+                section.name = name
+            recipe = Recipe(**section)
+            recipe.finalize(fqname=name)
+            return recipe
+        except Exception as exc:
+            if not isinstance(exc, RecipeValidationError):
+                exc = RecipeValidationError(f"error loading recipe '{name}'", exc)
+            log_exception(exc)
+            sys.exit(2)
+
 
     for item in items:
         # a filename -- treat it as a config
@@ -56,7 +72,7 @@ def help(items: List[str] = [], do_list=False, implicit=False, obscure=False, al
 
             # if file contains a recipe entry, treat it as a full config (that can include cabs etc.)
             try:
-                conf = configuratt.load(item, use_sources=[stimela.CONFIG])
+                conf, _ = configuratt.load(item, use_sources=[stimela.CONFIG])
             except ConfigExceptionTypes as exc:
                 log.error(f"error loading {item}: {exc}")
                 sys.exit(2)
@@ -64,16 +80,23 @@ def help(items: List[str] = [], do_list=False, implicit=False, obscure=False, al
             # anything that is not a standard config section will be treated as a recipe
             recipes = [name for name in conf if name not in stimela.CONFIG]
 
+            if len(recipes) == 1:
+                default_recipe = recipes[0]
+
             for name in recipes:
-                # cast section to Recipe and remove from loaded conf
-                recipe = OmegaConf.create(Recipe)
-                recipe = OmegaConf.unsafe_merge(recipe, conf[name])
+                try:
+                    # cast section to Recipe and remove from loaded conf
+                    recipe = OmegaConf.structured(Recipe)
+                    recipe = OmegaConf.unsafe_merge(recipe, conf[name])
+                except Exception as exc:
+                    log.error(f"recipe '{name}': {exc}")
+                    sys.exit(2)
                 del conf[name]
                 # add to global namespace
                 stimela.CONFIG.lib.recipes[name] = recipe
 
             # the rest is safe to merge into config as is
-            stimela.CONFIG = OmegaConf.merge(stimela.CONFIG, conf)
+            stimela.CONFIG = OmegaConf.unsafe_merge(stimela.CONFIG, conf)
         
         # else treat as a wildcard for recipe names or cab names
         else:
@@ -84,8 +107,7 @@ def help(items: List[str] = [], do_list=False, implicit=False, obscure=False, al
                 sys.exit(2)
 
             for name in recipe_names:
-                recipe = Recipe(**stimela.CONFIG.lib.recipes[name])
-                recipe.finalize(fqname=name)
+                recipe = load_recipe(name, stimela.CONFIG.lib.recipes[name])
                 tree = top_tree.add(f"Recipe: [bold]{name}[/bold]")
                 recipe.rich_help(tree, max_category=max_category)
             
@@ -97,7 +119,8 @@ def help(items: List[str] = [], do_list=False, implicit=False, obscure=False, al
 
             found_something = True
 
-    if do_list or not found_something:
+    if do_list or (not found_something and not default_recipe):
+
         if stimela.CONFIG.lib.recipes:
             subtree = top_tree.add("Recipes:")
             table = Table.grid("", "", padding=(0,2))
@@ -107,6 +130,11 @@ def help(items: List[str] = [], do_list=False, implicit=False, obscure=False, al
         elif not do_list and not found_something:
             log.error(f"nothing particular to help on, perhaps specify a recipe name or a cab name, or use -l/--list")
             sys.exit(2)
+
+    if default_recipe and not found_something:
+        recipe = load_recipe(name, stimela.CONFIG.lib.recipes[default_recipe])
+        tree = top_tree.add(f"Recipe: [bold]{default_recipe}[/bold]")
+        recipe.rich_help(tree, max_category=max_category)
 
     if do_list:
         subtree = top_tree.add("Cabs:")

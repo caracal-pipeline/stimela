@@ -5,9 +5,11 @@ from typing import Dict, Optional, Any
 from collections import OrderedDict
 from contextlib import redirect_stderr, redirect_stdout
 
-from scabha.cargo import Cab, Parameter
+from stimela.kitchen.cab import Cab
+from stimela import logger
 from stimela.utils.xrun_asyncio import xrun, dispatch_to_log
 from stimela.exceptions import StimelaCabRuntimeError
+from stimela.schedulers.slurm import SlurmBatch
 import click
 from stimela.schedulers import SlurmBatch
 
@@ -42,13 +44,12 @@ def run(cab: Cab, params: Dict[str, Any], log, subst: Optional[Dict[str, Any]] =
         Any: return value (e.g. exit code) of content
     """
 
-    # commands of form "(module)function" are a Python call
-    match = re.match("^\((.+)\)(.+)$", cab.command)
-    if match:
-        return run_callable(match.group(1), match.group(2), cab, params, log, subst)
-    # everything else is a shell command
-    else:
+    if cab.flavour == "python":
+        return run_callable(cab.py_module, cab.py_function, cab, params, log, subst)
+    elif cab.flavour == "binary":
         return run_command(cab, params, log, subst)
+    else:
+        raise StimelaCabRuntimeError(f"{cab.flavour} flavour cabs not yet supported by native runner")
 
 
 def run_callable(modulename: str, funcname: str,  cab: Cab, params: Dict[str, Any], log, subst: Optional[Dict[str, Any]] = None):

@@ -1,7 +1,9 @@
-
 from scabha.exceptions import ScabhaBaseException
 
 class StimelaBaseException(ScabhaBaseException):
+    pass
+
+class CabValidationError(StimelaBaseException):
     pass
 
 class SchemaError(StimelaBaseException):
