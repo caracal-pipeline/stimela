@@ -17,8 +17,6 @@ import rich.logging
 from rich.tree import Tree
 from rich import print as rich_print
 
-from .config import StimelaLogConfig
-
 class MultiplexingHandler(logging.Handler):
     """handler to send INFO and below to stdout, everything above to stderr"""
     def __init__(self, info_stream=sys.stdout, err_stream=sys.stderr):

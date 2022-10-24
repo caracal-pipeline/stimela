@@ -1,13 +1,11 @@
 import os
 import re
 import inspect
-import pkg_resources
 from pathlib import Path
 
-try:
-    __version__ = pkg_resources.require("stimela")[0].version
-except pkg_resources.DistributionNotFound:
-    __version__ = "dev"
+__author__ = """Sphesihle Makhathini, Oleg Smirnov and RATT"""
+__email__ = "sphemakh@gmail.com"
+__version__ = "2.0rc2"
 
 CONFIG = None
 
