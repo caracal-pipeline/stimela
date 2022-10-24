@@ -764,6 +764,8 @@ class Recipe(Cargo):
 
         if 'current' in subst:
             subst.current._add_('steps', self._prevalidated_steps, nosubst=True)
+        
+        self.update_assignments(subst, params=params, ignore_subst_errors=True)
 
         params = Cargo.validate_inputs(self, params, subst=subst, loosely=loosely)
 
