@@ -67,9 +67,7 @@ class SubstitutionError(ScabhaBaseException):
     pass
 
 class UnsetError(ScabhaBaseException):
-    def __init__(self, message, element, log=None):
-        super().__init__(message, log)
-        self.element = element
+    pass
 
 class ParserError(ScabhaBaseException):
     pass

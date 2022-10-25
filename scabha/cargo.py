@@ -13,16 +13,18 @@ from rich.markdown import Markdown
 from .exceptions import NestedSchemaError, ParameterValidationError, DefinitionError, SchemaError
 from .validate import validate_parameters, Unresolved
 from .substitutions import SubstitutionNS
-from .basetypes import EmptyDictDefault, EmptyListDefault
+from .basetypes import EmptyDictDefault, EmptyListDefault, UNSET
 
 # need * imports from both to make eval(self.dtype, globals()) work
 from typing import *
-from .types import *
+from .basetypes import *
 
 ## almost supported by omegaconf, see https://github.com/omry/omegaconf/issues/144, for now just use Any
 ListOrString = Any   
 
 Conditional = Optional[str]
+
+_UNSET_DEFAULT = "<UNSET DEFAULT VALUE>"
 
 @dataclass 
 class ParameterPolicies(object):
@@ -113,7 +115,7 @@ class Parameter(object):
     element_choices: Optional[List[Any]] = None
 
     # default value
-    default: Any = UNSET
+    default: Any = _UNSET_DEFAULT
 
     # list of aliases for this parameter (i.e. references to other parameters whose schemas/values this parameter shares)
     aliases: Optional[List[str]] = ()
@@ -152,6 +154,8 @@ class Parameter(object):
                 return [natify(x) for x in value]
             elif type(value) in (dict, OrderedDict, DictConfig):
                 return OrderedDict([(name, natify(value)) for name, value in value.items()])
+            elif value is _UNSET_DEFAULT:
+                return UNSET
             return value
         self.default = natify(self.default)
         self.choices = natify(self.choices)

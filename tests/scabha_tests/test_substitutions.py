@@ -123,7 +123,7 @@ def test_formulas():
         g = '=IFSET(previous.xx,SELF,2)',
         h = "=IF(previous.x, True, 'False')", 
         i = "=IF(previous.x0, True, 'False')",
-        j = "=IF(previous.xx, True, 'False', 'UNSET')",
+        j = "=IF(previous.xx, True, 'False', UNSET)",
         k = "=current.j",
         l = "=IFSET(current.f)",
         m = "=IF((previous.x+1)*previous.x == 2, previous.x == 1, previous.y == 0)",

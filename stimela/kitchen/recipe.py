@@ -18,7 +18,7 @@ from stimela.exceptions import *
 from scabha.validate import evaluate_and_substitute, Unresolved, join_quote
 from scabha.substitutions import SubstitutionNS, substitutions_from 
 from scabha.cargo import Parameter, Cargo, ParameterCategory
-from scabha.types import File, Directory, MS, UNSET
+from scabha.basetypes import File, Directory, MS, UNSET
 from .cab import Cab
 from .batch import Batch
 from .step import Step, resolve_dotted_reference
@@ -608,7 +608,7 @@ class Recipe(Cargo):
 
         # add for-loop variable to inputs, if expected there
         if self.for_loop is not None and self.for_loop.var in self.inputs:
-            params[self.for_loop.var] = Unresolved("for-loop")
+            params[self.for_loop.var] = UNSET(self.for_loop.var)
 
         # prevalidate our own parameters. This substitutes in defaults and does {}-substitutions
         # we call this twice, potentially, so define as a function

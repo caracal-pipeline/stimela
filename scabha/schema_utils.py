@@ -2,7 +2,7 @@ import click
 from scabha.exceptions import SchemaError
 from .cargo import Parameter, UNSET
 from typing import *
-from .types import *
+from .basetypes import *
 from dataclasses import make_dataclass, field
 from omegaconf import OmegaConf, MISSING
 from collections import OrderedDict, MutableSet, MutableSequence, MutableMapping

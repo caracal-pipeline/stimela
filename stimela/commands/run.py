@@ -166,7 +166,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: b
                 try:
                     stimela.CONFIG.lib.recipes[name] = OmegaConf.merge(RecipeSchema, value)
                 except Exception as exc:
-                    log_exception("error loading recipe '{name}'", exc)
+                    log_exception(f"error in definition of recipe '{name}'", exc)
                     sys.exit(2)
         
         try:

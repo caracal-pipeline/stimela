@@ -15,9 +15,8 @@ from omegaconf import OmegaConf, ListConfig, DictConfig
 from scabha.basetypes import Unresolved
 from .exceptions import Error, ParameterValidationError, SchemaError, SubstitutionErrorList
 from .substitutions import SubstitutionNS, substitutions_from
-from .types import File, Directory, MS
+from .basetypes import File, Directory, MS, UNSET
 from .evaluator import Evaluator
-from .types import UNSET
 
 def join_quote(values):
     return "'" + "', '".join(values) + "'" if values else ""

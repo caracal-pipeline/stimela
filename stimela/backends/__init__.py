@@ -5,7 +5,7 @@ from typing import Any, List, Dict, Optional, Union
 from stimela.kitchen.cab import Parameter
 
 from stimela.exceptions import SchemaError
-from scabha.types import File, Directory, MS
+from scabha.basetypes import File, Directory, MS
 
 
 @dataclass

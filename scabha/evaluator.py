@@ -1,6 +1,5 @@
 import glob
 import os.path
-from multiprocessing import allow_connection_pickling
 
 import pyparsing
 pyparsing.ParserElement.enable_packrat()
@@ -10,7 +9,7 @@ from functools import reduce
 import operator
 
 from .substitutions import SubstitutionError, SubstitutionContext
-from .basetypes import Unresolved
+from .basetypes import Unresolved, UNSET
 from .exceptions import *
 
 import typing
@@ -299,9 +298,6 @@ def parse_string(text: str, location: List[str] = []):
 def is_missing(result):
     return result is None
 
-class UNSET(Unresolved):
-    pass
-
 class SELF(object):
     pass
 
@@ -387,11 +383,11 @@ class Evaluator(object):
                 value = getattr(self, method)(*parse_result)
             except SubstitutionError as exc:
                 if allow_unset:
-                    return UNSET(exc)
+                    return UNSET("", [exc])
                 raise
 
         if type(value) is UNSET and not allow_unset:
-            raise SubstitutionError(f"{'.'.join(self.location)}: '{value.name}' is not defined")
+            raise UnsetError(f"'{value.value}' undefined")
 
         return value
 
@@ -410,12 +406,12 @@ class Evaluator(object):
                     try:
                         parse_results = parse_string(value[1:])
                     except Exception as exc:
-                        raise ParserError(f"error parsing formula '{value}' for {'.'.join(self.location)}", exc)
+                        raise ParserError(f"{'.'.join(self.location)}: error parsing formula '{value}'", exc)
 
                     try:
                         return self._evaluate_result(parse_results, allow_unset=True)
                     except Exception as exc:
-                        raise FormulaError(f"evaluation of '{value}' failed", exc, tb=True)
+                        raise FormulaError(f"{'.'.join(self.location)}: evaluation of '{value}' failed", exc, tb=True)
             return self._resolve(value)
         finally:
             self.location = self.location[:loclen]

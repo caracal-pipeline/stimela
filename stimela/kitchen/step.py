@@ -14,7 +14,7 @@ import scabha.exceptions
 from scabha.exceptions import SubstitutionError, SubstitutionErrorList
 from scabha.validate import evaluate_and_substitute, Unresolved, join_quote
 from scabha.substitutions import SubstitutionNS, substitutions_from 
-from scabha.types import UNSET
+from scabha.basetypes import UNSET
 from .cab import Cab
 
 Conditional = Optional[str]
@@ -287,6 +287,12 @@ class Step:
                 skips = evaluate_and_substitute(skips, subst, subst.current, location=[self.fqname], ignore_subst_errors=False)
                 self.log.debug(f"dynamic skip attribute evaluation returns {skips}")
                 skip = skips.get("skip")
+                # formulas with unset variables return UNSET instance
+                if isinstance(skip, UNSET):
+                    if skip.errors:
+                        raise StepValidationError(f"{self.fqname}.skip: error evaluating '{self.skip}'", skip.errors)
+                    else:
+                        raise StepValidationError(f"{self.fqname}.skip: error evaluating '{self.skip}'", SubstitutionError(f"unknown variable '{skip.value}'"))
 
             # Since prevalidation will have populated default values for potentially missing parameters, use those values
             # For parameters that aren't missing, use whatever value that was suplied

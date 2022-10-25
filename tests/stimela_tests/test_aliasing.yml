@@ -61,6 +61,7 @@ recipe:
       params:
         b: 1
         c: 2
+
     s2:
       cab: echo
       params:
