@@ -5,7 +5,8 @@ description = "Framework for system agnostic pipelines for radio interferometry 
 authors = ["Sphesihle Makhathini <sphemakh@gmail.com>", "Oleg Smirnov and RATT <osmirnov@gmail.com>"]
 readme = "README.rst"
 license = "GNU GPL v2"
-packages = [{include = "stimela", "tests/stimela_tests", "tests/scabha_tests"}]
+packages = [{ include = "stimela" }]
+include = [{ path = "tests" }]
 
 [tool.poetry.dependencies]
 python = "^3.7"
