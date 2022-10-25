@@ -21,28 +21,6 @@ to get help on the 'cleanmask cab' run 'stimela cabs --cab-doc cleanmask'")
 def cabs(args, conf):
     pass
 
-#     logfile = '{0:s}/{1:s}_stimela_logfile.json'.format(
-#         LOG_HOME, CAB_USERNAME)
-
-#     from stimela.main import get_cab_definition
-
-#     if args.cab_doc:
-#         name = '{0:s}_cab/{1:s}'.format(CAB_USERNAME, args.cab_doc)
-#         cabdir = "{:s}/{:s}".format(CAB_PATH, args.cab_doc)
-#         get_cab_definition(cabdir)
-
-#     elif args.list_summary:
-#         for val in CAB:
-#             cabdir = "{:s}/{:s}".format(CAB_PATH, val)
-#             try:
-#                 get_cab_definition(cabdir, header=True)
-#             except IOError:
-#                 pass
-#     else:
-#         print(', '.join(CAB))
-
-
-# # docker images --format "{{json .ID}} {{json .Repository}} {{json .Tag}}"
 
 # ## singularity:
 # # singularity inspect -l --json ubuntu.img

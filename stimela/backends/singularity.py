@@ -1,12 +1,7 @@
 import subprocess
 import os
-import sys
 from stimela import utils
-import json
 import stimela
-import time
-import datetime
-import tempfile
 import hashlib
 from shutil import which
 

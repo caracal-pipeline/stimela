@@ -2,14 +2,14 @@ _include:
   - test_include.yaml
 
 foo:
-  _include: (scabha_tests)test_include2.yaml
+  _include: (tests.scabha_tests)test_include2.yaml
 
 bar:
   _use: foo
 
 hierarchical:
   foo:
-    _include: (scabha_tests)test_include2.yaml
+    _include: (tests.scabha_tests)test_include2.yaml
   bar:
     _use: bar
 

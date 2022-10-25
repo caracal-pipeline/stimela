@@ -1,8 +1,5 @@
 import click
-import os.path
-from typing import List
 import stimela
-from stimela import config
 from stimela.main import cli
 from omegaconf.omegaconf import OmegaConf
 import stimela

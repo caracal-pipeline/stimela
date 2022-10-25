@@ -14,8 +14,9 @@ defaults:
   direction: "J2000,0deg,-30deg"
 
 inputs:
-  tel:
+  telescope:
     dtype: str
+    nom_de_guerre: tel
   antennas:
     info: Antenna table/file
     dtype: Union[File, Directory]
@@ -53,6 +54,7 @@ outputs:
     info: Measurement set to be Simulated
     dtype: MS
     required: true
+    mkdir: true
     nom_de_guerre: name
 
 

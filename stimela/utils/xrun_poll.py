@@ -1,7 +1,15 @@
-import select, traceback, subprocess, errno, re, time, logging, os, sys, signal
+import select 
+import traceback
+import subprocess
+import errno
+import re
+import time
+import logging
+import sys
+import signal
 
 DEBUG = 0
-from . import StimelaCabRuntimeError, StimelaProcessRuntimeError
+from stimela.exceptions import StimelaCabRuntimeError, StimelaProcessRuntimeError
 
 log = None
 

@@ -1,5 +1,7 @@
 import atexit
-import sys, os.path, re
+import sys
+import os.path
+import re
 from datetime import datetime
 import pathlib
 import logging
@@ -332,7 +334,6 @@ def update_file_logger(log: logging.Logger, logopts: DictConfig, nesting: int = 
     Returns:
         [type]: [description]
     """
-    from .config import StimelaLogConfig
 
     if logopts.enable and logopts.nest >= nesting:
         path = os.path.join(logopts.dir or ".", logopts.name)
