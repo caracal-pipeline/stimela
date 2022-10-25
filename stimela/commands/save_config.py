@@ -1,8 +1,5 @@
 import click
-import os.path
-from typing import List
 import stimela
-from stimela import config
 from stimela.main import cli
 from omegaconf.omegaconf import OmegaConf
 import stimela
@@ -33,7 +30,7 @@ def config(settings, save=None):
 
     # print config, if no key=value args specified
     if not settings:
-        for key, value in CONFIG.opts.items():
+        for key, value in stimela.CONFIG.opts.items():
             if isinstance(value, Enum):
                 value = value.name
             print(f"    {key} = {value}")
