@@ -75,13 +75,8 @@ cabs:
         dtype: str
 
   test_callable2:
-<<<<<<< HEAD
-    command: stimela_tests.test_recipe.callable_function
-    flavour: python-ext
-=======
     command: tests.stimela_tests.test_recipe.callable_function
     flavour: python
->>>>>>> 9c99a1dce82db3a45c66028b8045d16b8101067d
     inputs:
       a:
         dtype: int
