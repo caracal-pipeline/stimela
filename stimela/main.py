@@ -4,25 +4,17 @@ import glob
 import sys
 import click
 import datetime
-import pathlib
-import yaml
 from dataclasses import dataclass
 from omegaconf import OmegaConf
 import stimela
 from stimela import config, stimelogging
 
-BASE = stimela.BASE
-CAB = stimela.CAB
-USER = stimela.USER
 UID = stimela.UID
 GID = stimela.GID
 LOG_HOME = stimela.LOG_HOME
 LOG_FILE = stimela.LOG_FILE
-GLOBALS = stimela.GLOBALS
-CAB_USERNAME = stimela.CAB_USERNAME
 
 log = None
-
 
 class RunExecGroup(click.Group):
     """ Makes the run and exec commands point to the same thing

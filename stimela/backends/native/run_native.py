@@ -11,6 +11,7 @@ from stimela.utils.xrun_asyncio import xrun, dispatch_to_log
 from stimela.exceptions import StimelaCabRuntimeError, CabValidationError
 from stimela.schedulers.slurm import SlurmBatch
 import click
+from stimela.schedulers import SlurmBatch
 
 from io import TextIOBase
 

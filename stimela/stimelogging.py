@@ -1,4 +1,6 @@
-import sys, os.path, re, copy
+import sys
+import  os.path
+import  re
 import logging
 import traceback
 from types import TracebackType
@@ -13,7 +15,6 @@ from rich import print as rich_print
 from rich.markup import escape
 
 from . import task_stats
-from .task_stats import declare_subtask, declare_subtask_attributes, declare_subcommand, update_process_status, run_process_status_update
 
 class MultiplexingHandler(logging.Handler):
     """handler to send INFO and below to stdout, everything above to stderr"""
@@ -254,7 +255,6 @@ def update_file_logger(log: logging.Logger, logopts: DictConfig, nesting: int = 
     Returns:
         [type]: [description]
     """
-    from .config import StimelaLogConfig
 
     if logopts.enable and logopts.nest >= nesting:
         path = os.path.join(logopts.dir or ".", logopts.name + logopts.ext)

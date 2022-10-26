@@ -1,6 +1,8 @@
-import traceback, subprocess, errno, re, time, logging, os, sys, signal, contextlib, datetime
+import traceback
+import os
+import signal
+import datetime
 import asyncio
-import psutil
 import rich
 import rich.highlighter
 from rich.style import Style
@@ -11,7 +13,7 @@ from rich.logging import RichHandler
 from stimela import stimelogging
 
 from .xrun_poll import get_stimela_logger, dispatch_to_log, xrun_nolog
-from . import StimelaCabRuntimeError, StimelaProcessRuntimeError
+from stimela.exceptions import StimelaCabRuntimeError, StimelaProcessRuntimeError
 
 DEBUG = 0
 

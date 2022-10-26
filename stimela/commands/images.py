@@ -11,6 +11,7 @@ from stimela.main import cli
                 help="list in the more terse image+ID format.")
 def images(print_ids=False):
     from stimela.main import BACKEND
+    from stimela import CONFIG
     log = stimela.logger()
     available = BACKEND.available_images()
 
