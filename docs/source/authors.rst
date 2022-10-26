@@ -9,8 +9,8 @@ Development leads
 
 Contributors
 ---------------
-Benjamin Hugo
-Athanaseus Ramaila
-Lexy Andati
-Simon Perkins
-Landmman Bester
+* Benjamin Hugo
+* Athanaseus Ramaila
+* Lexy Andati
+* Simon Perkins
+* Landmman Bester
