@@ -289,7 +289,12 @@ def log_exception(*errors, severity="error", log=None):
     pretty-prints them to the console  as appropriate.
     """
     def exc_message(e):
-        return escape(e.message if isinstance(e, ScabhaBaseException) else f"{type(e).__name__}: {e}")
+        if isinstance(e, ScabhaBaseException):
+            return escape(e.message)
+        elif type(e) is str:
+            return escape(e)
+        else:
+            return escape(f"{type(e).__name__}: {e}")
 
     if severity == "error":
         colour = "bold red"

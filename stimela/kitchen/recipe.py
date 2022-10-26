@@ -223,6 +223,9 @@ class Recipe(Cargo):
                     raise AssignmentError(f"{whose.fqname}.assign_based_on.{basevar}: unknown value '{value}', and no default defined")
                 value = 'DEFAULT'
             assignments = value_list.get(value)
+            # an empty section maps to None, so skip 
+            if assignments is None:
+                continue
             if not isinstance(assignments, (dict, OrderedDict, DictConfig)):
                 raise AssignmentError(f"{whose.fqname}.assign_based_on.{basevar}.{value}: mapping expected, got {type(assignments)} instead")
             # process the assignments

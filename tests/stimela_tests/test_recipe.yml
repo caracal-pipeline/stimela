@@ -101,7 +101,7 @@ recipe:
     selfcal.image.size: 1024
   inputs:
     band:
-      choices: [L, UHF]
+      choices: [L, UHF, K]
       default: L
 
   assign:
@@ -119,6 +119,7 @@ recipe:
         var2: y1
         cabs.wsclean.inputs.dummy.default: 2000
         band_label: "band2-{recipe.band}"
+      DEFAULT:
 
   steps: 
       test_callable:
