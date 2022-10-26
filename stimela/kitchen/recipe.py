@@ -887,6 +887,7 @@ class Recipe(Cargo):
         subst._add_('config', self.config, nosubst=True)
         subst._add_('steps', {}, nosubst=True)
         subst._add_('previous', {}, nosubst=True)
+        subst._add_('current', {}, nosubst=True)
             
         subst.recipe = SubstitutionNS(**params)
         subst.recipe.log = self.logopts
