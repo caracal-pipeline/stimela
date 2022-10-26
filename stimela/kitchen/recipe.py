@@ -18,7 +18,7 @@ from stimela.exceptions import *
 from scabha.validate import evaluate_and_substitute, Unresolved, join_quote
 from scabha.substitutions import SubstitutionNS, substitutions_from 
 from scabha.cargo import Parameter, Cargo, ParameterCategory
-from scabha.basetypes import File, Directory, MS, UNSET
+from scabha.basetypes import File, Directory, MS, UNSET, Placeholder
 from .cab import Cab
 from .batch import Batch
 from .step import Step, resolve_dotted_reference
@@ -38,8 +38,8 @@ class ForLoopClause(object):
     # If True, this is a scatter not a loop -- things may be evaluated in parallel
     scatter: bool = False
 
-
-
+def IterantPlaceholder(name: str):
+    return name
 
 @dataclass
 class Recipe(Cargo):
@@ -553,6 +553,8 @@ class Recipe(Cargo):
         own_params = {}
         unset_params = set()
         for name, value in params.items():
+            # if self.for_loop is not None and name == self.for_loop.var:
+            #     continue # unset_params.add(name)
             if name in self.inputs_outputs:
                 if value == "UNSET":
                     unset_params.add(name)
@@ -611,7 +613,7 @@ class Recipe(Cargo):
 
         # add for-loop variable to inputs, if expected there
         if self.for_loop is not None and self.for_loop.var in self.inputs:
-            params[self.for_loop.var] = UNSET(self.for_loop.var)
+            params[self.for_loop.var] = Placeholder(self.for_loop.var)
 
         # prevalidate our own parameters. This substitutes in defaults and does {}-substitutions
         # we call this twice, potentially, so define as a function
@@ -774,36 +776,37 @@ class Recipe(Cargo):
 
         self.validate_for_loop(params, strict=True)
 
-        # in case of a for-loop, assign first iterant
-        if self.for_loop is not None:
-            if self.for_loop.var in self.inputs:
-                params[self.for_loop.var] = self._for_loop_values[0]
-            else:
-                self.assign[self.for_loop.var] = self._for_loop_values[0]
+        # # in case of a for-loop, assign first iterant
+        # if self.for_loop is not None:
+        #     if self.for_loop.var in self.inputs:
+        #         params[self.for_loop.var] = IterantPlaceholder(self.for_loop.var)
+        #     else:
+        #         self.assign[self.for_loop.var] = IterantPlaceholder(self.for_loop.var)
 
         return params
 
-    def _link_steps(self):
-        """
-        Adds  next_step and previous_step attributes to the recipe. 
-        """
-        steps = list(self.steps.values())
-        N = len(steps)
-        # Nothing to link if only one step
-        if N == 1:
-            return
+    ## NB: OMS: is this really used or needed anywhere?
+    # def _link_steps(self):
+    #     """
+    #     Adds  next_step and previous_step attributes to the recipe. 
+    #     """
+    #     steps = list(self.steps.values())
+    #     N = len(steps)
+    #     # Nothing to link if only one step
+    #     if N == 1:
+    #         return
 
-        for i in range(N):
-            step = steps[i]
-            if i == 0:
-                step.next_step = steps[1]
-                step.previous_step = None
-            elif i > 0 and i < N-2:
-                step.next_step = steps[i+1]
-                step.previous_step = steps[i-1]
-            elif i == N-1:
-                step.next_step = None
-                step.previous_step = steps[i-2]
+    #     for i in range(N):
+    #         step = steps[i]
+    #         if i == 0:
+    #             step.next_step = steps[1]
+    #             step.previous_step = None
+    #         elif i > 0 and i < N-2:
+    #             step.next_step = steps[i+1]
+    #             step.previous_step = steps[i-1]
+    #         elif i == N-1:
+    #             step.next_step = None
+    #             step.previous_step = steps[i-2]
 
     def summary(self, params: Dict[str, Any], recursive=True, ignore_missing=False):
         """Returns list of lines with a summary of the recipe state
@@ -888,13 +891,13 @@ class Recipe(Cargo):
         subst_copy = subst.copy()
 
         try:
-            # update variable assignments
-            self.update_assignments(subst, params=params)
-            # log options may have changed, so adjust
-            stimelogging.update_file_logger(self.log, self.logopts, nesting=self.nesting, subst=subst, location=[self.fqname])
+            # # update variable assignments
+            # self.update_assignments(subst, params=params)
+            # # log options may have changed, so adjust
+            # stimelogging.update_file_logger(self.log, self.logopts, nesting=self.nesting, subst=subst, location=[self.fqname])
 
-            # Harmonise before running
-            self._link_steps()
+            # # Harmonise before running
+            # self._link_steps()
 
             self.log.info(f"running recipe '{self.name}'")
 
@@ -902,14 +905,13 @@ class Recipe(Cargo):
             for name, schema in self.inputs.items():
                 if name in params:
                     value = params[name]
-                    if isinstance(value, Unresolved):
+                    if isinstance(value, Unresolved) and not isinstance(value, Placeholder):
                         raise RecipeValidationError(f"recipe '{self.name}' has unresolved input '{name}'", log=self.log)
                     # propagate up all aliases
                     for alias in self._alias_list.get(name, []):
                         if alias.from_recipe:
                             alias.step.update_parameter(alias.param, value)
-                else:
-                    if schema.required: 
+                elif schema.required and (self.for_loop is None or name != self.for_loop.var): 
                         raise RecipeValidationError(f"recipe '{self.name}' is missing required input '{name}'", log=self.log)
 
             # iterate over for-loop values (if not looping, this is set up to [None] in advance)

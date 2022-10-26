@@ -271,6 +271,11 @@ class Cargo(object):
     def finalized(self):
         return self.config is not None
 
+    def unresolved_params(self, params):
+        """Returns list of unresolved parameters"""
+        return [name for name, value in params.items() if isinstance(value, Unresolved)]
+
+
     def finalize(self, config=None, log=None, fqname=None, nesting=0):
         if not self.finalized:
             if fqname is not None:

@@ -77,6 +77,10 @@ def test_test_loop_recipe():
     retcode = os.system("stimela -v exec test_loop_recipe.yml same_as_cubical_image_loop ms=foo")
     assert retcode == 0
 
+    for name in "abc":
+        msname = f"test-{name}.ms"
+        if not os.path.exists(msname):
+            os.mkdir(msname)
     print("===== expecting no errors now =====")
     retcode = os.system("stimela -v exec test_loop_recipe.yml loop_recipe")
     assert retcode == 0

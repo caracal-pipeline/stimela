@@ -14,7 +14,7 @@ import scabha.exceptions
 from scabha.exceptions import SubstitutionError, SubstitutionErrorList
 from scabha.validate import evaluate_and_substitute, Unresolved, join_quote
 from scabha.substitutions import SubstitutionNS, substitutions_from 
-from scabha.basetypes import UNSET
+from scabha.basetypes import UNSET, Placeholder
 from .cab import Cab
 
 Conditional = Optional[str]
@@ -112,7 +112,7 @@ class Step:
 
     @property
     def unresolved_params(self):
-        return [name for name, value in self.validated_params.items() if isinstance(value, Unresolved)]
+        return [name for name, value in self.validated_params.items() if isinstance(value, Unresolved) and not isinstance(value, Placeholder)]
 
     @property
     def inputs(self):
@@ -340,7 +340,7 @@ class Step:
             if invalid:
                 invalid = self.invalid_params + self.unresolved_params
                 if skip:
-                    self.log.warning(f"invalid inputs/outputs: {join_quote(invalid)}")
+                    self.log.warning(f"invalid inputs: {join_quote(invalid)}")
                     if not skip_warned:
                         parent_log.warning("since the step was skipped, this is not fatal")
                         skip_warned = True

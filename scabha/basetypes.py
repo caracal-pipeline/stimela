@@ -29,6 +29,9 @@ class UNSET(Unresolved):
     """Marks unset values in formulas"""
     pass
 
+class Placeholder(Unresolved):
+    """Marks placeholder values that are guaranteed to resolve later, such as fot-loop iterants"""
+    pass
 
 import os.path
 
