@@ -5,7 +5,7 @@ stimela
 
 
 |Pypi Version|
-|Build Version|  
+|Python Versions|  
 
 To reference *stimela* in a scholary work, please use this citation:
 
@@ -22,7 +22,7 @@ To reference *stimela* in a scholary work, please use this citation:
 
 
 `Documentation <https://stimela.readthedocs.io/>`_  
-==============
+=========================================================================================
 
 
 
