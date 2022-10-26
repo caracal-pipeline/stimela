@@ -36,6 +36,7 @@ lib:
       for_loop:
         var: ms
         over: ms_list
+        scatter: true
       aliases:
         ms: ['cubical_image_step.ms']
       inputs:

@@ -848,6 +848,18 @@ class Recipe(Cargo):
             steps_tree = tree.add("No recipe steps defined")
 
 
+    def _update_aliases(self, name: str, value: Any):
+        """Propagates recipe aliases up top parameters
+
+        Args:
+            name (str): name of recipe parameter
+            value (Any): value
+        """
+        for alias in self._alias_list.get(name, []):
+            if alias.from_recipe:
+                alias.step.update_parameter(alias.param, value)
+
+
     def _run(self, params, subst=None) -> Dict[str, Any]:
         """Internal recipe run method. Meant to be called from a wrapper Step object (which validates the parameters, etc.)
 
@@ -907,10 +919,7 @@ class Recipe(Cargo):
                     value = params[name]
                     if isinstance(value, Unresolved) and not isinstance(value, Placeholder):
                         raise RecipeValidationError(f"recipe '{self.name}' has unresolved input '{name}'", log=self.log)
-                    # propagate up all aliases
-                    for alias in self._alias_list.get(name, []):
-                        if alias.from_recipe:
-                            alias.step.update_parameter(alias.param, value)
+                    self._update_aliases(name, value)
                 elif schema.required and (self.for_loop is None or name != self.for_loop.var): 
                         raise RecipeValidationError(f"recipe '{self.name}' is missing required input '{name}'", log=self.log)
 
@@ -935,6 +944,8 @@ class Recipe(Cargo):
                         inst.assign[inst.for_loop.var] = iter_var
                     # update variable index
                     inst.assign[f"{inst.for_loop.var}@index"] = count
+                    # update alias
+                    self._update_aliases(inst.for_loop.var, iter_var)
                     stimelogging.declare_subtask_attributes(f"{count+1}/{len(inst._for_loop_values)}")
 
                 # reevaluate recipe level assignments (info.fqname etc. have changed)
