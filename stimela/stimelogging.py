@@ -15,6 +15,9 @@ from rich import print as rich_print
 from rich.markup import escape
 
 from . import task_stats
+from .task_stats import declare_subtask, declare_subtask_attributes, \
+                        declare_subcommand, update_process_status, \
+                        run_process_status_update
 
 class MultiplexingHandler(logging.Handler):
     """handler to send INFO and below to stdout, everything above to stderr"""

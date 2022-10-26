@@ -6,10 +6,16 @@ from scabha.configuratt import ConfigurattError
 from omegaconf import OmegaConf
 from typing import *
 
-testdir = os.path.dirname(os.path.abspath(__file__))
+#testdir = os.path.dirname(os.path.abspath(__file__))
 
-def test_includes(path=None):
-    path = path or os.path.join(testdir, "testconf.yaml")
+# Change into directory where test_recipy.py lives
+# As suggested by https://stackoverflow.com/questions/62044541/change-pytest-working-directory-to-test-case-directory
+@pytest.fixture(autouse=True)
+def change_test_dir(request, monkeypatch):
+    monkeypatch.chdir(request.fspath.dirname)
+
+def test_includes():
+    path = "testconf.yaml"
     conf, deps = configuratt.load(path, use_sources=[], verbose=True, use_cache=False)
     assert conf.x.y2.z1 == 1
 
