@@ -14,6 +14,7 @@ def callable_function(a: int, b: str):
 
 def run(command):
     """Runs command, returns tuple of exit code, output"""
+    print(f"running: {command}")
     try:
         return 0, subprocess.check_output(command, shell=True).strip().decode()
     except subprocess.CalledProcessError as exc:
@@ -39,7 +40,7 @@ def test_test_aliasing():
     assert retcode != 0 
 
     print("===== expecting no errors now =====")
-    retcode, output = run("stimela -v exec test_aliasing.yml a=1 s3_a=1 s4_a=1 e=e f=f")
+    retcode, output = run("stimela -v exec test_aliasing.yml a=1 s3.a=1 s4.a=1 e=e f=f")
     assert retcode == 0
     print(output)
     assert verify_output(output, 
@@ -56,11 +57,11 @@ def test_test_nesting():
 
 def test_test_recipe():
     print("===== expecting an error since 'msname' parameter is missing =====")
-    retcode = os.system("stimela -v exec test_recipe.yml selfcal_image_name=bar")
+    retcode = os.system("stimela -v exec test_recipe.yml selfcal.image_name=bar")
     assert retcode != 0 
 
     print("===== expecting no errors now =====")
-    retcode = os.system("stimela -v exec test_recipe.yml selfcal_image_name=bar msname=foo")
+    retcode = os.system("stimela -v exec test_recipe.yml selfcal.image_name=bar msname=foo")
     assert retcode == 0
 
 def test_test_loop_recipe():
@@ -73,9 +74,13 @@ def test_test_loop_recipe():
     assert retcode == 0
 
     print("===== expecting no errors now =====")
-    retcode = os.system("stimela -v exec test_loop_recipe.yml same_as_cubical_image_loop ms=foo")
+    retcode = os.system("stimela exec test_loop_recipe.yml same_as_cubical_image_loop ms=foo")
     assert retcode == 0
 
+    for name in "abc":
+        msname = f"test-{name}.ms"
+        if not os.path.exists(msname):
+            os.mkdir(msname)
     print("===== expecting no errors now =====")
-    retcode = os.system("stimela -v exec test_loop_recipe.yml loop_recipe")
+    retcode = os.system("stimela exec test_loop_recipe.yml loop_recipe")
     assert retcode == 0

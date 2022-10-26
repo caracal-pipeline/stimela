@@ -37,6 +37,15 @@ opts:
 
 recipe:
   name: "alias test recipe"
+
+  inputs:
+    foo:
+      default: "{current.nested.bar}"
+
+  assign:
+    nested:
+      bar: xxx
+
   aliases:
     a: [s1.a, s2.a]
     b: [s1.b, s2.b]
@@ -52,6 +61,7 @@ recipe:
       params:
         b: 1
         c: 2
+
     s2:
       cab: echo
       params:

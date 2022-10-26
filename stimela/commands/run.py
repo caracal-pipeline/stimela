@@ -1,11 +1,10 @@
-import dataclasses
 import itertools
 import click
 import logging
 import os.path
 import yaml
 import sys
-import pathlib
+import traceback
 
 from datetime import datetime
 from typing import List, Optional
@@ -19,9 +18,36 @@ from stimela import stimelogging
 import stimela.config
 from stimela.config import ConfigExceptionTypes
 from stimela import logger, log_exception
-from stimela.exceptions import RecipeValidationError
+from stimela.exceptions import RecipeValidationError, StimelaRuntimeError
 from stimela.main import cli
 from stimela.kitchen.recipe import Recipe, Step, RecipeSchema, join_quote
+from stimela import task_stats
+
+def load_recipe_file(filename: str):
+    dependencies = stimela.config.get_initial_deps()
+
+    # if file contains a recipe entry, treat it as a full config (that can include cabs etc.)
+    try:
+        conf, deps = configuratt.load(filename, use_sources=[stimela.CONFIG])
+    except ConfigExceptionTypes as exc:
+        log_exception(f"error loading {filename}", exc)
+        sys.exit(2)
+
+    # warn user if any includes failed
+    if deps.fails:
+        logger().warning(f"{len(deps.fails)} optional includes were not found, some cabs may not be available")
+        for path, dep in deps.fails.items():
+            logger().warning(f"    {path} (from {dep.origin})")
+
+    dependencies.update(deps)
+
+    # check for missing requirements
+    missing = configuratt.check_requirements(conf, [stimela.CONFIG], strict=True)
+    for (loc, name, _) in missing:
+        logger().warning(f"optional config section '{loc}' omitted due to missing requirement '{name}'")
+
+
+    return conf, dependencies
 
 
 @cli.command("run",
@@ -46,9 +72,11 @@ from stimela.kitchen.recipe import Recipe, Step, RecipeSchema, join_quote
                 help="""Sets skip=false on the given step(s). Use commas, or give multiple times for multiple steps.""")
 @click.option("-d", "--dry-run", is_flag=True,
                 help="""Doesn't actually run anything, only prints the selected steps.""")
+@click.option("-p", "--profile", is_flag=True,
+                help="""Collect and print per-step profiling stats.""")
 @click.argument("what", metavar="filename.yml|cab name") 
 @click.argument("parameters", nargs=-1, metavar="[recipe name] [PARAM=VALUE] [X.Y.Z=FOO] ...", required=False) 
-def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool = False,
+def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: bool = False,
     step_names: List[str] = [], tags: List[str] = [], skip_tags: List[str] = [], enable_steps: List[str] = []):
 
     log = logger()
@@ -66,9 +94,9 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
             recipe_name = pp
         else:
             key, value = pp.split("=", 1)
-            # dotlist
-            if '.' in key:
-                dotlist[key] = pp
+            # config.xxx= is a dotlist
+            if key.startswith("config."):
+                dotlist[key[7:]] = pp
             # else param=value
             else:
                 # parse string as yaml value
@@ -85,7 +113,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
     # (when loading a recipe file, we want to merge these in AFTER the recipe is loaded, because the arguments
     # might apply to the recipe)
     try:
-        extra_config = OmegaConf.from_dotlist(dotlist.values()) if dotlist else OmegaConf.create()
+        extra_config = OmegaConf.from_dotlist(list(dotlist.values())) if dotlist else OmegaConf.create()
     except OmegaConfBaseException as exc:
         log_exception(f"error loading command-line dotlist", exc)
         sys.exit(2)
@@ -106,7 +134,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
 
         # prevalidate() is done by run() automatically if not already done, but it does set up the recipe's logger, so do it anyway
         try:
-            outer_step.prevalidate()
+            outer_step.prevalidate(root=True)
         except ScabhaBaseException as exc:
             log_exception(exc)
             sys.exit(1)
@@ -118,13 +146,8 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
 
         log.info(f"loading recipe/config {what}")
 
-        # if file contains a recipe entry, treat it as a full config (that can include cabs etc.)
-        try:
-            conf, recipe_deps = configuratt.load(what, use_sources=[stimela.CONFIG])
-        except ConfigExceptionTypes as exc:
-            log_exception(f"error loading {what}", exc)
-            sys.exit(2)
-        configuratt.add_dependency(recipe_deps, what)
+        conf, recipe_deps = load_recipe_file(what)
+        conf.merge_with(extra_config)
 
         # anything that is not a standard config section will be treated as a recipe
         all_recipe_names = [name for name in conf if name not in stimela.CONFIG]
@@ -143,13 +166,13 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
                 try:
                     stimela.CONFIG.lib.recipes[name] = OmegaConf.merge(RecipeSchema, value)
                 except Exception as exc:
-                    log_exception("error loading recipe '{name}'", exc)
+                    log_exception(f"error in definition of recipe '{name}'", exc)
                     sys.exit(2)
         
         try:
             stimela.CONFIG = OmegaConf.unsafe_merge(stimela.CONFIG, update_conf)
         except Exception as exc:
-            log_exception("error applying configuration from {what}", exc)
+            log_exception(f"error applying configuration from {what}", exc)
             sys.exit(2)
 
         log.info(f"{what} contains the following recipe sections: {join_quote(all_recipe_names)}")
@@ -183,17 +206,18 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
         # wrap it in an outer step and prevalidate (to set up loggers etc.)
         recipe.fqname = recipe_name
 
-        # protect dotlisted arguments from being assignedby recipe.assignb and recipe.assign_based_on
+        # protect dotlisted arguments from being assignedby recipe.assign and recipe.assign_based_on
         recipe.protect_from_assignments(dotlist.keys())
         recipe.protect_from_assignments(params.keys())
-
 
         log.info("pre-validating the recipe")
         outer_step = Step(recipe=recipe, name=f"{recipe_name}", info=what, params=params)
         try:
-            params = outer_step.prevalidate()
+            params = outer_step.prevalidate(root=True)
         except Exception as exc:
             log_exception(RecipeValidationError(f"pre-validation of recipe '{recipe_name}' failed", exc))
+            for line in traceback.format_exc().split("\n"):
+                log.debug(line)
             sys.exit(1)        
 
         # select recipe substeps based on command line
@@ -280,9 +304,9 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
         if any(recipe.steps[name]._skip for name in tagged_steps):
             log.warning("note that some steps remain explicitly skipped")
 
-        filename = os.path.join(stimelogging.LOG_DIR, "stimela.recipe.deps")
-        recipe_deps = OmegaConf.unsafe_merge(stimela.config.CONFIG_DEPS, recipe_deps)
-        OmegaConf.save(recipe_deps, filename)
+        filename = os.path.join(stimelogging.get_logger_file(recipe.log) or '.', "stimela.recipe.deps")
+        stimela.config.CONFIG_DEPS.update(recipe_deps)
+        stimela.config.CONFIG_DEPS.save(filename)
         log.info(f"saved recipe dependencies to {filename}")
 
     # in debug mode, pretty-print the recipe
@@ -301,8 +325,15 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
 
     try:
         outputs = outer_step.run()
-    except ScabhaBaseException as exc:
-        log_exception(f"run failed after {elapsed()}", exc)
+    except Exception as exc:
+        if not isinstance(exc, ScabhaBaseException) or not exc.logged:
+            log_exception(StimelaRuntimeError(f"run failed after {elapsed()}", exc, 
+                tb=not isinstance(exc, ScabhaBaseException)))
+        for line in traceback.format_exc().split("\n"):
+            log.debug(line)
+        task_stats.save_profiling_stats(outer_step.log)
+        if profile or stimela.CONFIG.opts.print_profile:
+            task_stats.print_profiling_stats()
         sys.exit(1)
 
     if outputs and step.log.isEnabledFor(logging.DEBUG):
@@ -312,5 +343,9 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, help: bool
                 outer_step.log.debug(f"  {name}: {value}")
     else:
         outer_step.log.info(f"run successful after {elapsed()}")
+
+    task_stats.save_profiling_stats(outer_step.log)
+    if profile or stimela.CONFIG.opts.print_profile:
+        task_stats.print_profiling_stats()
 
     return 0

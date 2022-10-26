@@ -3,7 +3,7 @@ import traceback
 from scabha.exceptions import SubstitutionError
 from scabha.substitutions import *
 from omegaconf import OmegaConf 
-from scabha.evaluator import Evaluator
+from scabha.evaluator import UNSET, Evaluator
 from scabha.validate import Unresolved
 
 def test_subst():
@@ -118,19 +118,21 @@ def test_formulas():
         c = '=previous.x',
         d = '=IFSET(previous.x)',
         e = '=IFSET(previous.x,"z",2)',
+        e1 = '=IFSET(previous.x,SELF,2)',
         f = '=IFSET(previous.xx)',
-        g = '=IFSET(previous.xx,,2)',
+        g = '=IFSET(previous.xx,SELF,2)',
         h = "=IF(previous.x, True, 'False')", 
         i = "=IF(previous.x0, True, 'False')",
-        j = "=IF(previous.xx, True, 'False', 'UNSET')",
+        j = "=IF(previous.xx, True, 'False', UNSET)",
         k = "=current.j",
         l = "=IFSET(current.f)",
         m = "=IF((previous.x+1)*previous.x == 2, previous.x == 1, previous.y == 0)",
         n = "=IF((-previous.x+1)*(previous.x) == 0, previous.x == 1, previous.y < 0)",
-        o = '=previous.zz',
+        o = '=previous.z',
         p = 'x{previous.zz}',
-        q = '=LIST(current.a, current.b, current.c + 1, 0)'
-        #q = '=[current.a, current.b, current.c + 1, 0]'
+        q = '=LIST(current.a, current.b, current.c + 1, 0)',
+        r = '=not IFSET(current.a)',
+        s = '=current.c + current.c + current.c'
     )
     ns._add_("current", current)
     
@@ -146,19 +148,20 @@ def test_formulas():
         assert r['c'] == 1
         assert r['d'] == 1 
         assert r['e'] == "z"
+        assert r['e1'] == 1
         assert 'f' not in r 
         assert r['g'] == 2
         assert r['h'] == True
         assert r['i'] == 'False'
-        assert r['j'] == "UNSET"
-        assert r['k'] == r['j']
+        assert 'j' not in r
+        assert type(r['k']) is UNSET
         assert 'l' not in r
         assert r['m'] == True
         assert r['n'] == True
-        assert type(r['o']) is Unresolved
+        assert r['o'] == 'z'
         assert type(r['p']) is Unresolved
         assert r['q'] == ["a1", "=escaped", 2, 0]
-
+        assert r['r'] == False
 
 if __name__ == "__main__":
     test_subst()

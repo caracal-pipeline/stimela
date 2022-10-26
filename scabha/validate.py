@@ -3,6 +3,7 @@ import os
 import os.path
 import yaml
 import re
+import typing
 from typing import *
 from collections import OrderedDict
 
@@ -14,9 +15,8 @@ from omegaconf import OmegaConf, ListConfig, DictConfig
 from scabha.basetypes import Unresolved
 from .exceptions import Error, ParameterValidationError, SchemaError, SubstitutionErrorList
 from .substitutions import SubstitutionNS, substitutions_from
-from .types import File, Directory, MS
+from .basetypes import File, Directory, MS, UNSET
 from .evaluator import Evaluator
-
 
 def join_quote(values):
     return "'" + "', '".join(values) + "'" if values else ""
@@ -33,6 +33,10 @@ def validate_schema(schema: Dict[str, Any]):
     """
 
     pass
+
+
+def dtype_from_str(dtype_str: str):
+    """Converts a string e.g. 'int' into a typing object"""
 
 
 def is_file_type(dtype):
@@ -60,7 +64,7 @@ def evaluate_and_substitute(inputs: Dict[str, Any],
                     errors += value.errors
             # check for substitution errors
             if errors:
-                raise SubstitutionErrorList(*errors)
+                raise SubstitutionErrorList("unresolved {}-substitutions", errors)
     return inputs
 
 
@@ -72,7 +76,7 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
                         check_required=True,
                         check_exist=True,
                         create_dirs=False,
-                        ignore_subst_errors=False
+                        ignore_subst_errors=False,
                         ) -> Dict[str, Any]:
     """Validates a dict of parameter values against a given schema 
 
@@ -120,17 +124,21 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
     inputs = OrderedDict((name, value) for name, value in params.items() if name in schemas)
     
     # build dict of all defaults 
-    all_defaults = {name: schema.default for name, schema in schemas.items() if schema.default is not None}
+    all_defaults = {name: schema.default for name, schema in schemas.items() if schema.default is not UNSET and schema.default != "UNSET"}
     if defaults:
         all_defaults.update(**{name: value for name, value in defaults.items() if name in schemas})
 
     # update missing inputs from defaults
     inputs.update(**{name: value for name, value in all_defaults.items() if name not in inputs})
 
+    # update implicit values
+    #  
+
     # perform substitution
     if subst is not None:
         inputs = evaluate_and_substitute(inputs, subst, subst.current, defaults=all_defaults, 
-                                        ignore_subst_errors=ignore_subst_errors, location=[fqname])
+                                        ignore_subst_errors=ignore_subst_errors, 
+                                        location=[fqname])
 
     # split inputs into unresolved substitutions, and proper inputs
     unresolved = {name: value for name, value in inputs.items() if isinstance(value, Unresolved)}
@@ -139,13 +147,12 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
     # check that required args are present
     if check_required:
         missing = [mkname(name) for name, schema in schemas.items() 
-                    if schema.required and inputs.get(name) is None and name not in unresolved]
+                    if schema.required and inputs.get(name) is UNSET and name not in unresolved]
         if missing:
             raise ParameterValidationError(f"missing required parameters: {join_quote(missing)}")
 
     # create dataclass from parameter schema
     validated = {}
-    dtypes = {}
     fields = []
 
     # maps parameter names to/from field names. Fields have "_" not "-"
@@ -153,13 +160,8 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
     field2name = {}
 
     for name, schema in schemas.items():
-        value = inputs.get(name)
-        if value is not None:
-            try:
-                dtypes[name] = dtype_impl = eval(schema.dtype, globals())
-            except Exception as exc:
-                raise SchemaError(f"invalid {mkname(name)}.dtype = {schema.dtype} ({exc})")
-
+        value = inputs.get(name, UNSET)
+        if value is not UNSET:
             # sanitize name: dataclass won't take hyphens or periods
             fldname = re.sub("\W", "_", name)
             while fldname in field2name:
@@ -167,7 +169,7 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
             field2name[fldname] = name
             name2field[name] = fldname
 
-            fields.append((fldname, dtype_impl))
+            fields.append((fldname, schema._dtype))
             
             # OmegaConf dicts/lists need to be converted to standard containers for pydantic to take them
             if isinstance(value, (ListConfig, DictConfig)):
@@ -185,9 +187,9 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
         if schema is None:
             continue
         # skip errors
-        if value is None or isinstance(value, Error):
+        if value is UNSET or isinstance(value, Error):
             continue
-        dtype = dtypes[name]
+        dtype = schema._dtype
 
         is_file = is_file_type(dtype)
         is_file_list = is_filelist_type(dtype)
@@ -236,10 +238,6 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
                             if not os.path.isdir(files[0]):
                                 raise ParameterValidationError(f"'{mkname(name)}': {value} is not a directory")
                     inputs[name] = files[0]
-                    if create_dirs:
-                        dirname = os.path.dirname(files[0])
-                        if dirname:
-                            os.makedirs(dirname, exist_ok=True)
             # else make list
             else:
                 # check that files are files and dirs are dirs
@@ -250,18 +248,19 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
                     if not all(os.path.isdir(f) for f in files if os.path.exists(f)):
                         raise ParameterValidationError(f"{mkname(name)}: {value} matches non-directories")
                 inputs[name] = files
-                if create_dirs:
-                    for path in files:
-                        dirname = os.path.dirname(path)
-                        if dirname:
-                            os.makedirs(dirname, exist_ok=True)
 
     # validate
     try:   
-        validated = pcls(**{name2field[name]: value for name, value in inputs.items() if name in schemas and value is not None})
+        validated = pcls(**{name2field[name]: value for name, value in inputs.items() if name in schemas and value is not UNSET})
     except pydantic.ValidationError as exc:
-        errors = [f"'{'.'.join(map(str, err['loc']))}': {err['msg']}" for err in exc.errors()]
-        raise ParameterValidationError(', '.join(errors))
+        errors = []
+        for err  in exc.errors():
+            loc = '.'.join([field2name.get(x, x) for x in err['loc']])
+            if loc in inputs:
+                errors.append(ParameterValidationError(f"{loc} = {inputs[loc]}: {err['msg']}")) 
+            else:
+                errors.append(ParameterValidationError(f"{loc}: {err['msg']}")) 
+        raise ParameterValidationError(f"{len(errors)} parameter(s) failed validation:", errors)
 
     validated = {field2name[fld]: value for fld, value in dataclasses.asdict(validated).items()}
 
@@ -274,9 +273,9 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
     # check for mkdir directives
     if create_dirs:
         for name, value in validated.items():
-            if schemas[name].mkdir:
+            if schemas[name].mkdir and isinstance(value, str):
                 dirname = os.path.dirname(value)
-                if dirname:
+                if dirname and not os.path.exists(dirname):
                     os.makedirs(dirname, exist_ok=True)
 
     # add in unresolved values

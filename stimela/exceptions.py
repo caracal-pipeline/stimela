@@ -1,6 +1,9 @@
-from scabha.exceptions import ScabhaBaseException
+from scabha.exceptions import *
 
 class StimelaBaseException(ScabhaBaseException):
+    pass
+
+class BackendError(StimelaBaseException):
     pass
 
 class CabValidationError(StimelaBaseException):
@@ -24,16 +27,22 @@ class RecipeValidationError(StimelaBaseException):
 class CabValidationError(StimelaBaseException):
     pass
 
-class ParameterValidationError(StimelaBaseException):
+class StimelaCabParameterError(StimelaBaseException):
     pass
 
-class StimelaCabParameterError(StimelaBaseException):
+class StimelaCabError(StimelaBaseException):
+    pass
+
+class StimelaStepExecutionError(StimelaBaseException):
     pass
 
 class StimelaRecipeExecutionError(StimelaBaseException):
     pass
 
 class StimelaBaseImageError(StimelaBaseException):
+    pass
+
+class StimelaRuntimeError(StimelaBaseException):
     pass
 
 class StimelaCabRuntimeError(StimelaBaseException):

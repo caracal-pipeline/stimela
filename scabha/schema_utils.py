@@ -1,11 +1,11 @@
-from typing import *
 import click
+from scabha.exceptions import SchemaError
 from .cargo import Parameter
-from .exceptions import SchemaError
+from typing import *
+from .basetypes import UNSET
 from dataclasses import make_dataclass, field
-from omegaconf import OmegaConf
-from collections import OrderedDict
-from collections.abc import MutableSet, MutableSequence, MutableMapping
+from omegaconf import OmegaConf, MISSING
+from collections import MutableSet, MutableSequence, MutableMapping
 
 def schema_to_dataclass(io: Dict[str, Parameter], class_name: str, bases=(), post_init: Optional[Callable] =None):
     """Converts a scabha schema to a dataclass.
@@ -27,10 +27,8 @@ def schema_to_dataclass(io: Dict[str, Parameter], class_name: str, bases=(), pos
     field2name = {}
     fields = []
     for name, schema in io.items():
-        try:
-            dtype_impl = eval(schema.dtype, globals())
-        except Exception as exc:
-            raise SchemaError(f"invalid dtype = {schema.dtype}")
+        if type(schema) is not Parameter:
+            schema = Parameter(**schema)
 
         # sanitize name: dataclass won't take hyphens or periods
         # so replace with "_" and ensure uniqueness
@@ -46,8 +44,17 @@ def schema_to_dataclass(io: Dict[str, Parameter], class_name: str, bases=(), pos
             metadata['choices'] = schema.choices
         if schema.element_choices:
             metadata['element_choices'] = schema.element_choices
+        metadata['required'] = required = schema.required
 
-        if isinstance(schema.default, MutableSequence):
+        if required and schema.default is not UNSET:
+            raise SchemaError(
+                f"Field '{fldname}' is required but specifies a default. "
+                f"This behaviour is unsupported/ambiguous."
+            )
+
+        if required:
+            fld = field(default=MISSING, metadata=metadata)
+        elif isinstance(schema.default, MutableSequence):
             fld = field(default_factory=default_wrapper(list, schema.default),
                         metadata=metadata)
         elif isinstance(schema.default, MutableSet):
@@ -56,10 +63,12 @@ def schema_to_dataclass(io: Dict[str, Parameter], class_name: str, bases=(), pos
         elif isinstance(schema.default, MutableMapping):
             fld = field(default_factory=default_wrapper(dict, schema.default),
                         metadata=metadata)
+        elif schema.default is UNSET:
+            fld = field(default=None, metadata=metadata)
         else:
             fld = field(default=schema.default, metadata=metadata)
 
-        fields.append((fldname, dtype_impl, fld))
+        fields.append((fldname, schema._dtype, fld))
 
     namespace = None if post_init is None else dict(__post_init__=post_init)
 
@@ -91,7 +100,7 @@ def nested_schema_to_dataclass(nested: Dict[str, Dict], class_name: str, bases=(
     # make dataclass based on schema contents
     nested_structure = make_dataclass(f"_{class_name}_schemas", [(name, Dict[str, Parameter]) for name in nested.keys()])
     # turn into a structured config
-    nested = OmegaConf.merge(OmegaConf.structured(nested_structure), nested)
+    nested = OmegaConf.unsafe_merge(OmegaConf.structured(nested_structure), nested)
     fields = []
 
     # convert per-section schemas into dataclasses and make list of fields for outer dataclass
@@ -136,9 +145,14 @@ def clickify_parameters(schemas: Dict[str, Any]):
             if schema.abbreviation:
                 optnames.append(f"-{schema.abbreviation}")
 
-            deco = click.option(*optnames, type=dtype,
-                                default=schema.default, required=schema.required, metavar=schema.metavar,
-                                help=schema.info)
+            if schema.default is UNSET:
+                deco = click.option(*optnames, type=dtype,
+                                    required=schema.required, 
+                                    metavar=schema.metavar,help=schema.info)
+            else:
+                deco = click.option(*optnames, type=dtype,
+                                    default=schema.default, required=schema.required, 
+                                    metavar=schema.metavar,help=schema.info)
 
             if decorator_chain is None:
                 decorator_chain = deco

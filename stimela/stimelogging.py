@@ -1,21 +1,23 @@
-import atexit
 import sys
-import os.path
-import re
-from datetime import datetime
-import pathlib
+import  os.path
+import  re
 import logging
-import contextlib
-from typing import Optional, Union
+import traceback
+from types import TracebackType
+from typing import Optional, OrderedDict, Union
 from omegaconf import DictConfig
 from scabha.exceptions import ScabhaBaseException
 from scabha.substitutions import SubstitutionNS, forgiving_substitutions_from
-import asyncio
-import psutil
 import rich.progress
 import rich.logging
 from rich.tree import Tree
 from rich import print as rich_print
+from rich.markup import escape
+
+from . import task_stats
+from .task_stats import declare_subtask, declare_subtask_attributes, \
+                        declare_subcommand, update_process_status, \
+                        run_process_status_update
 
 class MultiplexingHandler(logging.Handler):
     """handler to send INFO and below to stdout, everything above to stderr"""
@@ -107,8 +109,6 @@ class SelectiveFormatter(logging.Formatter):
 
 _logger = None
 log_console_handler = log_formatter = log_boring_formatter = log_colourful_formatter = None
-progress_bar = progress_task = None
-_start_time = datetime.now()
 
 LOG_DIR = '.'
 
@@ -149,28 +149,12 @@ def logger(name="STIMELA", propagate=False, console=True, boring=False,
         log_formatter = log_boring_formatter if boring else log_colourful_formatter
 
         if console:
-            global progress_bar, progress_task
-            console = rich.console.Console(file=sys.stdout)
-            progress_bar = rich.progress.Progress(
-                rich.progress.SpinnerColumn(),
-                "[yellow]{task.fields[elapsed_time]}[/yellow]",
-                "[bold]{task.description}[/bold]",
-                rich.progress.SpinnerColumn(),
-                "{task.fields[command]}",
-                rich.progress.TimeElapsedColumn(),
-                "{task.fields[cpu_info]}",
-                refresh_per_second=2,
-                console=console,
-                transient=True)
-
-            progress_task = progress_bar.add_task("stimela", command="starting", cpu_info=" ", elapsed_time="", start=True)
-            progress_bar.__enter__()
-            atexit.register(lambda:progress_bar.__exit__(None, None, None))
+            progress_bar, progress_console = task_stats.init_progress_bar()
 
             if "SILENT_STDERR" in os.environ and os.environ["SILENT_STDERR"].upper()=="ON":
                 log_console_handler = logging.StreamHandler(stream=sys.stdout)
             else:  
-                log_console_handler = rich.logging.RichHandler(console=console,
+                log_console_handler = rich.logging.RichHandler(console=progress_console,
                                     highlighter=rich.highlighter.NullHighlighter(),
                                     show_level=False, show_path=False, show_time=False)
 
@@ -184,69 +168,9 @@ def logger(name="STIMELA", propagate=False, console=True, boring=False,
 
     return _logger
 
-progress_task_names = []
-progress_task_names_orig = []
-
-@contextlib.contextmanager
-def declare_subtask(subtask_name):
-    progress_task_names.append(subtask_name)
-    progress_task_names_orig.append(subtask_name)
-    update_process_status(description='.'.join(progress_task_names))
-    try:
-        yield subtask_name
-    finally:
-        progress_task_names.pop(-1)
-        progress_task_names_orig.pop(-1)
-        update_process_status(progress_task, description='.'.join(progress_task_names))
-
-def declare_subtask_attributes(*args, **kw):
-    attrs = [str(x) for x in args] + [f"{key} {value}" for key, value in kw.items()] 
-    attrs = ', '.join(attrs)
-    progress_task_names[-1] = f"{progress_task_names_orig[-1]}\[{attrs}]"
-    update_process_status(description='.'.join(progress_task_names))
-
-
-@contextlib.contextmanager
-def declare_subcommand(command):
-    update_process_status(command=command)
-    progress_bar and progress_bar.reset(progress_task)
-    try:
-        yield command
-    finally:
-        update_process_status(command="")
-        
-def update_process_status(command=None, description=None):
-    if progress_bar is not None:
-        # elapsed time
-        elapsed = str(datetime.now() - _start_time).split('.', 1)[0]
-        # CPU and memory
-        cpu = psutil.cpu_percent()
-        mem = psutil.virtual_memory()
-        used = round(mem.total*mem.percent/100 / 2**30)
-        total = round(mem.total / 2**30)
-        updates = dict(elapsed_time=elapsed,
-                        cpu_info=f"CPU [green]{cpu}%[/green] RAM [green]{used}[/green]/[green]{total}[/green]G")
-        if command is not None:
-            updates['command'] = command
-        if description is not None:
-            updates['description'] = description
-        progress_bar.update(progress_task, **updates)
-
-
-async def run_process_status_update():
-    if progress_bar:
-        with contextlib.suppress(asyncio.CancelledError):
-            while True:
-                update_process_status()
-                await asyncio.sleep(1)
-
-
-
-
-
-
 _logger_file_handlers = {}
 _logger_console_handlers = {}
+
 
 def has_file_logger(log: logging.Logger):
     return log.name in _logger_file_handlers
@@ -336,7 +260,7 @@ def update_file_logger(log: logging.Logger, logopts: DictConfig, nesting: int = 
     """
 
     if logopts.enable and logopts.nest >= nesting:
-        path = os.path.join(logopts.dir or ".", logopts.name)
+        path = os.path.join(logopts.dir or ".", logopts.name + logopts.ext)
 
         if subst is not None:
             with forgiving_substitutions_from(subst, raise_errors=False) as context: 
@@ -349,54 +273,90 @@ def update_file_logger(log: logging.Logger, logopts: DictConfig, nesting: int = 
         # substitute non-filename characters for _
         path = re.sub(r'[^a-zA-Z0-9_./-]', '_', path)
 
-        global LOG_DIR
-        LOG_DIR = os.path.dirname(path)
-        pathlib.Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
-
         # setup the logger
         setup_file_logger(log, path, level=logopts.level, symlink=logopts.symlink)
     else:
         disable_file_logger(log)
 
 
-def log_exception(*errors):
+def get_logger_file(log: logging.Logger):
+    """Returns filename associated with the logger, or None if not logging to file"""
+    logfile, _ = _logger_file_handlers.get(log.name, (None, None))
+    if logfile is None:
+        return None
+    return os.path.dirname(logfile)
+
+
+def log_exception(*errors, severity="error", log=None):
     """Logs one or more error messages or exceptions (unless they are marked as already logged), and 
     pretty-prints them to the console  as appropriate.
     """
     def exc_message(e):
-        return e.message if isinstance(e, ScabhaBaseException) else str(e)
+        if isinstance(e, ScabhaBaseException):
+            return escape(e.message)
+        elif type(e) is str:
+            return escape(e)
+        else:
+            return escape(f"{type(e).__name__}: {e}")
+
+    if severity == "error":
+        colour = "bold red"
+        message_dispatch = (log or logger()).error
+    else:
+        colour = "yellow"
+        message_dispatch = (log or logger()).warning
 
     trees = []
     do_log = False
     messages = []
-    nested = False
+
+    def add_dict(dd, tree):
+        for field, value in dd.items():
+            if isinstance(value, (dict, OrderedDict, DictConfig)):
+                subtree = tree.add(escape(f"{field}:"))
+                add_dict(value, subtree)
+            else:
+                tree.add(escape(f"{field}: {value}"))
 
     def add_nested(excs, tree):
         for exc in excs:
-            subtree = tree.add(exc_message(exc))
-            if isinstance(exc, ScabhaBaseException) and exc.nested:
-                add_nested(exc.nested, subtree)
+            if isinstance(exc, Exception):
+                subtree = tree.add(f"{exc_message(exc)}")
+                # tbtree = subtree.add("Traceback:")
+                # for line in traceback.format_exception(exc):
+                #     tbtree.add(line)
+                if isinstance(exc, ScabhaBaseException) and exc.nested:
+                    add_nested(exc.nested, subtree)
+            elif type(exc) is TracebackType:
+                subtree = tree.add(f"[dim]Traceback:[/dim]")
+                for line in traceback.format_tb(exc):
+                    subtree.add(f"[dim]{escape(line.rstrip())}[/dim]")
+            elif isinstance(exc, (dict, OrderedDict, DictConfig)):
+                add_dict(exc, tree)
+            else:
+                tree.add(str(exc))
 
     for exc in errors:
         if isinstance(exc, ScabhaBaseException):
             messages.append(exc.message)
             if not exc.logged:
                 do_log = exc.logged = True
-            tree = Tree(exc_message(exc), guide_style="dim")
+            tree = Tree(f"[{colour}]{exc_message(exc)}[/{colour}]", guide_style="dim")
             trees.append(tree)
             if exc.nested:
                 add_nested(exc.nested, tree)
         else:
-            tree = Tree(exc_message(exc), guide_style="dim")
+            tree = Tree(f"[{colour}]{exc_message(exc)}[/{colour}]", guide_style="dim")
             trees.append(tree)
             do_log = True
             messages.append(str(exc))
 
     if do_log:
-        logger().error(": ".join(messages))
+        message_dispatch(": ".join(messages))
 
-    printfunc = progress_bar.console.print if progress_bar is not None else rich_print
+    printfunc = task_stats.progress_bar.console.print if task_stats.progress_bar is not None else rich_print
 
     for tree in trees:
         printfunc(tree)
+
 

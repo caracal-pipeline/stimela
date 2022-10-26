@@ -1,5 +1,5 @@
-import re, importlib
-from typing import Any, List, Dict, Optional, Union
+import dataclasses
+import re, importlib, sys
 from collections import OrderedDict
 from enum import Enum, IntEnum
 from dataclasses import dataclass
@@ -13,13 +13,18 @@ from rich.markdown import Markdown
 from .exceptions import NestedSchemaError, ParameterValidationError, DefinitionError, SchemaError
 from .validate import validate_parameters, Unresolved
 from .substitutions import SubstitutionNS
-from .basetypes import EmptyDictDefault, EmptyListDefault
+from .basetypes import EmptyDictDefault, EmptyListDefault, UNSET
+
+# need * imports from both to make eval(self.dtype, globals()) work
+from typing import *
+from .basetypes import *
 
 ## almost supported by omegaconf, see https://github.com/omry/omegaconf/issues/144, for now just use Any
 ListOrString = Any   
 
-
 Conditional = Optional[str]
+
+_UNSET_DEFAULT = "<UNSET DEFAULT VALUE>"
 
 @dataclass 
 class ParameterPolicies(object):
@@ -80,8 +85,8 @@ class ParameterPolicies(object):
     pass_missing_as_none: Optional[bool] = None
 
 
-
-# used to classify parameters. Purely for cosmetic and help purposes
+# This is used to classify parameters, for cosmetic and help purposes.
+# Usually set automatically based on whether a parameter is required, whether a default is provided, etc.
 ParameterCategory = IntEnum("ParameterCategory", 
                             dict(Required=0, Optional=1, Implicit=2, Obscure=3, Hidden=4),
                             module=__name__)
@@ -99,8 +104,9 @@ class Parameter(object):
     # optonal list of arbitrary tags, used to group parameters
     tags: List[str] = EmptyListDefault()
 
-    # if True, parameter is required
-    required: bool = False
+    # If True, parameter is required. None/False, not required. 
+    # For aliases, False at recipe level will override the target setting, while the default of None won't.
+    required: Optional[bool] = None
 
     # restrict value choices, i.e. making for an option-type parameter 
     choices:  Optional[List[Any]] = ()
@@ -109,7 +115,7 @@ class Parameter(object):
     element_choices: Optional[List[Any]] = None
 
     # default value
-    default: Optional[Any] = None
+    default: Any = _UNSET_DEFAULT
 
     # list of aliases for this parameter (i.e. references to other parameters whose schemas/values this parameter shares)
     aliases: Optional[List[str]] = ()
@@ -148,9 +154,17 @@ class Parameter(object):
                 return [natify(x) for x in value]
             elif type(value) in (dict, OrderedDict, DictConfig):
                 return OrderedDict([(name, natify(value)) for name, value in value.items()])
+            elif value is _UNSET_DEFAULT:
+                return UNSET
             return value
         self.default = natify(self.default)
         self.choices = natify(self.choices)
+
+        # converts string dtype into proper type object
+        # yes I know eval() is naughty but this is the best we can do for now
+        # see e.g. https://stackoverflow.com/questions/67500755/python-convert-type-hint-string-representation-from-docstring-to-actual-type-t
+        # The alternative is a non-standard API call i.e. typing._eval_type()
+        self._dtype = eval(self.dtype, globals())
 
     def get_category(self):
         """Returns category of parameter, auto-setting it if not already preset"""
@@ -164,6 +178,8 @@ class Parameter(object):
         return self.category
 
 ParameterSchema = OmegaConf.structured(Parameter)
+
+ParameterFields = set(f.name for f in dataclasses.fields(Parameter))
 
 @dataclass
 class Cargo(object):
@@ -186,24 +202,21 @@ class Cargo(object):
     @staticmethod
     def flatten_schemas(io_dest, io, label, prefix=""):
         for name, value in io.items():
+            if name == "subsection":
+                continue
             name = f"{prefix}{name}"
             if not isinstance(value, Parameter):
                 if not isinstance(value, (DictConfig, dict)):
                     raise SchemaError(f"{label}.{name} is not a valid schema")
-                # try to treat as Parameter
-                try:
-                    value = OmegaConf.merge(ParameterSchema, value)
-                    io_dest[name] = Parameter(**value)
-                except Exception as exc0:
-                    # try to treat as sub-schema
+                # try to treat as Parameter based on field names
+                if not (set(value.keys()) - ParameterFields):
                     try:
-                        Cargo.flatten_schemas(io_dest, value, label=label, prefix=f"{name}.")
-                    # nested error from down the tree gets re-raises as is
-                    except NestedSchemaError as exc:
-                        raise
-                    # all other exceptios, raise a NestedScheme error up
-                    except Exception as exc:
-                        raise NestedSchemaError(f"{label}.{name} is neither a parameter definition ({exc0}) nor a nested schema ({exc}")
+                        value = OmegaConf.unsafe_merge(ParameterSchema.copy(), value)
+                        io_dest[name] = Parameter(**value)
+                    except Exception as exc0:
+                        raise SchemaError(f"{label}.{name} is not a valid parameter definition", exc0)
+                else:
+                    Cargo.flatten_schemas(io_dest, value, label=label, prefix=f"{name}.")
         return io_dest
 
     def flatten_param_dict(self, output_params, input_params, prefix=""):
@@ -258,16 +271,21 @@ class Cargo(object):
     def finalized(self):
         return self.config is not None
 
-    def finalize(self, config=None, log=None, logopts=None, fqname=None, nesting=0):
+    def unresolved_params(self, params):
+        """Returns list of unresolved parameters"""
+        return [name for name, value in params.items() if isinstance(value, Unresolved)]
+
+
+    def finalize(self, config=None, log=None, fqname=None, nesting=0):
         if not self.finalized:
             if fqname is not None:
                 self.fqname = fqname
             self.config = config
             self.nesting = nesting
             self.log = log
-            self.logopts = logopts
+            self.logopts = config.opts.log.copy()
 
-    def prevalidate(self, params: Optional[Dict[str, Any]], subst: Optional[SubstitutionNS]=None):
+    def prevalidate(self, params: Optional[Dict[str, Any]], subst: Optional[SubstitutionNS]=None, root=False):
         """Does pre-validation. 
         No parameter substitution is done, but will check for missing params and such.
         A dynamic schema, if defined, is applied at this point."""
@@ -275,12 +293,15 @@ class Cargo(object):
         # update schemas, if dynamic schema is enabled
         if self._dyn_schema:
             self._inputs_outputs = None
-            self.inputs, self.outputs = self._dyn_schema(params, self.inputs, self.outputs)
+            try:
+                self.inputs, self.outputs = self._dyn_schema(params, self.inputs, self.outputs)
+            except Exception as exc:
+                raise SchemaError(f"error evaluating dynamic schema", exc) # [exc, sys.exc_info()[2]])
             for io in self.inputs, self.outputs:
                 for name, schema in list(io.items()):
                     if isinstance(schema, DictConfig):
                         try:
-                            schema = OmegaConf.merge(ParameterSchema, schema)
+                            schema = OmegaConf.unsafe_merge(ParameterSchema.copy(), schema)
                         except Exception  as exc:
                             raise SchemaError(f"error in dynamic schema for parameter 'name'", exc)
                         io[name] = Parameter(**schema)
@@ -325,13 +346,14 @@ class Cargo(object):
         If loosely is True, then doesn't check for required parameters, and doesn't check for files to exist etc.
         """
         assert(self.finalized)
+        # update implicits that weren't marked as unresolved
+        for name in self._implicit_params:
+            impl = self.inputs_outputs[name].implicit
+            if type(impl) is not Unresolved:
+                params[name] = self.inputs_outputs[name].implicit
         params.update(**validate_parameters(params, self.outputs, defaults=self.defaults, subst=subst, fqname=self.fqname,
                                                 check_unknowns=False, check_required=not loosely, check_exist=not loosely))
         return params
-
-    def make_substitition_namespace(self, params={}):
-        from .substitutions import SubstitutionNS
-        return SubstitutionNS(**params)
 
     def rich_help(self, tree, max_category=ParameterCategory.Optional):
         """Generates help into a rich.tree.Tree object"""
@@ -354,7 +376,7 @@ class Cargo(object):
                     default = self.defaults.get(name, schema.default)
                     if schema.implicit:
                         attrs.append(f"implicit: {schema.implicit}")
-                    if default is not None and not isinstance(default, Unresolved):
+                    if default is not UNSET and not isinstance(default, Unresolved):
                         attrs.append(f"default: {default}")
                     if schema.choices:
                         attrs.append(f"choices: {', '.join(schema.choices)}")

@@ -16,3 +16,45 @@ hierarchical:
 flat:
   _use: hierarchical
   _flatten: true
+
+scrubbed:
+  _use: hierarchical
+  _scrub: foo.x
+  foo:
+    x: replaced-x
+
+scrubbed2:
+  _include: (tests.scabha_tests)test_include2.yaml
+  _scrub: 
+    - x.a.*
+    - x.y
+
+requirements:
+  _include: (tests.scabha_tests)test_include2.yaml
+  x:
+    a:
+      _requires: scrubbed.foo.x
+      b: 2
+
+requirements2:
+  _include: (tests.scabha_tests)test_include2.yaml
+  x:
+    zz:
+      _contingent: scrubbed.foo.x
+      b: 2
+    yy:
+      _contingent: scrubbed.foo.xxx
+      b: 2
+
+requirements3:
+  _include: (tests.scabha_tests)test_include2.yaml
+  x:
+    zz:
+      _requires: scrubbed.foo.xxx
+      b: 2
+
+
+# this is meant to inject into x.y1, the name should also show up in x.y2 via its _use of x.y1
+x:
+  y1:
+    z1: 1

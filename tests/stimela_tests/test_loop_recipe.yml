@@ -36,6 +36,7 @@ lib:
       for_loop:
         var: ms
         over: ms_list
+        
       aliases:
         ms: ['cubical_image_step.ms']
       inputs:
@@ -43,7 +44,7 @@ lib:
           dtype: List[str]
           required: true
       defaults:
-        ms_list: [a,b,c]
+        ms_list: =GLOB(*ms)
       steps:
         cubical_image_step:
           recipe:
@@ -70,7 +71,7 @@ cubical_image_loop:
     image-prefix: "{recipe.dir.out}/im{info.suffix}-{recipe.loop-name}/im{info.suffix}-{recipe.loop-name}"
     loop-name: "s{recipe.loop:02d}"
     log:
-      name: log-{recipe.loop-name}-{info.fqname}.txt
+      name: log-{recipe.loop-name}-{info.fqname}
 
   for_loop:
     var: loop

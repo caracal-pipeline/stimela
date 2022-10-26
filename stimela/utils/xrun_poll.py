@@ -160,7 +160,7 @@ def dispatch_to_log(log, line, command_name, stream_name, output_wrangler, custo
         log.log(severity, line, extra=extra)
 
 
-def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, output_wrangler=None, shell=True, return_errcode=False, command_name=None):
+def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, output_wrangler=None, shell=True, return_errcode=False, command_name=None, log_command=True):
     command_name = command_name or command
 
     # this part could be inside the container
@@ -182,7 +182,8 @@ def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, o
 
     log = log or stimela.logger()
 
-    log.info("running " + command_line, extra=dict(stimela_subprocess_output=(command_name, "start")))
+    if log_command:
+        log.info("running " + command_line, extra=dict(stimela_subprocess_output=(command_name, "start")))
 
     start_time = time.time()
 

@@ -1,5 +1,5 @@
 import glob
-import os, os.path, time, sys, platform
+import os, os.path, time, sys, platform, traceback
 from typing import Any, List, Dict, Optional, Union
 from enum import Enum
 from dataclasses import dataclass, field
@@ -45,8 +45,9 @@ class StimelaImage:
 @dataclass 
 class StimelaLogConfig(object):
     enable: bool = True                          
-    name: str = "log-{info.fqname}.txt"          # Default name for log file. {fqname} and {config.x.y} is substituted.
-    
+    name: str = "log-{info.fqname}"          # Default name for log file. info dict and {config.x.y} is substituted.
+    ext: str = ".txt"                        # Default extension for log file.
+ 
     dir: str = "."                               # Default directory for log files
 
     symlink: Optional[str] = None                # Will make named symlink to the log directory. A useful pattern is e.g. dir="logs-{config.run.datetime}", symlink="logs",
@@ -61,13 +62,28 @@ class StimelaLogConfig(object):
 
 ## overall Stimela config schema
 
+import stimela.backends
 
-import stimela.backends.docker
-import stimela.backends.singularity
-import stimela.backends.podman
-import stimela.backends.native
+Backend = Enum("Backend", "docker singularity podman kubernetes native", module=__name__)
 
-Backend = Enum("Backend", "docker singularity podman native", module=__name__)
+SUPPORTED_BACKENDS = set(Backend.__members__)
+AVAILABLE_BACKENDS = {}
+BACKEND_STATUS = {}
+
+for _name in SUPPORTED_BACKENDS:
+    backend = __import__(f"stimela.backends.{_name}", fromlist=[_name])
+    if getattr(backend, 'AVAILABLE', None):
+        AVAILABLE_BACKENDS[_name] = backend
+        BACKEND_STATUS[_name] = backend.STATUS
+    else:
+        if hasattr(backend, 'STATUS'):
+            BACKEND_STATUS[_name] = backend.STATUS
+        else:
+            BACKEND_STATUS[_name] = "not implemented"
+
+def get_backend_status(name):
+    return BACKEND_STATUS.get(name, "unknown status")
+
 
 @dataclass
 class StimelaOptions(object):
@@ -80,6 +96,10 @@ class StimelaOptions(object):
     include: List[str] = EmptyListDefault()
     ## For distributed computes and cpu allocation
     dist: Dict[str, Any] = EmptyDictDefault()  
+    ## Miscellaneous runtime option 
+    runtime: Dict[str, Any] = EmptyDictDefault()
+    ## Profiling options
+    print_profile: bool = True
 
 
 def DefaultDirs():
@@ -102,6 +122,10 @@ CONFIG_LOADED = None
 # set to the set of config dependencies
 CONFIG_DEPS = None
 
+# stimela base directory
+STIMELA_DIR = os.path.dirname(stimela.__file__)
+
+
 def merge_extra_config(conf, newconf):
     from stimela import logger
 
@@ -116,11 +140,28 @@ StimelaConfigSchema = None
 
 ConfigExceptionTypes = (configuratt.ConfigurattError, OmegaConfBaseException, YAMLError)
 
+def get_initial_deps():
+    dependencies = configuratt.ConfigDependencies()
+
+    # add ourselves to dependencies
+    dependencies.add(STIMELA_DIR, version=stimela.__version__)              
+    dependencies.add(__file__, origin=STIMELA_DIR)              
+    dependencies.add(configuratt.__file__, origin=STIMELA_DIR)  
+
+    return dependencies
+
+
 def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include_paths: List[str] = [],
                 verbose: bool = False, use_sys_config: bool = True):
+
+    # # disable OmegaConf resolvers
+    # for name in "oc.create", "oc.decode", "oc.deprecated", "oc.env", "oc.select", "oc.dict.keys", "oc.dict.values":
+    #     print(f"clearing {name}")
+    #     print(OmegaConf.clear_resolver(name))
+
     log = stimela.logger()
 
-    configuratt.PACKAGE_VERSION = f"stimela=={stimela.__version__}"
+    configuratt.common.PACKAGE_VERSION = f"stimela=={stimela.__version__}"
     # set up include paths
 
     # stadard system paths
@@ -146,7 +187,7 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
 
     extra_cache_keys = list(extra_dotlist) + configuratt.PATH
 
-    stimela_dir = os.path.dirname(stimela.__file__)
+    STIMELA_DIR = os.path.dirname(stimela.__file__)
     from stimela.kitchen.cab import Cab
 
     global StimelaConfigSchema, StimelaLibrary, StimelaConfig
@@ -156,6 +197,7 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
         recipes: Dict[str, Any] = EmptyDictDefault()
         steps: Dict[str, Any] = EmptyDictDefault()
         misc: Dict[str, Any] = EmptyDictDefault()
+        wisdom: Dict[str, Any] = EmptyDictDefault()
 
     @dataclass 
     class StimelaConfig:
@@ -166,9 +208,14 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
         vars: Dict[str, Any] = EmptyDictDefault()
         run:  Dict[str, Any] = EmptyDictDefault()
 
-    base_configs = glob.glob(f"{stimela_dir}/cargo/base/*/*.yaml")
-    lib_configs = glob.glob(f"{stimela_dir}/cargo/lib/params/*.yaml")
-    cab_configs = glob.glob(f"{stimela_dir}/cargo/cab/*.yaml")
+    base_configs_glob = f"{STIMELA_DIR}/cargo/base/*/*.yaml"
+    lib_configs_glob = f"{STIMELA_DIR}/cargo/lib/params/*.yaml"
+    cab_configs_glob = f"{STIMELA_DIR}/cargo/cab/*.yaml"
+
+    base_configs = glob.glob(base_configs_glob)
+    lib_configs = glob.glob(lib_configs_glob)
+    cab_configs = glob.glob(cab_configs_glob)
+
     if use_sys_config:
         sys_configs = [config_file for config_file in CONFIG_LOCATIONS.values()
                         if config_file and os.path.exists(config_file)]
@@ -183,7 +230,7 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
         log.info("loaded full configuration from cache")
     else:
         log.info("loading configuration")
-        dependencies = OmegaConf.create()
+        dependencies = get_initial_deps()
 
         # start with empty structured config containing schema
         base_schema = OmegaConf.structured(StimelaImage) 
@@ -201,7 +248,7 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
                                                         use_cache=False, verbose=verbose)
             dependencies.update(deps)
         except Exception as exc:
-            log_exception(f"error loading base configuration", exc)
+            log_exception(ConfigError(f"error loading base configuration", exc))
             return None
 
         # merge lib/params/*yaml files into the config
@@ -210,7 +257,9 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
                                                                 location='lib.params', include_path='_path') 
             dependencies.update(deps)
         except Exception as exc:
-            log_exception(f"error loading lib.params configuration", exc)
+            if verbose:
+                traceback.print_exc()
+            log_exception(ConfigError("error loading lib.params configuration", exc))
             return None
 
         # merge all cab/*/*yaml files into the config, under cab.taskname
@@ -220,7 +269,9 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
                                                         use_cache=False, verbose=verbose)
             dependencies.update(deps)
         except Exception as exc:
-            log_exception(f"error loading cabs configuration", exc)
+            if verbose:
+                traceback.print_exc()
+            log_exception(ConfigError("error loading cabs configuration", exc))
             return None
 
         conf.opts = opts_schema
@@ -235,7 +286,9 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
                 if not CONFIG_LOADED:
                     CONFIG_LOADED = config_file
             except ConfigExceptionTypes as exc:
-                log_exception(f"error reading {config_file}", exc)
+                if verbose:
+                    traceback.print_exc()
+                log_exception(ConfigError("error reading {config_file}", exc))
             return conf
 
         # add standard configs 
@@ -244,12 +297,13 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
 
         # add local configs
         for path in extra_configs:
-            conf = _load(conf, config_file)
+            conf = _load(conf, path)
 
         if not CONFIG_LOADED:
             log.info("no user-supplied configuration files given, using defaults")
 
-        configuratt.add_dependency(dependencies, __file__, version=configuratt.PACKAGE_VERSION)  # add ourselves so as to refresh cache
+        dependencies.replace((base_configs_glob, cab_configs_glob, lib_configs_glob), STIMELA_DIR)
+
         configuratt.save_cache(all_configs, conf, dependencies, extra_keys=extra_cache_keys, verbose=verbose)
 
     # add dotlist settings
@@ -258,13 +312,19 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
             dotlist_conf = OmegaConf.from_dotlist(extra_dotlist)
             conf = OmegaConf.unsafe_merge(conf, dotlist_conf)
         except Exception as exc:
+            if verbose:
+                traceback.print_exc()
             log_exception(f"error applying command-line config settings", exc)
             return None
 
     # add runtime info
     _ds = time.strftime("%Y%m%d")
     _ts = time.strftime("%H%M%S")
-    runtime = dict(date=_ds, time=_ts, datetime=f"{_ds}-{_ts}", node=platform.node())
+    runtime = dict(
+        date=_ds, 
+        time=_ts, datetime=f"{_ds}-{_ts}", 
+        node=platform.node(), 
+        env={key: value.replace('${', '\${') for key, value in os.environ.items()})
 
     conf.run = OmegaConf.create(runtime)
 
@@ -275,6 +335,11 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
 
     global CONFIG_DEPS
     CONFIG_DEPS = dependencies
+
+    # check for missing requirements
+    missing = configuratt.check_requirements(conf, [], strict=True)
+    for (loc, name, _) in missing:
+        log.warn(f"optional config section '{loc}' omitted due to unmet requirement '{name}'")
 
     return conf
 

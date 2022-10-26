@@ -49,7 +49,7 @@ class RunExecGroup(click.Group):
                 help="Do not load standard config files.")
 @click.option('-I', '--include', metavar="DIR", multiple=True, 
                 help="Add directory to _include paths. Can be given multiple times.")
-@click.option('--clear-cache', is_flag=True, 
+@click.option('--clear-cache', '-C', is_flag=True, 
                 help="Reset the configuration cache. First thing to try in case of strange configuration errors.")
 @click.option('--verbose', '-v', is_flag=True, help='Be extra verbose in output.')
 @click.version_option(str(stimela.__version__))
@@ -64,23 +64,14 @@ def cli(backend, config_files=[], config_dotlist=[], include=[], verbose=False, 
     # use this logger for exceptions
     import scabha.exceptions
     scabha.exceptions.set_logger(log)
+    if verbose:
+        scabha.exceptions.ALWAYS_REPORT_TRACEBACK = True
 
+    import scabha.configuratt.cache
+    scabha.configuratt.cache.set_cache_dir(os.path.expanduser("~/.cache/stimela-configs"))
     # clear cache if requested
-    from scabha import configuratt
-    configuratt.CACHEDIR = os.path.expanduser("~/.cache/stimela-configs")
     if clear_cache:
-        if os.path.isdir(configuratt.CACHEDIR):
-            files = glob.glob(f"{configuratt.CACHEDIR}/*")
-            log.info(f"clearing {len(files)} cached config(s) from cache")
-        else:
-            files = []
-            log.info(f"no configs in cache")
-        for filename in files:
-            try:
-                os.unlink(filename)
-            except Exception as exc:
-                log.error(f"failed to remove cached config {filename}: {exc}")
-                sys.exit(1)
+        scabha.configuratt.cache.clear_cache(log)
 
     # load config files
     stimela.CONFIG = config.load_config(extra_configs=config_files, extra_dotlist=config_dotlist, include_paths=include,
@@ -102,24 +93,30 @@ def cli(backend, config_files=[], config_dotlist=[], include=[], verbose=False, 
                     config=stimela.CONFIG))
         stimelogging.update_file_logger(log, stimela.CONFIG.opts.log, nesting=-1, subst=subst)
 
-    # set backend module
+
+    # print backends
+    log.info(f"available backends: {' '.join(config.AVAILABLE_BACKENDS)}")
+
+    # get default backend module
     global BACKEND 
     if backend:
         stimela.CONFIG.opts.backend = backend
-    BACKEND = getattr(stimela.backends, stimela.CONFIG.opts.backend.name)
-    log.info(f"backend is {stimela.CONFIG.opts.backend.name}")
+
+    if stimela.CONFIG.opts.backend.name not in config.AVAILABLE_BACKENDS:
+        status = config.get_backend_status(stimela.CONFIG.opts.backend.name)
+        log.error(f"the backend '{stimela.CONFIG.opts.backend.name}' is not available: {status}")
+        sys.exit(1)
+
+    log.info(f"default backend is {stimela.CONFIG.opts.backend.name}")
 
     # report dependencies
-    for filename, attrs in config.CONFIG_DEPS.items():
-        attrs_str = [f"mtime: {datetime.datetime.fromtimestamp(value).strftime('%c')}" 
-                        if attr == "mtime" else f"{attr}: {value}"
-                        for attr, value in attrs.items()]
-        log.debug(f"config dependency {filename}, {', '.join(attrs_str)}")
+    for filename, attrs in config.CONFIG_DEPS.get_description().items():
+        log.debug(f"config dependency {', '.join([filename] + attrs)}")
 
     # dump dependencies
-    filename = os.path.join(stimelogging.LOG_DIR, "stimela.config.deps")
-    OmegaConf.save(config.CONFIG_DEPS, filename)
-    log.info(f"saved config dependencies to {filename}")
+    filename = os.path.join(stimelogging.get_logger_file(log) or '.', "stimela.config.deps")
+    log.info(f"saving config dependencies to {filename}")
+    config.CONFIG_DEPS.save(filename)
 
 
 # import commands
