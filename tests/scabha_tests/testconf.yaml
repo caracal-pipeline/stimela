@@ -2,14 +2,14 @@ _include:
   - test_include.yaml
 
 foo:
-  _include: (tests.scabha_tests)test_include2.yaml
+  _include: (scabha_tests)test_include2.yaml
 
 bar:
   _use: foo
 
 hierarchical:
   foo:
-    _include: (tests.scabha_tests)test_include2.yaml
+    _include: (scabha_tests)test_include2.yaml
   bar:
     _use: bar
 
@@ -24,20 +24,20 @@ scrubbed:
     x: replaced-x
 
 scrubbed2:
-  _include: (tests.scabha_tests)test_include2.yaml
+  _include: (scabha_tests)test_include2.yaml
   _scrub: 
     - x.a.*
     - x.y
 
 requirements:
-  _include: (tests.scabha_tests)test_include2.yaml
+  _include: (scabha_tests)test_include2.yaml
   x:
     a:
       _requires: scrubbed.foo.x
       b: 2
 
 requirements2:
-  _include: (tests.scabha_tests)test_include2.yaml
+  _include: (scabha_tests)test_include2.yaml
   x:
     zz:
       _contingent: scrubbed.foo.x
@@ -47,7 +47,7 @@ requirements2:
       b: 2
 
 requirements3:
-  _include: (tests.scabha_tests)test_include2.yaml
+  _include: (scabha_tests)test_include2.yaml
   x:
     zz:
       _requires: scrubbed.foo.xxx
