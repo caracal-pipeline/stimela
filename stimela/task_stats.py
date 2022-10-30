@@ -123,6 +123,13 @@ def collect_stats():
     return _taskstats
 
 
+def add_missing_stats(stats):
+    """Adds stats that wren't recorded into dictionary"""
+    for key, value in stats.items():
+        if key not in _taskstats:
+            _taskstats[key] = value
+
+
 def stats_field_names():
     return _taskstats_sample_names
 

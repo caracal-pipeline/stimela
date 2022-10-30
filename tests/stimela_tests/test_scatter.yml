@@ -1,0 +1,77 @@
+
+## recipes may define or redefine or augment cabs
+cabs:
+  sleep:
+    command: sleep # just a dummy for now 
+    inputs:
+      seconds:
+        dtype: int
+        default: 1
+        policies:
+          positional: true
+  echo:
+    command: echo # just a dummy for now 
+    inputs:
+      arg:
+        dtype: str
+        required: true
+        policies:
+          positional: true
+
+## lib.recipes.* may be added to and invoked via _use
+lib:
+  recipes:
+    multi_echo:
+      info: 'runs multiple echo cabs'
+      inputs:
+        args:
+          dtype: List[str]
+          required: true
+      for_loop:
+        var: arg
+        over: args
+      assign:
+        log:
+          name: log-{recipe.arg}-{info.fqname}
+      steps: 
+        sleep:
+          cab: sleep
+        echo: 
+          cab: echo
+          params:
+            arg: =recipe.arg
+
+opts:
+  log:
+    dir: test-logs/logs-{config.run.datetime} 
+    nest: 3
+    symlink: logs
+
+
+basic_loop:
+  _use: lib.recipes.multi_echo
+  defaults:
+    args: [1,2,3,4,5,6,7,8,9,10]
+  inputs:
+    for_loop:
+      scatter:
+        dtype: int
+        default: -1
+
+nested_loop:
+  for_loop:
+    var: subloop
+    over: subloops
+  inputs:
+    subloops:
+      dtype: List[str]
+      default: [a,b,c]
+    for_loop:
+      scatter:
+        dtype: int
+        default: -1
+  steps:
+    subloop-1: 
+      recipe: basic_loop
+    subloop-2:
+      recipe: basic_loop

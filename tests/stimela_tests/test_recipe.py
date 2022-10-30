@@ -84,3 +84,12 @@ def test_test_loop_recipe():
     print("===== expecting no errors now =====")
     retcode = os.system("stimela exec test_loop_recipe.yml loop_recipe")
     assert retcode == 0
+
+def test_scatter():
+    print("===== expecting no errors now =====")
+    retcode = os.system("stimela exec test_scatter.yml basic_loop")
+    assert retcode == 0
+
+    print("===== expecting no errors now =====")
+    retcode = os.system("stimela exec test_scatter.yml nested_loop")
+    assert retcode == 0
