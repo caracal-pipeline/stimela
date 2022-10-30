@@ -34,9 +34,10 @@ class ForLoopClause(object):
     # name of list variable
     var: str 
     # This should be the name of an input that provides a list, or a list
-    over: Any
-    # If True, this is a scatter not a loop -- things may be evaluated in parallel
-    scatter: bool = False
+    over: Optional[Any] = None
+    # If !=0 , this is a scatter not a loop -- things may be evaluated in parallel using this many workers
+    # (use -1 to scatter to unlimited number of workers)
+    scatter: int = 0
 
 def IterantPlaceholder(name: str):
     return name
@@ -120,6 +121,8 @@ class Recipe(Cargo):
         # set of keys protected from assignment
         self._protected_from_assign = set()
         self._for_loop_values = None
+        # process pool used to run for-loops
+        self._loop_pool = None
 
     def protect_from_assignments(self, keys):
         self._protected_from_assign.update(keys)
@@ -724,9 +727,25 @@ class Recipe(Cargo):
     def validate_for_loop(self, params, strict=False):
         # in case of for loops, get list of values to be iterated over 
         if self.for_loop is not None:
-            # if over != None (see finalize() above), list of values needs to be looked up in inputs
-            # if it is None, then an explicit list was supplied and is already in self._for_loop_values.
-            if self.for_loop.over is not None:
+            # get scatter value
+            if 'for_loop.scatter' in params:
+                scatter = params['for_loop.scatter']
+            elif 'for_loop.over' in self.assign:
+                scatter = self.assign['for_loop.scatter']
+            else:
+                scatter = self.for_loop.scatter
+            if type(scatter) is bool:
+                scatter = -1 if scatter else 0
+            elif type(scatter) is not int:
+                raise ParameterValidationError(f"for_loop.scattter={scatter}: bool or int expected")
+            self._for_loop_scatter = scatter
+
+            # the over list can be in the for_loop clause, or in inputs
+            if 'for_loop.over' in params:
+                values = params['for_loop.over']
+            elif 'for_loop.over' in self.assign:
+                values = self.assign['for_loop.over']
+            elif self.for_loop.over is not None:
                 # check that it's legal
                 if self.for_loop.over in self.assign:
                     values = self.assign[self.for_loop.over]
@@ -738,18 +757,19 @@ class Recipe(Cargo):
                     raise ParameterValidationError(f"recipe '{self.name}': for_loop.over={self.for_loop.over} is unset")
                 if strict and isinstance(values, Unresolved):
                     raise ParameterValidationError(f"recipe '{self.name}': for_loop.over={self.for_loop.over} is unresolved")
-                if type(values) is ListConfig:
-                    values = list(values)
-                elif not isinstance(values, (list, tuple)):
-                    values = [values]
+            else:
                 if self._for_loop_values is None:
-                    self.log.info(f"recipe is a for-loop with '{self.for_loop.var}' iterating over {len(values)} values")
-                    self.log.info(f"Loop values: {values}")
-                self._for_loop_values = values
-            # if self.for_loop.var in self.inputs:
-            #     params[self.for_loop.var] = self._for_loop_values[0]
-            # else:
-            #     self.assign[self.for_loop.var] = self._for_loop_values[0]
+                    raise ParameterValidationError(f"recipe '{self.name}': for_loop.over is unset")
+                values = self._for_loop_values 
+            # finalize list of values
+            if type(values) is ListConfig:
+                values = list(values)
+            elif not isinstance(values, (list, tuple)):
+                values = [values]
+            if self._for_loop_values is None:
+                self.log.info(f"recipe is a for-loop with '{self.for_loop.var}' iterating over {len(values)} values")
+                self.log.info(f"Loop values: {values}")
+            self._for_loop_values = values
         # else fake a single-value list
         else:
             self._for_loop_values = [None]
@@ -924,9 +944,6 @@ class Recipe(Cargo):
                 elif schema.required and (self.for_loop is None or name != self.for_loop.var): 
                         raise RecipeValidationError(f"recipe '{self.name}' is missing required input '{name}'", log=self.log)
 
-            # iterate over for-loop values (if not looping, this is set up to [None] in advance)
-            scatter = getattr(self.for_loop, "scatter", False)
-            
             def loop_worker(inst, step, label, subst, count, iter_var):
                 """"
                 Needed for concurrency
@@ -988,9 +1005,11 @@ class Recipe(Cargo):
             # Transpose the list before parsing to pool.map()
             loop_args = list(map(list, zip(*loop_futures)))
             max_workers = getattr(self.config.opts.dist, "ncpu", cpu_count()//4)
-            if scatter:
-                loop_pool = ProcessPool(max_workers, scatter=True)
-                results = loop_pool.amap(loop_worker, *loop_args)
+            if self._for_loop_scatter:
+                if self._loop_pool is None:
+                    self._loop_pool = ProcessPool(max_workers, scatter=True)
+
+                results = self._loop_pool.amap(loop_worker, *loop_args)
                 while not results.ready():
                     time.sleep(1)
                 results.get()
