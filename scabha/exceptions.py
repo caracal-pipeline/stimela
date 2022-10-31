@@ -2,6 +2,7 @@ import sys
 from typing import List, Union
 from typing import Optional as _Optional
 from types import TracebackType
+import traceback
 
 logger = None
 
@@ -9,16 +10,22 @@ def set_logger(log):
     global logger
     logger = log
 
-
 class Error(str):
     """A string that's marked as an error"""
     pass
 
 ALWAYS_REPORT_TRACEBACK = False
 
+class FormattedTraceback(object):
+    """This holds the lines of a formatted traceback object."""
+    def __init__(self, tb: TracebackType):
+        self.lines = [l.rstrip() for l in traceback.format_tb(tb)]
+
+
 class ScabhaBaseException(Exception):
     def __init__(self, message: str, 
-                 nested: _Optional[Union[Exception, TracebackType, List[Union[Exception, TracebackType]]]] = None, 
+                 nested: _Optional[Union[Exception, TracebackType, FormattedTraceback, 
+                                    List[Union[Exception, TracebackType, FormattedTraceback]]]] = None, 
                  log=None, tb=False):
         """Initializes exception object
 
@@ -34,6 +41,9 @@ class ScabhaBaseException(Exception):
         if isinstance(nested, (Exception, TracebackType)):
             nested = [nested]
         self.nested = nested or []
+        # convert nested tracebacks to formatted ones
+        self.nested = [FormattedTraceback(x) if isinstance(x, TracebackType) else x for x in self.nested]
+
         nested_exc = [str(exc) for exc in self.nested if isinstance(exc, Exception)]
         if nested_exc:
             message = f"{message}: {', '.join(nested_exc)}"
