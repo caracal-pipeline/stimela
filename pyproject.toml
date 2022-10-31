@@ -21,6 +21,7 @@ pyparsing = "^3.0.9"
 pydantic = "^1.10.2"
 psutil = "^5.9.3"
 rich = "^12.6.0"
+dill = "^0.3.6"
 
 [tool.poetry.scripts]
 stimela = "stimela.main:cli"
