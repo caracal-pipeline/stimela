@@ -5,7 +5,7 @@ from typing import *
 from .basetypes import UNSET
 from dataclasses import make_dataclass, field
 from omegaconf import OmegaConf, MISSING
-from collections import MutableSet, MutableSequence, MutableMapping
+from collections.abc import MutableSet, MutableSequence, MutableMapping
 
 def schema_to_dataclass(io: Dict[str, Parameter], class_name: str, bases=(), post_init: Optional[Callable] =None):
     """Converts a scabha schema to a dataclass.
