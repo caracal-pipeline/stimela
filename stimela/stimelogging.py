@@ -6,7 +6,7 @@ import traceback
 from types import TracebackType
 from typing import Optional, OrderedDict, Union
 from omegaconf import DictConfig
-from scabha.exceptions import ScabhaBaseException
+from scabha.exceptions import ScabhaBaseException, FormattedTraceback
 from scabha.substitutions import SubstitutionNS, forgiving_substitutions_from
 import rich.progress
 import rich.logging
@@ -331,6 +331,10 @@ def log_exception(*errors, severity="error", log=None):
                 subtree = tree.add(f"[dim]Traceback:[/dim]")
                 for line in traceback.format_tb(exc):
                     subtree.add(f"[dim]{escape(line.rstrip())}[/dim]")
+            elif type(exc) is FormattedTraceback:
+                subtree = tree.add(f"[dim]Traceback:[/dim]")
+                for line in exc.lines:
+                    subtree.add(f"[dim]{escape(line)}[/dim]")
             elif isinstance(exc, (dict, OrderedDict, DictConfig)):
                 add_dict(exc, tree)
             else:

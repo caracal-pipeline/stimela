@@ -1,6 +1,4 @@
-from cmath import exp
-from multiprocessing import cpu_count
-import os, os.path, re, logging, fnmatch, copy, time
+import os, os.path, re, fnmatch, copy, traceback
 from typing import Any, Tuple, List, Dict, Optional, Union
 from dataclasses import dataclass
 from omegaconf import MISSING, OmegaConf, DictConfig, ListConfig
@@ -8,20 +6,20 @@ from collections import OrderedDict
 from collections.abc import Mapping
 import rich.table
 
-from pathos.pools import ProcessPool
-from pathos.serial import SerialPool
-from multiprocessing import cpu_count
+from concurrent.futures import ProcessPoolExecutor
+
 from stimela.config import EmptyDictDefault, EmptyListDefault
 import stimela
 from stimela import log_exception, stimelogging
 from stimela.exceptions import *
 from scabha.validate import evaluate_and_substitute, Unresolved, join_quote
-from scabha.substitutions import SubstitutionNS, substitutions_from 
+from scabha.substitutions import SubstitutionNS
 from scabha.cargo import Parameter, Cargo, ParameterCategory
 from scabha.basetypes import File, Directory, MS, UNSET, Placeholder
 from .cab import Cab
 from .batch import Batch
-from .step import Step, resolve_dotted_reference
+from .step import Step
+from stimela import task_stats 
 
 
 class DeferredAlias(Unresolved):
@@ -34,9 +32,10 @@ class ForLoopClause(object):
     # name of list variable
     var: str 
     # This should be the name of an input that provides a list, or a list
-    over: Any
-    # If True, this is a scatter not a loop -- things may be evaluated in parallel
-    scatter: bool = False
+    over: Optional[Any] = None
+    # If !=0 , this is a scatter not a loop -- things may be evaluated in parallel using this many workers
+    # (use -1 to scatter to unlimited number of workers)
+    scatter: int = 0
 
 def IterantPlaceholder(name: str):
     return name
@@ -119,7 +118,9 @@ class Recipe(Cargo):
         self._alias_map  = None
         # set of keys protected from assignment
         self._protected_from_assign = set()
-        self._for_loop_values = None
+        self._for_loop_values = self._for_loop_scatter = None
+        # process pool used to run for-loops
+        self._loop_pool = None
 
     def protect_from_assignments(self, keys):
         self._protected_from_assign.update(keys)
@@ -724,9 +725,25 @@ class Recipe(Cargo):
     def validate_for_loop(self, params, strict=False):
         # in case of for loops, get list of values to be iterated over 
         if self.for_loop is not None:
-            # if over != None (see finalize() above), list of values needs to be looked up in inputs
-            # if it is None, then an explicit list was supplied and is already in self._for_loop_values.
-            if self.for_loop.over is not None:
+            # get scatter value
+            if 'for_loop.scatter' in params:
+                scatter = params['for_loop.scatter']
+            elif 'for_loop.over' in self.assign:
+                scatter = self.assign['for_loop.scatter']
+            else:
+                scatter = self.for_loop.scatter
+            if type(scatter) is bool:
+                scatter = -1 if scatter else 0
+            elif type(scatter) is not int:
+                raise ParameterValidationError(f"for_loop.scattter={scatter}: bool or int expected")
+            self._for_loop_scatter = scatter
+
+            # the over list can be in the for_loop clause, or in inputs
+            if 'for_loop.over' in params:
+                values = params['for_loop.over']
+            elif 'for_loop.over' in self.assign:
+                values = self.assign['for_loop.over']
+            elif self.for_loop.over is not None:
                 # check that it's legal
                 if self.for_loop.over in self.assign:
                     values = self.assign[self.for_loop.over]
@@ -738,18 +755,19 @@ class Recipe(Cargo):
                     raise ParameterValidationError(f"recipe '{self.name}': for_loop.over={self.for_loop.over} is unset")
                 if strict and isinstance(values, Unresolved):
                     raise ParameterValidationError(f"recipe '{self.name}': for_loop.over={self.for_loop.over} is unresolved")
-                if type(values) is ListConfig:
-                    values = list(values)
-                elif not isinstance(values, (list, tuple)):
-                    values = [values]
+            else:
                 if self._for_loop_values is None:
-                    self.log.info(f"recipe is a for-loop with '{self.for_loop.var}' iterating over {len(values)} values")
-                    self.log.info(f"Loop values: {values}")
-                self._for_loop_values = values
-            # if self.for_loop.var in self.inputs:
-            #     params[self.for_loop.var] = self._for_loop_values[0]
-            # else:
-            #     self.assign[self.for_loop.var] = self._for_loop_values[0]
+                    raise ParameterValidationError(f"recipe '{self.name}': for_loop.over is unset")
+                values = self._for_loop_values 
+            # finalize list of values
+            if type(values) is ListConfig:
+                values = list(values)
+            elif not isinstance(values, (list, tuple)):
+                values = [values]
+            if self._for_loop_values is None:
+                self.log.info(f"recipe is a for-loop with '{self.for_loop.var}' iterating over {len(values)} values")
+                self.log.info(f"Loop values: {values}")
+            self._for_loop_values = values
         # else fake a single-value list
         else:
             self._for_loop_values = [None]
@@ -860,6 +878,77 @@ class Recipe(Cargo):
                 alias.step.update_parameter(alias.param, value)
 
 
+    def _iterate_loop_worker(self, params, info, subst, count, iter_var, raise_exc=True):
+        """"
+        Needed for concurrency
+        """
+        outputs = {}
+        exception = tb = None
+        try:
+            for label, step in self.steps.items():
+                # update step info
+                self._prep_step(label, step, subst)
+
+                # if for-loop, assign new value
+                if self.for_loop:
+                    self.log.info(f"for loop iteration {count}: {self.for_loop.var} = {iter_var}")
+                    # update variable (in params, if expected there, else in assignments)
+                    if self.for_loop.var in self.inputs_outputs:
+                        params[self.for_loop.var] = iter_var
+                    else:
+                        self.assign[self.for_loop.var] = iter_var
+                    # update variable index
+                    self.assign[f"{self.for_loop.var}@index"] = count
+                    # update alias
+                    self._update_aliases(self.for_loop.var, iter_var)
+                    stimelogging.declare_subtask_attributes(f"{count+1}/{len(self._for_loop_values)}")
+
+                # reevaluate recipe level assignments (info.fqname etc. have changed)
+                self.update_assignments(subst, params=params)
+                # evaluate step-level assignments
+                self.update_assignments(subst, whose=step, params=params)
+                # step logger may have changed
+                stimelogging.update_file_logger(step.log, step.logopts, nesting=step.nesting, subst=subst, location=[step.fqname])
+                # set our info back temporarily to update log assignments
+                info_step = subst.info
+                subst.info = info.copy()
+                subst.info = info_step
+
+                self.log.info(f"processing step '{label}'")
+                if step.info:
+                    self.log.info(f"  ({step.info})", extra=dict(color="GREEN", boldface=True))
+                try:
+                    #step_params = step.run(subst=subst.copy(), batch=batch)  # make a copy of the subst dict since recipe might modify
+                    step_params = step.run(subst=subst.copy(), parent_log=self.log)  # make a copy of the subst dict since recipe might modify
+                except ScabhaBaseException as exc:
+                    newexc = StimelaStepExecutionError(f"error running step '{label}'", exc)
+                    if not exc.logged:
+                        log_exception(newexc)
+                    raise newexc
+
+                # put step parameters into previous and steps[label] again, as they may have changed based on outputs)
+                subst.previous = step_params
+                subst.steps[label] = subst.previous
+                # revert to recipe level assignments
+
+                # now check for output aliases that need to be propagated down from steps
+                self.update_assignments(subst, whose=self, params=params)
+                for name, aliases in self._alias_list.items():
+                    for alias in aliases:
+                        if alias.from_step:
+                            if alias.param in alias.step.validated_params:
+                                outputs[name] = alias.step.validated_params[alias.param]
+
+        except Exception as exc:
+            # raise exception up if asked to
+            if raise_exc:
+                raise
+            # else will be returned
+            exception = exc
+            tb = FormattedTraceback(sys.exc_info()[2])
+
+        return task_stats.collect_stats(), outputs, exception, tb
+
     def _run(self, params, subst=None) -> Dict[str, Any]:
         """Internal recipe run method. Meant to be called from a wrapper Step object (which validates the parameters, etc.)
 
@@ -924,88 +1013,41 @@ class Recipe(Cargo):
                 elif schema.required and (self.for_loop is None or name != self.for_loop.var): 
                         raise RecipeValidationError(f"recipe '{self.name}' is missing required input '{name}'", log=self.log)
 
-            # iterate over for-loop values (if not looping, this is set up to [None] in advance)
-            scatter = getattr(self.for_loop, "scatter", False)
-            
-            def loop_worker(inst, step, label, subst, count, iter_var):
-                """"
-                Needed for concurrency
-                """
-
-                # update step info
-                inst._prep_step(label, step, subst)
-
-                # if for-loop, assign new value
-                if inst.for_loop:
-                    inst.log.info(f"for loop iteration {count}: {inst.for_loop.var} = {iter_var}")
-                    # update variable (in params, if expected there, else in assignments)
-                    if inst.for_loop.var in inst.inputs_outputs:
-                        params[inst.for_loop.var] = iter_var
-                    else:
-                        inst.assign[inst.for_loop.var] = iter_var
-                    # update variable index
-                    inst.assign[f"{inst.for_loop.var}@index"] = count
-                    # update alias
-                    self._update_aliases(inst.for_loop.var, iter_var)
-                    stimelogging.declare_subtask_attributes(f"{count+1}/{len(inst._for_loop_values)}")
-
-                # reevaluate recipe level assignments (info.fqname etc. have changed)
-                inst.update_assignments(subst, params=params)
-                # evaluate step-level assignments
-                inst.update_assignments(subst, whose=step, params=params)
-                # step logger may have changed
-                stimelogging.update_file_logger(step.log, step.logopts, nesting=step.nesting, subst=subst, location=[step.fqname])
-                # set our info back temporarily to update log assignments
-                info_step = subst.info
-                subst.info = info.copy()
-                subst.info = info_step
-
-                inst.log.info(f"processing step '{label}'")
-                if step.info:
-                    inst.log.info(f"  ({step.info})", extra=dict(color="GREEN", boldface=True))
-                try:
-                    #step_params = step.run(subst=subst.copy(), batch=batch)  # make a copy of the subst dict since recipe might modify
-                    step_params = step.run(subst=subst.copy(), parent_log=self.log)  # make a copy of the subst dict since recipe might modify
-                except ScabhaBaseException as exc:
-                    if not exc.logged:
-                        log_exception(StimelaStepExecutionError(f"error running step '{label}'", exc))
-                        exc.logged = True
-                    raise
-
-                # put step parameters into previous and steps[label] again, as they may have changed based on outputs)
-                subst.previous = step_params
-                subst.steps[label] = subst.previous
-                # revert to recipe level assignments
-                inst.update_assignments(subst, whose=inst, params=params)
-
-            loop_futures = []
-
+            # form list of arguments for each invocation of the loop worker
+            loop_worker_args = []
             for count, iter_var in enumerate(self._for_loop_values):
-                for label, step in self.steps.items():
-                    this_args = (self,step, label, subst, count, iter_var)
-                    loop_futures.append(this_args)
+                loop_worker_args.append((params, info, subst, count, iter_var))
 
-            # Transpose the list before parsing to pool.map()
-            loop_args = list(map(list, zip(*loop_futures)))
-            max_workers = getattr(self.config.opts.dist, "ncpu", cpu_count()//4)
-            if scatter:
-                loop_pool = ProcessPool(max_workers, scatter=True)
-                results = loop_pool.amap(loop_worker, *loop_args)
-                while not results.ready():
-                    time.sleep(1)
-                results.get()
+            # if scatter is enabled, use a process pool
+            if self._for_loop_scatter:
+                num_workers = self._for_loop_scatter if self._for_loop_scatter > 0 else len(loop_worker_args)
+                with ProcessPoolExecutor(num_workers) as pool:
+                    # submit each iterant to pool
+                    futures = [pool.submit(self._iterate_loop_worker, *args, raise_exc=False) for args in loop_worker_args]
+                    stats = [f.result() for f in futures]
+                    # update task stats, since they're recorded independently within each step, as well
+                    # as get any exceptions from the nesting
+                    errors = []
+                    nfail = 0
+                    for f in futures:
+                        stats, outputs, exc, tb = f.result()
+                        task_stats.add_missing_stats(stats)
+                        if exc is not None:
+                            errors.append(exc)
+                            if not isinstance(exc, ScabhaBaseException):
+                                errors.append(tb)
+                            nfail += 1
+                    if errors:
+                        raise StimelaRuntimeError(f"{nfail}/{len(loop_worker_args)} loop iterations failed", errors)
+            # else just iterate directly
             else:
-                # loop_pool = SerialPool(max_workers)
-                # results = list(loop_pool.imap(loop_worker, *loop_args))
-                results = [loop_worker(*args) for args in loop_futures]
+                for args in loop_worker_args:
+                    _, outputs, _, _ = self._iterate_loop_worker(*args, raise_exc=True) 
+            
+            # either way, outputs contains output aliases from the last iteration
+            params.update(**outputs)
 
-            # now check for output aliases that need to be propagated down
-            for name, aliases in self._alias_list.items():
-                for alias in aliases:
-                    if alias.from_step:
-                        if alias.param in alias.step.validated_params:
-                            params[name] = alias.step.validated_params[alias.param]
-
+            # current namespace becomes recipe again
             subst.current = subst.recipe
             
             # # evaluate implicit outputs
