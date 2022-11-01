@@ -336,7 +336,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: b
             task_stats.print_profiling_stats()
         sys.exit(1)
 
-    if outputs and step.log.isEnabledFor(logging.DEBUG):
+    if outputs and outer_step.log.isEnabledFor(logging.DEBUG):
         outer_step.log.debug(f"run successful after {elapsed()}, outputs follow:")
         for name, value in outputs.items():
             if name in recipe.outputs:
