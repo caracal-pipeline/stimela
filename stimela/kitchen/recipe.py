@@ -1038,6 +1038,7 @@ class Recipe(Cargo):
                                 errors.append(tb)
                             nfail += 1
                     if errors:
+                        pool.shutdown()
                         raise StimelaRuntimeError(f"{nfail}/{len(loop_worker_args)} loop iterations failed", errors)
             # else just iterate directly
             else:

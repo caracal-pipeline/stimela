@@ -15,7 +15,7 @@ from scabha.exceptions import SubstitutionError, SubstitutionErrorList
 from scabha.validate import evaluate_and_substitute, Unresolved, join_quote
 from scabha.substitutions import SubstitutionNS, substitutions_from 
 from scabha.basetypes import UNSET, Placeholder
-from .cab import Cab
+from .cab import Cab, get_cab_schema
 
 Conditional = Optional[str]
 
@@ -46,8 +46,7 @@ def resolve_dotted_reference(key, base, current, context):
 @dataclass
 class Step:
     """Represents one processing step of a recipe"""
-    cab: Optional[str] = None                       # if not None, this step is a cab and this is the cab name
-#    recipe: Optional["Recipe"] = None                    # if not None, this step is a nested recipe
+    cab: Optional[Any] = None                       # if not None, this step is a cab and this is the cab name
     recipe: Optional[Any] = None                    # if not None, this step is a nested recipe
     params: Dict[str, Any] = EmptyDictDefault()     # assigns parameter values
     info: Optional[str] = None                      # comment or info
@@ -71,7 +70,7 @@ class Step:
 
     def __post_init__(self):
         self.fqname = self.fqname or self.name
-        if not bool(self.cab)and not bool(self.recipe):
+        if not bool(self.cab) and not bool(self.recipe):
             raise StepValidationError(f"step '{self.name}': step must specify either a cab or a nested recipe")
         if bool(self.cab) == bool(self.recipe):
             raise StepValidationError(f"step '{self.name}': step can't specify both a cab and a nested recipe")
@@ -171,7 +170,7 @@ class Step:
             # if recipe, validate the recipe with our parameters
             if self.recipe:
                 # first, if it is a string, look it up in library
-                recipe_name = "nested recipe"
+                recipe_name = f"{self.fqname}:recipe"
                 if type(self.recipe) is str:
                     recipe_name = f"nested recipe '{self.recipe}'"
                     # undotted name -- look in lib.recipes
@@ -192,20 +191,31 @@ class Step:
                         self.recipe = Recipe(**OmegaConf.unsafe_merge(RecipeSchema.copy(), self.recipe))
                     except OmegaConfBaseException as exc:
                         raise StepValidationError(f"error in recipe '{recipe_name}", exc)
-                elif type(self.recipe) is not Recipe:
+                elif not isinstance(self.recipe, Recipe):
                     raise StepValidationError(f"recipe field must be a string or a nested recipe, got {type(self.recipe)}")
                 self.cargo = self.recipe
             else:
-                if self.cab in self._instantiated_cabs:
-                    self.cargo = copy.copy(self._instantiated_cabs[self.cab])
-                else:
-                    if self.cab not in self.config.cabs:
-                        raise StepValidationError(f"unknown cab '{self.cab}'")
-                    try:
-                        self._instantiated_cabs[self.cab] = Cab(**config.cabs[self.cab])
+                if type(self.cab) is str:
+                    if self.cab in self._instantiated_cabs:
                         self.cargo = copy.copy(self._instantiated_cabs[self.cab])
-                    except Exception as exc:
-                        raise StepValidationError(f"error in cab '{self.cab}'", exc)
+                    else:
+                        if self.cab not in self.config.cabs:
+                            raise StepValidationError(f"unknown cab '{self.cab}'")
+                        try:
+                            self._instantiated_cabs[self.cab] = Cab(**config.cabs[self.cab])
+                            self.cargo = copy.copy(self._instantiated_cabs[self.cab])
+                        except Exception as exc:
+                            raise StepValidationError(f"error in cab '{self.cab}'", exc)
+                else:
+                    if type(self.cab) is DictConfig:
+                        cab_name = f"{self.fqname}:cab"
+                        try:
+                            self.cab = Cab(**OmegaConf.unsafe_merge(get_cab_schema().copy(), self.cab))
+                        except OmegaConfBaseException as exc:
+                            raise StepValidationError(f"error in cab '{cab_name}", exc)
+                    elif not isinstance(self.cab, Cab):
+                        raise StepValidationError(f"cab field must be a string or an inline cab, got {type(self.cab)}")
+                    self.cargo = self.cab
             self.cargo.name = self.name
 
             # flatten parameters
@@ -357,7 +367,13 @@ class Step:
                         backend = self.cargo.backend
                     else:
                         backend =  stimela.CONFIG.opts.backend
-                    runners.run_cab(self, params, backend=backend, subst=subst, batch=batch)
+                    cabstat = runners.run_cab(self, params, backend=backend, subst=subst, batch=batch)
+                    # check for runstate
+                    if cabstat.success is False:
+                        raise StimelaCabRuntimeError(f"error running cab '{self.cargo.name}'", cabstat.errors)
+                    for msg in cabstat.warnings:
+                        self.log.warning(f"cab '{self.cargo.name}': {msg}")
+                    params.update(**cabstat.outputs)
                 else:
                     raise RuntimeError("step '{self.name}': unknown cargo type")
             else:

@@ -1,16 +1,12 @@
-import shlex, os.path
-import importlib, traceback, sys, logging, uuid
+import shlex, os.path, logging, datetime
 
 from typing import Dict, Optional, Any
 from collections import OrderedDict
-from contextlib import redirect_stderr, redirect_stdout
 
 from stimela.kitchen.cab import Cab
-from stimela import logger
 from stimela.utils.xrun_asyncio import xrun, dispatch_to_log
 from stimela.exceptions import StimelaCabRuntimeError, CabValidationError
 from stimela.schedulers.slurm import SlurmBatch
-import click
 from stimela.schedulers import SlurmBatch
 
 from io import TextIOBase
@@ -47,82 +43,15 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
 
     if cab.flavour == "python":
         return run_callable(cab.py_module, cab.py_function, cab, params, log, subst)
-    if cab.flavour == "python-ext":
-        return run_external_callable(cab.py_module, cab.py_function, cab, params, log, subst)
+    elif cab.flavour == "python-code":
+        return _run_external_python(code, "python", cab, params, log, subst)
     elif cab.flavour == "binary":
         return run_command(cab, params, log, subst)
     else:
         raise StimelaCabRuntimeError(f"{cab.flavour} flavour cabs not yet supported by native backend")
 
 
-def run_callable(modulename: str, funcname: str,  cab: Cab, params: Dict[str, Any], log, subst: Optional[Dict[str, Any]] = None):
-    """Runs a cab corresponding to a Python callable. Intercepts stdout/stderr into the logger.
-
-    Args:
-        modulename (str): module name to import
-        funcname (str): name of function in module to call
-        cab (Cab): cab object
-        log (logger): logger to use
-        subst (Optional[Dict[str, Any]]): Substitution dict for commands etc., if any.
-
-    Raises:
-        StimelaCabRuntimeError: if any errors arise resolving the module or calling the function
-
-    Returns:
-        Any: return value (e.g. exit code) of content
-    """
-
-    # import module and get function object
-    path0 = sys.path.copy()
-    sys.path.append('.')
-    try:
-        mod = importlib.import_module(modulename)
-    except ImportError as exc:
-        raise StimelaCabRuntimeError(f"can't import {modulename}: {exc}", log=log)
-    finally:
-        sys.path = path0
-
-    func = getattr(mod, funcname, None)
-
-    if not callable(func):
-        raise StimelaCabRuntimeError(f"{modulename}.{funcname} is not a valid callable", log=log)
-
-    # for functions wrapped in a @click.command decorator, get the underlying function itself
-    if isinstance(func, click.Command):
-        log.info(f"invoking callable {modulename}.{funcname}() (as click command)")
-        func = func.callback
-    else:
-        log.info(f"invoking callable {modulename}.{funcname}()")
-
-    args = OrderedDict()
-    for key, schema in cab.inputs_outputs.items():
-        if not schema.policies.skip:
-            if key in params:
-                args[key] = params[key]
-            elif cab.get_schema_policy(schema, 'pass_missing_as_none'):
-                args[key] = None
-
-    # redirect and call
-    cab.reset_runtime_status()
-    try:
-        with redirect_stdout(LoggerIO(log, funcname, "stdout", output_wrangler=cab.apply_output_wranglers)), \
-                redirect_stderr(LoggerIO(log, funcname, "stderr", output_wrangler=cab.apply_output_wranglers)):
-            retval = func(**args)
-    except Exception as exc:
-        for line in traceback.format_exception(*sys.exc_info()):
-            log.error(line.rstrip())
-        raise StimelaCabRuntimeError(f"{modulename}.{funcname}() threw exception: {exc}'", log=log)
-
-    log.info(f"{modulename}.{funcname}() returns {retval}")
-
-    # check if command was marked as failed by the output wrangler
-    if cab.runtime_status is False:
-        raise StimelaCabRuntimeError(f"{modulename}.{funcname} was marked as failed based on its output", log=log)
-
-    return retval
-
-
-def run_external_callable(modulename: str, funcname: str,  cab: Cab, params: Dict[str, Any], log: logging.Logger, subst: Optional[Dict[str, Any]] = None):
+def run_callable(modulename: str, funcname: str,  cab: Cab, params: Dict[str, Any], log: logging.Logger, subst: Optional[Dict[str, Any]] = None):
     """Runs a cab corresponding to an external Python callable. Intercepts stdout/stderr into the logger.
 
     Args:
@@ -165,6 +94,9 @@ else:
 retval = {funcname}({','.join(arguments)})
 print("Return value is", repr(retval))
     """
+    return _run_external_python(command, funcname, cab, params, log, subst)
+
+def _run_external_python(command: str, funcname: str, cab: Cab, params: Dict[str, Any], log: logging.Logger, subst: Optional[Dict[str, Any]] = None):
     log.debug(f"python command is: {command}")
 
     # get virtual env, if specified
@@ -211,8 +143,6 @@ def run_command(cab: Cab, params: Dict[str, Any], log: logging.Logger, subst: Op
 
     log.debug(f"command line is {args}")
 
-    cab.reset_runtime_status()
-
     return _run_external(args, command_name, cab, params, subst, log, batch, log_command=True)
 
 
@@ -231,18 +161,25 @@ def _run_external(args, command_name, cab, params, subst, log, batch=None, log_c
 
     #-------------------------------------------------------
     # run command
+    start_time = datetime.datetime.now()
+    def elapsed(since=None):
+        """Returns string representing elapsed time"""
+        return str(datetime.datetime.now() - (since or start_time)).split('.', 1)[0]
+
+    cabstat = cab.reset_status()
 
     retcode = xrun(args[0], args[1:], shell=False, log=log,
-                output_wrangler=cab.apply_output_wranglers,
+                output_wrangler=cabstat.apply_wranglers,
                 return_errcode=True, command_name=command_name, log_command=log_command)
 
-    # if retcode is not zero, raise error, unless cab declared itself a success (via the wrangler)
-    if retcode:
-        if not cab.runtime_status:
-            raise StimelaCabRuntimeError(f"{command_name} returned non-zero exit status {retcode}", log=log)
-    # if retcode is zero, check that cab didn't declare itself a failure
-    else:
-        if cab.runtime_status is False:
-            raise StimelaCabRuntimeError(f"{command_name} was marked as failed based on its output", log=log)
+    # check if output marked it as a fail
+    if cabstat.success is False:
+        log.error(f"{command_name} was marked as failed based on its output")
 
-    return retcode
+    # if retcode != 0 and not explicitly marked as success, mark as failed
+    if retcode and cabstat.success is not True:
+        cabstat.declare_failure(f"{command_name} returns error code {retcode} after {elapsed()}")
+    else:
+        log.info(f"{command_name} returns exit code {retcode} after {elapsed()}")
+
+    return cabstat

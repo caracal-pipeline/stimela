@@ -152,7 +152,7 @@ print("Return value is", repr(retval))
     else:
         raise StimelaCabRuntimeError(f"{cab.flavour} flavour cabs not yet supported by native backend")
 
-    cab.reset_runtime_status()
+    cabstat = cab.reset_status()
 
     cluster = podname = cluster_name = None
     kube_api = get_kube_api()
@@ -341,18 +341,19 @@ print("Return value is", repr(retval))
 
             log.info(f"running {command_name} in pod {podname}")
             with declare_subcommand(os.path.basename(command_name)):
-                retcode = run_pod_command(args, command_name, wrangler=cab.apply_output_wranglers)
+                retcode = run_pod_command(args, command_name, wrangler=cabstat.apply_wranglers)
 
-            if retcode:
-                raise StimelaCabRuntimeError(f"{command_name} returns error code {retcode} after {elapsed()}")
+            # check if output marked it as a fail
+            if cabstat.success is False:
+                log.error(f"{command_name} was marked as failed based on its output")
+
+            # if retcode != 0 and not explicitly marked as success, mark as failed
+            if retcode and cabstat.success is not True:
+                cabstat.declare_failure(f"{command_name} returns error code {retcode} after {elapsed()}")
             else:
                 log.info(f"{command_name} returns exit code {retcode} after {elapsed()}")
 
-            # check if command was marked as failed by the output wrangler
-            if cab.runtime_status is False:
-                raise StimelaCabRuntimeError(f"{command_name} was marked as failed based on its output")
-
-            return retcode
+            return cabstat
 
         # handle various failure modes by logging errors appropriately
         except KeyboardInterrupt:
