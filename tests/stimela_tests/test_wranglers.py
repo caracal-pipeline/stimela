@@ -64,3 +64,23 @@ def test_wrangler_force_failure():
     assert retcode != 0
     print(output)
     assert verify_output(output, "Nobody expected the fox!")
+
+def test_wrangler_parse():
+    print("===== expecting no errors =====")
+    retcode, output = run("stimela run test_wranglers.yml test_parse")
+    assert retcode == 0
+    print(output)
+    assert verify_output(output, "The bloody cheetah ate 22 dogs!")
+
+    print("===== expecting no errors =====")
+    retcode, output = run("stimela run test_wranglers.yml test_parse2")
+    assert retcode == 0
+    print(output)
+    assert verify_output(output, "The bloody cheetah ate 22 dogs!")
+
+    print("===== expecting no errors =====")
+    retcode, output = run("stimela run test_wranglers.yml test_parse3")
+    assert retcode == 0
+    print(output)
+    assert verify_output(output, "The bloody cheetah ate 22 dogs!")
+

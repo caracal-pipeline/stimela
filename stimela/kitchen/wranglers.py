@@ -99,14 +99,19 @@ class ParseOutput(_BaseWrangler):
     def __init__(self, regex: re.Pattern, action: str, name: str, dtype: str):
         super().__init__(regex, action, name=name)
         self.loader = self.loaders[dtype]
-        if regex.groups < 1:
-            raise CabValidationError(f"wrangler action '{action}' for '{regex.pattern}': no ()-groups")
+        if name in regex.groupindex:
+            self.gid = name
+        else:
+            if regex.groups < 1:
+                raise CabValidationError(f"wrangler action '{action}' for '{regex.pattern}': no ()-groups")
+            self.gid = 1
 
     def apply(self, cabstat: CabStatus, output: str, match: re.Match):
+        value = match[self.gid]
         try:
-            value = self.loader(match.group(1))
+            value = self.loader(value)
         except Exception as exc:
-            cabstat.declare_failure(StimelaCabOutputError(f"error parsing string \"{match.group(1)}\" for output '{name}'", exc))
+            cabstat.declare_failure(StimelaCabOutputError(f"error parsing string \"{value}\" for output '{self.name}'", exc))
         cabstat.declare_outputs({self.name: value})
         return output, None
 
@@ -135,13 +140,13 @@ class ParseJSONOutputDict(_BaseWrangler):
     specifier = "PARSE_JSON_OUTPUT_DICT"
 
     def __init__(self, regex: re.Pattern, action: str):
-        super().__init__(self, regex, action)
+        super().__init__(regex, action)
         if regex.groups < 1:
             raise CabValidationError(f"wrangler action '{action}' for '{regex.pattern}': no ()-groups")
 
     def apply(self, cabstat: CabStatus, output: str, match: re.Match):
         try:
-            outputs = json.load(match.group(1))
+            outputs = json.loads(match.group(1))
         except Exception as exc:
             cabstat.declare_failure(StimelaCabOutputError(f"error parsing output dict from \"{self.name}'\"", exc))
         cabstat.declare_outputs(outputs)

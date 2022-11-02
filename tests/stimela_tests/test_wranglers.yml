@@ -49,7 +49,9 @@ test_parse:
         command: cat test_wranglers.txt
         management:
           wranglers:
-            "brown (?P<eater>\\w+) eats the (?P<num_dogs>\\d+) lazy dogs": PARSE_JSON_OUTPUTS
+            "brown (?P<eater>\\w+) eats the (?P<num_dogs>\\d+) lazy dogs": 
+              - PARSE_OUTPUT:eater:str
+              - PARSE_OUTPUT:num_dogs:json
         outputs:
           eater:
             dtype: str
@@ -57,7 +59,63 @@ test_parse:
             dtype: int
     report:
       cab:
-        command: echo {current.who} ate {current.num} dogs!
+        command: echo The bloody {current.who} ate {current.num} dogs!
+        policies:
+          skip: true
+        inputs:
+          who:
+            dtype: str
+          num:
+            dtype: int
+      params:
+        who: =previous.eater
+        num: =previous.num_dogs
+
+test_parse2:
+  steps:
+    test_parse:
+      cab:
+        command: cat test_wranglers.txt
+        management:
+          wranglers:
+            "JSON loader reads ({.*})": PARSE_JSON_OUTPUT_DICT 
+        outputs:
+          eater:
+            dtype: str
+          num_dogs:
+            dtype: int
+    report:
+      cab:
+        command: echo The bloody {current.who} ate {current.num} dogs!
+        policies:
+          skip: true
+        inputs:
+          who:
+            dtype: str
+          num:
+            dtype: int
+      params:
+        who: =previous.eater
+        num: =previous.num_dogs
+
+test_parse3:
+  steps:
+    test_parse:
+      cab:
+        command: cat test_wranglers.txt
+        management:
+          wranglers:
+            "JSON loader reads {\"eater\": (?P<eater>.*), \"num_dogs\": (?P<num_dogs>.*)}": PARSE_JSON_OUTPUTS
+        outputs:
+          eater:
+            dtype: str
+          num_dogs:
+            dtype: int
+    report:
+      cab:
+        command: echo The bloody {current.who} ate {current.num} dogs!
+        policies:
+          skip: true
         inputs:
           who:
             dtype: str
