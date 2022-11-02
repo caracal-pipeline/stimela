@@ -2,7 +2,7 @@ import click
 from scabha.exceptions import SchemaError
 from .cargo import Parameter
 from typing import *
-from .basetypes import UNSET
+from .cargo import _UNSET_DEFAULT
 from dataclasses import make_dataclass, field
 from omegaconf import OmegaConf, MISSING
 from collections.abc import MutableSet, MutableSequence, MutableMapping
@@ -46,7 +46,7 @@ def schema_to_dataclass(io: Dict[str, Parameter], class_name: str, bases=(), pos
             metadata['element_choices'] = schema.element_choices
         metadata['required'] = required = schema.required
 
-        if required and schema.default is not UNSET:
+        if required and schema.default is not _UNSET_DEFAULT:
             raise SchemaError(
                 f"Field '{fldname}' is required but specifies a default. "
                 f"This behaviour is unsupported/ambiguous."
@@ -63,7 +63,7 @@ def schema_to_dataclass(io: Dict[str, Parameter], class_name: str, bases=(), pos
         elif isinstance(schema.default, MutableMapping):
             fld = field(default_factory=default_wrapper(dict, schema.default),
                         metadata=metadata)
-        elif schema.default is UNSET:
+        elif schema.default is _UNSET_DEFAULT:
             fld = field(default=None, metadata=metadata)
         else:
             fld = field(default=schema.default, metadata=metadata)
@@ -145,13 +145,13 @@ def clickify_parameters(schemas: Dict[str, Any]):
             if schema.abbreviation:
                 optnames.append(f"-{schema.abbreviation}")
 
-            if schema.default is UNSET:
+            if schema.default is _UNSET_DEFAULT:
                 deco = click.option(*optnames, type=dtype,
-                                    required=schema.required, 
+                                    required=schema.required,
                                     metavar=schema.metavar,help=schema.info)
             else:
                 deco = click.option(*optnames, type=dtype,
-                                    default=schema.default, required=schema.required, 
+                                    default=schema.default, required=schema.required,
                                     metavar=schema.metavar,help=schema.info)
 
             if decorator_chain is None:
