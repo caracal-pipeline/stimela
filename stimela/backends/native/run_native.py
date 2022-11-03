@@ -44,7 +44,7 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
     if cab.flavour == "python":
         return run_callable(cab.py_module, cab.py_function, cab, params, log, subst)
     elif cab.flavour == "python-code":
-        return _run_external_python(code, "python", cab, params, log, subst)
+        return _run_external_python(cab.command, "python", cab, params, log, subst)
     elif cab.flavour == "binary":
         return run_command(cab, params, log, subst)
     else:

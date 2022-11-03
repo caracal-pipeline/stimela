@@ -3,7 +3,8 @@ from typing import Any, List, Dict, Optional, Union
 from omegaconf import ListConfig
 
 from scabha.cargo import ListOrString
-from stimela.exceptions import CabValidationError, StimelaCabOutputError, StimelaCabRuntimeError
+from stimela.exceptions import CabValidationError, StimelaCabOutputError, \
+                    StimelaCabRuntimeError
 
 # wranglers specified as a single string, or a list
 WranglerSpecList = ListOrString
