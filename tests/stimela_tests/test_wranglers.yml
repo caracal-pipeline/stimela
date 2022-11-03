@@ -1,3 +1,9 @@
+opts:
+  log:
+    dir: test-logs/logs-{config.run.datetime} 
+    nest: 3
+    symlink: logs
+
 
 test_replace_suppress:
   steps:
