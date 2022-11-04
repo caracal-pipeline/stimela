@@ -47,7 +47,11 @@ def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, o
     log = log or stimela.logger()
 
     if log_command:
-        log.info("running " + command_line, extra=dict(stimela_subprocess_output=(command_name, "start")))
+        if log_command is True:
+            log.info(f"running {command_line}", extra=dict(stimela_subprocess_output=(command_name, "start")))
+        else:
+            log.info(f"running {log_command}", extra=dict(stimela_subprocess_output=(command_name, "start")))
+            log.debug(f"full command line is {command_line}")
 
     with stimelogging.declare_subcommand(os.path.basename(command_name)):
 

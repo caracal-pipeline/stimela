@@ -53,7 +53,28 @@ cabs:
       yield_output(y=str({current.a}) + str("{current.b}"))
     flavour: 
       kind: python-code
-      output_dict: true
+      subst: true
+      output_vars: false
+    inputs:
+      a:
+        dtype: int
+      b:
+        dtype: str
+    outputs:
+      x:
+        dtype: int
+      y: 
+        dtype: str
+
+  test_callable5:
+    command: |
+      print("a is {a} and b is {b}")
+      x = a - 2
+      y = str(a) + b 
+    flavour: 
+      kind: python-code
+      input_vars: true
+      output_vars: true
     inputs:
       a:
         dtype: int
@@ -83,12 +104,12 @@ test_callables:
         a: =previous.x+1
         b: "bar"
     s4:
-      cab: test_callable3
+      cab: test_callable4
       params:
         a: =previous.x
         b: =previous.y
     s5:
-      cab: test_callable4
+      cab: test_callable5
       params:
         a: =previous.x
         b: =previous.y

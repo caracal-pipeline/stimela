@@ -10,6 +10,9 @@ import stimela
 
 
 class _BaseFlavour(object):
+    # if true, full command line is logged, else just command name
+    log_full_command: bool = True
+
     def finalize(self, cab: "stimela.kitchen.cab.Cab"):
         self.command_name = cab.command.split()[0]
 
