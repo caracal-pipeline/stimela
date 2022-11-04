@@ -142,7 +142,8 @@ class PythonCodeFlavour(_BaseFlavour):
 """
         if self.input_vars:
             for name in pass_params:
-                pre_command += f"""{name} = {inp_dict}["{name}"]\n"""
+                var_name = name.replace("-", "_").replace(".", "__")
+                pre_command += f"""{var_name} = {inp_dict}["{name}"]\n"""
 
         post_command = ""
         pass_outputs = [name for name, schema in cab.outputs.items()
@@ -151,7 +152,8 @@ class PythonCodeFlavour(_BaseFlavour):
             post_command += "from scabha.cab_utils import yield_output\n"
             if self.output_vars:
                 for name in pass_outputs:
-                    post_command += f"yield_output({name}={name})\n"                
+                    var_name = name.replace("-", "_").replace(".", "__")
+                    post_command += f"yield_output(**{{'{name}': {var_name}}})\n"                
 
         args = get_python_interpreter_args(cab, subst)
         args += ["-c", pre_command + command + post_command, params_arg]
