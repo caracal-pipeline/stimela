@@ -25,7 +25,7 @@ _prev_disk_io = None, None
 
 def init_progress_bar():
     global progress_bar, progress_task
-    console = rich.console.Console(file=sys.stdout)
+    console = rich.console.Console(file=sys.stdout, highlight=False)
     progress_bar = rich.progress.Progress(
         rich.progress.SpinnerColumn(),
         "[yellow]{task.fields[elapsed_time]}[/yellow]",

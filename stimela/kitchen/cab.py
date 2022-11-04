@@ -59,6 +59,11 @@ class Cab(Cargo):
     # default parameter conversion policies
     policies: ParameterPolicies = ParameterPolicies()
 
+    # For callable-type cabs, determines how the return value is treated.
+    # None to ignore, "{}" to treat it as a dict of outputs, else an output name to 
+    # treat it as a single output
+    return_outputs: Optional[str] = "{}" 
+
     # runtime settings
     backend: Optional['stimela.config.Backend']
     runtime: Dict[str, Any] = EmptyDictDefault()
@@ -76,7 +81,7 @@ class Cab(Cargo):
         match_old_python = re.match("^\((.+)\)(.+)$", self.command)
         if match_old_python:
             if self.flavour is not None and self.flavour.lower() != "python":
-                raise CabValidationError("cab {self.name}: '(module)function' implies python flavour, but '{self.flavour}' is specified")
+                raise CabValidationError(f"cab {self.name}: '(module)function' implies python flavour, but '{self.flavour}' is specified")
             self.flavour = "python"
             self.py_module, self.py_function = match_old_python.groups()
         else:
@@ -88,9 +93,14 @@ class Cab(Cargo):
                 if '.' in self.command:
                     self.py_module, self.py_function = self.command.rsplit('.', 1)
                 else:
-                    raise CabValidationError("cab {self.name}: 'python' flavour requires a command of the form module.function")
+                    raise CabValidationError(f"cab {self.name}: 'python' flavour requires a command of the form module.function")
             elif self.flavour not in ("binary", "python-code"):
-                raise CabValidationError("cab {self.name}: unknown cab flavour '{self.flavour}'")
+                raise CabValidationError(f"cab {self.name}: unknown cab flavour '{self.flavour}'")
+        # check output policy
+        if self.flavour in ("python",):
+            if self.return_outputs is not None and self.return_outputs != "{}" \
+                and self.return_outputs not in self.outputs:
+                raise CabValidationError(f"cab {self.name}: return_outputs setting '{self.return_outputs}' is not an output")
 
         # setup wranglers
         self._wranglers = []
@@ -316,14 +326,15 @@ class Cab(Cargo):
 
         return pos_args[0] + args + pos_args[1]
 
-    def reset_status(self):
-        return Cab.RuntimeStatus(self)
+    def reset_status(self, extra_wranglers: List = []):
+        return Cab.RuntimeStatus(self, extra_wranglers=extra_wranglers)
 
     class RuntimeStatus(object):
         """Represents the runtime status of a cab"""
 
-        def __init__(self, cab: "Cab"):
+        def __init__(self, cab: "Cab", extra_wranglers: List = []):
             self.cab = cab
+            self.wranglers = list(cab._wranglers) + list(extra_wranglers)
             self._success = None
             self._errors = []
             self._warnings = []
@@ -364,7 +375,7 @@ class Cab(Cargo):
 
         def apply_wranglers(self, output, severity):
             suppress = False
-            for regex, wranglers in self.cab._wranglers:
+            for regex, wranglers in self.wranglers:
                 match = regex.search(output) 
                 if match:
                     for wrangler in wranglers:

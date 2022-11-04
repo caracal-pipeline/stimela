@@ -1,13 +1,15 @@
-import shlex, os.path, logging, datetime
+import shlex, os.path, logging, datetime, re
 
 from typing import Dict, Optional, Any
 from collections import OrderedDict
 
 from stimela.kitchen.cab import Cab
+from stimela.kitchen import wranglers
 from stimela.utils.xrun_asyncio import xrun, dispatch_to_log
 from stimela.exceptions import StimelaCabRuntimeError, CabValidationError
 from stimela.schedulers.slurm import SlurmBatch
 from stimela.schedulers import SlurmBatch
+from scabha.cab_utils import CAB_OUTPUT_PREFIX
 
 from io import TextIOBase
 
@@ -69,16 +71,31 @@ def run_callable(modulename: str, funcname: str,  cab: Cab, params: Dict[str, An
     """
     # form up arguments
     arguments = []
-    for key, schema in cab.inputs_outputs.items():
-        if not schema.policies.skip:
-            if key in params:
-                arguments.append(f"{key}={repr(params[key])}")
-            elif cab.get_schema_policy(schema, 'pass_missing_as_none'):
-                arguments.append(f"{key}=None")
+    for io in cab.inputs, cab.outputs:
+        for key, schema in io.items():
+            if not schema.policies.skip and schema.is_input or schema.is_named_output:
+                if key in params:
+                    arguments.append(f"{key}={repr(params[key])}")
+                elif cab.get_schema_policy(schema, 'pass_missing_as_none'):
+                    arguments.append(f"{key}=None")
 
+    # form up outputs handler
+    if cab.return_outputs is not None:
+        yield_output = f"print(f'{CAB_OUTPUT_PREFIX}{{json.dumps(retval)}}')"
+        pattern = re.compile(f"{CAB_OUTPUT_PREFIX}(.*)")
+        if cab.return_outputs == "{}":
+            wrangler = wranglers.ParseJSONOutputDict(pattern, "PARSE_JSON")
+        else:
+            wrangler = wranglers.ParseOutput(pattern, "PARSE_OUTPUT", cab.return_outputs, "json")
+        extra_wranglers = [(pattern, [wrangler])]
+    else:
+        yield_output = ""
+        extra_wranglers = []
+    cabstat = cab.reset_status(extra_wranglers=extra_wranglers)
+        
     # form up command string
     command = f"""
-import sys
+import sys, json
 sys.path.append('.')
 from {modulename} import {funcname}
 try:
@@ -92,17 +109,17 @@ else:
     print("invoking callable {modulename}.{funcname}() using external interpreter")
 
 retval = {funcname}({','.join(arguments)})
-print("Return value is", repr(retval))
+{yield_output}
     """
-    return _run_external_python(command, funcname, cab, params, log, subst)
+    return _run_external_python(command, funcname, cabstat, params, log, subst)
 
-def _run_external_python(command: str, funcname: str, cab: Cab, params: Dict[str, Any], log: logging.Logger, subst: Optional[Dict[str, Any]] = None):
+def _run_external_python(command: str, funcname: str, cabstat: Cab.RuntimeStatus, params: Dict[str, Any], log: logging.Logger, subst: Optional[Dict[str, Any]] = None):
     log.debug(f"python command is: {command}")
 
     # get virtual env, if specified
     from scabha.substitutions import substitutions_from
     with substitutions_from(subst, raise_errors=True) as context:
-        venv = context.evaluate(cab.virtual_env, location=["virtual_env"])
+        venv = context.evaluate(cabstat.cab.virtual_env, location=["virtual_env"])
 
     if venv:
         venv = os.path.expanduser(venv)
@@ -115,7 +132,7 @@ def _run_external_python(command: str, funcname: str, cab: Cab, params: Dict[str
 
     args = [interpreter, "-c", command]
 
-    return _run_external(args, funcname, cab, params, subst, log, log_command=False)
+    return _run_external(args, funcname, cabstat, params, subst, log, log_command=False)
 
 
 
@@ -143,15 +160,17 @@ def run_command(cab: Cab, params: Dict[str, Any], log: logging.Logger, subst: Op
 
     log.debug(f"command line is {args}")
 
-    return _run_external(args, command_name, cab, params, subst, log, batch, log_command=True)
+    cabstat = cab.reset_status()
+
+    return _run_external(args, command_name, cabstat, params, subst, log, batch, log_command=True)
 
 
 
-def _run_external(args, command_name, cab, params, subst, log, batch=None, log_command=True):
+def _run_external(args, command_name, cabstat, params, subst, log, batch=None, log_command=True):
 
     if batch:
         batch = SlurmBatch(**batch)
-        batch.__init_cab__(cab, params, subst, log)
+        batch.__init_cab__(cabstat.cab, params, subst, log)
         runcmd = "/bin/bash -c" + " ".join(args)
         jobfile = "foo-bar.job"
         batch.name = "foo-bar"
@@ -166,11 +185,10 @@ def _run_external(args, command_name, cab, params, subst, log, batch=None, log_c
         """Returns string representing elapsed time"""
         return str(datetime.datetime.now() - (since or start_time)).split('.', 1)[0]
 
-    cabstat = cab.reset_status()
-
     retcode = xrun(args[0], args[1:], shell=False, log=log,
                 output_wrangler=cabstat.apply_wranglers,
-                return_errcode=True, command_name=command_name, log_command=log_command)
+                return_errcode=True, command_name=command_name, 
+                log_command=log_command, log_result=False)
 
     # check if output marked it as a fail
     if cabstat.success is False:

@@ -166,6 +166,8 @@ class Parameter(object):
         # The alternative is a non-standard API call i.e. typing._eval_type()
         self._dtype = eval(self.dtype, globals())
 
+        self._is_input = True
+
     def get_category(self):
         """Returns category of parameter, auto-setting it if not already preset"""
         if self.category is None:
@@ -176,6 +178,18 @@ class Parameter(object):
             else:
                 self.category = ParameterCategory.Optional
         return self.category
+
+    @property 
+    def is_input(self):
+        return self._is_input
+
+    @property 
+    def is_output(self):
+        return not self._is_input
+
+    @property
+    def is_named_output(self):
+        return self.is_output and self.dtype in (File, MS, Directory) and not self.implicit
 
 ParameterSchema = OmegaConf.structured(Parameter)
 
@@ -235,6 +249,8 @@ class Cargo(object):
         # flatten inputs/outputs into a single dict (with entries like sub.foo.bar)
         self.inputs = Cargo.flatten_schemas(OrderedDict(), self.inputs, "inputs")
         self.outputs = Cargo.flatten_schemas(OrderedDict(), self.outputs, "outputs")
+        for schema in self.outputs.values():
+            schema._is_input = False
         for name in self.inputs.keys():
             if name in self.outputs:
                 raise DefinitionError(f"parameter '{name}' appears in both inputs and outputs")
