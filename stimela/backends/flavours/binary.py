@@ -13,6 +13,9 @@ from . import _CallableFlavour, _BaseFlavour
 
 @dataclass
 class BinaryFlavour(_BaseFlavour):
+    """
+    Represents a cab flavour that is a command run via the shell
+    """
     kind: str = "binary"
 
     def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any]):

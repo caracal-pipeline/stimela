@@ -10,18 +10,34 @@ import stimela
 
 
 class _BaseFlavour(object):
+    """
+    A flavour class represents a particular kind of runnable task
+    (binary, python callable, inline python code, etc.)
+    """
     # if true, full command line is logged, else just command name
     log_full_command: bool = True
 
     def finalize(self, cab: "stimela.kitchen.cab.Cab"):
+        """Finalizes flavour definition, given a cab"""
         self.command_name = cab.command.split()[0]
 
     def get_arguments(self, cab: "stimela.kitchen.cab.Cab", params: Dict[str, Any], subst: Dict[str, Any]):
+        """Returns command line arguments for running this flavour of task, given
+        a cab and a set of parameters. 
+
+        Args:
+            cab (Cab):               cab definition
+            params (Dict[str, Any]): parameter dict
+            subst (Dict[str, Any]):  substitution namespace 
+        """
         pass
 
 
 @dataclass
 class _CallableFlavour(_BaseFlavour):
+    """
+    Represents a callable function (in python)
+    """
     # if True, function returns dict of outputs
     output_dict: bool = False
     # if not None, function returns the named output
@@ -41,7 +57,13 @@ _flavour_map = None
 _flavour_schemas = None
 
 def lookup_flavour(kind):
+    """
+    Given a "kind" string, looks up appropriate flavour class, and corresponding OmegeCaonf schema
+    Returns:
+        (class, OmegaConf.DictConfig): class and schema 
+    """
     global _flavour_map, _flavour_schemas
+    # init map the first time we're called
     if _flavour_map is None:
         from .binary import BinaryFlavour
         from .python_flavours import PythonCallableFlavour, PythonCodeFlavour
@@ -60,6 +82,11 @@ def lookup_flavour(kind):
         return None, None
 
 def init_cab_flavour(cab: "stimela.kitchen.cab.Cab"):
+    """
+    Given a cab definition, creates an object of the appropriate flavour class. 
+    Cab.flavour can be specified as a string (default class definition), or as a mapping
+    with a "kind" attribute, in which case flavour parameters may be passed.
+    """
     flavour = cab.flavour
     if flavour is None:
         from .binary import BinaryFlavour
