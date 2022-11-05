@@ -104,7 +104,7 @@ class StimelaLogFormatter(logging.Formatter):
                 font, color = self.WARNING_STYLE
             else:
                 font = color = ""
-            if hasattr(record, 'color'):
+            if getattr(record, 'color', None):
                 color = record.color.lower()
             if hasattr(record, 'bold') or hasattr(record, 'boldface'):
                 if "bold" not in font:
