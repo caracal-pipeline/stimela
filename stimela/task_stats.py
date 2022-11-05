@@ -24,8 +24,8 @@ _prev_disk_io = None, None
 
 
 def init_progress_bar():
-    global progress_bar, progress_task
-    console = rich.console.Console(file=sys.stdout, highlight=False)
+    global progress_console, progress_bar, progress_task
+    progress_console = rich.console.Console(file=sys.stdout, highlight=False)
     progress_bar = rich.progress.Progress(
         rich.progress.SpinnerColumn(),
         "[yellow]{task.fields[elapsed_time]}[/yellow]",
@@ -35,13 +35,13 @@ def init_progress_bar():
         rich.progress.TimeElapsedColumn(),
         "{task.fields[cpu_info]}",
         refresh_per_second=2,
-        console=console,
+        console=progress_console,
         transient=True)
 
     progress_task = progress_bar.add_task("stimela", command="starting", cpu_info=" ", elapsed_time="", start=True)
     progress_bar.__enter__()
     atexit.register(destroy_progress_bar)
-    return progress_bar, console
+    return progress_bar, progress_console
 
 def destroy_progress_bar():
     global progress_bar
@@ -227,11 +227,11 @@ _sum_stats = ("read_count", "read_gb", "read_ms", "write_count", "write_gb", "wr
 def print_profiling_stats():
     stats = collect_stats()
 
-    table_avg = Table(title="Brief profiling stats (averages + total R/W)")
+    table_avg = Table(title="averages + total I/O")
     table_avg.add_column("")
     table_avg.add_column("time hms", justify="right")
 
-    table_peak = Table(title="Brief profiling stats (peaks)")
+    table_peak = Table(title="peaks")
     table_peak.add_column("")
     table_peak.add_column("time hms", justify="right")
     
@@ -257,9 +257,12 @@ def print_profiling_stats():
             table_avg.add_row(*avg_row)
             table_peak.add_row(*peak_row)
 
+    progress_console.rule("profiling results")
     destroy_progress_bar()
-    rich.print(table_avg) 
-    rich.print(table_peak)  
+    from rich.columns import Columns
+    # progress_console.print(table_avg, justify="center") 
+    # progress_console.print(table_peak, justify="center")  
+    progress_console.print(Columns((table_avg, table_peak)), justify="center") 
 
 def save_profiling_stats(log):
     from . import stimelogging

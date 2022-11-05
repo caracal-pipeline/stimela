@@ -292,6 +292,8 @@ class Step:
         from .recipe import Recipe
         from . import runners
 
+        stimelogging.declare_chapter(f"{self.fqname}")
+
         if self.validated_params is None:
             self.prevalidate(self.params)
         # some messages go to the parent logger -- if not defined, default to our own logger

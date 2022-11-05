@@ -54,7 +54,7 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
 
     # check if output marked it as a fail
     if cabstat.success is False:
-        log.error(f"{command_name} was marked as failed based on its output")
+        log.error(f"declaring '{command_name}' as failed based on its output")
 
     # if retcode != 0 and not explicitly marked as success, mark as failed
     if retcode and cabstat.success is not True:

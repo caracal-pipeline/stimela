@@ -26,25 +26,24 @@ def get_stimela_logger():
     except ImportError:
         return None
 
-def _remove_ctrls(msg):
-    ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
-    return ansi_escape.sub('', msg)
 
-
-def dispatch_to_log(log, line, command_name, stream_name, output_wrangler, custom_console_handler=None):
+def dispatch_to_log(log, line, command_name, stream_name, output_wrangler):
     # dispatch output to log
-    # line = _remove_ctrls(line)
-    extra = dict(stimela_subprocess_output=(command_name, stream_name))
+    extra = dict()
     # severity = logging.WARNING if fobj is proc.stderr else logging.INFO
     severity = logging.INFO
-    if stream_name == 'stderr':
-        extra['color'] = 'WHITE'
-    if custom_console_handler is not None:
-        extra['custom_console_handler'] = custom_console_handler
+    if stream_name == 'stdout':
+        extra['style'] = 'dim'
+        extra['prefix'] = "#"
+    else:
+        extra['style'] = 'white'
+        extra['prefix'] = "#"
     # feed through wrangler to adjust severity and content
     if output_wrangler is not None:
         line, severity = output_wrangler(line, severity)
     if line is not None:
+        if severity >= logging.ERROR:
+            extra['prefix'] = stimelogging.FunkyMessage(":warning:", "!")
         log.log(severity, line, extra=extra)
 
 
@@ -77,10 +76,10 @@ def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, o
 
     if log_command:
         if log_command is True:
-            log.info(f"running {command_line}", extra=dict(stimela_subprocess_output=(command_name, "start")))
+            log.info(f"running {command_line}", extra=dict(prefix="###", style="dim"))
         else:
-            log.info(f"running {log_command}", extra=dict(stimela_subprocess_output=(command_name, "start")))
-            log.debug(f"full command line is {command_line}")
+            log.info(f"running {log_command}", extra=dict(prefix="###", style="dim"))
+            log.debug(f"full command line is {command_line}", extra=dict(prefix="###", style="dim"))
 
     with stimelogging.declare_subcommand(os.path.basename(command_name)):
 

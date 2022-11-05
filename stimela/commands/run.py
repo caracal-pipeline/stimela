@@ -210,6 +210,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: b
         recipe.protect_from_assignments(dotlist.keys())
         recipe.protect_from_assignments(params.keys())
 
+        stimelogging.declare_chapter("prevalidation")
         log.info("pre-validating the recipe")
         outer_step = Step(recipe=recipe, name=f"{recipe_name}", info=what, params=params)
         try:
