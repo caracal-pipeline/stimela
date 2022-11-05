@@ -4,11 +4,7 @@ import signal
 import datetime
 import asyncio
 import logging
-import re
-from rich.style import Style
-from rich.table import Column
-from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn
-from rich.logging import RichHandler
+from rich.markup import escape
 
 from stimela import stimelogging
 
@@ -40,10 +36,12 @@ def dispatch_to_log(log, line, command_name, stream_name, output_wrangler):
         extra['prefix'] = "#"
     # feed through wrangler to adjust severity and content
     if output_wrangler is not None:
-        line, severity = output_wrangler(line, severity)
+        line, severity = output_wrangler(escape(line), severity)
     if line is not None:
         if severity >= logging.ERROR:
             extra['prefix'] = stimelogging.FunkyMessage("[red]:warning: [/red]", "!")
+        if isinstance(line, stimelogging.FunkyMessage) and line.prefix:
+            extra['prefix'] = line.prefix
         log.log(severity, line, extra=extra)
 
 

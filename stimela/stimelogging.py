@@ -23,9 +23,10 @@ from .task_stats import declare_subtask, declare_subtask_attributes, \
 
 class FunkyMessage(object):
     """Class representing a message with two versions: funky (with markup), and boring (no markup)"""
-    def __init__(self, funky, boring=None):
+    def __init__(self, funky, boring=None, prefix=None):
         self.funky = funky
         self.boring = boring if boring is not None else funky
+        self.prefix = prefix
     def __str__(self):
         return self.funky
     def __add__(self, other):
@@ -342,6 +343,8 @@ def log_exception(*errors, severity="error", log=None):
             else:
                 tree.add(str(exc))
 
+    has_nesting = False
+
     for exc in errors:
         if isinstance(exc, ScabhaBaseException):
             messages.append(exc.message)
@@ -351,6 +354,7 @@ def log_exception(*errors, severity="error", log=None):
             trees.append(tree)
             if exc.nested:
                 add_nested(exc.nested, tree)
+                has_nesting = True
         else:
             tree = Tree(f"[{colour}]:warning: {exc_message(exc)}[/{colour}]", guide_style="dim")
             trees.append(tree)
@@ -362,8 +366,9 @@ def log_exception(*errors, severity="error", log=None):
 
     printfunc = task_stats.progress_bar.console.print if task_stats.progress_bar is not None else rich_print
 
-    declare_chapter("detailed error report follows", style="red")
-    for tree in trees:
-        printfunc(Padding(tree, pad=(0,0,0,8)))
+    if has_nesting:
+        declare_chapter("detailed error report follows", style="red")
+        for tree in trees:
+            printfunc(Padding(tree, pad=(0,0,0,8)))
 
 

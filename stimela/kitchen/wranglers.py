@@ -168,7 +168,8 @@ class DeclareSuccess(_BaseWrangler):
     specifier = "DECLARE_SUCCESS"
     def apply(self, cabstat: CabStatus, output: str, match: re.Match):
         cabstat.declare_success()
-        return f":white_check_mark: [bold green]{output}[/bold green]", None
+        return FunkyMessage(f"[bold green]{output}[/bold green]", output, 
+            prefix=FunkyMessage(":white_check_mark:","+")), None
 
 class ParseOutput(_BaseWrangler):
     """
