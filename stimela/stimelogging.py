@@ -14,6 +14,7 @@ import rich.logging
 from rich.tree import Tree
 from rich import print as rich_print
 from rich.markup import escape
+from rich.padding import Padding
 
 from . import task_stats
 from .task_stats import declare_subtask, declare_subtask_attributes, \
@@ -362,6 +363,6 @@ def log_exception(*errors, severity="error", log=None):
     printfunc = task_stats.progress_bar.console.print if task_stats.progress_bar is not None else rich_print
 
     for tree in trees:
-        printfunc(tree)
+        printfunc(Padding(tree, pad=(0,0,0,8)))
 
 
