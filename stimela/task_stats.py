@@ -224,8 +224,7 @@ _printed_stats = dict(
 # these stats are written as sums
 _sum_stats = ("read_count", "read_gb", "read_ms", "write_count", "write_gb", "write_ms")
 
-def print_profiling_stats():
-    stats = collect_stats()
+def render_profiling_summary(stats):
 
     table_avg = Table(title="averages + total I/O")
     table_avg.add_column("")
@@ -262,15 +261,31 @@ def print_profiling_stats():
     from rich.columns import Columns
     # progress_console.print(table_avg, justify="center") 
     # progress_console.print(table_peak, justify="center")  
-    progress_console.print(Columns((table_avg, table_peak)), justify="center") 
+    # progress_console.print(Columns((table_avg, table_peak)), justify="center") 
 
-def save_profiling_stats(log):
+    with progress_console.capture() as capture:
+        progress_console.print(Columns((table_avg, table_peak)), justify="center") 
+
+    text = capture.get()
+
+    return text
+
+    
+# from rich.console import Console
+# console = Console()
+# with console.capture() as capture:
+#     console.print("[bold red]Hello[/] World")
+# str_output = capture.get()
+
+def save_profiling_stats(log, print_stats=True):
     from . import stimelogging
     
-    filename = os.path.join(stimelogging.get_logger_file(log) or '.', "stimela.stats")
-    log.info(f"saving full profiling stats to {filename}")
-    
     stats = collect_stats()
+    summary = render_profiling_summary(stats)
+    if print_stats:
+        print(summary)
+
+    filename = os.path.join(stimelogging.get_logger_file(log) or '.', "stimela.stats.full")
 
     stats_dict = OmegaConf.create()
 
@@ -286,3 +301,9 @@ def save_profiling_stats(log):
 
     OmegaConf.save(stats_dict, filename)
 
+    log.info(f"saved full profiling stats to {filename}")
+
+    filename = os.path.join(stimelogging.get_logger_file(log) or '.', "stimela.stats.summary.txt")
+    open(filename, "wt").write(summary)
+
+    log.info(f"saved summary to {filename}")
