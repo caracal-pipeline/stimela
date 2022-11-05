@@ -4,6 +4,7 @@ from collections import OrderedDict
 from enum import Enum, IntEnum
 from dataclasses import dataclass
 from omegaconf import MISSING, OmegaConf
+import rich.markup
 
 from scabha.cargo import Parameter, Cargo, ListOrString, ParameterPolicies, ParameterCategory
 from stimela.exceptions import CabValidationError, StimelaCabRuntimeError
@@ -357,6 +358,8 @@ class Cab(Cargo):
             self._outputs.update(**outputs)
 
         def apply_wranglers(self, output, severity):
+            # make sure any unintended [rich style] tags are escaped in output
+            output = rich.markup.escape(output)
             suppress = False
             for regex, wranglers in self.wranglers:
                 match = regex.search(output) 

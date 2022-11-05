@@ -94,18 +94,26 @@ class ColorizingFormatter(logging.Formatter):
 
 class SelectiveFormatter(logging.Formatter):
     """Selective formatter. if condition(record) is True, invokes other formatter"""
-    def __init__(self, default_formatter, dispatch_list):
+
+    _ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
+
+    def __init__(self, default_formatter, dispatch_list, strip_ansi=False):
         logging.Formatter.__init__(self)
+        self._strip_ansi = False
         self._dispatch_list = dispatch_list
         self._default_formatter = default_formatter
+        self._strip_ansi = strip_ansi
 
     def format(self, record):
         for condition, formatter in self._dispatch_list:
             if condition(record):
-                return formatter.format(record)
+                line = formatter.format(record)
+                break
         else:
-            return self._default_formatter.format(record)
-
+            line = self._default_formatter.format(record)
+        if self._strip_ansi:
+            line = self._ansi_escape.sub('', line)
+        return line
 
 _logger = None
 log_console_handler = log_formatter = log_boring_formatter = log_colourful_formatter = None
@@ -139,7 +147,8 @@ def logger(name="STIMELA", propagate=False, console=True, boring=False,
 
         log_boring_formatter = SelectiveFormatter(
                     logging.Formatter(fmt, datefmt, style="{"),
-                    [(_is_from_subprocess, logging.Formatter(sub_fmt, datefmt, style="{"))])
+                    [(_is_from_subprocess, logging.Formatter(sub_fmt, datefmt, style="{"))],
+                    strip_ansi=True)
 
         log_colourful_formatter = SelectiveFormatter(
                     ColorizingFormatter(col_fmt, datefmt, style="{"),
@@ -155,7 +164,7 @@ def logger(name="STIMELA", propagate=False, console=True, boring=False,
                 log_console_handler = logging.StreamHandler(stream=sys.stdout)
             else:  
                 log_console_handler = rich.logging.RichHandler(console=progress_console,
-                                    highlighter=rich.highlighter.NullHighlighter(),
+                                    highlighter=rich.highlighter.NullHighlighter(), markup=True,
                                     show_level=False, show_path=False, show_time=False, keywords=[])
 
             log_console_handler.setFormatter(log_formatter)

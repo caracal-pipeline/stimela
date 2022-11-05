@@ -921,7 +921,7 @@ class Recipe(Cargo):
                     #step_params = step.run(subst=subst.copy(), batch=batch)  # make a copy of the subst dict since recipe might modify
                     step_params = step.run(subst=subst.copy(), parent_log=self.log)  # make a copy of the subst dict since recipe might modify
                 except ScabhaBaseException as exc:
-                    newexc = StimelaStepExecutionError(f"error running step '{label}'", exc)
+                    newexc = StimelaStepExecutionError(f"error at step '{self.fqname}.{label}'", exc)
                     if not exc.logged:
                         log_exception(newexc)
                     raise newexc

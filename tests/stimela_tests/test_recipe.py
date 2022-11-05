@@ -45,7 +45,7 @@ def test_test_aliasing():
     print(output)
     assert verify_output(output, 
             "DEBUG: ### validated outputs", 
-            "DEBUG: recipe 'recipe'", 
+            "DEBUG: recipe 'alias test recipe'", 
             "DEBUG:   out: 1")
 
 def test_test_nesting():
