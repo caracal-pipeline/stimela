@@ -10,9 +10,8 @@ from omegaconf import OmegaConf
 import psutil
 import rich.progress
 import rich.logging
-from rich.tree import Tree
 from rich.table import Table
-
+from rich.text import Text
 
 progress_bar = progress_task = None
 
@@ -226,11 +225,11 @@ _sum_stats = ("read_count", "read_gb", "read_ms", "write_count", "write_gb", "wr
 
 def render_profiling_summary(stats):
 
-    table_avg = Table(title="averages + total I/O")
+    table_avg = Table(title=Text("\naverages & total I/O", style="bold"))
     table_avg.add_column("")
     table_avg.add_column("time hms", justify="right")
 
-    table_peak = Table(title="peaks")
+    table_peak = Table(title=Text("\npeaks", style="bold"))
     table_peak.add_column("")
     table_peak.add_column("time hms", justify="right")
     

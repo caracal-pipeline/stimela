@@ -131,8 +131,8 @@ def is_logger_initialized():
     return _logger is not None
 
 
-def declare_chapter(title: str):
-    progress_console.rule(title)
+def declare_chapter(title: str, **kw):
+    progress_console.rule(title, **kw)
 
 
 def logger(name="STIMELA", propagate=False, boring=False, loglevel="INFO"):
@@ -347,12 +347,12 @@ def log_exception(*errors, severity="error", log=None):
             messages.append(exc.message)
             if not exc.logged:
                 do_log = exc.logged = True
-            tree = Tree(f"[{colour}]{exc_message(exc)}[/{colour}]", guide_style="dim")
+            tree = Tree(f"[{colour}]:warning: {exc_message(exc)}[/{colour}]", guide_style="dim")
             trees.append(tree)
             if exc.nested:
                 add_nested(exc.nested, tree)
         else:
-            tree = Tree(f"[{colour}]{exc_message(exc)}[/{colour}]", guide_style="dim")
+            tree = Tree(f"[{colour}]:warning: {exc_message(exc)}[/{colour}]", guide_style="dim")
             trees.append(tree)
             do_log = True
             messages.append(str(exc))
@@ -362,6 +362,7 @@ def log_exception(*errors, severity="error", log=None):
 
     printfunc = task_stats.progress_bar.console.print if task_stats.progress_bar is not None else rich_print
 
+    declare_chapter("detailed error report follows", style="red")
     for tree in trees:
         printfunc(Padding(tree, pad=(0,0,0,8)))
 

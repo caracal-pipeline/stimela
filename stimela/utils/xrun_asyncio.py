@@ -43,7 +43,7 @@ def dispatch_to_log(log, line, command_name, stream_name, output_wrangler):
         line, severity = output_wrangler(line, severity)
     if line is not None:
         if severity >= logging.ERROR:
-            extra['prefix'] = stimelogging.FunkyMessage(":warning:", "!")
+            extra['prefix'] = stimelogging.FunkyMessage("[red]:warning: [/red]", "!")
         log.log(severity, line, extra=extra)
 
 
