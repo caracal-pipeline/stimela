@@ -158,7 +158,22 @@ class Cab(Cargo):
         return ([command] + args + self.build_argument_list(params)), venv
 
 
-    def build_argument_list(self, params):
+    def filter_input_params(self, params: Dict[str, Any]):
+        """Filters dict of params, returning only those that should be passed to a cab
+        (i.e. inputs or named outputs, and not skipped)
+        """
+        filtered_params = OrderedDict()
+        for name, schema in self.inputs_outputs.items():
+            if not self.get_schema_policy(schema, 'skip'):
+                if schema.is_input or schema.is_named_output:
+                    if name in params:
+                        filtered_params[name] = params[name]
+                    elif self.get_schema_policy(schema, 'pass_missing_as_none'):
+                        filtered_params[name] = None
+        return filtered_params
+
+
+    def build_argument_list(self, params: Dict[str, Any]):
         """
         Converts command, and current dict of parameters, into a list of command-line arguments.
 
