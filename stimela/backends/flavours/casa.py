@@ -74,7 +74,7 @@ class CasaTaskFlavour(_CallableFlavour):
         pass_params = cab.filter_input_params(params)
         params_string = json.dumps(pass_params)
 
-        code = f"""import sys, json; command(**json.loads(sys.argv[1]));"""
+        code = f"""import sys, json; {command}(**json.loads(sys.argv[-1]));"""
 
         args =  [casa] + casa_opts.strip().split() + ["-c", code, params_string]
         return args
