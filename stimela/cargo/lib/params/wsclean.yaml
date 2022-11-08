@@ -122,6 +122,8 @@ base_inputs:
     dtype: bool
   simulate-noise:
     dtype: Union[float, str]
+  pol:
+    dtype: str
 
 base_outputs:
   source-list:

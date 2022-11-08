@@ -34,6 +34,8 @@ class ParameterPolicies(object):
     """
     # if true, parameter is passed as key=value, not command line option
     key_value: Optional[bool] = None
+    # if true, parameter is passed as key=value command line option
+    key_value_command_line: Optional[bool] = None
     # if true, value is passed as a positional argument, not an option
     positional: Optional[bool] = None
     # if true, value is head-positional, i.e. passed *before* any options
