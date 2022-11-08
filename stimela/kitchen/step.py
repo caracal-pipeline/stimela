@@ -221,7 +221,7 @@ class Step:
                     elif not isinstance(self.cab, Cab):
                         raise StepValidationError(f"cab field must be a string or an inline cab, got {type(self.cab)}")
                     self.cargo = self.cab
-            self.cargo.name = self.name
+            self.cargo.name = self.cargo.name or self.name
 
             # flatten parameters
             self.params = self.cargo.flatten_param_dict(OrderedDict(), self.params)

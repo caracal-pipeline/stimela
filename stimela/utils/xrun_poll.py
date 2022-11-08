@@ -13,13 +13,7 @@ from stimela.exceptions import StimelaCabRuntimeError, StimelaProcessRuntimeErro
 
 log = None
 
-def get_stimela_logger():
-    """Returns Stimela's logger, or None if no Stimela installed"""
-    try:
-        import stimela
-        return stimela.logger()
-    except ImportError:
-        return None
+from .xrun_asyncio import get_stimela_logger, dispatch_to_log
 
 def global_logger():
     """Returns Stimela logger if running in stimela, else inits a global logger"""
@@ -31,6 +25,29 @@ def global_logger():
             logging.basicConfig(format="%(message)s", level=logging.INFO, stream=sys.stdout)
             log = logging.getLogger()
     return log
+
+def xrun_nolog(command, name=None, shell=True):
+    log = global_logger()
+    name = name or command.split(" ", 1)[0]
+    try:
+        log.info("# running {}".format(command))
+        status = subprocess.call(command, shell=shell)
+
+    except KeyboardInterrupt:
+        log.error("# {} interrupted by Ctrl+C".format(name))
+        raise
+
+    except Exception as exc:
+        for line in traceback.format_exc():
+            log.error("# {}".format(line.strip()))
+        log.error("# {} raised exception: {}".format(name, str(exc)))
+        raise
+
+    if status:
+        raise StimelaProcessRuntimeError("{} returns error code {}".format(name, status))
+
+    return 0
+
 
 class SelectPoller(object):
     """Poller class. Poor man's select.poll(). Damn you OS/X and your select.poll will-you-won'y-you bollocks"""
@@ -114,50 +131,6 @@ class Poller(object):
     def __contains__(self, fobj):
         return fobj.fileno() in self.fdlabels
 
-
-def _remove_ctrls(msg):
-    ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
-    return ansi_escape.sub('', msg)
-
-
-def xrun_nolog(command, name=None, shell=True):
-    log = global_logger()
-    name = name or command.split(" ", 1)[0]
-    try:
-        log.info("# running {}".format(command))
-        status = subprocess.call(command, shell=shell)
-
-    except KeyboardInterrupt:
-        log.error("# {} interrupted by Ctrl+C".format(name))
-        raise
-
-    except Exception as exc:
-        for line in traceback.format_exc():
-            log.error("# {}".format(line.strip()))
-        log.error("# {} raised exception: {}".format(name, str(exc)))
-        raise
-
-    if status:
-        raise StimelaProcessRuntimeError("{} returns error code {}".format(name, status))
-
-    return 0
-
-
-def dispatch_to_log(log, line, command_name, stream_name, output_wrangler, custom_console_handler=None):
-    # dispatch output to log
-    line = _remove_ctrls(line)
-    extra = dict(stimela_subprocess_output=(command_name, stream_name))
-    # severity = logging.WARNING if fobj is proc.stderr else logging.INFO
-    severity = logging.INFO
-    if stream_name == 'stderr':
-        extra['color'] = 'WHITE'
-    if custom_console_handler is not None:
-        extra['custom_console_handler'] = custom_console_handler
-    # feed through wrangler to adjust severity and content
-    if output_wrangler is not None:
-        line, severity = output_wrangler(line, severity)
-    if line is not None:
-        log.log(severity, line, extra=extra)
 
 
 def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, output_wrangler=None, shell=True, return_errcode=False, command_name=None, log_command=True):

@@ -3,8 +3,8 @@ import os
 import signal
 import datetime
 import asyncio
-import rich
-import rich.highlighter
+import logging
+import re
 from rich.style import Style
 from rich.table import Column
 from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn
@@ -12,12 +12,40 @@ from rich.logging import RichHandler
 
 from stimela import stimelogging
 
-from .xrun_poll import get_stimela_logger, dispatch_to_log, xrun_nolog
 from stimela.exceptions import StimelaCabRuntimeError, StimelaProcessRuntimeError
 
 DEBUG = 0
 
 log = None
+
+def get_stimela_logger():
+    """Returns Stimela's logger, or None if no Stimela installed"""
+    try:
+        import stimela
+        return stimela.logger()
+    except ImportError:
+        return None
+
+def _remove_ctrls(msg):
+    ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
+    return ansi_escape.sub('', msg)
+
+
+def dispatch_to_log(log, line, command_name, stream_name, output_wrangler, custom_console_handler=None):
+    # dispatch output to log
+    # line = _remove_ctrls(line)
+    extra = dict(stimela_subprocess_output=(command_name, stream_name))
+    # severity = logging.WARNING if fobj is proc.stderr else logging.INFO
+    severity = logging.INFO
+    if stream_name == 'stderr':
+        extra['color'] = 'WHITE'
+    if custom_console_handler is not None:
+        extra['custom_console_handler'] = custom_console_handler
+    # feed through wrangler to adjust severity and content
+    if output_wrangler is not None:
+        line, severity = output_wrangler(line, severity)
+    if line is not None:
+        log.log(severity, line, extra=extra)
 
 
 
@@ -39,6 +67,7 @@ def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, o
     log = log or get_stimela_logger()
 
     if log is None:
+        from .xrun_poll import xrun_nolog
         return xrun_nolog(command, name=command_name, shell=shell)
 
     # this part is never inside the container

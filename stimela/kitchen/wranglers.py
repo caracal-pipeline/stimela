@@ -152,10 +152,12 @@ class DeclareError(_BaseWrangler):
     """
     specifier = "ERROR(?::(?P<message>.*))?"
     def apply(self, cabstat: CabStatus, output: str, match: re.Match):
-        err = StimelaCabRuntimeError(self.message or 
-            f"cab marked as failed based on encountering '{self.regex.pattern}' in output")
-        cabstat.declare_failure(err)
-        return f"[FAILURE] {output}", logging.ERROR
+        if self.message:
+            message = self.message.format(**match.groupdict())
+        else:
+            message = f"cab marked as failed based on encountering '{self.regex.pattern}' in output"
+        cabstat.declare_failure(StimelaCabRuntimeError(message))
+        return f":warning: [bold red]{output}[/bold red]", logging.ERROR
 
 class DeclareSuccess(_BaseWrangler):
     """
@@ -165,7 +167,7 @@ class DeclareSuccess(_BaseWrangler):
     specifier = "DECLARE_SUCCESS"
     def apply(self, cabstat: CabStatus, output: str, match: re.Match):
         cabstat.declare_success()
-        return f"[SUCCESS] {output}", None
+        return f":white_check_mark: [bold green]{output}[/bold green]", None
 
 class ParseOutput(_BaseWrangler):
     """

@@ -103,7 +103,7 @@ class PythonCallableFlavour(_CallableFlavour):
             try:
                 command = context.evaluate(cab.command, location=["command"])
             except Exception as exc:
-                raise SubstitutionError("error substituting Python callable name", exc)
+                raise SubstitutionError(f"error substituting Python callable '{cab.command}'", exc)
 
         if '.' in command:
             py_module, py_function = cab.command.rsplit('.', 1)

@@ -67,11 +67,13 @@ def lookup_flavour(kind):
     if _flavour_map is None:
         from .binary import BinaryFlavour
         from .python_flavours import PythonCallableFlavour, PythonCodeFlavour
+        from .casa import CasaTaskFlavour
 
         _flavour_map = {
             'binary': BinaryFlavour,
             'python': PythonCallableFlavour,
-            'python-code': PythonCodeFlavour
+            'python-code': PythonCodeFlavour,
+            'casa-task': CasaTaskFlavour
         }
 
         _flavour_schemas = {name: OmegaConf.structured(cls) for name, cls in _flavour_map.items()}
