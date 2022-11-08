@@ -48,6 +48,9 @@ class StimelaRuntimeError(StimelaBaseException):
 class StimelaCabRuntimeError(StimelaBaseException):
     pass
 
+class StimelaCabOutputError(StimelaBaseException):
+    pass
+
 class StimelaProcessRuntimeError(StimelaBaseException):
     pass
 

@@ -1,0 +1,132 @@
+opts:
+  log:
+    dir: test-logs/logs-{config.run.datetime} 
+    nest: 3
+    symlink: logs
+
+
+test_replace_suppress:
+  steps:
+    test_replace:
+      cab:
+        command: cat test_wranglers.txt
+        management:
+          wranglers:
+            "brown (fox|cow)": 
+              - REPLACE:Michael J. Fox
+              - SEVERITY:WARNING
+              - WARNING:Where we're going, we don't need roads!
+            "cheetah": SUPPRESS
+
+test_force_success:
+  steps:
+    test_success:
+      cab:
+        command: cat deliberately-missing-file
+        management:
+          wranglers:
+            "No such file": 
+              - DECLARE_SUCCESS
+              - WARNING:We have deliberately declared this cab a success.
+
+test_force_failure:
+  steps:
+    test_failure:
+      cab:
+        command: cat test_wranglers.txt
+        management:
+          wranglers:
+            fox: ERROR
+
+test_force_failure2:
+  steps:
+    test_failure:
+      cab:
+        command: cat test_wranglers.txt
+        management:
+          wranglers:
+            fox: 
+              - ERROR:Nobody expected the fox!
+
+test_parse:
+  steps:
+    test_parse:
+      cab:
+        command: cat test_wranglers.txt
+        management:
+          wranglers:
+            "brown (?P<eater>\\w+) eats the (?P<num_dogs>\\d+) lazy dogs": 
+              - PARSE_OUTPUT:eater:str
+              - PARSE_OUTPUT:num_dogs:json
+        outputs:
+          eater:
+            dtype: str
+          num_dogs:
+            dtype: int
+    report:
+      cab:
+        command: echo The bloody {current.who} ate {current.num} dogs!
+        policies:
+          skip: true
+        inputs:
+          who:
+            dtype: str
+          num:
+            dtype: int
+      params:
+        who: =previous.eater
+        num: =previous.num_dogs
+
+test_parse2:
+  steps:
+    test_parse:
+      cab:
+        command: cat test_wranglers.txt
+        management:
+          wranglers:
+            "JSON loader reads ({.*})": PARSE_JSON_OUTPUT_DICT 
+        outputs:
+          eater:
+            dtype: str
+          num_dogs:
+            dtype: int
+    report:
+      cab:
+        command: echo The bloody {current.who} ate {current.num} dogs!
+        policies:
+          skip: true
+        inputs:
+          who:
+            dtype: str
+          num:
+            dtype: int
+      params:
+        who: =previous.eater
+        num: =previous.num_dogs
+
+test_parse3:
+  steps:
+    test_parse:
+      cab:
+        command: cat test_wranglers.txt
+        management:
+          wranglers:
+            "JSON loader reads {\"eater\": (?P<eater>.*), \"num_dogs\": (?P<num_dogs>.*)}": PARSE_JSON_OUTPUTS
+        outputs:
+          eater:
+            dtype: str
+          num_dogs:
+            dtype: int
+    report:
+      cab:
+        command: echo The bloody {current.who} ate {current.num} dogs!
+        policies:
+          skip: true
+        inputs:
+          who:
+            dtype: str
+          num:
+            dtype: int
+      params:
+        who: =previous.eater
+        num: =previous.num_dogs

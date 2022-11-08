@@ -3,13 +3,14 @@ from typing import Any, List, Dict, Optional, Union
 from collections import OrderedDict
 from enum import Enum, IntEnum
 from dataclasses import dataclass
-from omegaconf import MISSING
+from omegaconf import MISSING, OmegaConf
 
 from scabha.cargo import Parameter, Cargo, ListOrString, ParameterPolicies, ParameterCategory
-from stimela.exceptions import CabValidationError
+from stimela.exceptions import CabValidationError, StimelaCabRuntimeError
 from scabha.exceptions import SchemaError
 from scabha.basetypes import EmptyDictDefault, EmptyListDefault
 import stimela
+from . import wranglers
 
 ParameterPassingMechanism = Enum("ParameterPassingMechanism", "args yaml", module=__name__)
 
@@ -62,15 +63,6 @@ class Cab(Cargo):
     backend: Optional['stimela.config.Backend']
     runtime: Dict[str, Any] = EmptyDictDefault()
 
-    # copy names of logging levels into wrangler actions
-    wrangler_actions =  {attr: value for attr, value in logging.__dict__.items() if attr.upper() == attr and type(value) is int}
-
-    # then add litetal constants for other wrangler actions
-    ACTION_SUPPRESS = wrangler_actions["SUPPRESS"] = "SUPPRESS"
-    ACTION_DECLARE_SUCCESS = wrangler_actions["DECLARE_SUCCESS"] = "DECLARE_SUPPRESS"
-    ACTION_DECLARE_FAILURE = wrangler_actions["DECLARE_FAILURE"] = "DECLARE_FAILURE"
-
-
     _path: Optional[str] = None   # path to image definition yaml file, if any
 
     def __post_init__ (self):
@@ -92,34 +84,18 @@ class Cab(Cargo):
                 self.flavour = "binary" 
             else:
                 self.flavour = self.flavour.lower()
-            if self.flavour == "python" or self.flavour == "python-ext":
+            if self.flavour == "python":
                 if '.' in self.command:
                     self.py_module, self.py_function = self.command.rsplit('.', 1)
                 else:
                     raise CabValidationError("cab {self.name}: 'python' flavour requires a command of the form module.function")
-            elif self.flavour != "binary":
+            elif self.flavour not in ("binary", "python-code"):
                 raise CabValidationError("cab {self.name}: unknown cab flavour '{self.flavour}'")
 
         # setup wranglers
         self._wranglers = []
-        for match, actions in self.management.wranglers.items():
-            replace = None
-            if type(actions) is str:
-                actions = [actions]
-            if type(actions) is not list:
-                raise CabValidationError(f"wrangler entry {match}: expected action or list of actions")
-            for action in actions:
-                if action.startswith("replace:"):
-                    replace = action.split(":", 1)[1]
-                elif action not in self.wrangler_actions:
-                    raise CabValidationError(f"wrangler entry {match}: unknown action '{action}'")
-            actions = [self.wrangler_actions[act] for act in actions if act in self.wrangler_actions]
-            try:
-                rexp = re.compile(match)
-            except Exception as exc:
-                raise CabValidationError(f"wrangler entry {match} is not a valid regular expression")
-            self._wranglers.append((re.compile(match), replace, actions))
-        self._runtime_status = None
+        for pattern, actions in self.management.wranglers.items():
+            self._wranglers.append(wranglers.create_list(pattern, actions))
 
 
     def summary(self, params=None, recursive=True, ignore_missing=False):
@@ -340,34 +316,75 @@ class Cab(Cargo):
 
         return pos_args[0] + args + pos_args[1]
 
+    def reset_status(self):
+        return Cab.RuntimeStatus(self)
 
-    @property
-    def runtime_status(self):
-        return self._runtime_status
+    class RuntimeStatus(object):
+        """Represents the runtime status of a cab"""
 
-    def reset_runtime_status(self):
-        self._runtime_status = None
+        def __init__(self, cab: "Cab"):
+            self.cab = cab
+            self._success = None
+            self._errors = []
+            self._warnings = []
+            self._outputs = OrderedDict()
 
-    def apply_output_wranglers(self, output, severity):
-        suppress = False
-        modified_output = output
-        for regex, replace, actions in self._wranglers:
-            if regex.search(output):
-                if replace is not None:
-                    modified_output = regex.sub(replace, output)
-                for action in actions:
-                    if type(action) is int:
-                        severity = action
-                    elif action is self.ACTION_SUPPRESS:
-                        suppress = True
-                    elif action is self.ACTION_DECLARE_FAILURE and self._runtime_status is None:
-                        self._runtime_status  = False
-                        modified_output = "[FAILURE] " + modified_output
-                        severity = logging.ERROR
-                    elif action is self.ACTION_DECLARE_SUCCESS and self._runtime_status is None:
-                        self._runtime_status = True
-                        modified_output = "[SUCCESS] " + modified_output
-        return (None, 0) if suppress else (modified_output, severity)
+        @property
+        def success(self):
+            return self._success
 
+        @property
+        def errors(self):
+            return self._errors
 
+        @property
+        def warnings(self):
+            return self._warnings
 
+        @property
+        def outputs(self):
+            return self._outputs
+
+        def declare_success(self):
+            if self._success is None:
+                self._success = True
+
+        def declare_failure(self, error: Optional[Union[str, Exception]] = None):
+            self._success = False
+            if error is not None:
+                if type(error) is str:
+                    error = StimelaCabRuntimeError(error)
+                self._errors.append(error)
+
+        def declare_warning(self, message: str):
+            self._warnings.append(message)
+
+        def declare_outputs(self, outputs: Dict):
+            self._outputs.update(**outputs)
+
+        def apply_wranglers(self, output, severity):
+            suppress = False
+            for regex, wranglers in self.cab._wranglers:
+                match = regex.search(output) 
+                if match:
+                    for wrangler in wranglers:
+                        mod_output, mod_severity = wrangler.apply(self, output, match)
+                        # has wrangler asked to suppress the output?
+                        if mod_output is None:
+                            suppress = True
+                        else:
+                            output = mod_output
+                        # has wrangler modified the severity?
+                        if mod_severity is not None:
+                            severity = max(severity, mod_severity)
+
+            return (None, 0) if suppress else (output, severity)
+
+CabSchema = None
+
+def get_cab_schema():
+    global CabSchema
+    if CabSchema is None:
+        import stimela.config
+        CabSchema = OmegaConf.structured(Cab)
+    return CabSchema
