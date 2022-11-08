@@ -1,0 +1,115 @@
+opts:
+  log:
+    dir: test-logs/logs-{config.run.datetime} 
+    nest: 3
+    symlink: logs
+
+cabs:
+  test_callable:
+    command: stimela_tests.test_callables.callable_function
+    flavour: 
+      kind: python
+    inputs:
+      a:
+        dtype: int
+      b:
+        dtype: str
+
+  test_callable2:
+    command: stimela_tests.test_callables.callable_function
+    flavour: 
+      kind: python
+      output: x
+    inputs:
+      a:
+        dtype: int
+      b:
+        dtype: str
+    outputs:
+      x:
+        dtype: int
+
+  test_callable3:
+    command: stimela_tests.test_callables.callable_function_dict
+    flavour: 
+      kind: python
+      output_dict: true
+    inputs:
+      a:
+        dtype: int
+      b:
+        dtype: str
+    outputs:
+      x:
+        dtype: int
+      y: 
+        dtype: str
+
+  test_callable4:
+    command: |
+      from scabha.cab_utils import yield_output
+      print("a is {current.a} and b is {current.b}")
+      yield_output(x={current.a}-2)
+      yield_output(y=str({current.a}) + str("{current.b}"))
+    flavour: 
+      kind: python-code
+      subst: true
+      output_vars: false
+    inputs:
+      a:
+        dtype: int
+      b:
+        dtype: str
+    outputs:
+      x:
+        dtype: int
+      y: 
+        dtype: str
+
+  test_callable5:
+    command: |
+      print("a is {a} and b is {b}")
+      x = a - 2
+      y = str(a) + b 
+    flavour: 
+      kind: python-code
+      input_vars: true
+      output_vars: true
+    inputs:
+      a:
+        dtype: int
+      b:
+        dtype: str
+    outputs:
+      x:
+        dtype: int
+      y: 
+        dtype: str
+
+test_callables:
+  steps:
+    s1: 
+      cab: test_callable
+      params:
+        a: 1
+        b: "foo"
+    s2:
+      cab: test_callable2
+      params:
+        a: 1
+        b: "foo"
+    s3:
+      cab: test_callable3
+      params:
+        a: =previous.x+1
+        b: "bar"
+    s4:
+      cab: test_callable4
+      params:
+        a: =previous.x
+        b: =previous.y
+    s5:
+      cab: test_callable5
+      params:
+        a: =previous.x
+        b: =previous.y

@@ -1,39 +1,5 @@
 import os, re, subprocess, pytest
-
-
-# Change into directory where the test script lives
-# As suggested by https://stackoverflow.com/questions/62044541/change-pytest-working-directory-to-test-case-directory
-@pytest.fixture(autouse=True)
-def change_test_dir(request, monkeypatch):
-    monkeypatch.chdir(request.fspath.dirname)
-
-
-def callable_function(a: int, b: str):
-    print(f"callable_function({a},'{b}')")
-
-
-def run(command):
-    """Runs command, returns tuple of exit code, output"""
-    print(f"running: {command}")
-    try:
-        return 0, subprocess.check_output(command, shell=True).strip().decode()
-    except subprocess.CalledProcessError as exc:
-        return exc.returncode, exc.output.strip().decode()
-
-
-def verify_output(output, *regexes):
-    """Returns true if the output contains lines matching the regexes in sequence (possibly with other lines in between)"""
-    regexes = list(regexes[::-1])
-    for line in output.split("\n"):
-        if regexes and re.search(regexes[-1], line):
-            regexes.pop()
-    if regexes:
-        print("Error, the following regexes did not match the output:")
-        for regex in regexes:
-            print(f"  {regex}")
-        return False
-    return True
-
+from .test_recipe import change_test_dir, run, verify_output
 
 def test_wrangler_replace_suppress():
     print("===== expecting no errors =====")

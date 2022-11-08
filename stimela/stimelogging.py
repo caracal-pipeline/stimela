@@ -156,7 +156,7 @@ def logger(name="STIMELA", propagate=False, console=True, boring=False,
             else:  
                 log_console_handler = rich.logging.RichHandler(console=progress_console,
                                     highlighter=rich.highlighter.NullHighlighter(),
-                                    show_level=False, show_path=False, show_time=False)
+                                    show_level=False, show_path=False, show_time=False, keywords=[])
 
             log_console_handler.setFormatter(log_formatter)
             log_console_handler.setLevel(loglevel)

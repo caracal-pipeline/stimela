@@ -9,6 +9,7 @@ from scabha.cargo import Parameter, Cargo, ListOrString, ParameterPolicies, Para
 from stimela.exceptions import CabValidationError, StimelaCabRuntimeError
 from scabha.exceptions import SchemaError
 from scabha.basetypes import EmptyDictDefault, EmptyListDefault
+from stimela.backends import flavours
 import stimela
 from . import wranglers
 
@@ -45,10 +46,9 @@ class Cab(Cargo):
     # if set, activates this virtual environment first before running the command (not much sense doing this inside the container)
     virtual_env: Optional[str] = None
 
-    # cab flavour. Default will run the command as a binary (inside image or virtual_env). "python" will treat the command
-    # as a Python package.module.function specification. 
-    #   Future examples would be e.g. "casa" to treat it as a CASA task 
-    flavour: Optional[str] = None  
+    # cab flavour. Default will run the command as a binary (inside image or virtual_env). Otherwise specify
+    # a string flavour, or a mapping to specify options (see backends.flavours)
+    flavour: Optional[Any] = None
 
     # controls how params are passed. args: via command line argument, yml: via a single yml string
     parameter_passing: ParameterPassingMechanism = ParameterPassingMechanism.args
@@ -58,6 +58,11 @@ class Cab(Cargo):
 
     # default parameter conversion policies
     policies: ParameterPolicies = ParameterPolicies()
+
+    # For callable-type cabs, determines how the return value is treated.
+    # None to ignore, "{}" to treat it as a dict of outputs, else an output name to 
+    # treat it as a single output
+    return_outputs: Optional[str] = "{}" 
 
     # runtime settings
     backend: Optional['stimela.config.Backend']
@@ -72,30 +77,14 @@ class Cab(Cargo):
         for param in self.inputs.keys():
             if param in self.outputs:
                 raise CabValidationError(f"cab {self.name}: parameter '{param}' appears in both inputs and outputs")
-        # check flavours
-        match_old_python = re.match("^\((.+)\)(.+)$", self.command)
-        if match_old_python:
-            if self.flavour is not None and self.flavour.lower() != "python":
-                raise CabValidationError("cab {self.name}: '(module)function' implies python flavour, but '{self.flavour}' is specified")
-            self.flavour = "python"
-            self.py_module, self.py_function = match_old_python.groups()
-        else:
-            if self.flavour is None:
-                self.flavour = "binary" 
-            else:
-                self.flavour = self.flavour.lower()
-            if self.flavour == "python":
-                if '.' in self.command:
-                    self.py_module, self.py_function = self.command.rsplit('.', 1)
-                else:
-                    raise CabValidationError("cab {self.name}: 'python' flavour requires a command of the form module.function")
-            elif self.flavour not in ("binary", "python-code"):
-                raise CabValidationError("cab {self.name}: unknown cab flavour '{self.flavour}'")
 
         # setup wranglers
         self._wranglers = []
         for pattern, actions in self.management.wranglers.items():
             self._wranglers.append(wranglers.create_list(pattern, actions))
+
+        # check flavours
+        self.flavour = flavours.init_cab_flavour(self)
 
 
     def summary(self, params=None, recursive=True, ignore_missing=False):
@@ -260,6 +249,8 @@ class Cab(Cargo):
         for name, schema in self.inputs_outputs.items():
             if schema.required and name not in value_dict:
                 raise CabValidationError(f"required parameter '{name}' is missing", log=self.log)
+            if schema.is_output and not schema.is_named_output:
+                continue
             if name in value_dict:
                 positional_first = get_policy(schema, 'positional_head') 
                 positional = get_policy(schema, 'positional') or positional_first
@@ -281,6 +272,8 @@ class Cab(Cargo):
             if name not in self.inputs_outputs:
                 raise RuntimeError(f"unknown parameter '{name}'")
             schema = self.inputs_outputs[name]
+            if schema.is_output and not schema.is_named_output:
+                continue
 
             # default behaviour for unset skip_implicits is True
             skip_implicits = get_policy(schema, 'skip_implicits', True)
@@ -316,14 +309,15 @@ class Cab(Cargo):
 
         return pos_args[0] + args + pos_args[1]
 
-    def reset_status(self):
-        return Cab.RuntimeStatus(self)
+    def reset_status(self, extra_wranglers: List = []):
+        return Cab.RuntimeStatus(self, extra_wranglers=extra_wranglers)
 
     class RuntimeStatus(object):
         """Represents the runtime status of a cab"""
 
-        def __init__(self, cab: "Cab"):
+        def __init__(self, cab: "Cab", extra_wranglers: List = []):
             self.cab = cab
+            self.wranglers = list(cab._wranglers) + list(extra_wranglers)
             self._success = None
             self._errors = []
             self._warnings = []
@@ -364,7 +358,7 @@ class Cab(Cargo):
 
         def apply_wranglers(self, output, severity):
             suppress = False
-            for regex, wranglers in self.cab._wranglers:
+            for regex, wranglers in self.wranglers:
                 match = regex.search(output) 
                 if match:
                     for wrangler in wranglers:

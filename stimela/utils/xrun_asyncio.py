@@ -22,7 +22,8 @@ log = None
 
 
 def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, output_wrangler=None, shell=True, 
-            return_errcode=False, command_name=None, progress_bar=False, log_command=True):
+            return_errcode=False, command_name=None, progress_bar=False, 
+            log_command=True, log_result=True):
     
     command_name = command_name or command
 
@@ -46,7 +47,11 @@ def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, o
     log = log or stimela.logger()
 
     if log_command:
-        log.info("running " + command_line, extra=dict(stimela_subprocess_output=(command_name, "start")))
+        if log_command is True:
+            log.info(f"running {command_line}", extra=dict(stimela_subprocess_output=(command_name, "start")))
+        else:
+            log.info(f"running {log_command}", extra=dict(stimela_subprocess_output=(command_name, "start")))
+            log.debug(f"full command line is {command_line}")
 
     with stimelogging.declare_subcommand(os.path.basename(command_name)):
 
@@ -85,7 +90,8 @@ def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, o
             )
             results = loop.run_until_complete(job)
             status = proc.returncode
-            log.info(f"{command_name} exited with code {status} after {elapsed()}")
+            if log_result:
+                log.info(f"{command_name} exited with code {status} after {elapsed()}")
         except SystemExit as exc:
             loop.run_until_complete(proc.wait())
         except KeyboardInterrupt:

@@ -364,6 +364,7 @@ class Evaluator(object):
         return self._resolve(value)
 
     def _evaluate_result(self, parse_result, allow_unset=False):
+        allow_unset = allow_unset or self.allow_unresolved
         # if result is a handler, use evaluate
         if isinstance(parse_result, ResultsHandler):
             value = parse_result.evaluate(self)
@@ -428,7 +429,7 @@ class Evaluator(object):
                 retry = True
                 while retry:
                     retry = False
-                    if verbose:
+                    if verbose: # or type(value) is UNSET:
                         print(f"{name}: {value} ...")
                     try:
                         new_value = self.evaluate(value, sublocation=[name])
