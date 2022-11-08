@@ -10,9 +10,8 @@ from omegaconf import OmegaConf
 import psutil
 import rich.progress
 import rich.logging
-from rich.tree import Tree
 from rich.table import Table
-
+from rich.text import Text
 
 progress_bar = progress_task = None
 
@@ -24,8 +23,8 @@ _prev_disk_io = None, None
 
 
 def init_progress_bar():
-    global progress_bar, progress_task
-    console = rich.console.Console(file=sys.stdout, highlight=False)
+    global progress_console, progress_bar, progress_task
+    progress_console = rich.console.Console(file=sys.stdout, highlight=False)
     progress_bar = rich.progress.Progress(
         rich.progress.SpinnerColumn(),
         "[yellow]{task.fields[elapsed_time]}[/yellow]",
@@ -35,13 +34,13 @@ def init_progress_bar():
         rich.progress.TimeElapsedColumn(),
         "{task.fields[cpu_info]}",
         refresh_per_second=2,
-        console=console,
+        console=progress_console,
         transient=True)
 
     progress_task = progress_bar.add_task("stimela", command="starting", cpu_info=" ", elapsed_time="", start=True)
     progress_bar.__enter__()
     atexit.register(destroy_progress_bar)
-    return progress_bar, console
+    return progress_bar, progress_console
 
 def destroy_progress_bar():
     global progress_bar
@@ -224,14 +223,13 @@ _printed_stats = dict(
 # these stats are written as sums
 _sum_stats = ("read_count", "read_gb", "read_ms", "write_count", "write_gb", "write_ms")
 
-def print_profiling_stats():
-    stats = collect_stats()
+def render_profiling_summary(stats):
 
-    table_avg = Table(title="Brief profiling stats (averages + total R/W)")
+    table_avg = Table(title=Text("\naverages & total I/O", style="bold"))
     table_avg.add_column("")
     table_avg.add_column("time hms", justify="right")
 
-    table_peak = Table(title="Brief profiling stats (peaks)")
+    table_peak = Table(title=Text("\npeaks", style="bold"))
     table_peak.add_column("")
     table_peak.add_column("time hms", justify="right")
     
@@ -257,17 +255,36 @@ def print_profiling_stats():
             table_avg.add_row(*avg_row)
             table_peak.add_row(*peak_row)
 
+    progress_console.rule("profiling results")
     destroy_progress_bar()
-    rich.print(table_avg) 
-    rich.print(table_peak)  
+    from rich.columns import Columns
+    # progress_console.print(table_avg, justify="center") 
+    # progress_console.print(table_peak, justify="center")  
+    # progress_console.print(Columns((table_avg, table_peak)), justify="center") 
 
-def save_profiling_stats(log):
+    with progress_console.capture() as capture:
+        progress_console.print(Columns((table_avg, table_peak)), justify="center") 
+
+    text = capture.get()
+
+    return text
+
+    
+# from rich.console import Console
+# console = Console()
+# with console.capture() as capture:
+#     console.print("[bold red]Hello[/] World")
+# str_output = capture.get()
+
+def save_profiling_stats(log, print_stats=True):
     from . import stimelogging
     
-    filename = os.path.join(stimelogging.get_logger_file(log) or '.', "stimela.stats")
-    log.info(f"saving full profiling stats to {filename}")
-    
     stats = collect_stats()
+    summary = render_profiling_summary(stats)
+    if print_stats:
+        print(summary)
+
+    filename = os.path.join(stimelogging.get_logger_file(log) or '.', "stimela.stats.full")
 
     stats_dict = OmegaConf.create()
 
@@ -283,3 +300,9 @@ def save_profiling_stats(log):
 
     OmegaConf.save(stats_dict, filename)
 
+    log.info(f"saved full profiling stats to {filename}")
+
+    filename = os.path.join(stimelogging.get_logger_file(log) or '.', "stimela.stats.summary.txt")
+    open(filename, "wt").write(summary)
+
+    log.info(f"saved summary to {filename}")

@@ -1,5 +1,6 @@
 import re
 import os.path
+import json
 from typing import Optional, Any, Union, Dict
 from dataclasses import dataclass
 
@@ -69,9 +70,13 @@ class CasaTaskFlavour(_CallableFlavour):
                 casa_opts = stimela.CONFIG.opts.runtime.get('casa_opts', "--log2term --nologger --nologfile")
 
         self.command_name = command
-        func_call = form_python_function_call(command, cab, params)
+        # convert inputs into a JSON string
+        pass_params = cab.filter_input_params(params)
+        params_string = json.dumps(pass_params)
 
-        args =  [casa] + casa_opts.strip().split() + ["-c", func_call]
+        code = f"""import sys, json; {command}(**json.loads(sys.argv[-1]));"""
+
+        args =  [casa] + casa_opts.strip().split() + ["-c", code, params_string]
         return args
 
 

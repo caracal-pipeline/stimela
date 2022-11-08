@@ -3,6 +3,7 @@ import  os.path
 import  re
 import logging
 import traceback
+import copy
 from types import TracebackType
 from typing import Optional, OrderedDict, Union
 from omegaconf import DictConfig
@@ -13,11 +14,29 @@ import rich.logging
 from rich.tree import Tree
 from rich import print as rich_print
 from rich.markup import escape
+from rich.padding import Padding
 
 from . import task_stats
 from .task_stats import declare_subtask, declare_subtask_attributes, \
                         declare_subcommand, update_process_status, \
                         run_process_status_update
+
+class FunkyMessage(object):
+    """Class representing a message with two versions: funky (with markup), and boring (no markup)"""
+    def __init__(self, funky, boring=None, prefix=None):
+        self.funky = funky
+        self.boring = boring if boring is not None else funky
+        self.prefix = prefix
+    def __str__(self):
+        return self.funky
+    def __add__(self, other):
+        if isinstance(other, FunkyMessage):
+            return FunkyMessage(f"{self}{other}", f"{self.boring}{other.boring}")
+        else:
+            return FunkyMessage(f"{self}{other}", f"{self.boring}{other}")
+
+def defunkify(arg: Union[str, FunkyMessage]):
+    return arg.boring if isinstance(arg, FunkyMessage) else arg
 
 class MultiplexingHandler(logging.Handler):
     """handler to send INFO and below to stdout, everything above to stderr"""
@@ -55,68 +74,57 @@ class MultiplexingHandler(logging.Handler):
         self.err_handler.setFormatter(fmt)
         self.info_handler.setFormatter(fmt)
 
-class ConsoleColors():
-    WARNING = '\033[93m' if sys.stdin.isatty() else ''
-    ERROR   = '\033[91m' if sys.stdin.isatty() else ''
-    BOLD    = '\033[1m'  if sys.stdin.isatty() else ''
-    DIM     = '\033[2m'  if sys.stdin.isatty() else ''
-    GREEN   = '\033[92m' if sys.stdin.isatty() else ''
-    YELLOW  = '\033[93m' if sys.stdin.isatty() else ''
-    BLUE    = '\033[94m' if sys.stdin.isatty() else ''
-    WHITE   = '\033[39m' if sys.stdin.isatty() else ''
-    ENDC    = '\033[0m'  if sys.stdin.isatty() else ''
-
-    BEGIN = "<COLORIZE>"
-    END   = "</COLORIZE>"
-
-    @staticmethod
-    def colorize(msg, *styles):
-        style = "".join(styles)
-        return msg.replace(ConsoleColors.BEGIN, style).replace(ConsoleColors.END, ConsoleColors.ENDC if style else "")
-
-class ColorizingFormatter(logging.Formatter):
-    """This Formatter inserts color codes into the string according to severity"""
-    def __init__(self, fmt=None, datefmt=None, style="%", default_color=None):
-        super(ColorizingFormatter, self).__init__(fmt, datefmt, style)
-        self._default_color = default_color or ""
-
-    def format(self, record):
-        style = ConsoleColors.BOLD if hasattr(record, 'boldface') else ""
-        # print(f"{record} {dir(record)}")
-        if hasattr(record, 'color'):
-            style += getattr(ConsoleColors, record.color or "None", "")
-        elif record.levelno >= logging.ERROR:
-            style += ConsoleColors.ERROR
-        elif record.levelno >= logging.WARNING:
-            style += ConsoleColors.WARNING
-        return ConsoleColors.colorize(super(ColorizingFormatter, self).format(record), style or self._default_color)
-
-
-class SelectiveFormatter(logging.Formatter):
-    """Selective formatter. if condition(record) is True, invokes other formatter"""
+class StimelaLogFormatter(logging.Formatter):
+    DEBUG_STYLE   = "dim", ""
+    WARNING_STYLE = "", "yellow"
+    ERROR_STYLE   = "bold", "red"
+    CRITICAL_STYLE  = "bold", "red"
 
     _ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
 
-    def __init__(self, default_formatter, dispatch_list, strip_ansi=False):
-        logging.Formatter.__init__(self)
-        self._strip_ansi = False
-        self._dispatch_list = dispatch_list
-        self._default_formatter = default_formatter
-        self._strip_ansi = strip_ansi
+    def __init__(self, boring=False):
+        datefmt = "%Y-%m-%d %H:%M:%S"
+        if not boring:
+            super().__init__("{asctime} {name} [{style}]{levelname}: {message}[/{style}]", datefmt, style="{")
+            self._prefix_fmt = logging.Formatter("[{style}]{prefix} {message}[/{style}]", style="{")
+        else:
+            super().__init__("{asctime} {name} {levelname}: {message}", datefmt, style="{")
+            self._prefix_fmt = logging.Formatter("{prefix} {message}", style="{")
+        self.boring = boring
 
     def format(self, record):
-        for condition, formatter in self._dispatch_list:
-            if condition(record):
-                line = formatter.format(record)
-                break
+        # apply styling
+        record = copy.copy(record)
+        if not hasattr(record, 'style'):
+            if record.levelno <= logging.DEBUG:
+                font, color = self.DEBUG_STYLE
+            elif record.levelno >= logging.CRITICAL:
+                font, color = self.SEVERE_STYLE
+            elif record.levelno >= logging.ERROR:
+                font, color = self.ERROR_STYLE
+            elif record.levelno >= logging.WARNING:
+                font, color = self.WARNING_STYLE
+            else:
+                font = color = ""
+            if getattr(record, 'color', None):
+                color = record.color.lower()
+            if hasattr(record, 'bold') or hasattr(record, 'boldface'):
+                if "bold" not in font:
+                    font = f"bold {font}"
+            setattr(record, 'style', f"{font} {color}".strip() or "normal")
+        # in boring mode, make funky messages boring, and strip ANSI codes
+        if self.boring:
+            record.msg = self._ansi_escape.sub('', defunkify(record.msg))
+        # select format based on whether we have prefix or not
+        if hasattr(record, 'prefix'):
+            if self.boring:
+                record.prefix = defunkify(record.prefix)
+            return self._prefix_fmt.format(record)
         else:
-            line = self._default_formatter.format(record)
-        if self._strip_ansi:
-            line = self._ansi_escape.sub('', line)
-        return line
+            return super().format(record)
 
 _logger = None
-log_console_handler = log_formatter = log_boring_formatter = log_colourful_formatter = None
+log_console_handler = log_formatter = log_file_formatter = log_boring_formatter = log_colourful_formatter = None
 
 LOG_DIR = '.'
 
@@ -124,12 +132,11 @@ def is_logger_initialized():
     return _logger is not None
 
 
-def logger(name="STIMELA", propagate=False, console=True, boring=False,
-           fmt="{asctime} {name} {levelname}: {message}",
-           col_fmt="{asctime} {name} %s{levelname}: {message}%s"%(ConsoleColors.BEGIN, ConsoleColors.END),
-           sub_fmt="# {message}",
-           col_sub_fmt="%s# {message}%s"%(ConsoleColors.BEGIN, ConsoleColors.END),
-           datefmt="%Y-%m-%d %H:%M:%S", loglevel="INFO"):
+def declare_chapter(title: str, **kw):
+    progress_console.rule(title, **kw)
+
+
+def logger(name="STIMELA", propagate=False, boring=False, loglevel="INFO"):
     """Returns the global Stimela logger (initializing if not already done so, with the given values)"""
     global _logger
     if _logger is None:
@@ -139,38 +146,25 @@ def logger(name="STIMELA", propagate=False, console=True, boring=False,
         _logger.setLevel(loglevel)
         _logger.propagate = propagate
 
-        global log_console_handler, log_formatter, log_boring_formatter, log_colourful_formatter
+        global log_console_handler, log_formatter, log_file_formatter, log_boring_formatter, log_colourful_formatter
+        global progress_console, progress_bar
 
-        # this function checks if the log record corresponds to stdout/stderr output from a cab
-        def _is_from_subprocess(rec):
-            return hasattr(rec, 'stimela_subprocess_output')
-
-        log_boring_formatter = SelectiveFormatter(
-                    logging.Formatter(fmt, datefmt, style="{"),
-                    [(_is_from_subprocess, logging.Formatter(sub_fmt, datefmt, style="{"))],
-                    strip_ansi=True)
-
-        log_colourful_formatter = SelectiveFormatter(
-                    ColorizingFormatter(col_fmt, datefmt, style="{"),
-                    [(_is_from_subprocess, ColorizingFormatter(fmt=col_sub_fmt, datefmt=datefmt, style="{",
-                                                               default_color=ConsoleColors.DIM))])
+        log_boring_formatter = StimelaLogFormatter(boring=True)
+        log_colourful_formatter = StimelaLogFormatter(boring=False)
 
         log_formatter = log_boring_formatter if boring else log_colourful_formatter
 
-        if console:
-            progress_bar, progress_console = task_stats.init_progress_bar()
+        progress_bar, progress_console = task_stats.init_progress_bar()
 
-            if "SILENT_STDERR" in os.environ and os.environ["SILENT_STDERR"].upper()=="ON":
-                log_console_handler = logging.StreamHandler(stream=sys.stdout)
-            else:  
-                log_console_handler = rich.logging.RichHandler(console=progress_console,
-                                    highlighter=rich.highlighter.NullHighlighter(), markup=True,
-                                    show_level=False, show_path=False, show_time=False, keywords=[])
+        log_console_handler = rich.logging.RichHandler(console=progress_console,
+                            highlighter=rich.highlighter.NullHighlighter(), markup=True,
+                            show_level=False, show_path=False, show_time=False, keywords=[])
 
-            log_console_handler.setFormatter(log_formatter)
-            log_console_handler.setLevel(loglevel)
-            _logger.addHandler(log_console_handler)
-            _logger_console_handlers[_logger.name] = log_console_handler
+        log_console_handler.setFormatter(log_formatter)
+        log_console_handler.setLevel(loglevel)
+
+        _logger.addHandler(log_console_handler)
+        _logger_console_handlers[_logger.name] = log_console_handler
 
         import scabha
         scabha.set_logger(_logger)
@@ -349,17 +343,20 @@ def log_exception(*errors, severity="error", log=None):
             else:
                 tree.add(str(exc))
 
+    has_nesting = False
+
     for exc in errors:
         if isinstance(exc, ScabhaBaseException):
             messages.append(exc.message)
             if not exc.logged:
                 do_log = exc.logged = True
-            tree = Tree(f"[{colour}]{exc_message(exc)}[/{colour}]", guide_style="dim")
+            tree = Tree(f"[{colour}]:warning: {exc_message(exc)}[/{colour}]", guide_style="dim")
             trees.append(tree)
             if exc.nested:
                 add_nested(exc.nested, tree)
+                has_nesting = True
         else:
-            tree = Tree(f"[{colour}]{exc_message(exc)}[/{colour}]", guide_style="dim")
+            tree = Tree(f"[{colour}]:warning: {exc_message(exc)}[/{colour}]", guide_style="dim")
             trees.append(tree)
             do_log = True
             messages.append(str(exc))
@@ -369,7 +366,9 @@ def log_exception(*errors, severity="error", log=None):
 
     printfunc = task_stats.progress_bar.console.print if task_stats.progress_bar is not None else rich_print
 
-    for tree in trees:
-        printfunc(tree)
+    if has_nesting:
+        declare_chapter("detailed error report follows", style="red")
+        for tree in trees:
+            printfunc(Padding(tree, pad=(0,0,0,8)))
 
 

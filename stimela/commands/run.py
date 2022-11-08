@@ -210,6 +210,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: b
         recipe.protect_from_assignments(dotlist.keys())
         recipe.protect_from_assignments(params.keys())
 
+        stimelogging.declare_chapter("prevalidation")
         log.info("pre-validating the recipe")
         outer_step = Step(recipe=recipe, name=f"{recipe_name}", info=what, params=params)
         try:
@@ -331,9 +332,8 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: b
                 tb=not isinstance(exc, ScabhaBaseException)))
         for line in traceback.format_exc().split("\n"):
             log.debug(line)
-        task_stats.save_profiling_stats(outer_step.log)
-        if profile or stimela.CONFIG.opts.print_profile:
-            task_stats.print_profiling_stats()
+        task_stats.save_profiling_stats(outer_step.log,
+            print_stats=profile or stimela.CONFIG.opts.print_profile)
         sys.exit(1)
 
     if outputs and outer_step.log.isEnabledFor(logging.DEBUG):
@@ -344,8 +344,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: b
     else:
         outer_step.log.info(f"run successful after {elapsed()}")
 
-    task_stats.save_profiling_stats(outer_step.log)
-    if profile or stimela.CONFIG.opts.print_profile:
-        task_stats.print_profiling_stats()
+    task_stats.save_profiling_stats(outer_step.log, 
+        print_stats=profile or stimela.CONFIG.opts.print_profile)
 
     return 0

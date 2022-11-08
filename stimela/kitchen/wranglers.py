@@ -5,6 +5,7 @@ from omegaconf import ListConfig
 from scabha.cargo import ListOrString
 from stimela.exceptions import CabValidationError, StimelaCabOutputError, \
                     StimelaCabRuntimeError
+from stimela.stimelogging import FunkyMessage
 
 # wranglers specified as a single string, or a list
 WranglerSpecList = ListOrString
@@ -157,7 +158,7 @@ class DeclareError(_BaseWrangler):
         else:
             message = f"cab marked as failed based on encountering '{self.regex.pattern}' in output"
         cabstat.declare_failure(StimelaCabRuntimeError(message))
-        return f":warning: [bold red]{output}[/bold red]", logging.ERROR
+        return FunkyMessage(f"[bold red]{output}[/bold red]", output), logging.ERROR
 
 class DeclareSuccess(_BaseWrangler):
     """
@@ -167,7 +168,8 @@ class DeclareSuccess(_BaseWrangler):
     specifier = "DECLARE_SUCCESS"
     def apply(self, cabstat: CabStatus, output: str, match: re.Match):
         cabstat.declare_success()
-        return f":white_check_mark: [bold green]{output}[/bold green]", None
+        return FunkyMessage(f"[bold green]{output}[/bold green]", output, 
+            prefix=FunkyMessage(":white_check_mark:","+")), None
 
 class ParseOutput(_BaseWrangler):
     """

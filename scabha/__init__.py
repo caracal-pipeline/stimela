@@ -2,13 +2,12 @@ import os
 import logging
 import subprocess
 
-from .logging_utils import ConsoleColors, ColorizingFormatter, MultiplexingHandler
+from .logging_utils import MultiplexingHandler
 from .  import exceptions
 
 
 def init_logger(name="SCABHA",
            fmt="{asctime}: {message}",
-           col_fmt="{asctime}: %s{message}%s"%(ConsoleColors.BEGIN, ConsoleColors.END),
            datefmt="%Y-%m-%d %H:%M:%S", loglevel="INFO"):
     """Returns the global Stimela logger (initializing if not already done so, with the given values)"""
     global log
@@ -19,17 +18,9 @@ def init_logger(name="SCABHA",
         level = os.environ.get('SCABHA_LOG_LEVEL') or 'INFO'
         log.setLevel(getattr(logging, level, logging.INFO))
 
-        global log_console_handler, log_formatter, log_boring_formatter, log_colourful_formatter
+        global log_console_handler, log_formatter
 
-        # this function checks if the log record corresponds to stdout/stderr output from a cab
-        def _is_from_subprocess(rec):
-            return hasattr(rec, 'stimela_subprocess_output')
-
-        log_boring_formatter = logging.Formatter(fmt, datefmt, style="{")
-
-        log_colourful_formatter = ColorizingFormatter(col_fmt, datefmt, style="{")
-
-        log_formatter = log_colourful_formatter
+        log_formatter = logging.Formatter(fmt, datefmt, style="{")
 
         log_console_handler = MultiplexingHandler()
         log_console_handler.setFormatter(log_formatter)

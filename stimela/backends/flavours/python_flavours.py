@@ -28,13 +28,8 @@ def form_python_function_call(function: str, cab: Cab, params: Dict[str, Any]):
         str: function invocation, e.g. "func(a=1, b='foo')"
     """
     arguments = []
-    for io in cab.inputs, cab.outputs:
-        for key, schema in io.items():
-            if not schema.policies.skip and (schema.is_input or schema.is_named_output):
-                if key in params:
-                    arguments.append(f"{key}={repr(params[key])}")
-                elif cab.get_schema_policy(schema, 'pass_missing_as_none'):
-                    arguments.append(f"{key}=None")
+    for key, value in cab.filter_input_params(params).items():
+        arguments.append(f"{key}={repr(value)}")
     return f"{function}({', '.join(arguments)})"
 
 
@@ -95,10 +90,8 @@ class PythonCallableFlavour(_CallableFlavour):
         else:
             self._yield_output = ""
 
-    def form_python_code(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any]):
-        """
-        Helper method to form python code for invoking a callable function
-        """
+    def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any]):
+        # substitute command and split into module/function
         with substitutions_from(subst, raise_errors=True) as context:
             try:
                 command = context.evaluate(cab.command, location=["command"])
@@ -111,12 +104,14 @@ class PythonCallableFlavour(_CallableFlavour):
             raise CabValidationError(f"cab {cab.name}: python flavour requires a command of the form module.function")
         self.command_name = py_function
 
-        # form list of arguments
-        func_call = form_python_function_call(py_function, cab, params)
+        # convert inputs into a JSON string
+        pass_params = cab.filter_input_params(params)
+        params_string = json.dumps(pass_params)
 
         # form up command string
-        return f"""
+        code = f"""
 import sys, json
+_inputs = json.loads(sys.argv[1])
 sys.path.append('.')
 from {py_module} import {py_function}
 try:
@@ -128,14 +123,12 @@ if Command is not None and isinstance({py_function}, Command):
     {py_function} = {py_function}.callback
 else:
     print("invoking callable {command}() using external interpreter")
-
-_result = {func_call}
+_result = {py_function}(**_inputs)
 {self._yield_output}
         """
 
-    def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any]):
         args = get_python_interpreter_args(cab, subst)
-        args += ["-c", self.form_python_code(cab, params, subst)]
+        args += ["-c", code, params_string]
         return args
 
 
@@ -178,10 +171,7 @@ class PythonCodeFlavour(_BaseFlavour):
             command = cab.command
 
         # only pass inputs and named outputs
-        pass_params = {name: value for name, value in params.items()
-                        if not cab.inputs_outputs[name].policies.skip and 
-                            (cab.inputs_outputs[name].is_input or cab.inputs_outputs[name].is_named_output)
-        }
+        pass_params = cab.filter_input_params(params)
 
         # form up code to parse params from JSON string that will be given as sys.argv[1]
         params_arg = json.dumps(pass_params)
