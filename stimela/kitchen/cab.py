@@ -243,7 +243,8 @@ class Cab(Cargo):
                 # check repeat policy and form up representation
                 repeat_policy = get_policy(schema, 'repeat')
                 if repeat_policy == "list":
-                    return [option] + list(value) if option else list(value)
+                    value = [" ".join(value)]
+                    return [option] + value if option else value
                 elif repeat_policy == "[]":
                     val = "[" + ",".join(value) + "]"
                     return [option] + [val] if option else val
@@ -298,6 +299,7 @@ class Cab(Cargo):
                 continue
 
             key_value = get_policy(schema, 'key_value')
+            key_value_command_line = get_policy(schema, 'key_value_command_line')
 
             # apply replacementss
             replacements = get_policy(schema, 'replace')
@@ -313,12 +315,19 @@ class Cab(Cargo):
             if schema.dtype == "bool":
                 if key_value:
                     args += [f"{name}={value}"]
+                elif key_value_command_line:
+                    val = get_policy(schema, "explicit_" + str(value).lower()) or value
+                    args += [f"{option}={val}"]
                 else:
                     explicit = get_policy(schema, 'explicit_true' if value else 'explicit_false')
                     args += [option, str(explicit)] if explicit is not None else ([option] if value else [])
             else:
+                
                 value = stringify_argument(name, value, schema, option=option)
                 if type(value) is list:
+                    if key_value_command_line:
+                        if len(value) > 1:
+                            value = [f"{value[0]}={value[1]}"]
                     args += value
                 elif value is not None:
                     args.append(value)
