@@ -315,6 +315,9 @@ class Cab(Cargo):
             if schema.dtype == "bool":
                 if key_value:
                     args += [f"{name}={value}"]
+                elif key_value_command_line:
+                    val = get_policy(schema, "explicit_" + str(value).lower()) or value
+                    args += [f"{option}={val}"]
                 else:
                     explicit = get_policy(schema, 'explicit_true' if value else 'explicit_false')
                     args += [option, str(explicit)] if explicit is not None else ([option] if value else [])
