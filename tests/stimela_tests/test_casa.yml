@@ -1,0 +1,21 @@
+opts:
+  log:
+    dir: test-logs/logs-{config.run.datetime} 
+    nest: 3
+    symlink: logs
+
+cabs:
+  casa.listobs:
+    command: listobs
+    flavour: casa-task
+    inputs:
+      vis:
+        dtype: MS
+        required: true
+
+test_casa:
+  steps:
+    s1: 
+      cab: casa.listobs
+      params:
+        vis: test-a.ms 

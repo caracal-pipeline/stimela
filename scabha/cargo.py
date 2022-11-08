@@ -20,13 +20,13 @@ from typing import *
 from .basetypes import *
 
 ## almost supported by omegaconf, see https://github.com/omry/omegaconf/issues/144, for now just use Any
-ListOrString = Any   
+ListOrString = Any
 
 Conditional = Optional[str]
 
 _UNSET_DEFAULT = "<UNSET DEFAULT VALUE>"
 
-@dataclass 
+@dataclass
 class ParameterPolicies(object):
     """This class describes policies that determine how a Parameter is turned into
     cab arguments. Most policies refer to how command-line arguments are formed up,
@@ -66,17 +66,17 @@ class ParameterPolicies(object):
 
     # dict of character replacements
     replace: Optional[Dict[str, str]] = None
-    
+
     # Value formatting policies.
     # If set, specifies {}-type format strings used to convert the value(s) to string(s).
     # For a non-list value:
     #   * if 'format_list_scalar' is set, formats the value into a list of strings as fmt[i].format(value, **dict)
     #     example:  ["{0}", "{0}"] will simply repeat the value twice
-    #   * if 'format' is set, value is formatted as format.format(value, **dict) 
+    #   * if 'format' is set, value is formatted as format.format(value, **dict)
     # For a list-type value:
     #   * if 'format_list' is set, each element #i formatted separately as fmt[i].format(*value, **dict)
-    #     example:  ["{0}", "{2}"] will output elements 0 and 2, and skip element 1 
-    #   * if 'format' is set, each element #i is formatted as format.format(value[i], **dict) 
+    #     example:  ["{0}", "{2}"] will output elements 0 and 2, and skip element 1
+    #   * if 'format' is set, each element #i is formatted as format.format(value[i], **dict)
     # **dict contains all parameters passed to a cab, so these can be used in the formatting
     format: Optional[str] = None
     format_list: Optional[List[str]] = None
@@ -89,7 +89,7 @@ class ParameterPolicies(object):
 
 # This is used to classify parameters, for cosmetic and help purposes.
 # Usually set automatically based on whether a parameter is required, whether a default is provided, etc.
-ParameterCategory = IntEnum("ParameterCategory", 
+ParameterCategory = IntEnum("ParameterCategory",
                             dict(Required=0, Optional=1, Implicit=2, Obscure=3, Hidden=4),
                             module=__name__)
 
@@ -101,16 +101,16 @@ class Parameter(object):
     writable: bool = False
     # data type
     dtype: str = "str"
-    # specifies that the value is implicitly set inside the step (i.e. not a free parameter). Typically used with filenames 
+    # specifies that the value is implicitly set inside the step (i.e. not a free parameter). Typically used with filenames
     implicit: Any = None
     # optonal list of arbitrary tags, used to group parameters
     tags: List[str] = EmptyListDefault()
 
-    # If True, parameter is required. None/False, not required. 
+    # If True, parameter is required. None/False, not required.
     # For aliases, False at recipe level will override the target setting, while the default of None won't.
     required: Optional[bool] = None
 
-    # restrict value choices, i.e. making for an option-type parameter 
+    # restrict value choices, i.e. making for an option-type parameter
     choices:  Optional[List[Any]] = ()
 
     # for List or Dict-type parameters, restict values of list elements or dict entries to a list of choices
@@ -124,8 +124,8 @@ class Parameter(object):
 
     # if true, treat parameter as a path, and ensure that the parent directories it refers to exist
     mkdir: bool = False
-    
-    # for file and dir-type parameters: if True, the file(s)/dir(s) must exist. If False, they can be missing.  
+
+    # for file and dir-type parameters: if True, the file(s)/dir(s) must exist. If False, they can be missing.
     # if None, then the default logic applies: inputs must exist, and outputs don't
     must_exist: Optional[bool] = None
 
@@ -135,8 +135,8 @@ class Parameter(object):
     # policies object, specifying a non-default way to handle this parameter
     policies: ParameterPolicies = ParameterPolicies()
 
-    # Parameter category, purely cosmetic, used for generating help and debug messages. 
-    # Assigned automatically if None, but a schema may explicitly mark parameters as e.g. 
+    # Parameter category, purely cosmetic, used for generating help and debug messages.
+    # Assigned automatically if None, but a schema may explicitly mark parameters as e.g.
     # "obscure" or "hidden"
     category: Optional[ParameterCategory] = None
 
@@ -147,7 +147,7 @@ class Parameter(object):
     abbreviation: Optional[str] = None
 
     # arbitrary metadata associated with parameter
-    metadata: Dict[str, Any] = EmptyDictDefault() 
+    metadata: Dict[str, Any] = EmptyDictDefault()
 
     def __post_init__(self):
         def natify(value):
@@ -168,6 +168,8 @@ class Parameter(object):
         # The alternative is a non-standard API call i.e. typing._eval_type()
         self._dtype = eval(self.dtype, globals())
 
+        self._is_input = True
+
     def get_category(self):
         """Returns category of parameter, auto-setting it if not already preset"""
         if self.category is None:
@@ -178,6 +180,18 @@ class Parameter(object):
             else:
                 self.category = ParameterCategory.Optional
         return self.category
+
+    @property 
+    def is_input(self):
+        return self._is_input
+
+    @property 
+    def is_output(self):
+        return not self._is_input
+
+    @property
+    def is_named_output(self):
+        return self.is_output and self.dtype in (File, MS, Directory) and not self.implicit
 
 ParameterSchema = OmegaConf.structured(Parameter)
 
@@ -237,6 +251,8 @@ class Cargo(object):
         # flatten inputs/outputs into a single dict (with entries like sub.foo.bar)
         self.inputs = Cargo.flatten_schemas(OrderedDict(), self.inputs, "inputs")
         self.outputs = Cargo.flatten_schemas(OrderedDict(), self.outputs, "outputs")
+        for schema in self.outputs.values():
+            schema._is_input = False
         for name in self.inputs.keys():
             if name in self.outputs:
                 raise DefinitionError(f"parameter '{name}' appears in both inputs and outputs")
@@ -268,8 +284,8 @@ class Cargo(object):
             self._inputs_outputs = self.inputs.copy()
             self._inputs_outputs.update(**self.outputs)
         return self._inputs_outputs
-    
-    @property 
+
+    @property
     def finalized(self):
         return self.config is not None
 
@@ -288,7 +304,7 @@ class Cargo(object):
             self.logopts = config.opts.log.copy()
 
     def prevalidate(self, params: Optional[Dict[str, Any]], subst: Optional[SubstitutionNS]=None, root=False):
-        """Does pre-validation. 
+        """Does pre-validation.
         No parameter substitution is done, but will check for missing params and such.
         A dynamic schema, if defined, is applied at this point."""
         self.finalize()
@@ -322,29 +338,29 @@ class Cargo(object):
 
         params = validate_parameters(params, self.inputs_outputs, defaults=self.defaults, subst=subst, fqname=self.fqname,
                                           check_unknowns=True, check_required=False, check_exist=False,
-                                          create_dirs=False, ignore_subst_errors=True)        
+                                          create_dirs=False, ignore_subst_errors=True)
 
         return params
 
     def validate_inputs(self, params: Dict[str, Any], subst: Optional[SubstitutionNS]=None, loosely=False):
-        """Validates inputs.  
+        """Validates inputs.
         If loosely is True, then doesn't check for required parameters, and doesn't check for files to exist etc.
         This is used when skipping a step.
         """
         assert(self.finalized)
-        
+
         # check inputs
         params1 = validate_parameters(params, self.inputs, defaults=self.defaults, subst=subst, fqname=self.fqname,
-                                                check_unknowns=False, check_required=not loosely, check_exist=not loosely, 
+                                                check_unknowns=False, check_required=not loosely, check_exist=not loosely,
                                                 create_dirs=not loosely)
         # check outputs
-        params1.update(**validate_parameters(params, self.outputs, defaults=self.defaults, subst=subst, fqname=self.fqname, 
-                                                check_unknowns=False, check_required=False, check_exist=False, 
+        params1.update(**validate_parameters(params, self.outputs, defaults=self.defaults, subst=subst, fqname=self.fqname,
+                                                check_unknowns=False, check_required=False, check_exist=False,
                                                 create_dirs=not loosely))
         return params1
 
     def validate_outputs(self, params: Dict[str, Any], subst: Optional[SubstitutionNS]=None, loosely=False):
-        """Validates outputs. Parameter substitution is done. 
+        """Validates outputs. Parameter substitution is done.
         If loosely is True, then doesn't check for required parameters, and doesn't check for files to exist etc.
         """
         assert(self.finalized)
@@ -372,8 +388,8 @@ class Cargo(object):
                     continue
                 subtree = tree.add(f"{cat.name} {title}:")
                 table = Table.grid("", "", "", padding=(0,2)) # , show_header=False, show_lines=False, box=rich.box.SIMPLE)
-                subtree.add(table)            
-                for name, schema in schemas: 
+                subtree.add(table)
+                for name, schema in schemas:
                     attrs = []
                     default = self.defaults.get(name, schema.default)
                     if schema.implicit:
@@ -385,8 +401,8 @@ class Cargo(object):
                     info = []
                     schema.info and info.append(rich.markup.escape(schema.info))
                     attrs and info.append(f"[dim]\[{rich.markup.escape(', '.join(attrs))}][/dim]")
-                    table.add_row(f"[bold]{name}[/bold]", 
-                                  f"[dim]{rich.markup.escape(str(schema.dtype))}[/dim]", 
+                    table.add_row(f"[bold]{name}[/bold]",
+                                  f"[dim]{rich.markup.escape(str(schema.dtype))}[/dim]",
                                   " ".join(info))
 
 

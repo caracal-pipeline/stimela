@@ -14,8 +14,8 @@ import scabha.exceptions
 from scabha.exceptions import SubstitutionError, SubstitutionErrorList
 from scabha.validate import evaluate_and_substitute, Unresolved, join_quote
 from scabha.substitutions import SubstitutionNS, substitutions_from 
-from scabha.basetypes import UNSET, Placeholder
-from .cab import Cab
+from scabha.basetypes import UNSET, Placeholder, MS, File, Directory
+from .cab import Cab, get_cab_schema
 
 Conditional = Optional[str]
 
@@ -46,8 +46,7 @@ def resolve_dotted_reference(key, base, current, context):
 @dataclass
 class Step:
     """Represents one processing step of a recipe"""
-    cab: Optional[str] = None                       # if not None, this step is a cab and this is the cab name
-#    recipe: Optional["Recipe"] = None                    # if not None, this step is a nested recipe
+    cab: Optional[Any] = None                       # if not None, this step is a cab and this is the cab name
     recipe: Optional[Any] = None                    # if not None, this step is a nested recipe
     params: Dict[str, Any] = EmptyDictDefault()     # assigns parameter values
     info: Optional[str] = None                      # comment or info
@@ -71,7 +70,7 @@ class Step:
 
     def __post_init__(self):
         self.fqname = self.fqname or self.name
-        if not bool(self.cab)and not bool(self.recipe):
+        if not bool(self.cab) and not bool(self.recipe):
             raise StepValidationError(f"step '{self.name}': step must specify either a cab or a nested recipe")
         if bool(self.cab) == bool(self.recipe):
             raise StepValidationError(f"step '{self.name}': step can't specify both a cab and a nested recipe")
@@ -93,9 +92,14 @@ class Step:
             self._skip = None
         
         
-    def summary(self, params=None, recursive=True, ignore_missing=False):
-        return self.cargo and self.cargo.summary(recursive=recursive, 
-                                params=params or self.validated_params or self.params, ignore_missing=ignore_missing)
+    def summary(self, params=None, recursive=True, ignore_missing=False, inputs=True, outputs=True):
+        summary_params = OrderedDict()
+        for name, value in (params or self.validated_params or self.params).items():
+            schema = self.cargo.inputs_outputs[name]
+            if (inputs and (schema.is_input or schema.is_named_output)) or \
+                (outputs and schema.is_output):
+                summary_params[name] = value
+        return self.cargo and self.cargo.summary(recursive=recursive, params=summary_params, ignore_missing=ignore_missing)
 
     @property
     def finalized(self):
@@ -171,7 +175,7 @@ class Step:
             # if recipe, validate the recipe with our parameters
             if self.recipe:
                 # first, if it is a string, look it up in library
-                recipe_name = "nested recipe"
+                recipe_name = f"{self.fqname}:recipe"
                 if type(self.recipe) is str:
                     recipe_name = f"nested recipe '{self.recipe}'"
                     # undotted name -- look in lib.recipes
@@ -192,21 +196,32 @@ class Step:
                         self.recipe = Recipe(**OmegaConf.unsafe_merge(RecipeSchema.copy(), self.recipe))
                     except OmegaConfBaseException as exc:
                         raise StepValidationError(f"error in recipe '{recipe_name}", exc)
-                elif type(self.recipe) is not Recipe:
+                elif not isinstance(self.recipe, Recipe):
                     raise StepValidationError(f"recipe field must be a string or a nested recipe, got {type(self.recipe)}")
                 self.cargo = self.recipe
             else:
-                if self.cab in self._instantiated_cabs:
-                    self.cargo = copy.copy(self._instantiated_cabs[self.cab])
-                else:
-                    if self.cab not in self.config.cabs:
-                        raise StepValidationError(f"unknown cab '{self.cab}'")
-                    try:
-                        self._instantiated_cabs[self.cab] = Cab(**config.cabs[self.cab])
+                if type(self.cab) is str:
+                    if self.cab in self._instantiated_cabs:
                         self.cargo = copy.copy(self._instantiated_cabs[self.cab])
-                    except Exception as exc:
-                        raise StepValidationError(f"error in cab '{self.cab}'", exc)
-            self.cargo.name = self.name
+                    else:
+                        if self.cab not in self.config.cabs:
+                            raise StepValidationError(f"unknown cab '{self.cab}'")
+                        try:
+                            self._instantiated_cabs[self.cab] = Cab(**config.cabs[self.cab])
+                            self.cargo = copy.copy(self._instantiated_cabs[self.cab])
+                        except Exception as exc:
+                            raise StepValidationError(f"error in cab '{self.cab}'", exc)
+                else:
+                    if type(self.cab) is DictConfig:
+                        cab_name = f"{self.fqname}:cab"
+                        try:
+                            self.cab = Cab(**OmegaConf.unsafe_merge(get_cab_schema().copy(), self.cab))
+                        except OmegaConfBaseException as exc:
+                            raise StepValidationError(f"error in cab '{cab_name}", exc)
+                    elif not isinstance(self.cab, Cab):
+                        raise StepValidationError(f"cab field must be a string or an inline cab, got {type(self.cab)}")
+                    self.cargo = self.cab
+            self.cargo.name = self.cargo.name or self.name
 
             # flatten parameters
             self.params = self.cargo.flatten_param_dict(OrderedDict(), self.params)
@@ -251,6 +266,10 @@ class Step:
         self.finalize()
         # validate cab or recipe
         params = self.validated_params = self.cargo.prevalidate(self.params, subst, root=root)
+        # add missing outputs
+        for name in self.cargo.outputs:
+            if name not in params:
+                params[name] = UNSET(name)
         self.log.debug(f"{self.cargo.name}: {len(self.missing_params)} missing, "
                         f"{len(self.invalid_params)} invalid and "
                         f"{len(self.unresolved_params)} unresolved parameters")
@@ -258,11 +277,11 @@ class Step:
             raise StepValidationError(f"step '{self.name}': {self.cargo.name} has the following invalid parameters: {join_quote(self.invalid_params)}")
         return params
 
-    def log_summary(self, level, title, color=None, ignore_missing=True):
+    def log_summary(self, level, title, color=None, ignore_missing=True, inputs=False, outputs=False):
         extra = dict(color=color)
         if self.log.isEnabledFor(level):
             self.log.log(level, f"### {title}", extra=extra)
-            for line in self.summary(recursive=False, ignore_missing=ignore_missing):
+            for line in self.summary(recursive=False, inputs=inputs, outputs=outputs, ignore_missing=ignore_missing):
                 self.log.log(level, line, extra=extra)
 
     def log_exception(self, exc, severity="error"):
@@ -272,6 +291,8 @@ class Step:
         """Runs the step"""
         from .recipe import Recipe
         from . import runners
+
+        stimelogging.declare_chapter(f"{self.fqname}")
 
         if self.validated_params is None:
             self.prevalidate(self.params)
@@ -318,7 +339,7 @@ class Step:
                     else:
                         self.log_exception(StepValidationError(f"error validating inputs:", exc), severity=severity)
                     exc.logged = True
-                self.log_summary(level, "summary of inputs follows", color="WARNING")
+                self.log_summary(level, "summary of inputs follows", color="WARNING", inputs=True)
                 # raise up, unless step is being skipped
                 if skip:
                     parent_log.warning("since the step is being skipped, this is not fatal")
@@ -330,13 +351,17 @@ class Step:
 
             # log inputs
             if validated and not skip:
-                self.log_summary(logging.INFO, "validated inputs", color="GREEN", ignore_missing=True)
+                self.log_summary(logging.INFO, "validated inputs", color="GREEN", ignore_missing=True, inputs=True)
                 if subst is not None:
                     subst.current = params
 
-            ## check for (a) invalid params (b) unresolved inputs (c) unresolved outputs, except explicit ones 
-            invalid = self.invalid_params + \
-                    [name for name in self.unresolved_params if name in self.cargo.inputs or not self.cargo.outputs[name].implicit]
+            ## check for (a) invalid params (b) unresolved inputs 
+            # (c) unresolved outputs of File/MS/Directory type 
+            invalid = self.invalid_params
+            for name in self.unresolved_params:
+                schema = self.cargo.inputs_outputs[name]
+                if schema.is_input or schema.is_named_output:
+                    invalid.append(name)
             if invalid:
                 invalid = self.invalid_params + self.unresolved_params
                 if skip:
@@ -357,7 +382,13 @@ class Step:
                         backend = self.cargo.backend
                     else:
                         backend =  stimela.CONFIG.opts.backend
-                    runners.run_cab(self, params, backend=backend, subst=subst, batch=batch)
+                    cabstat = runners.run_cab(self, params, backend=backend, subst=subst, batch=batch)
+                    # check for runstate
+                    if cabstat.success is False:
+                        raise StimelaCabRuntimeError(f"error running cab '{self.cargo.name}'", cabstat.errors)
+                    for msg in cabstat.warnings:
+                        self.log.warning(f"cab '{self.cargo.name}': {msg}")
+                    params.update(**cabstat.outputs)
                 else:
                     raise RuntimeError("step '{self.name}': unknown cargo type")
             else:
@@ -387,14 +418,14 @@ class Step:
                 if skip:
                     self.log.warning("since the step was skipped, this is not fatal")
                 else:
-                    self.log_summary(level, "failed outputs", color="WARNING")
+                    self.log_summary(level, "failed outputs", color="WARNING", inputs=False, outputs=True)
                     raise
 
             if validated:
                 self.validated_params.update(**params)
                 if subst is not None:
                     subst.current._merge_(params)
-                self.log_summary(logging.DEBUG, "validated outputs", ignore_missing=True)
+                self.log_summary(logging.DEBUG, "validated outputs", ignore_missing=True, outputs=True)
 
             # bomb out if an output was invalid
             invalid = [name for name in self.invalid_params + self.unresolved_params if name in self.cargo.outputs]

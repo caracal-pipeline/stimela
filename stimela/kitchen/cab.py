@@ -3,13 +3,16 @@ from typing import Any, List, Dict, Optional, Union
 from collections import OrderedDict
 from enum import Enum, IntEnum
 from dataclasses import dataclass
-from omegaconf import MISSING
+from omegaconf import MISSING, OmegaConf
+import rich.markup
 
 from scabha.cargo import Parameter, Cargo, ListOrString, ParameterPolicies, ParameterCategory
-from stimela.exceptions import CabValidationError
+from stimela.exceptions import CabValidationError, StimelaCabRuntimeError
 from scabha.exceptions import SchemaError
 from scabha.basetypes import EmptyDictDefault, EmptyListDefault
+from stimela.backends import flavours
 import stimela
+from . import wranglers
 
 ParameterPassingMechanism = Enum("ParameterPassingMechanism", "args yaml", module=__name__)
 
@@ -44,10 +47,9 @@ class Cab(Cargo):
     # if set, activates this virtual environment first before running the command (not much sense doing this inside the container)
     virtual_env: Optional[str] = None
 
-    # cab flavour. Default will run the command as a binary (inside image or virtual_env). "python" will treat the command
-    # as a Python package.module.function specification. 
-    #   Future examples would be e.g. "casa" to treat it as a CASA task 
-    flavour: Optional[str] = None  
+    # cab flavour. Default will run the command as a binary (inside image or virtual_env). Otherwise specify
+    # a string flavour, or a mapping to specify options (see backends.flavours)
+    flavour: Optional[Any] = None
 
     # controls how params are passed. args: via command line argument, yml: via a single yml string
     parameter_passing: ParameterPassingMechanism = ParameterPassingMechanism.args
@@ -58,17 +60,14 @@ class Cab(Cargo):
     # default parameter conversion policies
     policies: ParameterPolicies = ParameterPolicies()
 
+    # For callable-type cabs, determines how the return value is treated.
+    # None to ignore, "{}" to treat it as a dict of outputs, else an output name to 
+    # treat it as a single output
+    return_outputs: Optional[str] = "{}" 
+
     # runtime settings
     backend: Optional['stimela.config.Backend']
     runtime: Dict[str, Any] = EmptyDictDefault()
-
-    # copy names of logging levels into wrangler actions
-    wrangler_actions =  {attr: value for attr, value in logging.__dict__.items() if attr.upper() == attr and type(value) is int}
-
-    # then add litetal constants for other wrangler actions
-    ACTION_SUPPRESS = wrangler_actions["SUPPRESS"] = "SUPPRESS"
-    ACTION_DECLARE_SUCCESS = wrangler_actions["DECLARE_SUCCESS"] = "DECLARE_SUPPRESS"
-    ACTION_DECLARE_FAILURE = wrangler_actions["DECLARE_FAILURE"] = "DECLARE_FAILURE"
 
     _path: Optional[str] = None   # path to image definition yaml file, if any
 
@@ -79,46 +78,14 @@ class Cab(Cargo):
         for param in self.inputs.keys():
             if param in self.outputs:
                 raise CabValidationError(f"cab {self.name}: parameter '{param}' appears in both inputs and outputs")
-        # check flavours
-        match_old_python = re.match("^\((.+)\)(.+)$", self.command)
-        if match_old_python:
-            if self.flavour is not None and self.flavour.lower() != "python":
-                raise CabValidationError("cab {self.name}: '(module)function' implies python flavour, but '{self.flavour}' is specified")
-            self.flavour = "python"
-            self.py_module, self.py_function = match_old_python.groups()
-        else:
-            if self.flavour is None:
-                self.flavour = "binary" 
-            else:
-                self.flavour = self.flavour.lower()
-            if self.flavour == "python" or self.flavour == "python-ext":
-                if '.' in self.command:
-                    self.py_module, self.py_function = self.command.rsplit('.', 1)
-                else:
-                    raise CabValidationError("cab {self.name}: 'python' flavour requires a command of the form module.function")
-            elif self.flavour != "binary":
-                raise CabValidationError("cab {self.name}: unknown cab flavour '{self.flavour}'")
 
         # setup wranglers
         self._wranglers = []
-        for match, actions in self.management.wranglers.items():
-            replace = None
-            if type(actions) is str:
-                actions = [actions]
-            if type(actions) is not list:
-                raise CabValidationError(f"wrangler entry {match}: expected action or list of actions")
-            for action in actions:
-                if action.startswith("replace:"):
-                    replace = action.split(":", 1)[1]
-                elif action not in self.wrangler_actions:
-                    raise CabValidationError(f"wrangler entry {match}: unknown action '{action}'")
-            actions = [self.wrangler_actions[act] for act in actions if act in self.wrangler_actions]
-            try:
-                rexp = re.compile(match)
-            except Exception as exc:
-                raise CabValidationError(f"wrangler entry {match} is not a valid regular expression")
-            self._wranglers.append((re.compile(match), replace, actions))
-        self._runtime_status = None
+        for pattern, actions in self.management.wranglers.items():
+            self._wranglers.append(wranglers.create_list(pattern, actions))
+
+        # check flavours
+        self.flavour = flavours.init_cab_flavour(self)
 
 
     def summary(self, params=None, recursive=True, ignore_missing=False):
@@ -191,7 +158,22 @@ class Cab(Cargo):
         return ([command] + args + self.build_argument_list(params)), venv
 
 
-    def build_argument_list(self, params):
+    def filter_input_params(self, params: Dict[str, Any]):
+        """Filters dict of params, returning only those that should be passed to a cab
+        (i.e. inputs or named outputs, and not skipped)
+        """
+        filtered_params = OrderedDict()
+        for name, schema in self.inputs_outputs.items():
+            if not self.get_schema_policy(schema, 'skip'):
+                if schema.is_input or schema.is_named_output:
+                    if name in params:
+                        filtered_params[name] = params[name]
+                    elif self.get_schema_policy(schema, 'pass_missing_as_none'):
+                        filtered_params[name] = None
+        return filtered_params
+
+
+    def build_argument_list(self, params: Dict[str, Any]):
         """
         Converts command, and current dict of parameters, into a list of command-line arguments.
 
@@ -284,6 +266,8 @@ class Cab(Cargo):
         for name, schema in self.inputs_outputs.items():
             if schema.required and name not in value_dict:
                 raise CabValidationError(f"required parameter '{name}' is missing", log=self.log)
+            if schema.is_output and not schema.is_named_output:
+                continue
             if name in value_dict:
                 positional_first = get_policy(schema, 'positional_head') 
                 positional = get_policy(schema, 'positional') or positional_first
@@ -305,6 +289,8 @@ class Cab(Cargo):
             if name not in self.inputs_outputs:
                 raise RuntimeError(f"unknown parameter '{name}'")
             schema = self.inputs_outputs[name]
+            if schema.is_output and not schema.is_named_output:
+                continue
 
             # default behaviour for unset skip_implicits is True
             skip_implicits = get_policy(schema, 'skip_implicits', True)
@@ -345,34 +331,78 @@ class Cab(Cargo):
 
         return pos_args[0] + args + pos_args[1]
 
+    def reset_status(self, extra_wranglers: List = []):
+        return Cab.RuntimeStatus(self, extra_wranglers=extra_wranglers)
 
-    @property
-    def runtime_status(self):
-        return self._runtime_status
+    class RuntimeStatus(object):
+        """Represents the runtime status of a cab"""
 
-    def reset_runtime_status(self):
-        self._runtime_status = None
+        def __init__(self, cab: "Cab", extra_wranglers: List = []):
+            self.cab = cab
+            self.wranglers = list(cab._wranglers) + list(extra_wranglers)
+            self._success = None
+            self._errors = []
+            self._warnings = []
+            self._outputs = OrderedDict()
 
-    def apply_output_wranglers(self, output, severity):
-        suppress = False
-        modified_output = output
-        for regex, replace, actions in self._wranglers:
-            if regex.search(output):
-                if replace is not None:
-                    modified_output = regex.sub(replace, output)
-                for action in actions:
-                    if type(action) is int:
-                        severity = action
-                    elif action is self.ACTION_SUPPRESS:
-                        suppress = True
-                    elif action is self.ACTION_DECLARE_FAILURE and self._runtime_status is None:
-                        self._runtime_status  = False
-                        modified_output = "[FAILURE] " + modified_output
-                        severity = logging.ERROR
-                    elif action is self.ACTION_DECLARE_SUCCESS and self._runtime_status is None:
-                        self._runtime_status = True
-                        modified_output = "[SUCCESS] " + modified_output
-        return (None, 0) if suppress else (modified_output, severity)
+        @property
+        def success(self):
+            return self._success
 
+        @property
+        def errors(self):
+            return self._errors
 
+        @property
+        def warnings(self):
+            return self._warnings
 
+        @property
+        def outputs(self):
+            return self._outputs
+
+        def declare_success(self):
+            if self._success is None:
+                self._success = True
+
+        def declare_failure(self, error: Optional[Union[str, Exception]] = None):
+            self._success = False
+            if error is not None:
+                if type(error) is str:
+                    error = StimelaCabRuntimeError(error)
+                self._errors.append(error)
+
+        def declare_warning(self, message: str):
+            self._warnings.append(message)
+
+        def declare_outputs(self, outputs: Dict):
+            self._outputs.update(**outputs)
+
+        def apply_wranglers(self, output, severity):
+            # make sure any unintended [rich style] tags are escaped in output
+            output = rich.markup.escape(output)
+            suppress = False
+            for regex, wranglers in self.wranglers:
+                match = regex.search(output) 
+                if match:
+                    for wrangler in wranglers:
+                        mod_output, mod_severity = wrangler.apply(self, output, match)
+                        # has wrangler asked to suppress the output?
+                        if mod_output is None:
+                            suppress = True
+                        else:
+                            output = mod_output
+                        # has wrangler modified the severity?
+                        if mod_severity is not None:
+                            severity = max(severity, mod_severity)
+
+            return (None, 0) if suppress else (output, severity)
+
+CabSchema = None
+
+def get_cab_schema():
+    global CabSchema
+    if CabSchema is None:
+        import stimela.config
+        CabSchema = OmegaConf.structured(Cab)
+    return CabSchema

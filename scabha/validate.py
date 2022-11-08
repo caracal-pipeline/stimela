@@ -53,7 +53,7 @@ def evaluate_and_substitute(inputs: Dict[str, Any],
                             ignore_subst_errors: bool = False, 
                             location: List[str] = []):
     with substitutions_from(subst, raise_errors=True) as context:
-        evaltor = Evaluator(subst, context, location=location)
+        evaltor = Evaluator(subst, context, location=location, allow_unresolved=True)
         inputs = evaltor.evaluate_dict(inputs, corresponding_ns=corresponding_ns, defaults=defaults,
                                         raise_substitution_errors=False)
         # collect errors

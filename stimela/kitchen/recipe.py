@@ -921,9 +921,9 @@ class Recipe(Cargo):
                     #step_params = step.run(subst=subst.copy(), batch=batch)  # make a copy of the subst dict since recipe might modify
                     step_params = step.run(subst=subst.copy(), parent_log=self.log)  # make a copy of the subst dict since recipe might modify
                 except ScabhaBaseException as exc:
-                    newexc = StimelaStepExecutionError(f"error running step '{label}'", exc)
+                    newexc = StimelaStepExecutionError(f"step '{step.fqname}' has failed, aborting the recipe", exc)
                     if not exc.logged:
-                        log_exception(newexc)
+                        log_exception(newexc, log=step.log)
                     raise newexc
 
                 # put step parameters into previous and steps[label] again, as they may have changed based on outputs)
@@ -1038,6 +1038,7 @@ class Recipe(Cargo):
                                 errors.append(tb)
                             nfail += 1
                     if errors:
+                        pool.shutdown()
                         raise StimelaRuntimeError(f"{nfail}/{len(loop_worker_args)} loop iterations failed", errors)
             # else just iterate directly
             else:

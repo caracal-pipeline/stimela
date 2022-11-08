@@ -110,49 +110,12 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
     if not namespace:
         raise StimelaCabRuntimeError(f"runtime.kube.namespace must be set")
 
-    # form up command
-    if cab.flavour=="binary":
-        args, venv = cab.build_command_line(params, subst, search=False)
-        command_name = args[0]
-        if venv:
-            raise StimelaCabRuntimeError("kubernetes backend does not support cab.virtual_env settings")
-    elif cab.flavour in ["python", "python-ext"]:
-        # form up arguments
-        args = []
-        for key, schema in cab.inputs_outputs.items():
-            if not schema.policies.skip:
-                if key in params:
-                    args.append(f"{key}={repr(params[key])}")
-                elif cab.get_schema_policy(schema, 'pass_missing_as_none'):
-                    args.append(f"{key}=None")
-        # form up command string
-        modulename = cab.py_module
-        funcname = cab.py_function
-        command_name = f'({modulename}){funcname}'
-        # LB - why is this in an if statment below? Won't it always be the case?
-        rundir = os.path.abspath(kube.run_dir)
-        command = f"""
-import sys, os
-os.chdir('{rundir}')
-# sys.path.append('.')
-from {modulename} import {funcname}
-try:
-    from click import Command
-except ImportError:
-    Command = None
-if Command is not None and isinstance({funcname}, Command):
-    print("invoking callable {modulename}.{funcname}() (as click command) using external interpreter")
-    {funcname} = {funcname}.callback
-else:
-    print("invoking callable {modulename}.{funcname}() using external interpreter")
-retval = {funcname}({','.join(args)})
-print("Return value is", repr(retval))
-    """
+    args = cab.flavour.get_arguments(cab, params, subst)
+    log.debug(f"command line is {args}")
 
-    else:
-        raise StimelaCabRuntimeError(f"{cab.flavour} flavour cabs not yet supported by native backend")
+    cabstat = cab.reset_status()
 
-    cab.reset_runtime_status()
+    command_name = cab.flavour.command_name
 
     cluster = podname = cluster_name = None
     kube_api = get_kube_api()
@@ -333,26 +296,25 @@ print("Return value is", repr(retval))
                             log.info(f"pre-command successful after {elapsed()}")
 
             # do we need to chdir
-            if kube.run_dir and cab.flavour not in ["python","python-ext"]:
+            if kube.run_dir:
                 rundir = os.path.abspath(kube.run_dir)
                 args = ["python", "-c", f"import os,sys; os.chdir('{rundir}'); os.execlp('{args[0]}', *sys.argv[1:])"] + list(args)
-            else:
-                args = ["python", "-c", command]
 
             log.info(f"running {command_name} in pod {podname}")
             with declare_subcommand(os.path.basename(command_name)):
-                retcode = run_pod_command(args, command_name, wrangler=cab.apply_output_wranglers)
+                retcode = run_pod_command(args, command_name, wrangler=cabstat.apply_wranglers)
 
-            if retcode:
-                raise StimelaCabRuntimeError(f"{command_name} returns error code {retcode} after {elapsed()}")
+            # check if output marked it as a fail
+            if cabstat.success is False:
+                log.error(f"declaring '{command_name}' as failed based on its output")
+
+            # if retcode != 0 and not explicitly marked as success, mark as failed
+            if retcode and cabstat.success is not True:
+                cabstat.declare_failure(f"{command_name} returns error code {retcode} after {elapsed()}")
             else:
                 log.info(f"{command_name} returns exit code {retcode} after {elapsed()}")
 
-            # check if command was marked as failed by the output wrangler
-            if cab.runtime_status is False:
-                raise StimelaCabRuntimeError(f"{command_name} was marked as failed based on its output")
-
-            return retcode
+            return cabstat
 
         # handle various failure modes by logging errors appropriately
         except KeyboardInterrupt:

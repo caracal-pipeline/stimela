@@ -52,9 +52,6 @@ cabs:
         dtype: str
       dummy2:
         dtype: str
-    outputs:
-      msout:
-        must_exist: false  # for testing
 
   aimfast:
     command: /bin/true ## dummy command for now, since this is just a dummy example step
@@ -67,14 +64,6 @@ cabs:
         required: true
 
   test_callable:
-    command: (stimela_tests.test_recipe)callable_function
-    inputs:
-      a:
-        dtype: int
-      b:
-        dtype: str
-
-  test_callable2:
     command: stimela_tests.test_recipe.callable_function
     flavour: python
     inputs:
@@ -82,7 +71,6 @@ cabs:
         dtype: int
       b:
         dtype: str
-
 opts:
   log:
     dir: test-logs/logs-{config.run.datetime} 
@@ -127,12 +115,6 @@ recipe:
         params:
           a: 1
           b: foo
-
-      test_callable2:
-        cab: test_callable2
-        params:
-          a: 2
-          b: bar
 
       makems:
           cab: simms

@@ -58,6 +58,7 @@ def cli(backend, config_files=[], config_dotlist=[], include=[], verbose=False, 
     log = stimela.logger(loglevel=logging.DEBUG if verbose else logging.INFO)
     log.info(f"starting")        # remove this eventually, but it's handy for timing things right now
 
+    stimela.VERBOSE = verbose
     if verbose:
         log.debug("verbose output enabled")
 

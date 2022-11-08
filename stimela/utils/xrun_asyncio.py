@@ -3,26 +3,52 @@ import os
 import signal
 import datetime
 import asyncio
-import rich
-import rich.highlighter
-from rich.style import Style
-from rich.table import Column
-from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn
-from rich.logging import RichHandler
+import logging
+from rich.markup import escape
 
 from stimela import stimelogging
 
-from .xrun_poll import get_stimela_logger, dispatch_to_log, xrun_nolog
 from stimela.exceptions import StimelaCabRuntimeError, StimelaProcessRuntimeError
 
 DEBUG = 0
 
 log = None
 
+def get_stimela_logger():
+    """Returns Stimela's logger, or None if no Stimela installed"""
+    try:
+        import stimela
+        return stimela.logger()
+    except ImportError:
+        return None
+
+
+def dispatch_to_log(log, line, command_name, stream_name, output_wrangler):
+    # dispatch output to log
+    extra = dict()
+    # severity = logging.WARNING if fobj is proc.stderr else logging.INFO
+    severity = logging.INFO
+    if stream_name == 'stdout':
+        extra['style'] = 'dim'
+        extra['prefix'] = "#"
+    else:
+        extra['style'] = 'white'
+        extra['prefix'] = "#"
+    # feed through wrangler to adjust severity and content
+    if output_wrangler is not None:
+        line, severity = output_wrangler(escape(line), severity)
+    if line is not None:
+        if severity >= logging.ERROR:
+            extra['prefix'] = stimelogging.FunkyMessage("[red]:warning: [/red]", "!")
+        if isinstance(line, stimelogging.FunkyMessage) and line.prefix:
+            extra['prefix'] = line.prefix
+        log.log(severity, line, extra=extra)
+
 
 
 def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, output_wrangler=None, shell=True, 
-            return_errcode=False, command_name=None, progress_bar=False, log_command=True):
+            return_errcode=False, command_name=None, progress_bar=False, 
+            log_command=True, log_result=True):
     
     command_name = command_name or command
 
@@ -38,6 +64,7 @@ def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, o
     log = log or get_stimela_logger()
 
     if log is None:
+        from .xrun_poll import xrun_nolog
         return xrun_nolog(command, name=command_name, shell=shell)
 
     # this part is never inside the container
@@ -46,7 +73,11 @@ def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, o
     log = log or stimela.logger()
 
     if log_command:
-        log.info("running " + command_line, extra=dict(stimela_subprocess_output=(command_name, "start")))
+        if log_command is True:
+            log.info(f"running {command_line}", extra=dict(prefix="###", style="dim"))
+        else:
+            log.info(f"running {log_command}", extra=dict(prefix="###", style="dim"))
+            log.debug(f"full command line is {command_line}", extra=dict(prefix="###", style="dim"))
 
     with stimelogging.declare_subcommand(os.path.basename(command_name)):
 
@@ -85,7 +116,8 @@ def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, o
             )
             results = loop.run_until_complete(job)
             status = proc.returncode
-            log.info(f"{command_name} exited with code {status} after {elapsed()}")
+            if log_result:
+                log.info(f"{command_name} exited with code {status} after {elapsed()}")
         except SystemExit as exc:
             loop.run_until_complete(proc.wait())
         except KeyboardInterrupt:
