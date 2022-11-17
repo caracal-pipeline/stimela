@@ -13,6 +13,7 @@ from scabha.basetypes import EmptyDictDefault, EmptyListDefault
 from stimela.backends import flavours
 import stimela
 from . import wranglers
+from scabha.substitutions import substitutions_from
 
 ParameterPassingMechanism = Enum("ParameterPassingMechanism", "args yaml", module=__name__)
 
@@ -120,7 +121,6 @@ class Cab(Cargo):
             return default
 
     def build_command_line(self, params: Dict[str, Any], subst: Optional[Dict[str, Any]] = None, search=True):
-        from scabha.substitutions import substitutions_from
 
         try:
             with substitutions_from(subst, raise_errors=True) as context:
@@ -128,7 +128,6 @@ class Cab(Cargo):
                 command = context.evaluate(self.command, location=["command"])
         except Exception as exc:
             raise CabValidationError(f"error constructing cab command", exc)
-
 
         if venv:
             venv = os.path.expanduser(venv)
@@ -156,6 +155,19 @@ class Cab(Cargo):
         self.log.debug(f"command is {command}")
 
         return ([command] + args + self.build_argument_list(params)), venv
+
+    def update_environment(self, subst):
+        try:
+            with substitutions_from(subst, raise_errors=True) as context:
+                environ = CabManagement().environment
+                for key,val in self.management.environment.items():
+                    environ[key] = context.evaluate(val,
+                                location=["management", "environment"])
+        except Exception as exc:
+            raise CabValidationError(f"Error applying environment variables", exc)
+
+        if environ:
+            self.management.environment = environ
 
 
     def filter_input_params(self, params: Dict[str, Any]):
@@ -201,8 +213,6 @@ class Cab(Cargo):
 
         def stringify_argument(name, value, schema, option=None):
             key_value = get_policy(schema, 'key_value')
-            if key_value:
-                return f"{name}={value}"
 
             if value is None:
                 return None
@@ -243,7 +253,9 @@ class Cab(Cargo):
                 # check repeat policy and form up representation
                 repeat_policy = get_policy(schema, 'repeat')
                 if repeat_policy == "list":
-                    return [option] + list(value) if option else list(value)
+                    if key_value:
+                        raise CabValidationError(f"Repeat policy 'list' is incompatible with schema policy 'key_value' for parameter '{name}'")
+                    return [option] + [value] if option else [value]
                 elif repeat_policy == "[]":
                     val = "[" + ",".join(value) + "]"
                     return [option] + [val] if option else val
@@ -311,14 +323,17 @@ class Cab(Cargo):
             option = (get_policy(schema, 'prefix') or "--") + (schema.nom_de_guerre or name)
 
             if schema.dtype == "bool":
+                explicit = get_policy(schema, "explicit_" + str(value).lower()) or value
                 if key_value:
-                    args += [f"{name}={value}"]
+                    args += [f"{option}={explicit}"]
                 else:
-                    explicit = get_policy(schema, 'explicit_true' if value else 'explicit_false')
                     args += [option, str(explicit)] if explicit is not None else ([option] if value else [])
             else:
                 value = stringify_argument(name, value, schema, option=option)
                 if type(value) is list:
+                    if key_value:
+                        assert len(value) == 2
+                        value = [f"{value[0]}={value[1]}"]
                     args += value
                 elif value is not None:
                     args.append(value)
