@@ -255,7 +255,7 @@ class Cab(Cargo):
                 if repeat_policy == "list":
                     if key_value:
                         raise CabValidationError(f"Repeat policy 'list' is incompatible with schema policy 'key_value' for parameter '{name}'")
-                    return [option] + [value] if option else [value]
+                    return [option] + list(value) if option else list(value)
                 elif repeat_policy == "[]":
                     val = "[" + ",".join(value) + "]"
                     return [option] + [val] if option else val
