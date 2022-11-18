@@ -217,11 +217,16 @@ class Recipe(Cargo):
                         value = None
             # nothing found? error then
             if value is None:
-                raise AssignmentError(f"{whose.fqname}.assign_based_on.{basevar} is not a known input or variable or config item")
+                if basevar in self.inputs_outputs:
+                    raise AssignmentError(f"{whose.fqname}.assign_based_on: a value for '{basevar}' was not supplied")
+                elif '.' in basevar:
+                    raise AssignmentError(f"{whose.fqname}.assign_based_on: '{basevar}' is not a known config item")
+                else:
+                    raise AssignmentError(f"{whose.fqname}.assign_based_on: '{basevar}' is not a known variable")
             # look up list of assignments
             if value not in value_list:
                 if 'DEFAULT' not in value_list:
-                    raise AssignmentError(f"{whose.fqname}.assign_based_on.{basevar}: unknown value '{value}', and no default defined")
+                    raise AssignmentError(f"{whose.fqname}.assign_based_on: neither the '{basevar}={value}' case nor a DEFAULT case is defined")
                 value = 'DEFAULT'
             assignments = value_list.get(value)
             # an empty section maps to None, so skip 

@@ -24,6 +24,9 @@ ListOrString = Any
 
 Conditional = Optional[str]
 
+# this marks unset defaults: it's turned into an UNSET by the __post_init__
+# method (UNSET can't be used directly in an OmegeConf structured schema, hence
+# the need for this stopgap)
 _UNSET_DEFAULT = "<UNSET DEFAULT VALUE>"
 
 @dataclass
