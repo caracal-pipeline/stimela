@@ -2,7 +2,7 @@ import click
 from scabha.exceptions import SchemaError
 from .cargo import Parameter
 from typing import *
-from .cargo import _UNSET_DEFAULT
+from .cargo import UNSET
 from dataclasses import make_dataclass, field
 from omegaconf import OmegaConf, MISSING
 from collections.abc import MutableSet, MutableSequence, MutableMapping
@@ -46,7 +46,7 @@ def schema_to_dataclass(io: Dict[str, Parameter], class_name: str, bases=(), pos
             metadata['element_choices'] = schema.element_choices
         metadata['required'] = required = schema.required
 
-        if required and schema.default is not _UNSET_DEFAULT:
+        if required and schema.default is not UNSET:
             raise SchemaError(
                 f"Field '{fldname}' is required but specifies a default. "
                 f"This behaviour is unsupported/ambiguous."
@@ -63,7 +63,7 @@ def schema_to_dataclass(io: Dict[str, Parameter], class_name: str, bases=(), pos
         elif isinstance(schema.default, MutableMapping):
             fld = field(default_factory=default_wrapper(dict, schema.default),
                         metadata=metadata)
-        elif schema.default is _UNSET_DEFAULT:
+        elif schema.default is UNSET:
             fld = field(default=None, metadata=metadata)
         else:
             fld = field(default=schema.default, metadata=metadata)
