@@ -145,7 +145,7 @@ def clickify_parameters(schemas: Dict[str, Any]):
             if schema.abbreviation:
                 optnames.append(f"-{schema.abbreviation}")
 
-            if schema.default is _UNSET_DEFAULT:
+            if schema.default is UNSET:
                 deco = click.option(*optnames, type=dtype,
                                     required=schema.required,
                                     metavar=schema.metavar,help=schema.info)
