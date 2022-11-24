@@ -224,6 +224,7 @@ class Step:
             self.cargo.name = self.cargo.name or self.name
 
             # flatten parameters
+            self.cargo.apply_dynamic_schemas(self.params)
             self.params = self.cargo.flatten_param_dict(OrderedDict(), self.params)
 
             # if logger is not provided, then init one

@@ -7,7 +7,7 @@ stimela 2.0
 |Pypi Version|
 |Python Versions|  
 
-System agnostic framework for creating radio interometry data processing
+A workflow management framework for radio interometry data processing pipelines.
 
 `Documentation Page <https://stimela.readthedocs.io/>`_  
 =========================================================================================
