@@ -170,18 +170,19 @@ class Cab(Cargo):
             self.management.environment = environ
 
 
-    def filter_input_params(self, params: Dict[str, Any]):
+    def filter_input_params(self, params: Dict[str, Any], apply_nom_de_guerre=True):
         """Filters dict of params, returning only those that should be passed to a cab
         (i.e. inputs or named outputs, and not skipped)
         """
         filtered_params = OrderedDict()
         for name, schema in self.inputs_outputs.items():
+            output_name = (apply_nom_de_guerre and schema.nom_de_guerre) or name
             if not self.get_schema_policy(schema, 'skip'):
                 if schema.is_input or schema.is_named_output:
                     if name in params:
-                        filtered_params[name] = params[name]
+                        filtered_params[output_name] = params[name]
                     elif self.get_schema_policy(schema, 'pass_missing_as_none'):
-                        filtered_params[name] = None
+                        filtered_params[output_name] = None
         return filtered_params
 
 
@@ -320,14 +321,23 @@ class Cab(Cargo):
                     except TypeError:
                         raise TypeError(f"Could not perform policy replacement for parameter [{name}] : {rep_from} => {rep_to}")
 
-            option = (get_policy(schema, 'prefix') or "--") + (schema.nom_de_guerre or name)
+            prefix = get_policy(schema, 'prefix')
+            if prefix is None:
+                prefix = "--"
+            option = prefix + (schema.nom_de_guerre or name)
 
             if schema.dtype == "bool":
-                explicit = get_policy(schema, "explicit_" + str(value).lower()) or value
+                explicit = get_policy(schema, "explicit_" + str(value).lower()) 
+                # if explicit setting is given, this also becomes the option value
+                # in key=value mode, just give that value directly
+                strval = str(value) if explicit is None else str(explicit)
                 if key_value:
-                    args += [f"{option}={explicit}"]
+                    args += [f"{option}={strval}"]
+                # in option mode, use --option value for explicit settings, 
+                # else give option for True and omit for False. TODO: some tools may eventually need a policy for
+                # passing --no-option for False.
                 else:
-                    args += [option, str(explicit)] if explicit is not None else ([option] if value else [])
+                    args += [option, strval] if explicit is not None else ([option] if value else [])
             else:
                 value = stringify_argument(name, value, schema, option=option)
                 if type(value) is list:

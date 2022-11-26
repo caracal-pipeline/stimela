@@ -323,7 +323,8 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
     runtime = dict(
         date=_ds, 
         time=_ts, datetime=f"{_ds}-{_ts}", 
-        node=platform.node(), 
+        node=platform.node().split('.', 1)[0],
+        hostname=platform.node(), 
         env={key: value.replace('${', '\${') for key, value in os.environ.items()})
 
     conf.run = OmegaConf.create(runtime)

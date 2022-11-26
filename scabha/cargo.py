@@ -190,9 +190,12 @@ class Parameter(object):
     def is_output(self):
         return not self._is_input
 
+    _filename_types = (File, MS, Directory, "File", "MS", "Directory")
+
     @property
     def is_named_output(self):
-        return self.is_output and self.dtype in (File, MS, Directory) and not self.implicit
+        return self.is_output and \
+            (self.dtype in self._filename_types and not self.implicit)
 
 ParameterSchema = OmegaConf.structured(Parameter)
 
@@ -304,11 +307,7 @@ class Cargo(object):
             self.log = log
             self.logopts = config.opts.log.copy()
 
-    def prevalidate(self, params: Optional[Dict[str, Any]], subst: Optional[SubstitutionNS]=None, root=False):
-        """Does pre-validation.
-        No parameter substitution is done, but will check for missing params and such.
-        A dynamic schema, if defined, is applied at this point."""
-        self.finalize()
+    def apply_dynamic_schemas(self, params):
         # update schemas, if dynamic schema is enabled
         if self._dyn_schema:
             self._inputs_outputs = None
@@ -324,6 +323,12 @@ class Cargo(object):
                         except Exception  as exc:
                             raise SchemaError(f"error in dynamic schema for parameter 'name'", exc)
                         io[name] = Parameter(**schema)
+
+    def prevalidate(self, params: Optional[Dict[str, Any]], subst: Optional[SubstitutionNS]=None, root=False):
+        """Does pre-validation.
+        No parameter substitution is done, but will check for missing params and such.
+        A dynamic schema, if defined, is applied at this point."""
+        self.finalize()
         # add implicits, if resolved
         for name, schema in self.inputs_outputs.items():
             if schema.implicit is not None and type(schema.implicit) is not Unresolved:
