@@ -72,11 +72,11 @@ def load_recipe_file(filename: str):
                 help="""Sets skip=false on the given step(s). Use commas, or give multiple times for multiple steps.""")
 @click.option("-d", "--dry-run", is_flag=True,
                 help="""Doesn't actually run anything, only prints the selected steps.""")
-@click.option("-p", "--profile", is_flag=True,
-                help="""Collect and print per-step profiling stats.""")
+@click.option("-p", "--profile", metavar="DEPTH", type=int,
+                help="""Print per-step profiling stats to this depth. 0 disables.""")
 @click.argument("what", metavar="filename.yml|cab name") 
 @click.argument("parameters", nargs=-1, metavar="[recipe name] [PARAM=VALUE] [X.Y.Z=FOO] ...", required=False) 
-def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: bool = False,
+def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: Optional[int] = None,
     step_names: List[str] = [], tags: List[str] = [], skip_tags: List[str] = [], enable_steps: List[str] = []):
 
     log = logger()
@@ -332,8 +332,9 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: b
                 tb=not isinstance(exc, ScabhaBaseException)))
         for line in traceback.format_exc().split("\n"):
             log.debug(line)
-        task_stats.save_profiling_stats(outer_step.log,
-            print_stats=profile or stimela.CONFIG.opts.print_profile)
+        task_stats.save_profiling_stats(outer_step.log, 
+            print_depth=profile if profile is not None else stimela.CONFIG.opts.profile.print_depth,
+            unroll_loops=stimela.CONFIG.opts.profile.unroll_loops)
         sys.exit(1)
 
     if outputs and outer_step.log.isEnabledFor(logging.DEBUG):
@@ -345,6 +346,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: b
         outer_step.log.info(f"run successful after {elapsed()}")
 
     task_stats.save_profiling_stats(outer_step.log, 
-        print_stats=profile or stimela.CONFIG.opts.print_profile)
+            print_depth=profile if profile is not None else stimela.CONFIG.opts.profile.print_depth,
+            unroll_loops=stimela.CONFIG.opts.profile.unroll_loops)
 
     return 0

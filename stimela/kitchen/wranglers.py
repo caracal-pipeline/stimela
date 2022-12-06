@@ -111,6 +111,17 @@ class Replace(_BaseWrangler):
     def apply(self, cabstat: CabStatus, output: str, match: re.Match):
         return self.regex.sub(self.replace, output), None
 
+class Highlight(_BaseWrangler):
+    """
+    This wrangler will replace the matching pattern with the given string. Specified as REPLACE:replacement.
+    Uses re.sub() internally, so look that up for more complex usage.
+    """
+    specifier = "HIGHLIGHT:(?P<style>.*)"
+    
+    def apply(self, cabstat: CabStatus, output: str, match: re.Match):
+        return self.regex.sub(f"[{self.style}]\\g<0>[/{self.style}]", output), None
+
+
 class ChangeSeverity(_BaseWrangler):
     """
     This wrangler will cause the output to be reported at the given severity level (instead of the
@@ -195,6 +206,7 @@ class ParseOutput(_BaseWrangler):
 
     def apply(self, cabstat: CabStatus, output: str, match: re.Match):
         value = match[self.gid]
+        print(value, self.gid)
         try:
             value = self.loader(value)
         except Exception as exc:

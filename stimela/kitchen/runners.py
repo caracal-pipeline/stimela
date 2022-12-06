@@ -11,7 +11,7 @@ def run_cab(step: Step, params: Dict[str, Any],
             batch: Batch=None) -> Cab.RuntimeStatus:
     log = step.log
     cab = step.cargo
-
+        
     ## NOTE(Sphe)
     # Not sure is this the best implementation
     # But the runtime environment has to default to config.run unless explicitly given in the step

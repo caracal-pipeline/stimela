@@ -1,4 +1,4 @@
-import re, os.path,json
+import re, os.path, json, zlib, codecs, base64
 from typing import Optional, Any, Union, Dict
 from dataclasses import dataclass
 
@@ -60,7 +60,7 @@ def get_python_interpreter_args(cab: Cab, subst: Dict[str, Any]):
     else:
         interpreter = "python"
 
-    return [interpreter]
+    return [interpreter, "-u"]
 
 
 @dataclass
@@ -106,12 +106,16 @@ class PythonCallableFlavour(_CallableFlavour):
 
         # convert inputs into a JSON string
         pass_params = cab.filter_input_params(params)
-        params_string = json.dumps(pass_params)
+        params_string = base64.b64encode(
+                            zlib.compress(json.dumps(pass_params).encode('ascii'), 2)
+                        ).decode('ascii')
 
         # form up command string
         code = f"""
-import sys, json
-_inputs = json.loads(sys.argv[1])
+import sys, json, zlib, base64
+_inputs = json.loads(zlib.decompress(
+                        base64.b64decode(sys.argv[1].encode("ascii"))
+                    ).decode("ascii"))
 sys.path.append('.')
 from {py_module} import {py_function}
 try:
