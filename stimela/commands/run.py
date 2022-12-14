@@ -7,7 +7,7 @@ import sys
 import traceback
 
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from collections import OrderedDict
 from omegaconf.omegaconf import OmegaConf, OmegaConfBaseException
 
@@ -70,6 +70,9 @@ def load_recipe_file(filename: str):
                 Use commas, or give multiple times for multiple tags.""")
 @click.option("-e", "--enable-step", "enable_steps", metavar="STEP(s)", multiple=True,
                 help="""Sets skip=false on the given step(s). Use commas, or give multiple times for multiple steps.""")
+@click.option("-a", "--assign", metavar="PARAM VALUE", nargs=2, multiple=True,
+                help="""assigns values to parameters: equivalent to PARAM=VALUE, but plays nicer with the shell's 
+                tab completion.""")
 @click.option("-d", "--dry-run", is_flag=True,
                 help="""Doesn't actually run anything, only prints the selected steps.""")
 @click.option("-p", "--profile", metavar="DEPTH", type=int,
@@ -77,10 +80,11 @@ def load_recipe_file(filename: str):
 @click.argument("what", metavar="filename.yml|cab name") 
 @click.argument("parameters", nargs=-1, metavar="[recipe name] [PARAM=VALUE] [X.Y.Z=FOO] ...", required=False) 
 def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: Optional[int] = None,
+    assign: List[Tuple[str, str]] = [],
     step_names: List[str] = [], tags: List[str] = [], skip_tags: List[str] = [], enable_steps: List[str] = []):
 
     log = logger()
-    params = OrderedDict()
+    params = OrderedDict(assign)
     dotlist = OrderedDict()
     errcode = 0
     recipe_name = None
@@ -327,14 +331,16 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: O
     try:
         outputs = outer_step.run()
     except Exception as exc:
-        if not isinstance(exc, ScabhaBaseException) or not exc.logged:
-            log_exception(StimelaRuntimeError(f"run failed after {elapsed()}", exc, 
-                tb=not isinstance(exc, ScabhaBaseException)))
-        for line in traceback.format_exc().split("\n"):
-            log.debug(line)
         task_stats.save_profiling_stats(outer_step.log, 
             print_depth=profile if profile is not None else stimela.CONFIG.opts.profile.print_depth,
             unroll_loops=stimela.CONFIG.opts.profile.unroll_loops)
+        if not isinstance(exc, ScabhaBaseException) or not exc.logged:
+            log_exception(StimelaRuntimeError(f"run failed after {elapsed()}", exc, 
+                tb=not isinstance(exc, ScabhaBaseException)))
+        else:
+            log.error("run failed, exiting with error code 1")
+        for line in traceback.format_exc().split("\n"):
+            log.debug(line)
         sys.exit(1)
 
     if outputs and outer_step.log.isEnabledFor(logging.DEBUG):
