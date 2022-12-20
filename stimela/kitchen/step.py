@@ -1,9 +1,10 @@
-import os, os.path, re, logging, fnmatch, copy, time
+import os, os.path, re, logging, copy
 from typing import Any, Tuple, List, Dict, Optional, Union
 from dataclasses import dataclass
 from omegaconf import MISSING, OmegaConf, DictConfig, ListConfig
 from omegaconf.errors import OmegaConfBaseException
 from collections import OrderedDict
+from contextlib import nullcontext
 
 from stimela import config
 from stimela.config import EmptyDictDefault, EmptyListDefault
@@ -327,7 +328,13 @@ class Step:
         if parent_log is None:
             parent_log = self.log
 
-        with stimelogging.declare_subtask(self.name) as subtask:
+        # if step is being explicitly skipped, omit from profiling
+        if self.skip is True:
+            context = nullcontext()
+        else:
+            context = stimelogging.declare_subtask(self.name)
+
+        with context as subtask:
             # evaluate the skip attribute (it can be a formula and/or a {}-substititon)
             skip = self._skip
             if self._skip is None and subst is not None:
