@@ -308,7 +308,7 @@ class Step:
         if key in self.inputs_outputs:
             self.params[key] = value
             # and remove from prevalidated params
-            if key in self.validated_params:
+            if self.validated_params and key in self.validated_params:
                 del self.validated_params[key]
         # else delegate to cargo to assign
         else:

@@ -270,8 +270,8 @@ class Recipe(Cargo):
                 comps = nested_key.split('.')
                 while len(comps) > 1:
                     if comps[0] not in container:
-                        raise AssignmentError("{self.fqname}: invalid assignment {key}={value}")
-                    container = comps[0]
+                        raise AssignmentError(f"{self.fqname}: invalid assignment {key}={value}")
+                    container = container[comps[0]]
                     comps.pop(0)
                 container[comps[0]] = value
             assign_nested(self.config, subkey, value)
