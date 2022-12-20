@@ -84,10 +84,19 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: O
     step_names: List[str] = [], tags: List[str] = [], skip_tags: List[str] = [], enable_steps: List[str] = []):
 
     log = logger()
-    params = OrderedDict(assign)
+    params = OrderedDict()
     dotlist = OrderedDict()
     errcode = 0
     recipe_name = None
+
+    # parse assign values as YaML
+    for key, value in assign:
+        # parse string as yaml value
+        try:
+            params[key] = yaml.safe_load(value)
+        except Exception as exc:
+            log_exception(f"error parsing value for --assign {key} {value}", exc)
+            errcode = 2
 
     # parse arguments as recipe name, parameter assignments, or dotlist for OmegaConf    
     for pp in parameters:
@@ -98,17 +107,12 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: O
             recipe_name = pp
         else:
             key, value = pp.split("=", 1)
-            # config.xxx= is a dotlist
-            if key.startswith("config."):
-                dotlist[key[7:]] = pp
-            # else param=value
-            else:
-                # parse string as yaml value
-                try:
-                    params[key] = yaml.safe_load(value)
-                except Exception as exc:
-                    log_exception(f"error parsing '{pp}'", exc)
-                    errcode = 2
+            # parse string as yaml value
+            try:
+                params[key] = yaml.safe_load(value)
+            except Exception as exc:
+                log_exception(f"error parsing {pp}", exc)
+                errcode = 2
 
     if errcode:
         sys.exit(errcode)
@@ -200,6 +204,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: O
         try:
             recipe = Recipe(**kwargs)
         except Exception as exc:
+            traceback.print_exc()
             log_exception(f"error loading recipe '{recipe_name}'", exc)
             sys.exit(2)
 
@@ -209,10 +214,11 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: O
 
         # wrap it in an outer step and prevalidate (to set up loggers etc.)
         recipe.fqname = recipe_name
+        recipe.finalize()
 
-        # protect dotlisted arguments from being assignedby recipe.assign and recipe.assign_based_on
-        recipe.protect_from_assignments(dotlist.keys())
-        recipe.protect_from_assignments(params.keys())
+        # split into parameters and other assignments
+        assignments = {key: value for key, value in params.items() if key not in recipe.inputs_outputs}
+        params = {key: value for key, value in params.items() if key in recipe.inputs_outputs}
 
         stimelogging.declare_chapter("prevalidation")
         log.info("pre-validating the recipe")
@@ -224,6 +230,9 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: O
             for line in traceback.format_exc().split("\n"):
                 log.debug(line)
             sys.exit(1)        
+
+        for key, value in assignments.items():
+            outer_step.assign_value(key, value, override=True)
 
         # select recipe substeps based on command line
 

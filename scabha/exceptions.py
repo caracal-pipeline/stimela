@@ -70,6 +70,9 @@ class DefinitionError(ScabhaBaseException):
 class StepValidationError(ScabhaBaseException):
     pass
 
+class AssignmentError(ScabhaBaseException):
+    pass
+
 class ParameterValidationError(ScabhaBaseException):
     pass
 

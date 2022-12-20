@@ -81,6 +81,8 @@ class Step:
             self.params = OmegaConf.to_container(self.params)
         # after (pre)validation, this contains parameter values
         self.validated_params = None
+        # parameters protected from assignment (because they've been set on the command line, presumably)
+        self._assignment_overrides = set()
         # the "skip" attribute is reevaluated at runtime since it may contain substitutions, but if it's set to a bool
         # constant, self._skip will be preset already
         if self.skip in {"True", "true", "1"}:
@@ -288,11 +290,29 @@ class Step:
     def log_exception(self, exc, severity="error"):
         log_exception(exc, severity=severity, log=self.log)
 
-    # def assign(self, key, value):
-    #     if key in self.inputs_outputs:
-    #         self.params[key] = value
-    #         if key in self.validated_params:
-    #             del self.validated_params[key]
+    def assign_value(self, key: str, value: Any, override: bool = False):
+        """assigns parameter value or nested variable value to this step
+
+        Args:
+            key (str): name
+            value (Any): value
+            override (bool): If True, value will override all future assignments (used for command-line overrides)
+                             Defaults to False.
+        """
+        # ignore assignment if an override assignment was done earlier
+        if key in self._assignment_overrides and not override:
+            return
+        if override:
+            self._assignment_overrides.add(key)
+        # assigning parameter directly? Add to self.params
+        if key in self.inputs_outputs:
+            self.params[key] = value
+            # and remove from prevalidated params
+            if key in self.validated_params:
+                del self.validated_params[key]
+        # else delegate to cargo to assign
+        else:
+            self.cargo.assign_value(key, value, override=override, subst=subst)
 
     def run(self, subst=None, batch=None, parent_log=None):
         """Runs the step"""

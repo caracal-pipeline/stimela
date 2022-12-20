@@ -10,7 +10,7 @@ import rich.markup
 from rich.table import Table
 from rich.markdown import Markdown
 
-from .exceptions import NestedSchemaError, ParameterValidationError, DefinitionError, SchemaError
+from .exceptions import ParameterValidationError, DefinitionError, SchemaError, AssignmentError
 from .validate import validate_parameters, Unresolved
 from .substitutions import SubstitutionNS
 from .basetypes import EmptyDictDefault, EmptyListDefault, UNSET
@@ -411,4 +411,10 @@ class Cargo(object):
                                   f"[dim]{rich.markup.escape(str(schema.dtype))}[/dim]",
                                   " ".join(info))
 
+    def assign_value(self, key: str, value: Any, override: bool = False):
+        """assigns a parameter value to the cargo. 
+        Recipe will override this to handle nested assignments. Cabs can't be assigned to
+        (it will be handled by the wraping step)
+        """
+        raise AssignmentError(f"{self.name}: invalid assignment {key}={value}")
 
