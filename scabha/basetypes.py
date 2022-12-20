@@ -33,6 +33,10 @@ class Placeholder(Unresolved):
     """Marks placeholder values that are guaranteed to resolve later, such as fot-loop iterants"""
     pass
 
+class SkippedOutput(Unresolved):
+    """Marks invalid outputs of skipped steps"""
+    pass
+
 import os.path
 
 class File(str):

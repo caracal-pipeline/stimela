@@ -15,7 +15,7 @@ import scabha.exceptions
 from scabha.exceptions import SubstitutionError, SubstitutionErrorList
 from scabha.validate import evaluate_and_substitute, Unresolved, join_quote
 from scabha.substitutions import SubstitutionNS, substitutions_from 
-from scabha.basetypes import UNSET, Placeholder, MS, File, Directory
+from scabha.basetypes import UNSET, Placeholder, MS, File, Directory, SkippedOutput
 from .cab import Cab, get_cab_schema
 
 Conditional = Optional[str]
@@ -320,19 +320,22 @@ class Step:
         from .recipe import Recipe
         from . import runners
 
-        stimelogging.declare_chapter(f"{self.fqname}")
-
-        if self.validated_params is None:
-            self.prevalidate(self.params)
         # some messages go to the parent logger -- if not defined, default to our own logger
         if parent_log is None:
             parent_log = self.log
 
-        # if step is being explicitly skipped, omit from profiling
-        if self.skip is True:
+        # if step is being explicitly skipped, omit from profiling, and drop info/warning messages to debug level
+        explicit_skip = self.skip is True 
+        if explicit_skip:
             context = nullcontext()
+            parent_log_info, parent_log_warning = parent_log.debug, parent_log.debug
         else:
             context = stimelogging.declare_subtask(self.name)
+            stimelogging.declare_chapter(f"{self.fqname}")
+            parent_log_info, parent_log_warning = parent_log.info, parent_log.warning
+
+        if self.validated_params is None:
+            self.prevalidate(self.params)
 
         with context as subtask:
             # evaluate the skip attribute (it can be a formula and/or a {}-substititon)
@@ -376,7 +379,7 @@ class Step:
                 self.log_summary(level, "summary of inputs follows", color="WARNING", inputs=True)
                 # raise up, unless step is being skipped
                 if skip:
-                    parent_log.warning("since the step is being skipped, this is not fatal")
+                    parent_log_warning("since the step is being skipped, this is not fatal")
                     skip_warned = True
                 else:
                     raise
@@ -399,9 +402,9 @@ class Step:
             if invalid:
                 invalid = self.invalid_params + self.unresolved_params
                 if skip:
-                    self.log.warning(f"invalid inputs: {join_quote(invalid)}")
+                    parent_log_warning(f"invalid inputs: {join_quote(invalid)}")
                     if not skip_warned:
-                        parent_log.warning("since the step was skipped, this is not fatal")
+                        parent_log_warning("since the step was skipped, this is not fatal")
                         skip_warned = True
                 else:
                     raise StepValidationError(f"step '{self.name}': invalid inputs: {join_quote(invalid)}", log=self.log)
@@ -427,9 +430,9 @@ class Step:
                     raise RuntimeError("step '{self.name}': unknown cargo type")
             else:
                 if self._skip is None and subst is not None:
-                    parent_log.info(f"skipping step based on setting of '{self.skip}'")
+                    parent_log_info(f"skipping step based on setting of '{self.skip}'")
                 else:
-                    parent_log.info("skipping step based on explicit setting")
+                    parent_log.debug("skipping step based on explicit setting")
 
             self.log.debug(f"validating outputs")
             validated = False
@@ -462,11 +465,12 @@ class Step:
                 self.log_summary(logging.DEBUG, "validated outputs", ignore_missing=True, outputs=True)
 
             # bomb out if an output was invalid
-            invalid = [name for name in self.invalid_params + self.unresolved_params if name in self.cargo.outputs]
+            invalid = [name for name in self.invalid_params + self.unresolved_params 
+                        if name in self.cargo.outputs and self.cargo.outputs[name].required is not False]
             if invalid:
                 if skip:
-                    parent_log.warning(f"invalid outputs: {join_quote(invalid)}")
-                    parent_log.warning("since the step was skipped, this is not fatal")
+                    parent_log_warning(f"invalid outputs: {join_quote(invalid)}")
+                    parent_log_warning("since the step was skipped, this is not fatal")
                 else:
                     raise StepValidationError(f"invalid outputs: {join_quote(invalid)}", log=self.log)
 

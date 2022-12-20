@@ -12,6 +12,7 @@ from stimela.config import EmptyDictDefault, EmptyListDefault
 import stimela
 from stimela import log_exception, stimelogging
 from stimela.exceptions import *
+from scabha.basetypes import SkippedOutput
 from scabha.validate import evaluate_and_substitute, Unresolved, join_quote
 from scabha.substitutions import SubstitutionNS
 from scabha.cargo import Parameter, Cargo, ParameterCategory
@@ -803,8 +804,8 @@ class Recipe(Cargo):
             elif not isinstance(values, (list, tuple)):
                 values = [values]
             if self._for_loop_values is None:
-                self.log.info(f"recipe is a for-loop with '{self.for_loop.var}' iterating over {len(values)} values")
-                self.log.info(f"Loop values: {values}")
+                self.log.debug(f"recipe is a for-loop with '{self.for_loop.var}' iterating over {len(values)} values")
+                self.log.debug(f"loop values: {values}")
             self._for_loop_values = values
         # else fake a single-value list
         else:
@@ -952,9 +953,12 @@ class Recipe(Cargo):
                 subst.info = info.copy()
                 subst.info = info_step
 
-                self.log.info(f"processing step '{label}'")
-                if step.info:
-                    self.log.info(f"  ({step.info})", extra=dict(color="GREEN", boldface=True))
+                if step.skip is True:
+                    self.log.debug(f"step '{label}' will be explicitly skipped")
+                else:
+                    self.log.info(f"processing step '{label}'")
+                    if step.info:
+                        self.log.info(f"  ({step.info})", extra=dict(color="GREEN", boldface=True))
                 try:
                     #step_params = step.run(subst=subst.copy(), batch=batch)  # make a copy of the subst dict since recipe might modify
                     step_params = step.run(subst=subst.copy(), parent_log=self.log)  # make a copy of the subst dict since recipe might modify
@@ -974,6 +978,10 @@ class Recipe(Cargo):
                 for name, aliases in self._alias_list.items():
                     for alias in aliases:
                         if alias.from_step:
+                            # if step was skipped, mark output as not required
+                            if alias.step._skip:
+                                self.outputs[name].required = False
+                            # if step output is validated, add it to our output 
                             if alias.param in alias.step.validated_params:
                                 outputs[name] = alias.step.validated_params[alias.param]
 

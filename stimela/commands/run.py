@@ -215,9 +215,11 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: O
         # wrap it in an outer step and prevalidate (to set up loggers etc.)
         recipe.fqname = recipe_name
         recipe.finalize()
+        
+        for key, value in params.items():
+            recipe.assign_value(key, value, override=True)
 
-        # split into parameters and other assignments
-        assignments = {key: value for key, value in params.items() if key not in recipe.inputs_outputs}
+        # split out parameters
         params = {key: value for key, value in params.items() if key in recipe.inputs_outputs}
 
         stimelogging.declare_chapter("prevalidation")
@@ -230,9 +232,6 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: O
             for line in traceback.format_exc().split("\n"):
                 log.debug(line)
             sys.exit(1)        
-
-        for key, value in assignments.items():
-            outer_step.assign_value(key, value, override=True)
 
         # select recipe substeps based on command line
 
@@ -258,7 +257,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: O
             for step_name, step in recipe.steps.items():
                 if (tags & step.tags):
                     tagged_steps.add(step_name)
-            log.info(f"{len(tagged_steps)} of {len(recipe.steps)} steps selected via tags ({', '.join(tags)})")
+            log.info(f"{len(tagged_steps)} of {len(recipe.steps)} step(s) selected via tags ({', '.join(tags)})")
         # else, use steps without any tag in (skip_tags + {"never"})
         else:
             skip_tags.add("never")
@@ -266,7 +265,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: O
                 if not (skip_tags & step.tags):
                     tagged_steps.add(step_name)
             if len(recipe.steps) != len(tagged_steps):
-                log.info(f"{len(recipe.steps) - len(tagged_steps)} steps skipped due to tags ({', '.join(skip_tags)})")
+                log.info(f"{len(recipe.steps) - len(tagged_steps)} step(s) skipped due to tags ({', '.join(skip_tags)})")
 
         # add steps explicitly enabled by --step
         if step_names:
@@ -300,7 +299,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: O
                     recipe.enable_step(name)  # config file may have skip=True, but we force-enable here
                     step_subset.add(name)
             # specified subset becomes *the* subset
-            log.info(f"{len(step_subset)} steps selected by name")
+            log.info(f"{len(step_subset)} step(s) selected by name")
             tagged_steps = step_subset
 
         if not tagged_steps:
