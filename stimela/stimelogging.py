@@ -187,6 +187,34 @@ def disable_file_logger(log: logging.Logger):
         del _logger_file_handlers[log.name]
 
 
+class DelayedFileHandler(logging.FileHandler):
+    """A version of FileHandler that also handles directory and symlink creation in a delayed way"""
+    def __init__(self, logfile, symlink, mode):
+        self.symlink, self.logfile = symlink, logfile
+        self.is_open = False
+        super().__init__(logfile, mode, delay=True)
+
+    def get_logfile_dir(self):
+        """Gets name of logfile and ensures the directory exists"""
+        if not self.is_open:
+            self.is_open = True
+            logdir = os.path.dirname(self.logfile)
+            if logdir and not os.path.exists(logdir):            
+                os.makedirs(logdir)
+                if self.symlink:
+                    symlink_path = os.path.join(os.path.dirname(logdir.rstrip("/")) or ".", self.symlink)
+                    # remove existing symlink
+                    if os.path.islink(symlink_path):
+                        os.unlink(symlink_path)
+                    # Make symlink to logdir. If name exists and is not a symlink, we'll do nothing
+                    if not os.path.exists(symlink_path):
+                        os.symlink(os.path.basename(logdir), symlink_path)
+        return os.path.dirname(self.logfile)
+
+    def emit(self, record):
+        self.get_logfile_dir()
+        return super().emit(record)
+
 def setup_file_logger(log: logging.Logger, logfile: str, level: Optional[Union[int, str]] = logging.INFO, symlink: Optional[str] = None):
     """Sets up logging to file
 
@@ -210,21 +238,8 @@ def setup_file_logger(log: logging.Logger, logfile: str, level: Optional[Union[i
             fh.close()
             log.removeHandler(fh)
 
-        # create new one
-        logdir = os.path.dirname(logfile)
-        if logdir and not os.path.exists(logdir):            
-            os.makedirs(logdir)
-            if symlink:
-                symlink_path = os.path.join(os.path.dirname(logdir.rstrip("/")) or ".", symlink)
-                # remove existing symlink
-                if os.path.islink(symlink_path):
-                    os.unlink(symlink_path)
-                # Make symlink to logdir. If name exists and is not a symlink, we'll do nothing
-                if not os.path.exists(symlink_path):
-                    os.symlink(os.path.basename(logdir), symlink_path)
-
-        
-        fh = logging.FileHandler(logfile, 'w', delay=True)
+        # create new FH
+        fh = DelayedFileHandler(logfile, symlink, 'w')
         fh.setFormatter(log_boring_formatter)
         log.addHandler(fh)
 
@@ -282,12 +297,12 @@ def update_file_logger(log: logging.Logger, logopts: DictConfig, nesting: int = 
         disable_file_logger(log)
 
 
-def get_logger_file(log: logging.Logger):
+def get_logfile_dir(log: logging.Logger):
     """Returns filename associated with the logger, or None if not logging to file"""
-    logfile, _ = _logger_file_handlers.get(log.name, (None, None))
+    logfile, fh = _logger_file_handlers.get(log.name, (None, None))
     if logfile is None:
         return None
-    return os.path.dirname(logfile)
+    return fh.get_logfile_dir()
 
 
 def log_exception(*errors, severity="error", log=None):

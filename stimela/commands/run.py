@@ -317,7 +317,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: O
         if any(recipe.steps[name]._skip for name in tagged_steps):
             log.warning("note that some steps remain explicitly skipped")
 
-        filename = os.path.join(stimelogging.get_logger_file(recipe.log) or '.', "stimela.recipe.deps")
+        filename = os.path.join(stimelogging.get_logfile_dir(recipe.log) or '.', "stimela.recipe.deps")
         stimela.config.CONFIG_DEPS.update(recipe_deps)
         stimela.config.CONFIG_DEPS.save(filename)
         log.info(f"saved recipe dependencies to {filename}")

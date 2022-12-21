@@ -115,7 +115,7 @@ def cli(backend, config_files=[], config_dotlist=[], include=[], verbose=False, 
         log.debug(f"config dependency {', '.join([filename] + attrs)}")
 
     # dump dependencies
-    filename = os.path.join(stimelogging.get_logger_file(log) or '.', "stimela.config.deps")
+    filename = os.path.join(stimelogging.get_logfile_dir(log) or '.', "stimela.config.deps")
     log.info(f"saving config dependencies to {filename}")
     config.CONFIG_DEPS.save(filename)
 

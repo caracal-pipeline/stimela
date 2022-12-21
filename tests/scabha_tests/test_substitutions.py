@@ -105,12 +105,13 @@ def test_subst():
         
 def test_formulas():
 
-    ns = SubstitutionNS(previous={})
+    ns = SubstitutionNS(previous={}, previous2={})
 
     ns.previous.x = 1
     ns.previous.x0 = 0
     ns.previous.y = 'y'
     ns.previous.z = 'z'
+    ns.previous2.z = 'zz'
 
     current = OrderedDict(
         a = 'a{previous.x}',
@@ -132,7 +133,8 @@ def test_formulas():
         p = 'x{previous.zz}',
         q = '=LIST(current.a, current.b, current.c + 1, 0)',
         r = '=not IFSET(current.a)',
-        s = '=current.c + current.c + current.c'
+        s = '=current.c + current.c + current.c',
+        t = '=previous*.z'
     )
     ns._add_("current", current)
     
@@ -162,6 +164,7 @@ def test_formulas():
         assert type(r['p']) is Unresolved
         assert r['q'] == ["a1", "=escaped", 2, 0]
         assert r['r'] == False
+        assert r['t'] == 'zz'
 
 if __name__ == "__main__":
     test_subst()

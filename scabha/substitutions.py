@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from contextlib import contextmanager
 from typing import Any, Dict, Optional, Union, List
 import threading
+import fnmatch
 
 from .exceptions import Error, SubstitutionError, CyclicSubstitutionError
 from .basetypes import EmptyDictDefault
@@ -150,6 +151,12 @@ class SubstitutionNS(OrderedDict):
                 for otherloc, otherfrom in context.loc_stack[:-1]:
                     if otherloc == nestloc:
                         raise CyclicSubstitutionError(context.loc_stack[-1][1], otherfrom)
+            # check wildcards, substitute last
+            if name not in self and ('*' in name or '?' in name):
+                names = sorted(fnmatch.filter(super().keys(), name))
+                if names:
+                    name = names[-1]
+            # now look up again
             if name in self:
                 value = super().get(name)
                 if context and not self._nosubst_:
