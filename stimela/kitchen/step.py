@@ -1,4 +1,4 @@
-import os, os.path, re, logging, copy
+import os, os.path, re, logging, copy, shutil
 from typing import Any, Tuple, List, Dict, Optional, Union
 from dataclasses import dataclass
 from omegaconf import MISSING, OmegaConf, DictConfig, ListConfig
@@ -410,6 +410,16 @@ class Step:
                     raise StepValidationError(f"step '{self.name}': invalid inputs: {join_quote(invalid)}", log=self.log)
 
             if not skip:
+                # check for outputs that need removal
+                for name, schema in self.outputs.items():
+                    if name in params and schema.remove_if_exists and schema.is_file_type:
+                        path = params[name]
+                        if os.path.exists(path):
+                            if os.path.isdir(path) and not os.path.islink(path):
+                                shutil.rmtree(path)
+                            else:
+                                os.unlink(path)
+
                 if type(self.cargo) is Recipe:
                     self.cargo._run(params, subst)
                 elif type(self.cargo) is Cab:

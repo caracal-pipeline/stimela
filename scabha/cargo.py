@@ -51,7 +51,7 @@ class ParameterPolicies(object):
 
     # skip this parameter
     skip: Optional[bool] = None
-    # if True, implicit parameters will be skipped automatically
+    # if True, implicit parameters will be skipped 
     skip_implicits: Optional[bool] = None
 
     # if set, {}-substitutions on this paramater will not be done
@@ -65,7 +65,7 @@ class ParameterPolicies(object):
     # if set, a string-type value will be split into a list of arguments using this separator
     split: Optional[str] = None
 
-    # dict of character replacements
+    # dict of character replacements for mapping parameter name to command line
     replace: Optional[Dict[str, str]] = None
 
     # Value formatting policies.
@@ -131,6 +131,9 @@ class Parameter(object):
     # if None, then the default logic applies: inputs must exist, and outputs don't
     must_exist: Optional[bool] = None
 
+    # For output File-type parameters. If True, and the output exists, remove before running
+    remove_if_exists: bool = False
+
     # if command-line option for underlying binary has a different name, specify it here
     nom_de_guerre: Optional[str] = None
 
@@ -194,9 +197,14 @@ class Parameter(object):
     _filename_types = (File, MS, Directory, "File", "MS", "Directory")
 
     @property
+    def is_file_type(self):
+        """True if parameter is a file or directory type"""
+        return self.dtype in self._filename_types
+
+    @property
     def is_named_output(self):
-        return self.is_output and \
-            (self.dtype in self._filename_types and not self.implicit)
+        """True if parameter is a named file or directory output"""
+        return self.is_output and self.is_file_type and not self.implicit
 
 ParameterSchema = OmegaConf.structured(Parameter)
 
