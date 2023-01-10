@@ -223,7 +223,7 @@ _printed_stats = dict(
 # these stats are written as sums
 _sum_stats = ("read_count", "read_gb", "read_ms", "write_count", "write_gb", "write_ms")
 
-def render_profiling_summary(stats):
+def render_profiling_summary(stats, max_depth, unroll_loops=False):
 
     table_avg = Table(title=Text("\naverages & total I/O", style="bold"))
     table_avg.add_column("")
@@ -241,7 +241,10 @@ def render_profiling_summary(stats):
     table_avg.add_column("W GB", justify="right")
 
     for name, (elapsed, sum, peak) in stats.items():
-        if name:
+        if name and len(name) <= max_depth:
+            # skip loop iterations, if not unrolling loops 
+            if not unroll_loops and any(n.endswith("]") for n in name):
+                continue
             secs, mins, hours = elapsed % 60, int(elapsed // 60) % 60, int(elapsed // 3600)
             tstr = f"{hours:d}:{mins:02d}:{secs:04.1f}"
             avg = sum.averaged()
@@ -276,12 +279,12 @@ def render_profiling_summary(stats):
 #     console.print("[bold red]Hello[/] World")
 # str_output = capture.get()
 
-def save_profiling_stats(log, print_stats=True):
+def save_profiling_stats(log, print_depth=2, unroll_loops=False):
     from . import stimelogging
     
     stats = collect_stats()
-    summary = render_profiling_summary(stats)
-    if print_stats:
+    summary = render_profiling_summary(stats, print_depth, unroll_loops=unroll_loops)
+    if print_depth:
         print(summary)
 
     filename = os.path.join(stimelogging.get_logger_file(log) or '.', "stimela.stats.full")

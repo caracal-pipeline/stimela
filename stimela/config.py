@@ -86,6 +86,11 @@ def get_backend_status(name):
 
 
 @dataclass
+class StimelaProfilingOptions(object):
+    print_depth: int = 9999
+    unroll_loops: bool = False
+
+@dataclass
 class StimelaOptions(object):
     backend: Backend = "native" #TODO(Sphe):: Maybe docker/singularity makes more sense
     registry: str = "quay.io"
@@ -96,10 +101,12 @@ class StimelaOptions(object):
     include: List[str] = EmptyListDefault()
     ## For distributed computes and cpu allocation
     dist: Dict[str, Any] = EmptyDictDefault()  
+    ## Resource limits -- see resource module
+    rlimits: Dict[str, Any] = EmptyDictDefault()
     ## Miscellaneous runtime option 
     runtime: Dict[str, Any] = EmptyDictDefault()
     ## Profiling options
-    print_profile: bool = True
+    profile: StimelaProfilingOptions = StimelaProfilingOptions()
 
 
 def DefaultDirs():
