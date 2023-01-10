@@ -12,6 +12,7 @@ from stimela.config import EmptyDictDefault, EmptyListDefault
 import stimela
 from stimela import log_exception, stimelogging
 from stimela.exceptions import *
+from scabha.basetypes import SkippedOutput
 from scabha.validate import evaluate_and_substitute, Unresolved, join_quote
 from scabha.substitutions import SubstitutionNS
 from scabha.cargo import Parameter, Cargo, ParameterCategory
@@ -121,10 +122,6 @@ class Recipe(Cargo):
         self._for_loop_values = self._for_loop_scatter = None
         # process pool used to run for-loops
         self._loop_pool = None
-
-    def protect_from_assignments(self, keys):
-        self._protected_from_assign.update(keys)
-        #self.log.debug(f"protected from assignment: {self._protected_from_assign}")
 
     def validate_assignments(self, assign, assign_based_on, location):
         # collect a list of all assignments
@@ -244,19 +241,56 @@ class Recipe(Cargo):
             raise AssignmentError(f"{whose.fqname}: error evaluating assignments", exc)
         # dispatch and reassign, since substitutions may have been performed
         for key, value in assign.items():
-            subst.recipe[key] = value
-            if key in self.inputs_outputs:
-                self.log.debug(f"default params assignment: {key}={value}")
-                self.defaults[key] = value
-            elif key.startswith("log."):
-                if type(value) is Unresolved:
-                    self.log.debug(f"ignoring unresolved log options assignment {key}={value}")
-                else:
-                    self.log.debug(f"log options assignment: {key}={value}")
-                    _, setting = key.split('.')
-                    whose.update_log_options(**{setting: value})
+            self.assign_value(key, value, subst=subst, whose=whose)
+
+    def assign_value(self, key: str, value: Any, override: bool = False,
+                     subst: Optional[Dict[str, Any]] = None, whose: Optional[Any] = None):
+        """assigns a parameter value to the recipe. Handles nested assignments and 
+        assignments to local log options.
+        """
+        # ignore protected assignments
+        if key in self._protected_from_assign and not override:
+            return
+
+        if '.' in key:
+            nesting, subkey = key.split('.', 1)
+        else:
+            nesting, subkey = None, key
+
+        # assigning to input or output? Provide default            
+        if key in self.inputs_outputs:
+            self.log.debug(f"default params assignment: {key}={value}")
+            self.defaults[key] = value
+        # assigning to a substep? Invoke nested assignment
+        elif nesting is not None and nesting in self.steps:
+            return self.steps[nesting].assign_value(subkey, value, override=override)
+        # assigning to config?
+        elif nesting == "config":
+            # helper function to do nested assignment of config and subst
+            def assign_nested(container, nested_key, value):
+                comps = nested_key.split('.')
+                while len(comps) > 1:
+                    if comps[0] not in container:
+                        raise AssignmentError(f"{self.fqname}: invalid assignment {key}={value}")
+                    container = container[comps[0]]
+                    comps.pop(0)
+                container[comps[0]] = value
+            assign_nested(self.config, subkey, value)
+            if subst is not None and 'config' in subst:
+                assign_nested(subst.config, subkey, value)
+        elif nesting == "log":
+            whose = whose or self
+            if type(value) is Unresolved:
+                self.log.debug(f"ignoring unresolved log options assignment {key}={value}")
             else:
-                self.log.debug(f"variable assignment: {key}={value}")
+                self.log.debug(f"log options assignment: {key}={value}")
+                whose.update_log_options(**{subkey: value})
+            if whose is self and subst is not None and 'recipe' in subst:
+                subst.recipe.log[subkey] = value
+        # in override mode, assign to assign dict for future processing
+        if override:
+            self.assign[key] = value
+            self._protected_from_assign.add(key)
 
     def update_log_options(self, **options):
         for setting, value in options.items():
@@ -770,8 +804,8 @@ class Recipe(Cargo):
             elif not isinstance(values, (list, tuple)):
                 values = [values]
             if self._for_loop_values is None:
-                self.log.info(f"recipe is a for-loop with '{self.for_loop.var}' iterating over {len(values)} values")
-                self.log.info(f"Loop values: {values}")
+                self.log.debug(f"recipe is a for-loop with '{self.for_loop.var}' iterating over {len(values)} values")
+                self.log.debug(f"loop values: {values}")
             self._for_loop_values = values
         # else fake a single-value list
         else:
@@ -919,9 +953,12 @@ class Recipe(Cargo):
                 subst.info = info.copy()
                 subst.info = info_step
 
-                self.log.info(f"processing step '{label}'")
-                if step.info:
-                    self.log.info(f"  ({step.info})", extra=dict(color="GREEN", boldface=True))
+                if step.skip is True:
+                    self.log.debug(f"step '{label}' will be explicitly skipped")
+                else:
+                    self.log.info(f"processing step '{label}'")
+                    if step.info:
+                        self.log.info(f"  ({step.info})", extra=dict(color="GREEN", boldface=True))
                 try:
                     #step_params = step.run(subst=subst.copy(), batch=batch)  # make a copy of the subst dict since recipe might modify
                     step_params = step.run(subst=subst.copy(), parent_log=self.log)  # make a copy of the subst dict since recipe might modify
@@ -941,6 +978,10 @@ class Recipe(Cargo):
                 for name, aliases in self._alias_list.items():
                     for alias in aliases:
                         if alias.from_step:
+                            # if step was skipped, mark output as not required
+                            if alias.step._skip:
+                                self.outputs[name].required = False
+                            # if step output is validated, add it to our output 
                             if alias.param in alias.step.validated_params:
                                 outputs[name] = alias.step.validated_params[alias.param]
 

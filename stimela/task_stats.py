@@ -287,7 +287,7 @@ def save_profiling_stats(log, print_depth=2, unroll_loops=False):
     if print_depth:
         print(summary)
 
-    filename = os.path.join(stimelogging.get_logger_file(log) or '.', "stimela.stats.full")
+    filename = os.path.join(stimelogging.get_logfile_dir(log) or '.', "stimela.stats.full")
 
     stats_dict = OmegaConf.create()
 
@@ -305,7 +305,7 @@ def save_profiling_stats(log, print_depth=2, unroll_loops=False):
 
     log.info(f"saved full profiling stats to {filename}")
 
-    filename = os.path.join(stimelogging.get_logger_file(log) or '.', "stimela.stats.summary.txt")
+    filename = os.path.join(stimelogging.get_logfile_dir(log) or '.', "stimela.stats.summary.txt")
     open(filename, "wt").write(summary)
 
     log.info(f"saved summary to {filename}")

@@ -1,6 +1,6 @@
 import glob
 import os.path
-
+import fnmatch
 import pyparsing
 pyparsing.ParserElement.enable_packrat()
 from pyparsing import *
@@ -173,38 +173,49 @@ class FunctionHandler(ResultsHandler):
         if len(args) != 1:
             raise FormulaError(f"{'.'.join(evaluator.location)}: GLOB() expects 1 argument, got {len(args)}")
         pattern = evaluator._evaluate_result(args[0])
+        if type(pattern) is UNSET:
+            return pattern
         return sorted(glob.glob(pattern))
 
     def EXISTS(self, evaluator, args):
         if len(args) != 1:
             raise FormulaError(f"{'.'.join(evaluator.location)}: EXISTS() expects 1 argument, got {len(args)}")
         pattern = evaluator._evaluate_result(args[0])
+        if type(pattern) is UNSET:
+            return pattern
         return bool(glob.glob(pattern))
 
     def DIRNAME(self, evaluator, args):
         if len(args) != 1:
             raise FormulaError(f"{'.'.join(evaluator.location)}: DIRNAME() expects 1 argument, got {len(args)}")
         path = evaluator._evaluate_result(args[0])
+        if type(path) is UNSET:
+            return path
         return os.path.dirname(str(path))
 
     def BASENAME(self, evaluator, args):
         if len(args) != 1:
             raise FormulaError(f"{'.'.join(evaluator.location)}: BASENAME() expects 1 argument, got {len(args)}")
         path = evaluator._evaluate_result(args[0])
+        if type(path) is UNSET:
+            return path
         return os.path.basename(str(path))
 
     def EXTENSION(self, evaluator, args):
         if len(args) != 1:
             raise FormulaError(f"{'.'.join(evaluator.location)}: EXTENSION() expects 1 argument, got {len(args)}")
         path = evaluator._evaluate_result(args[0])
+        if type(path) is UNSET:
+            return path
         return os.path.splitext(str(path))[1]
 
     def STRIPEXT(self, evaluator, args):
         if len(args) != 1:
             raise FormulaError(f"{'.'.join(evaluator.location)}: STRIPEXT() expects 1 argument, got {len(args)}")
         path = evaluator._evaluate_result(args[0])
+        if type(path) is UNSET:
+            return path
         return os.path.splitext(str(path))[0]
-
 
 def construct_parser():
     lparen = Literal("(").suppress()
@@ -223,7 +234,7 @@ def construct_parser():
     boolean = (bool_true | bool_false)("constant")
     number = common.number("constant")
 
-    fieldname = Word(alphas + "_", alphanums + "_-@")
+    fieldname = Word(alphas + "_", alphanums + "_-@*?")
     nested_field = Group(fieldname + OneOrMore(period + fieldname))("namespace_lookup")
     anyseq = CharsNotIn(",)")("constant")
 
@@ -322,7 +333,7 @@ class Evaluator(object):
                 try:
                     value = self.subst_context.evaluate(value, location=self.location)
                 except (KeyError, AttributeError) as exc:
-                    raise SubstitutionError(f"{value}: invalid key '{exc}'")
+                    raise SubstitutionError(f"{value}: invalid key {exc}")
                 except Exception as exc:
                     raise SubstitutionError(f"{value}: {exc}")
         return value
@@ -350,6 +361,11 @@ class Evaluator(object):
         fields = list(args)
         while fields:
             fld = fields.pop(0)
+            # check for wildcards
+            if fld not in value and ('*' in fld or '?' in fld):
+                names = sorted(fnmatch.filter(value.keys(), fld))
+                if names:
+                    fld = names[-1]
             # last element allowed to be UNSET, otherwise substitution error
             if fld not in value:
                 if fields:

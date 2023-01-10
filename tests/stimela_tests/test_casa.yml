@@ -12,6 +12,23 @@ cabs:
       vis:
         dtype: MS
         required: true
+  casa.split:
+    command: split
+    flavour: casa-task
+    inputs:
+      vis:
+        dtype: MS
+        required: true
+      datacolumn:
+        dtype: str
+        default: data
+      antenna:
+        dtype: str
+    outputs:
+      outputvis:
+        dtype: MS
+        required: true
+        remove_if_exists: true
 
 test_casa:
   steps:
@@ -19,3 +36,10 @@ test_casa:
       cab: casa.listobs
       params:
         vis: test-a.ms 
+
+    s2: 
+      cab: casa.split
+      params:
+        vis: demo-D147.ms
+        outputvis: demo-D147-ant1.ms
+        antenna: 1

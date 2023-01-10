@@ -84,10 +84,19 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: O
     step_names: List[str] = [], tags: List[str] = [], skip_tags: List[str] = [], enable_steps: List[str] = []):
 
     log = logger()
-    params = OrderedDict(assign)
+    params = OrderedDict()
     dotlist = OrderedDict()
     errcode = 0
     recipe_name = None
+
+    # parse assign values as YaML
+    for key, value in assign:
+        # parse string as yaml value
+        try:
+            params[key] = yaml.safe_load(value)
+        except Exception as exc:
+            log_exception(f"error parsing value for --assign {key} {value}", exc)
+            errcode = 2
 
     # parse arguments as recipe name, parameter assignments, or dotlist for OmegaConf    
     for pp in parameters:
@@ -98,17 +107,12 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: O
             recipe_name = pp
         else:
             key, value = pp.split("=", 1)
-            # config.xxx= is a dotlist
-            if key.startswith("config."):
-                dotlist[key[7:]] = pp
-            # else param=value
-            else:
-                # parse string as yaml value
-                try:
-                    params[key] = yaml.safe_load(value)
-                except Exception as exc:
-                    log_exception(f"error parsing '{pp}'", exc)
-                    errcode = 2
+            # parse string as yaml value
+            try:
+                params[key] = yaml.safe_load(value)
+            except Exception as exc:
+                log_exception(f"error parsing {pp}", exc)
+                errcode = 2
 
     if errcode:
         sys.exit(errcode)
@@ -200,6 +204,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: O
         try:
             recipe = Recipe(**kwargs)
         except Exception as exc:
+            traceback.print_exc()
             log_exception(f"error loading recipe '{recipe_name}'", exc)
             sys.exit(2)
 
@@ -209,10 +214,13 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: O
 
         # wrap it in an outer step and prevalidate (to set up loggers etc.)
         recipe.fqname = recipe_name
+        recipe.finalize()
+        
+        for key, value in params.items():
+            recipe.assign_value(key, value, override=True)
 
-        # protect dotlisted arguments from being assignedby recipe.assign and recipe.assign_based_on
-        recipe.protect_from_assignments(dotlist.keys())
-        recipe.protect_from_assignments(params.keys())
+        # split out parameters
+        params = {key: value for key, value in params.items() if key in recipe.inputs_outputs}
 
         stimelogging.declare_chapter("prevalidation")
         log.info("pre-validating the recipe")
@@ -249,7 +257,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: O
             for step_name, step in recipe.steps.items():
                 if (tags & step.tags):
                     tagged_steps.add(step_name)
-            log.info(f"{len(tagged_steps)} of {len(recipe.steps)} steps selected via tags ({', '.join(tags)})")
+            log.info(f"{len(tagged_steps)} of {len(recipe.steps)} step(s) selected via tags ({', '.join(tags)})")
         # else, use steps without any tag in (skip_tags + {"never"})
         else:
             skip_tags.add("never")
@@ -257,7 +265,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: O
                 if not (skip_tags & step.tags):
                     tagged_steps.add(step_name)
             if len(recipe.steps) != len(tagged_steps):
-                log.info(f"{len(recipe.steps) - len(tagged_steps)} steps skipped due to tags ({', '.join(skip_tags)})")
+                log.info(f"{len(recipe.steps) - len(tagged_steps)} step(s) skipped due to tags ({', '.join(skip_tags)})")
 
         # add steps explicitly enabled by --step
         if step_names:
@@ -291,7 +299,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: O
                     recipe.enable_step(name)  # config file may have skip=True, but we force-enable here
                     step_subset.add(name)
             # specified subset becomes *the* subset
-            log.info(f"{len(step_subset)} steps selected by name")
+            log.info(f"{len(step_subset)} step(s) selected by name")
             tagged_steps = step_subset
 
         if not tagged_steps:
@@ -309,7 +317,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: O
         if any(recipe.steps[name]._skip for name in tagged_steps):
             log.warning("note that some steps remain explicitly skipped")
 
-        filename = os.path.join(stimelogging.get_logger_file(recipe.log) or '.', "stimela.recipe.deps")
+        filename = os.path.join(stimelogging.get_logfile_dir(recipe.log) or '.', "stimela.recipe.deps")
         stimela.config.CONFIG_DEPS.update(recipe_deps)
         stimela.config.CONFIG_DEPS.save(filename)
         log.info(f"saved recipe dependencies to {filename}")

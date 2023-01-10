@@ -15,9 +15,6 @@ class SchemaError(StimelaBaseException):
 class DefinitionError(StimelaBaseException):
     pass
 
-class AssignmentError(StimelaBaseException):
-    pass
-
 class StepValidationError(StimelaBaseException):
     pass
 

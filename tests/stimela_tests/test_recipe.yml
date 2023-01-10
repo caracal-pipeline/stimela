@@ -100,13 +100,15 @@ recipe:
       L:
         var1: x
         var2: y
-        cabs.wsclean.inputs.dummy.default: 1000
+        config.cabs.wsclean.inputs.dummy.default: 1000
         band_label: "band1-{recipe.band}"
+        test_callable.b: LBAND
       UHF:
         var1: x1
         var2: y1
-        cabs.wsclean.inputs.dummy.default: 2000
+        config.cabs.wsclean.inputs.dummy.default: 2000
         band_label: "band2-{recipe.band}"
+        test_callable.b: UHF
       DEFAULT:
 
   steps: 
