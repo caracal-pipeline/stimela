@@ -288,6 +288,12 @@ class Step:
     def log_exception(self, exc, severity="error"):
         log_exception(exc, severity=severity, log=self.log)
 
+    # def assign(self, key, value):
+    #     if key in self.inputs_outputs:
+    #         self.params[key] = value
+    #         if key in self.validated_params:
+    #             del self.validated_params[key]
+
     def run(self, subst=None, batch=None, parent_log=None):
         """Runs the step"""
         from .recipe import Recipe
