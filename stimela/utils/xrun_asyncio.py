@@ -48,6 +48,7 @@ def dispatch_to_log(log, line, command_name, stream_name, output_wrangler):
 
 def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, output_wrangler=None, shell=True, 
             return_errcode=False, command_name=None, progress_bar=False, 
+            gentle_ctrl_c=False,
             log_command=True, log_result=True):
     
     command_name = command_name or command
@@ -79,7 +80,7 @@ def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, o
             log.info(f"running {log_command}", extra=dict(prefix="###", style="dim"))
             log.debug(f"full command line is {command_line}", extra=dict(prefix="###", style="dim"))
 
-    with stimelogging.declare_subcommand(os.path.basename(command_name)):
+    with stimelogging.declare_subcommand(os.path.basename(command_name)) as command_context:
 
         start_time = datetime.datetime.now()
         def elapsed():
@@ -106,7 +107,7 @@ def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, o
                 task.cancel()
 
         reporter = asyncio.Task(stimelogging.run_process_status_update())
-
+        ctrl_c_caught = job_interrupted = False
         try:
             job = asyncio.gather(
                 proc_awaiter(proc, reporter),
@@ -122,33 +123,48 @@ def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, o
             loop.run_until_complete(proc.wait())
         except KeyboardInterrupt:
             if callable(kill_callback):
+                command_context.ctrl_c()
                 log.warning(f"Ctrl+C caught after {elapsed()}, shutting down {command_name} process, please give it a few moments")
                 kill_callback() 
                 log.info(f"the {command_name} process was shut down successfully",
                         extra=dict(stimela_subprocess_output=(command_name, "status")))
                 loop.run_until_complete(proc.wait())
             else:
-                log.warning(f"Ctrl+C caught after {elapsed()}, interrupting {command_name} process {proc.pid}")
-                proc.send_signal(signal.SIGINT)
+                try:
+                    raise KeyboardInterrupt
+                    # below doesn't work -- figure out later
+                    if not gentle_ctrl_c or ctrl_c_caught:
+                        raise KeyboardInterrupt
+                    command_context.ctrl_c()
+                    ctrl_c_caught = True
+                    log.warning(f"Ctrl+C caught after {elapsed()}, job will error out when {command_name} process {proc.pid} completes")
+                    log.warning(f"Use Ctrl+C again to interrupt the job")
+                    results = loop.run_until_complete(job)
+                except KeyboardInterrupt:
+                    log.warning(f"Ctrl+C caught after {elapsed()}, interrupting {command_name} process {proc.pid}")
+                    job_interrupted = True
+                    proc.send_signal(signal.SIGINT)
 
-                async def wait_on_process(proc):
-                    for retry in range(10):
-                        await asyncio.sleep(1)
-                        if proc.returncode is not None:
-                            log.info(f"Process {proc.pid} has exited with return code {proc.returncode}")
-                            break
-                        if retry == 5:
-                            log.warning(f"Process {proc.pid} not exited after {retry} seconds, will try to terminate it")
-                            proc.terminate()
+                    async def wait_on_process(proc):
+                        for retry in range(10):
+                            await asyncio.sleep(1)
+                            if proc.returncode is not None:
+                                log.info(f"Process {proc.pid} has exited with return code {proc.returncode}")
+                                break
+                            if retry == 5:
+                                log.warning(f"Process {proc.pid} not exited after {retry} seconds, will try to terminate it")
+                                proc.terminate()
+                            else:
+                                log.info(f"Process {proc.pid} not exited after {retry} seconds, waiting a bit longer...")
                         else:
-                            log.info(f"Process {proc.pid} not exited after {retry} seconds, waiting a bit longer...")
-                    else:
-                        log.warning(f"Killing process {proc.pid}")
-                        proc.kill()
-                
-                loop.run_until_complete(wait_on_process(proc))
-
-            raise StimelaCabRuntimeError(f"{command_name} interrupted with Ctrl+C")
+                            log.warning(f"Killing process {proc.pid}")
+                            proc.kill()
+                    
+                    loop.run_until_complete(wait_on_process(proc))
+            if job_interrupted:
+                raise StimelaCabRuntimeError(f"{command_name} interrupted with Ctrl+C")
+            else:
+                raise StimelaCabRuntimeError(f"{command_name} complete, but received a Ctrl+C during the run")
 
         except Exception as exc:
             loop.run_until_complete(proc.wait())

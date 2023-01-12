@@ -27,7 +27,7 @@ def update_rlimits(rlimits: Dict[str, Any], log: logging.Logger):
             if limit > hard:
                 raise StimelaProcessRuntimeError(f"can't set opts.rlimits.{name}={limit}: hard limit is {hard}")
         resource.setrlimit(rconst, (limit, hard))
-        log.info(f"setting soft limit {name}={limit} (hard limit is {hard})")
+        log.debug(f"setting soft limit {name}={limit} (hard limit is {hard})")
 
 
 def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
@@ -74,6 +74,7 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
     retcode = xrun(args[0], args[1:], shell=False, log=log,
                 output_wrangler=cabstat.apply_wranglers,
                 return_errcode=True, command_name=command_name, 
+                gentle_ctrl_c=True,
                 log_command=True if cab.flavour.log_full_command else command_name, 
                 log_result=False)
 

@@ -37,6 +37,10 @@ class ForLoopClause(object):
     # If !=0 , this is a scatter not a loop -- things may be evaluated in parallel using this many workers
     # (use -1 to scatter to unlimited number of workers)
     scatter: int = 0
+    # How to indicate the status of the loop on the console.
+    # Default is "i/N", where i is the current index plus 1, and N is the total number of loops. 
+    # A format string can be supplied instead.
+    display_status: Optional[str] = None
 
 def IterantPlaceholder(name: str):
     return name
@@ -260,7 +264,11 @@ class Recipe(Cargo):
         # assigning to input or output? Provide default            
         if key in self.inputs_outputs:
             self.log.debug(f"default params assignment: {key}={value}")
-            self.defaults[key] = value
+            if value is UNSET:
+                if key in self.defaults:
+                    del self.defaults[key]
+            else:
+                self.defaults[key] = value
         # assigning to a substep? Invoke nested assignment
         elif nesting is not None and nesting in self.steps:
             return self.steps[nesting].assign_value(subkey, value, override=override)
@@ -317,6 +325,7 @@ class Recipe(Cargo):
             elif step._skip is not False:
                 self.log.warning(f"enabling step '{label}' which is normally conditionally skipped ('{step.skip}')")
             step.skip = step._skip = False
+            step.skip_if_outputs = None
         else:
             self.log.warning(f"will skip step '{label}'")
             step.skip = step._skip = True
@@ -940,7 +949,19 @@ class Recipe(Cargo):
                     self.assign[f"{self.for_loop.var}@index"] = count
                     # update alias
                     self._update_aliases(self.for_loop.var, iter_var)
-                    stimelogging.declare_subtask_attributes(f"{count+1}/{len(self._for_loop_values)}")
+                    # update status display
+                    status = None
+                    status_dict = dict(index0=count, 
+                                index1=count+1, total=len(self._for_loop_values),
+                                var=self.for_loop.var, value=iter_var)
+                    if self.for_loop.display_status:
+                        try:
+                            status = self.for_loop.display_status.format(**status_dict)
+                        except Exception as exc:
+                            self.log.warning(f"error formatting for-loop status: {exc}, falling back on default status display")
+                    if status is None:
+                        status = "{index1}/{total}".format(**status_dict)
+                    stimelogging.declare_subtask_attributes(status)
 
                 # reevaluate recipe level assignments (info.fqname etc. have changed)
                 self.update_assignments(subst, params=params)

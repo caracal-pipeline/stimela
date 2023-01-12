@@ -1,4 +1,4 @@
-import os, os.path, re, logging, copy, shutil
+import os, os.path, re, logging, copy, shutil, time
 from typing import Any, Tuple, List, Dict, Optional, Union
 from dataclasses import dataclass
 from omegaconf import MISSING, OmegaConf, DictConfig, ListConfig
@@ -43,6 +43,8 @@ def resolve_dotted_reference(key, base, current, context):
             raise NameError(f"{context}: '{element}' in '{key}' is not a valid config section")
     return section, varname
 
+OUTPUTS_EXISTS = "exist"
+OUTPUTS_FRESH = "fresh"
 
 @dataclass
 class Step:
@@ -51,7 +53,8 @@ class Step:
     recipe: Optional[Any] = None                    # if not None, this step is a nested recipe
     params: Dict[str, Any] = EmptyDictDefault()     # assigns parameter values
     info: Optional[str] = None                      # comment or info
-    skip: Optional[str] = None                      # if this evaluates to True, step is skipped 
+    skip: Optional[str] = None                      # if this evaluates to True, step is skipped.  
+    skip_if_outputs: Optional[str] = None           # skip if outputs "exist' or "fresh"
     tags: List[str] = EmptyListDefault()
     backend: Optional["stimela.config.Backend"] = None                   # backend setting, overrides opts.config.backend if set
 
@@ -84,8 +87,11 @@ class Step:
         self.validated_params = None
         # parameters protected from assignment (because they've been set on the command line, presumably)
         self._assignment_overrides = set()
+        if self.skip_if_outputs and self.skip_if_outputs not in (OUTPUTS_EXISTS, OUTPUTS_FRESH):
+            raise StepValidationError(f"step '{self.name}': invalid 'skip_if_outputs={self.skip_if_outputs}' setting")
         # the "skip" attribute is reevaluated at runtime since it may contain substitutions, but if it's set to a bool
         # constant, self._skip will be preset already
+        # validate skip attribute
         if self.skip in {"True", "true", "1"}:
             self._skip = True
         elif self.skip in {"False", "false", "0", "", None}:
@@ -93,7 +99,6 @@ class Step:
         else:
             # otherwise, self._skip stays at None, and will be re-evaluated at runtime
             self._skip = None
-        
         
     def summary(self, params=None, recursive=True, ignore_missing=False, inputs=True, outputs=True):
         summary_params = OrderedDict()
@@ -409,6 +414,46 @@ class Step:
                 else:
                     raise StepValidationError(f"step '{self.name}': invalid inputs: {join_quote(invalid)}", log=self.log)
 
+            ## check if we need to skip based on existing file outputs
+            if self.skip_if_outputs:
+                max_mtime, max_mtime_path = 0, None
+                if self.skip_if_outputs == OUTPUTS_FRESH:
+                    parent_log_info("checking if file-type outputs of step are fresh")
+                    for name, value in params.items():
+                        schema = self.inputs_outputs[name]
+                        if schema.is_input and schema.is_file_type and os.path.exists(value):
+                            mtime = os.path.getmtime(value)
+                            if mtime > max_mtime:
+                                max_mtime = mtime
+                                max_mtime_path = value
+                    if max_mtime:
+                        parent_log_info(f"  most recently modified input is {max_mtime_path} ({time.ctime(max_mtime)})")
+                else:
+                    parent_log_info("checking if file-type outputs of step exist")
+
+                all_exist = True
+                for name, value in params.items():
+                    schema = self.inputs_outputs[name]
+                    if schema.is_output and schema.is_file_type:
+                        if os.path.exists(value):
+                            if max_mtime:
+                                mtime = os.path.getmtime(value)
+                                if mtime < max_mtime:
+                                    parent_log_info(f"  {name} = {value} is not fresh")
+                                    all_exist = False
+                                    break
+                                else:
+                                    parent_log_info(f"  {name} = {value} is fresh")
+                            else:
+                                parent_log_info(f"  {name} = {value} already exists")
+                        else:
+                            all_exist = False
+                            parent_log_info(f"  {name} = {value} doesn't exist")
+                            break
+                if all_exist:
+                    parent_log_info("all required outputs are OK, skipping this step")
+                    skip = True
+
             if not skip:
                 # check for outputs that need removal
                 for name, schema in self.outputs.items():
@@ -440,7 +485,7 @@ class Step:
                     raise RuntimeError("step '{self.name}': unknown cargo type")
             else:
                 if self._skip is None and subst is not None:
-                    parent_log_info(f"skipping step based on setting of '{self.skip}'")
+                    parent_log_info(f"skipping step based on conditonal settings")
                 else:
                     parent_log.debug("skipping step based on explicit setting")
 

@@ -16,7 +16,9 @@ from .common import *
 def load(path: str, use_sources: Optional[List[DictConfig]] = [], name: Optional[str]=None, 
         location: Optional[str]=None, 
         includes: bool=True, selfrefs: bool=True, include_path: str=None, 
-        use_cache: bool = True, verbose: bool = False):
+        use_cache: bool = True,
+        no_toplevel_cache = False,
+        verbose: bool = False):
     """Loads config file, using a previously loaded config to resolve _use references.
 
     Args:
@@ -36,7 +38,8 @@ def load(path: str, use_sources: Optional[List[DictConfig]] = [], name: Optional
             conf (DictConfig): config object    
             dependencies (ConfigDependencies): filenames that were _included
     """
-    conf, dependencies = load_cache((path,), verbose=verbose) if use_cache else (None, None)
+    use_toplevel_cache = use_cache and not no_toplevel_cache
+    conf, dependencies = load_cache((path,), verbose=verbose) if use_toplevel_cache else (None, None)
 
     if conf is None:
         subconf = OmegaConf.load(path)

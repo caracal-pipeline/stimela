@@ -192,17 +192,21 @@ class ParseOutput(_BaseWrangler):
     """
 
     loaders = dict(str=str, bool=bool, int=int, float=float, complex=complex, json=json.loads, JSON=json.loads)
-    specifier = f"PARSE_OUTPUT:(?P<name>.*):(?P<dtype>{'|'.join(loaders.keys())})"
+    specifier = f"PARSE_OUTPUT:((?P<name>.*):)?(?P<group>.*):(?P<dtype>{'|'.join(loaders.keys())})"
 
-    def __init__(self, regex: re.Pattern, spec: str, name: str, dtype: str):
+    def __init__(self, regex: re.Pattern, spec: str, name: Optional[str], group: str, dtype: str):
         super().__init__(regex, spec, name=name)
         self.loader = self.loaders[dtype]
-        if name in regex.groupindex:
-            self.gid = name
+        self.name = name or group
+        if group in regex.groupindex:
+            self.gid = group
+        elif re.fullmatch('\d+', group):
+            gid = int(group)
+            if gid > regex.groups:
+                raise CabValidationError(f"wrangler action '{spec}' for '{regex.pattern}': {gid} is not a valid ()-group")
+            self.gid = gid
         else:
-            if regex.groups < 1:
-                raise CabValidationError(f"wrangler action '{spec}' for '{regex.pattern}': no ()-groups")
-            self.gid = 1
+            raise CabValidationError(f"wrangler action '{spec}' for '{regex.pattern}': {group} is not a valid ()-group")
 
     def apply(self, cabstat: CabStatus, output: str, match: re.Match):
         value = match[self.gid]

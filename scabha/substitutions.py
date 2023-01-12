@@ -7,7 +7,7 @@ import threading
 import fnmatch
 
 from .exceptions import Error, SubstitutionError, CyclicSubstitutionError
-from .basetypes import EmptyDictDefault
+from .basetypes import EmptyDictDefault, Unresolved
 
 from omegaconf import DictConfig
 
@@ -159,9 +159,12 @@ class SubstitutionNS(OrderedDict):
             # now look up again
             if name in self:
                 value = super().get(name)
-                if context and not self._nosubst_:
-                    # recursive=False will invoke substitution on strings, but will return containers as is
-                    value = context.evaluate(value, location=nestloc, recursive=False)
+                if context:
+                    if context.raise_errors and type(value) is Unresolved:
+                        raise SubstitutionError("unresolved substitution: {value}")
+                    if not self._nosubst_:
+                        # recursive=False will invoke substitution on strings, but will return containers as is
+                        value = context.evaluate(value, location=nestloc, recursive=False)
                 return value
             elif default in (KeyError, AttributeError):
                 raise default(name)

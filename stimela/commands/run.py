@@ -28,7 +28,7 @@ def load_recipe_file(filename: str):
 
     # if file contains a recipe entry, treat it as a full config (that can include cabs etc.)
     try:
-        conf, deps = configuratt.load(filename, use_sources=[stimela.CONFIG])
+        conf, deps = configuratt.load(filename, use_sources=[stimela.CONFIG], no_toplevel_cache=True)
     except ConfigExceptionTypes as exc:
         log_exception(f"error loading {filename}", exc)
         sys.exit(2)
@@ -60,8 +60,8 @@ def load_recipe_file(filename: str):
     no_args_is_help=True)
 @click.option("-s", "--step", "step_names", metavar="STEP(s)", multiple=True,
                 help="""only runs specific step(s) from the recipe. Use commas, or give multiple times to cherry-pick steps.
-                Use [BEGIN]:[END] to specify a range of steps. Note that enabling an individual step via this option
-                force-enables even steps with skip=true.""")
+                Use [BEGIN]:[END] to specify a range of steps. Note that cherry-picking an individual step via this option
+                also impies --enable-step.""")
 @click.option("-t", "--tags", "tags", metavar="TAG(s)", multiple=True,
                 help="""only runs steps wth the given tags (and also steps tagged as "always"). 
                 Use commas, or give multiple times for multiple tags.""")
@@ -69,7 +69,8 @@ def load_recipe_file(filename: str):
                 help="""explicitly skips steps wth the given tags. 
                 Use commas, or give multiple times for multiple tags.""")
 @click.option("-e", "--enable-step", "enable_steps", metavar="STEP(s)", multiple=True,
-                help="""Sets skip=false on the given step(s). Use commas, or give multiple times for multiple steps.""")
+                help="""Force-enable steps even if the recipe marks them as skipped. Use commas, or give multiple times 
+                for multiple steps.""")
 @click.option("-a", "--assign", metavar="PARAM VALUE", nargs=2, multiple=True,
                 help="""assigns values to parameters: equivalent to PARAM=VALUE, but plays nicer with the shell's 
                 tab completion.""")
@@ -317,7 +318,10 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: O
         if any(recipe.steps[name]._skip for name in tagged_steps):
             log.warning("note that some steps remain explicitly skipped")
 
-        filename = os.path.join(stimelogging.get_logfile_dir(recipe.log) or '.', "stimela.recipe.deps")
+        logdir = stimelogging.get_logfile_dir(recipe.log) or '.'
+        log.info(f"recipe logs will be saved under {logdir}")
+
+        filename = os.path.join(logdir, "stimela.recipe.deps")
         stimela.config.CONFIG_DEPS.update(recipe_deps)
         stimela.config.CONFIG_DEPS.save(filename)
         log.info(f"saved recipe dependencies to {filename}")
@@ -349,6 +353,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: O
             log.error("run failed, exiting with error code 1")
         for line in traceback.format_exc().split("\n"):
             log.debug(line)
+        outer_step.log.info(f"last log directory was [bold green]{stimelogging.get_logfile_dir(outer_step.log) or '.'}[/bold green]")
         sys.exit(1)
 
     if outputs and outer_step.log.isEnabledFor(logging.DEBUG):
@@ -362,5 +367,6 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: O
     task_stats.save_profiling_stats(outer_step.log, 
             print_depth=profile if profile is not None else stimela.CONFIG.opts.profile.print_depth,
             unroll_loops=stimela.CONFIG.opts.profile.unroll_loops)
-
+    
+    outer_step.log.info(f"last log directory was [bold green]{stimelogging.get_logfile_dir(outer_step.log) or '.'}[/bold green]")
     return 0

@@ -323,11 +323,11 @@ class Evaluator(object):
         self.location = location
         self.allow_unresolved = allow_unresolved
 
-    def _resolve(self, value):
+    def _resolve(self, value, in_formula=True):
         if type(value) is str:
-            if value == "SELF":
+            if in_formula and value == "SELF":
                 return SELF
-            elif value == "UNSET":
+            elif in_formula and value == "UNSET":
                 return UNSET
             elif self.subst_context is not None:
                 try:
@@ -418,7 +418,7 @@ class Evaluator(object):
         try:
             if value.startswith("="):
                 if value.startswith("=="):
-                    return self._resolve(value[1:])
+                    return self._resolve(value[1:], in_formula=False)
                 else:
                     try:
                         parse_results = parse_string(value[1:])
@@ -429,7 +429,8 @@ class Evaluator(object):
                         return self._evaluate_result(parse_results, allow_unset=True)
                     except Exception as exc:
                         raise FormulaError(f"{'.'.join(self.location)}: evaluation of '{value}' failed", exc, tb=True)
-            return self._resolve(value)
+            else:
+                return self._resolve(value, in_formula=False)
         finally:
             self.location = self.location[:loclen]
             
@@ -462,7 +463,7 @@ class Evaluator(object):
                     # UNSET return means delete or revert to default
                     if new_value is UNSET:
                         # if value is in defaults, try to evaluate that instead
-                        if name in defaults:
+                        if name in defaults and defaults[name] is not UNSET:
                             value = params[name] = defaults[name]
                             if corresponding_ns:
                                 corresponding_ns[name] = str(defaults[name])
