@@ -82,7 +82,7 @@ class PythonCallableFlavour(_CallableFlavour):
             if self.output_dict:
                 wrangler = wranglers.ParseJSONOutputDict(pattern, "PARSE_JSON")
             else:
-                wrangler = wranglers.ParseOutput(pattern, "PARSE_OUTPUT", self.output, "json")
+                wrangler = wranglers.ParseOutput(pattern, "PARSE_OUTPUT", self.output, '1', "json")
             wrangs = [wrangler]
             if not stimela.VERBOSE:
                 wrangs.append(wranglers.Suppress(pattern, "SUPPRESS"))
