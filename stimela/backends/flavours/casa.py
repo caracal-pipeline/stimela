@@ -76,7 +76,7 @@ class CasaTaskFlavour(_CallableFlavour):
 
         code = f"""import sys, json; kw=json.loads(sys.argv[-1]); kw={{key: (str(value) if type(value) is unicode else value) for key, value in kw.items()}}; {command}(**kw);"""
 
-        args =  [casa] + casa_opts.strip().split() + ["-c", code, params_string]
+        args =  casa.strip().split() + casa_opts.strip().split() + ["-c", code, params_string]
         return args
 
 
