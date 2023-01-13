@@ -238,7 +238,7 @@ class Step:
             # if logger is not provided, then init one
             if log is None:
                 log = stimela.logger().getChild(self.fqname)
-                log.propagate = True
+                log.propagate = False
 
             # finalize the cargo
             self.cargo.finalize(config, log=log, fqname=self.fqname, nesting=nesting)
