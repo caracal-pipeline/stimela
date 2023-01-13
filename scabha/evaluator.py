@@ -1,3 +1,4 @@
+
 import glob
 import os.path
 import fnmatch
@@ -95,8 +96,8 @@ class BinaryHandler(ResultsHandler):
         self.allow_unset = False
     
     def evaluate(self, evaluator):
-        arg1, arg2 =    evaluator._evaluate_result(self.arg1, allow_unset=self.allow_unset), \
-                        evaluator._evaluate_result(self.arg2, allow_unset=self.allow_unset)
+        arg1, arg2 = evaluator._evaluate_result(self.arg1, allow_unset=self.allow_unset), \
+                     evaluator._evaluate_result(self.arg2, allow_unset=self.allow_unset)
         if type(arg1) is UNSET:
             return arg1
         if type(arg2) is UNSET:
@@ -133,8 +134,28 @@ class FunctionHandler(ResultsHandler):
     def evaluate(self, evaluator):
         return self._func(evaluator, self.args)
 
+    def evaluate_generic_callable(self, evaluator, name, callable, args, min_args=None, max_args=None):
+        if min_args is not None and len(args) < min_args:
+            raise FormulaError(f"{'.'.join(evaluator.location)}: {name}() expects at least {min_args} argument(s)")
+        if max_args is not None and len(args) > max_args:
+            raise FormulaError(f"{'.'.join(evaluator.location)}: {name}() expects at most {max_args} argument(s)")
+        eval_args = [evaluator._evaluate_result(arg) for arg in args]
+        # if any argument is UNSET, return it as our result
+        unsets = [arg for arg in eval_args if type(arg) is UNSET]
+        if unsets:
+            return unsets[0]
+        return callable(*eval_args)
+
     def LIST(self, evaluator, args):
-        return [evaluator._evaluate_result(value) for value in args]
+        def make_list(*x):
+            return list(x)
+        return self.evaluate_generic_callable(evaluator, "LIST", make_list, args)
+
+    def MIN(self, evaluator, args):
+        return self.evaluate_generic_callable(evaluator, "MIN", min, args, min_args=1)
+
+    def MAX(self, evaluator, args):
+        return self.evaluate_generic_callable(evaluator, "MAX", max, args, min_args=1)
 
     def IF(self, evaluator, args):
         if len(args) < 3 or len(args) > 4:
@@ -242,7 +263,8 @@ def construct_parser():
     expr = Forward()
     
     # functions
-    functions = reduce(operator.or_, map(Keyword, ["IF", "IFSET", "GLOB", "EXISTS", "LIST", "BASENAME", "DIRNAME", "EXTENSION", "STRIPEXT"]))
+    functions = reduce(operator.or_, map(Keyword, ["IF", "IFSET", "GLOB", "EXISTS", "LIST", 
+        "BASENAME", "DIRNAME", "EXTENSION", "STRIPEXT", "MIN", "MAX"]))
     # these functions take one argument, which could also be a sequence
     anyseq_functions = reduce(operator.or_, map(Keyword, ["GLOB", "EXISTS"]))
 
