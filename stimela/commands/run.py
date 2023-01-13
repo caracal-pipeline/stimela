@@ -377,3 +377,4 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: O
     
     outer_step.log.info(f"last log directory was [bold green]{stimelogging.get_logfile_dir(outer_step.log) or '.'}[/bold green]")
     return 0
+    
