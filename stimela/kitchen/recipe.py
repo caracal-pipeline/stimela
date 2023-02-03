@@ -267,6 +267,7 @@ class Recipe(Cargo):
             if value is UNSET:
                 if key in self.defaults:
                     del self.defaults[key]
+                self.inputs_outputs[key].default = UNSET
             else:
                 self.defaults[key] = value
         # assigning to a substep? Invoke nested assignment
@@ -297,7 +298,8 @@ class Recipe(Cargo):
                 subst.recipe.log[subkey] = value
         # in override mode, assign to assign dict for future processing
         if override:
-            self.assign[key] = value
+            if value is not UNSET:
+                self.assign[key] = value
             self._protected_from_assign.add(key)
 
     def update_log_options(self, **options):
@@ -699,10 +701,12 @@ class Recipe(Cargo):
             # if self.for_loop is not None and name == self.for_loop.var:
             #     continue # unset_params.add(name)
             if name in self.inputs_outputs:
-                if value == "UNSET":
+                # if value == "UNSET":
+                #     unset_params.add(name)
+                # elif value == "EMPTY":
+                #     own_params[name] = ""
+                if value is UNSET: 
                     unset_params.add(name)
-                elif value == "EMPTY":
-                    own_params[name] = ""
                 else:
                     own_params[name] = value
             elif '.' not in name: 

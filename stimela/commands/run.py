@@ -13,6 +13,7 @@ from omegaconf.omegaconf import OmegaConf, OmegaConfBaseException
 
 import stimela
 from scabha import configuratt
+from scabha.basetypes import UNSET
 from scabha.exceptions import ScabhaBaseException
 from stimela import stimelogging
 import stimela.config
@@ -92,11 +93,17 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, last_recip
     errcode = 0
     recipe_name = None
 
+    def convert_value(value):
+        if value == "=UNSET":
+            return UNSET
+        else:
+            return yaml.safe_load(value)
+
     # parse assign values as YaML
     for key, value in assign:
         # parse string as yaml value
         try:
-            params[key] = yaml.safe_load(value)
+            params[key] = convert_value(value)
         except Exception as exc:
             log_exception(f"error parsing value for --assign {key} {value}", exc)
             errcode = 2
@@ -112,7 +119,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, last_recip
             key, value = pp.split("=", 1)
             # parse string as yaml value
             try:
-                params[key] = yaml.safe_load(value)
+                params[key] = convert_value(value)
             except Exception as exc:
                 log_exception(f"error parsing {pp}", exc)
                 errcode = 2
@@ -300,3 +307,4 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, last_recip
     
     outer_step.log.info(f"last log directory was [bold green]{stimelogging.get_logfile_dir(outer_step.log) or '.'}[/bold green]")
     return 0
+    
