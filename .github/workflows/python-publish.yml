@@ -34,8 +34,7 @@ jobs:
     - name: Install stimela
       run: |
         poetry install --with docs --no-interaction
-    - name: Publish package
-      uses: pypa/gh-action-pypi-publish@27b31702a0e7fc50959f5ad993c78deac1bdfc29
+    - name: Build and publish to pypi
+      uses: JRubics/poetry-publish@v1.16
       with:
-        user: __token__
-        password: ${{ secrets.PYPI_TOKEN }}
+        pypi_token: ${{ secrets.PYPI_TOKEN }}
