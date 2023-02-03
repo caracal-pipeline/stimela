@@ -1,3 +1,4 @@
+
 import glob
 import os.path
 import fnmatch
@@ -95,8 +96,8 @@ class BinaryHandler(ResultsHandler):
         self.allow_unset = False
     
     def evaluate(self, evaluator):
-        arg1, arg2 =    evaluator._evaluate_result(self.arg1, allow_unset=self.allow_unset), \
-                        evaluator._evaluate_result(self.arg2, allow_unset=self.allow_unset)
+        arg1, arg2 = evaluator._evaluate_result(self.arg1, allow_unset=self.allow_unset), \
+                     evaluator._evaluate_result(self.arg2, allow_unset=self.allow_unset)
         if type(arg1) is UNSET:
             return arg1
         if type(arg2) is UNSET:
@@ -133,8 +134,28 @@ class FunctionHandler(ResultsHandler):
     def evaluate(self, evaluator):
         return self._func(evaluator, self.args)
 
+    def evaluate_generic_callable(self, evaluator, name, callable, args, min_args=None, max_args=None):
+        if min_args is not None and len(args) < min_args:
+            raise FormulaError(f"{'.'.join(evaluator.location)}: {name}() expects at least {min_args} argument(s)")
+        if max_args is not None and len(args) > max_args:
+            raise FormulaError(f"{'.'.join(evaluator.location)}: {name}() expects at most {max_args} argument(s)")
+        eval_args = [evaluator._evaluate_result(arg) for arg in args]
+        # if any argument is UNSET, return it as our result
+        unsets = [arg for arg in eval_args if type(arg) is UNSET]
+        if unsets:
+            return unsets[0]
+        return callable(*eval_args)
+
     def LIST(self, evaluator, args):
-        return [evaluator._evaluate_result(value) for value in args]
+        def make_list(*x):
+            return list(x)
+        return self.evaluate_generic_callable(evaluator, "LIST", make_list, args)
+
+    def MIN(self, evaluator, args):
+        return self.evaluate_generic_callable(evaluator, "MIN", min, args, min_args=1)
+
+    def MAX(self, evaluator, args):
+        return self.evaluate_generic_callable(evaluator, "MAX", max, args, min_args=1)
 
     def IF(self, evaluator, args):
         if len(args) < 3 or len(args) > 4:
@@ -242,7 +263,8 @@ def construct_parser():
     expr = Forward()
     
     # functions
-    functions = reduce(operator.or_, map(Keyword, ["IF", "IFSET", "GLOB", "EXISTS", "LIST", "BASENAME", "DIRNAME", "EXTENSION", "STRIPEXT"]))
+    functions = reduce(operator.or_, map(Keyword, ["IF", "IFSET", "GLOB", "EXISTS", "LIST", 
+        "BASENAME", "DIRNAME", "EXTENSION", "STRIPEXT", "MIN", "MAX"]))
     # these functions take one argument, which could also be a sequence
     anyseq_functions = reduce(operator.or_, map(Keyword, ["GLOB", "EXISTS"]))
 
@@ -323,11 +345,11 @@ class Evaluator(object):
         self.location = location
         self.allow_unresolved = allow_unresolved
 
-    def _resolve(self, value):
+    def _resolve(self, value, in_formula=True):
         if type(value) is str:
-            if value == "SELF":
+            if in_formula and value == "SELF":
                 return SELF
-            elif value == "UNSET":
+            elif in_formula and value == "UNSET":
                 return UNSET
             elif self.subst_context is not None:
                 try:
@@ -418,7 +440,7 @@ class Evaluator(object):
         try:
             if value.startswith("="):
                 if value.startswith("=="):
-                    return self._resolve(value[1:])
+                    return self._resolve(value[1:], in_formula=False)
                 else:
                     try:
                         parse_results = parse_string(value[1:])
@@ -429,7 +451,8 @@ class Evaluator(object):
                         return self._evaluate_result(parse_results, allow_unset=True)
                     except Exception as exc:
                         raise FormulaError(f"{'.'.join(self.location)}: evaluation of '{value}' failed", exc, tb=True)
-            return self._resolve(value)
+            else:
+                return self._resolve(value, in_formula=False)
         finally:
             self.location = self.location[:loclen]
             
@@ -462,7 +485,7 @@ class Evaluator(object):
                     # UNSET return means delete or revert to default
                     if new_value is UNSET:
                         # if value is in defaults, try to evaluate that instead
-                        if name in defaults:
+                        if name in defaults and defaults[name] is not UNSET:
                             value = params[name] = defaults[name]
                             if corresponding_ns:
                                 corresponding_ns[name] = str(defaults[name])

@@ -13,12 +13,13 @@ from omegaconf.omegaconf import OmegaConf, OmegaConfBaseException
 
 import stimela
 from scabha import configuratt
+from scabha.basetypes import UNSET
 from scabha.exceptions import ScabhaBaseException
 from stimela import stimelogging
 import stimela.config
 from stimela.config import ConfigExceptionTypes
 from stimela import logger, log_exception
-from stimela.exceptions import RecipeValidationError, StimelaRuntimeError
+from stimela.exceptions import RecipeValidationError, StimelaRuntimeError, StepSelectionError
 from stimela.main import cli
 from stimela.kitchen.recipe import Recipe, Step, RecipeSchema, join_quote
 from stimela import task_stats
@@ -28,7 +29,7 @@ def load_recipe_file(filename: str):
 
     # if file contains a recipe entry, treat it as a full config (that can include cabs etc.)
     try:
-        conf, deps = configuratt.load(filename, use_sources=[stimela.CONFIG])
+        conf, deps = configuratt.load(filename, use_sources=[stimela.CONFIG], no_toplevel_cache=True)
     except ConfigExceptionTypes as exc:
         log_exception(f"error loading {filename}", exc)
         sys.exit(2)
@@ -58,10 +59,10 @@ def load_recipe_file(filename: str):
     change any and all config and/or recipe settings.
     """,
     no_args_is_help=True)
-@click.option("-s", "--step", "step_names", metavar="STEP(s)", multiple=True,
+@click.option("-s", "--step", "step_ranges", metavar="STEP(s)", multiple=True,
                 help="""only runs specific step(s) from the recipe. Use commas, or give multiple times to cherry-pick steps.
-                Use [BEGIN]:[END] to specify a range of steps. Note that enabling an individual step via this option
-                force-enables even steps with skip=true.""")
+                Use [BEGIN]:[END] to specify a range of steps. Note that cherry-picking an individual step via this option
+                also impies --enable-step.""")
 @click.option("-t", "--tags", "tags", metavar="TAG(s)", multiple=True,
                 help="""only runs steps wth the given tags (and also steps tagged as "always"). 
                 Use commas, or give multiple times for multiple tags.""")
@@ -69,19 +70,22 @@ def load_recipe_file(filename: str):
                 help="""explicitly skips steps wth the given tags. 
                 Use commas, or give multiple times for multiple tags.""")
 @click.option("-e", "--enable-step", "enable_steps", metavar="STEP(s)", multiple=True,
-                help="""Sets skip=false on the given step(s). Use commas, or give multiple times for multiple steps.""")
+                help="""Force-enable steps even if the recipe marks them as skipped. Use commas, or give multiple times 
+                for multiple steps.""")
 @click.option("-a", "--assign", metavar="PARAM VALUE", nargs=2, multiple=True,
                 help="""assigns values to parameters: equivalent to PARAM=VALUE, but plays nicer with the shell's 
                 tab completion.""")
+@click.option("-l", "--last-recipe", is_flag=True,
+                help="""if multiple recipes are defined, selects the last one for execution.""")
 @click.option("-d", "--dry-run", is_flag=True,
                 help="""Doesn't actually run anything, only prints the selected steps.""")
 @click.option("-p", "--profile", metavar="DEPTH", type=int,
                 help="""Print per-step profiling stats to this depth. 0 disables.""")
 @click.argument("what", metavar="filename.yml|cab name") 
 @click.argument("parameters", nargs=-1, metavar="[recipe name] [PARAM=VALUE] [X.Y.Z=FOO] ...", required=False) 
-def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: Optional[int] = None,
+def run(what: str, parameters: List[str] = [], dry_run: bool = False, last_recipe: bool = False, profile: Optional[int] = None,
     assign: List[Tuple[str, str]] = [],
-    step_names: List[str] = [], tags: List[str] = [], skip_tags: List[str] = [], enable_steps: List[str] = []):
+    step_ranges: List[str] = [], tags: List[str] = [], skip_tags: List[str] = [], enable_steps: List[str] = []):
 
     log = logger()
     params = OrderedDict()
@@ -89,11 +93,17 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: O
     errcode = 0
     recipe_name = None
 
+    def convert_value(value):
+        if value == "=UNSET":
+            return UNSET
+        else:
+            return yaml.safe_load(value)
+
     # parse assign values as YaML
     for key, value in assign:
         # parse string as yaml value
         try:
-            params[key] = yaml.safe_load(value)
+            params[key] = convert_value(value)
         except Exception as exc:
             log_exception(f"error parsing value for --assign {key} {value}", exc)
             errcode = 2
@@ -109,7 +119,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: O
             key, value = pp.split("=", 1)
             # parse string as yaml value
             try:
-                params[key] = yaml.safe_load(value)
+                params[key] = convert_value(value)
             except Exception as exc:
                 log_exception(f"error parsing {pp}", exc)
                 errcode = 2
@@ -189,12 +199,12 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: O
             if recipe_name not in conf:
                 log_exception(f"{what} does not contain recipe '{recipe_name}'")
                 sys.exit(2)
+        elif last_recipe or len(all_recipe_names) == 1:
+            recipe_name = all_recipe_names[-1]
         else:
-            if len(all_recipe_names) > 1: 
-                print(f"This file contains the following recipes: {', '.join(all_recipe_names)}")
-                log_exception(f"multiple recipes found, please specify one on the command line")
-                sys.exit(2)
-            recipe_name = all_recipe_names[0]
+            print(f"This file contains the following recipes: {', '.join(all_recipe_names)}")
+            log_exception(f"multiple recipes found, please specify one on the command line")
+            sys.exit(2)
         
         log.info(f"selected recipe is '{recipe_name}'")
 
@@ -233,91 +243,22 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: O
                 log.debug(line)
             sys.exit(1)        
 
-        # select recipe substeps based on command line
+        # select recipe substeps based on command line, and exit if nothing to run
+        selection_options = []
+        for opts in (tags, skip_tags, step_ranges, enable_steps):
+            selection_options.append(set(itertools.chain(*(opt.split(",") for opt in opts))))
+        
+        try:
+            if not recipe.restrict_steps(*selection_options):
+                sys.exit(0)
+        except StepSelectionError as exc:
+            log_exception(exc)
+            sys.exit(2)
 
-        tags = set(itertools.chain(*(tag.split(",") for tag in tags)))
-        skip_tags = set(itertools.chain(*(tag.split(",") for tag in skip_tags))) 
-        step_names = list(itertools.chain(*(step.split(',') for step in step_names)))
-        enable_steps = set(itertools.chain(*(step.split(",") for step in enable_steps)))
+        logdir = stimelogging.get_logfile_dir(recipe.log) or '.'
+        log.info(f"recipe logs will be saved under {logdir}")
 
-        for name in enable_steps:
-            if name in recipe.steps:
-                recipe.enable_step(name)  # config file may have skip=True, but we force-enable here
-            else:
-                log_exception(f"no such recipe step: '{name}'")
-                sys.exit(2)
-
-        # select subset based on tags/skip_tags, this will be a list of names
-        tagged_steps = set()
-
-        # if tags are given, only use steps with (tags+{"always"}-skip_tags)
-        if tags:
-            tags.add("always")
-            tags.difference_update(skip_tags)
-            for step_name, step in recipe.steps.items():
-                if (tags & step.tags):
-                    tagged_steps.add(step_name)
-            log.info(f"{len(tagged_steps)} of {len(recipe.steps)} step(s) selected via tags ({', '.join(tags)})")
-        # else, use steps without any tag in (skip_tags + {"never"})
-        else:
-            skip_tags.add("never")
-            for step_name, step in recipe.steps.items():
-                if not (skip_tags & step.tags):
-                    tagged_steps.add(step_name)
-            if len(recipe.steps) != len(tagged_steps):
-                log.info(f"{len(recipe.steps) - len(tagged_steps)} step(s) skipped due to tags ({', '.join(skip_tags)})")
-
-        # add steps explicitly enabled by --step
-        if step_names:
-            all_step_names = list(recipe.steps.keys())
-            step_subset = set()
-            for name in step_names:
-                if ':' in name:
-                    begin, end = name.split(':', 1)
-                    if begin:
-                        try:
-                            first = all_step_names.index(begin)
-                        except ValueError as exc:
-                            log_exception(f"No such recipe step: '{begin}")
-                            sys.exit(2)
-                    else:
-                        first = 0
-                    if end:
-                        try:
-                            last = all_step_names.index(end)
-                        except ValueError as exc:
-                            log_exception(f"No such recipe step: '{end}")
-                            sys.exit(2)
-                    else:
-                        last = len(recipe.steps)-1
-                    step_subset.update(name for name in all_step_names[first:last+1] if name in tagged_steps)
-                # explicit step name: enable, and add to tagged_steps
-                else:
-                    if name not in all_step_names:
-                        log_exception(f"No such recipe step: '{name}")
-                        sys.exit(2)
-                    recipe.enable_step(name)  # config file may have skip=True, but we force-enable here
-                    step_subset.add(name)
-            # specified subset becomes *the* subset
-            log.info(f"{len(step_subset)} step(s) selected by name")
-            tagged_steps = step_subset
-
-        if not tagged_steps:
-            log.info("specified tags and/or step names select no steps")
-            sys.exit(0)
-
-        # apply restrictions, if any
-        recipe.restrict_steps(tagged_steps, force_enable=False)
-
-        steps = [name for name, step in recipe.steps.items() if not step._skip]
-        log.info(f"will run the following recipe steps:")
-        log.info(f"    {' '.join(steps)}", extra=dict(color="GREEN"))
-
-        # warn user if som steps remain explicitly disabled
-        if any(recipe.steps[name]._skip for name in tagged_steps):
-            log.warning("note that some steps remain explicitly skipped")
-
-        filename = os.path.join(stimelogging.get_logfile_dir(recipe.log) or '.', "stimela.recipe.deps")
+        filename = os.path.join(logdir, "stimela.recipe.deps")
         stimela.config.CONFIG_DEPS.update(recipe_deps)
         stimela.config.CONFIG_DEPS.save(filename)
         log.info(f"saved recipe dependencies to {filename}")
@@ -349,6 +290,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: O
             log.error("run failed, exiting with error code 1")
         for line in traceback.format_exc().split("\n"):
             log.debug(line)
+        outer_step.log.info(f"last log directory was [bold green]{stimelogging.get_logfile_dir(outer_step.log) or '.'}[/bold green]")
         sys.exit(1)
 
     if outputs and outer_step.log.isEnabledFor(logging.DEBUG):
@@ -362,5 +304,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, profile: O
     task_stats.save_profiling_stats(outer_step.log, 
             print_depth=profile if profile is not None else stimela.CONFIG.opts.profile.print_depth,
             unroll_loops=stimela.CONFIG.opts.profile.unroll_loops)
-
+    
+    outer_step.log.info(f"last log directory was [bold green]{stimelogging.get_logfile_dir(outer_step.log) or '.'}[/bold green]")
     return 0
+    

@@ -255,7 +255,7 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
     except pydantic.ValidationError as exc:
         errors = []
         for err  in exc.errors():
-            loc = '.'.join([field2name.get(x, x) for x in err['loc']])
+            loc = '.'.join([field2name.get(x, str(x)) for x in err['loc']])
             if loc in inputs:
                 errors.append(ParameterValidationError(f"{loc} = {inputs[loc]}: {err['msg']}")) 
             else:

@@ -70,12 +70,20 @@ def declare_subtask_attributes(*args, **kw):
     update_process_status(description='.'.join(_progress_task_names))
 
 
+class _CommandContext(object):
+    def __init__(self, command):
+        self.command = command
+        update_process_status(command=command)
+    def ctrl_c(self):
+        update_process_status(command=f"{self.command}(^C)")
+
+
 @contextlib.contextmanager
 def declare_subcommand(command):
     update_process_status(command=command)
     progress_bar and progress_bar.reset(progress_task)
     try:
-        yield command
+        yield _CommandContext(command)
     finally:
         update_process_status(command="")
 

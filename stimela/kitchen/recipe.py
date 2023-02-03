@@ -37,6 +37,10 @@ class ForLoopClause(object):
     # If !=0 , this is a scatter not a loop -- things may be evaluated in parallel using this many workers
     # (use -1 to scatter to unlimited number of workers)
     scatter: int = 0
+    # How to indicate the status of the loop on the console.
+    # Default is "i/N", where i is the current index plus 1, and N is the total number of loops. 
+    # A format string can be supplied instead.
+    display_status: Optional[str] = None
 
 def IterantPlaceholder(name: str):
     return name
@@ -260,7 +264,12 @@ class Recipe(Cargo):
         # assigning to input or output? Provide default            
         if key in self.inputs_outputs:
             self.log.debug(f"default params assignment: {key}={value}")
-            self.defaults[key] = value
+            if value is UNSET:
+                if key in self.defaults:
+                    del self.defaults[key]
+                self.inputs_outputs[key].default = UNSET
+            else:
+                self.defaults[key] = value
         # assigning to a substep? Invoke nested assignment
         elif nesting is not None and nesting in self.steps:
             return self.steps[nesting].assign_value(subkey, value, override=override)
@@ -289,7 +298,8 @@ class Recipe(Cargo):
                 subst.recipe.log[subkey] = value
         # in override mode, assign to assign dict for future processing
         if override:
-            self.assign[key] = value
+            if value is not UNSET:
+                self.assign[key] = value
             self._protected_from_assign.add(key)
 
     def update_log_options(self, **options):
@@ -317,24 +327,119 @@ class Recipe(Cargo):
             elif step._skip is not False:
                 self.log.warning(f"enabling step '{label}' which is normally conditionally skipped ('{step.skip}')")
             step.skip = step._skip = False
+            step.skip_if_outputs = None
         else:
             self.log.warning(f"will skip step '{label}'")
             step.skip = step._skip = True
 
-    def restrict_steps(self, steps: List[str], force_enable=True):
-        self.finalize()
-        # check for unknown steps
-        restrict_steps = set(steps)
-        unknown_steps = restrict_steps.difference(self.steps)
-        if unknown_steps:
-            raise RecipeValidationError(f"recipe '{self.name}': unknown step(s) {join_quote(unknown_steps)}", log=self.log)
+    def restrict_steps(self, tags: List[str] = [], skip_tags: List[str] = [], 
+                             step_ranges: List[str] = [], enable_steps: List[str]=[]):
+        try:
+            # extract subsets of tags and step specifications that refer to sub-recipes
+            # this will map name -> (tags, skip_tags, step_ranges, enable_steps). Name is '' for the parent recipe.
+            subrecipe_entries = OrderedDict()
+            def process_specifier_list(specs: List[str], num=0):
+                for spec in specs:
+                    if '.' in spec:
+                        subrecipe, spec = spec.split('.', 1)
+                        if subrecipe not in self.steps or not isinstance(self.steps[subrecipe].cargo, Recipe):
+                            raise StepSelectionError(f"'{subrecipe}.{spec}' does not refer to a valid subrecipe")
+                    else:
+                        subrecipe = None
+                    entry = subrecipe_entries.setdefault(subrecipe, ([],[],[],[])) 
+                    entry[num].append(spec)
+            # this builds up all the entries given on the command-line
+            for num, options in enumerate((tags, skip_tags, step_ranges, enable_steps)):
+                process_specifier_list(options, num)
 
-        # apply skip flags 
-        for label, step in self.steps.items():
-            if label not in restrict_steps:
-                step.skip = step._skip = True
-            elif force_enable:
-                step.skip = step._skip = False
+            # process our own entries
+            tags, skip_tags, step_ranges, enable_steps = subrecipe_entries.get(None, ([],[],[],[]))
+
+            # apply enabled steps
+            for name in enable_steps:
+                if name in self.steps:
+                    self.enable_step(name)  # config file may have skip=True, but we force-enable here
+                else:
+                    raise StepSelectionError(f"'{name}' does not refer to a valid step")
+
+            # select subset based on tags/skip_tags, this will be a list of names
+            tagged_steps = set()
+
+            # if tags are given, only use steps with (tags+{"always"}-skip_tags)
+            if tags:
+                tags = set(tags) | {"always"}
+                tags.difference_update(skip_tags)
+                for step_name, step in self.steps.items():
+                    if (tags & step.tags):
+                        tagged_steps.add(step_name)
+                self.log.info(f"{len(tagged_steps)} of {len(self.steps)} step(s) selected via tags ({', '.join(tags)})")
+            # else, use steps without any tag in (skip_tags + {"never"})
+            else:
+                skip_tags = set(skip_tags) | {"never"}
+                for step_name, step in self.steps.items():
+                    if not (skip_tags & step.tags):
+                        tagged_steps.add(step_name)
+                if len(self.steps) != len(tagged_steps):
+                    self.log.info(f"{len(self.steps) - len(tagged_steps)} step(s) skipped due to tags ({', '.join(skip_tags)})")
+
+            # add steps explicitly enabled by --step
+            if step_ranges:
+                all_step_names = list(self.steps.keys())
+                step_subset = set()
+                for name in step_ranges:
+                    if ':' in name:
+                        begin, end = name.split(':', 1)
+                        if begin:
+                            try:
+                                first = all_step_names.index(begin)
+                            except ValueError as exc:
+                                raise StepSelectionError(f"no such step: '{begin}' (in '{name}')")
+                        else:
+                            first = 0
+                        if end:
+                            try:
+                                last = all_step_names.index(end)
+                            except ValueError as exc:
+                                raise StepSelectionError(f"no such step: '{end}' (in '{name}')")
+                        else:
+                            last = len(self.steps)-1
+                        step_subset.update(name for name in all_step_names[first:last+1] if name in tagged_steps)
+                    # explicit step name: enable, and add to tagged_steps
+                    else:
+                        if name not in all_step_names:
+                            raise StepSelectionError(f"no such step: '{name}'")
+                        self.enable_step(name)  # config file may have skip=True, but we force-enable here
+                        step_subset.add(name)
+                # specified subset becomes *the* subset
+                self.log.info(f"{len(step_subset)} step(s) selected by name")
+                tagged_steps = step_subset
+
+            if not tagged_steps:
+                self.log.info("no steps have been selected for execution")
+                return 0
+            else:
+                if len(tagged_steps) != len(self.steps):
+                    # apply skip flags 
+                    for label, step in self.steps.items():
+                        if label not in tagged_steps:
+                            step.skip = step._skip = True
+                # see how many steps are actually going to run
+                scheduled_steps = [label for label, step in self.steps.items() if not step._skip]
+                # report scheduled steps to log if (a) they're a subset or (b) any selection options were passed
+                if len(scheduled_steps) != len(self.steps) or None in subrecipe_entries:
+                    self.log.info(f"the following recipe steps have been selected for execution:")
+                    self.log.info(f"    [bold green]{' '.join(scheduled_steps)}[/bold green]")
+
+                # now recurse into sub-recipes
+                for subrecipe, options in subrecipe_entries.items():
+                    if subrecipe is not None:
+                        self.steps[subrecipe].cargo.restrict_steps(*options)
+
+                return len(scheduled_steps)
+        except StepSelectionError as exc:
+            log_exception(exc, log=self.log)
+            raise exc
+
 
     def add_step(self, step: Step, label: str = None):
         """Adds a step to the recipe. Label is auto-generated if not supplied
@@ -512,7 +617,7 @@ class Recipe(Cargo):
             # finalize steps
             for label, step in self.steps.items():
                 step_log = log.getChild(label)
-                step_log.propagate = True
+                step_log.propagate = False
                 try:
                     step.finalize(config, log=step_log, fqname=f"{fqname}.{label}", nesting=nesting+1)
                     # check that per-step assignments don't clash with i/o parameters
@@ -596,10 +701,12 @@ class Recipe(Cargo):
             # if self.for_loop is not None and name == self.for_loop.var:
             #     continue # unset_params.add(name)
             if name in self.inputs_outputs:
-                if value == "UNSET":
+                # if value == "UNSET":
+                #     unset_params.add(name)
+                # elif value == "EMPTY":
+                #     own_params[name] = ""
+                if value is UNSET: 
                     unset_params.add(name)
-                elif value == "EMPTY":
-                    own_params[name] = ""
                 else:
                     own_params[name] = value
             elif '.' not in name: 
@@ -924,24 +1031,35 @@ class Recipe(Cargo):
         outputs = {}
         exception = tb = None
         try:
+            # if for-loop, assign new value
+            if self.for_loop:
+                self.log.info(f"for loop iteration {count}: {self.for_loop.var} = {iter_var}")
+                print(f"for loop iteration {count}: {self.for_loop.var} = {iter_var}")
+                if self.for_loop.var in self.inputs_outputs:
+                    params[self.for_loop.var] = iter_var
+                else:
+                    self.assign[self.for_loop.var] = iter_var
+                # update variable index
+                self.assign[f"{self.for_loop.var}@index"] = count
+                # update alias
+                self._update_aliases(self.for_loop.var, iter_var)
+                # update status display
+                status = None
+                status_dict = dict(index0=count, 
+                            index1=count+1, total=len(self._for_loop_values),
+                            var=self.for_loop.var, value=iter_var)
+                if self.for_loop.display_status:
+                    try:
+                        status = self.for_loop.display_status.format(**status_dict)
+                    except Exception as exc:
+                        self.log.warning(f"error formatting for-loop status: {exc}, falling back on default status display")
+                if status is None:
+                    status = "{index1}/{total}".format(**status_dict)
+                stimelogging.declare_subtask_attributes(status)
+
             for label, step in self.steps.items():
                 # update step info
                 self._prep_step(label, step, subst)
-
-                # if for-loop, assign new value
-                if self.for_loop:
-                    self.log.info(f"for loop iteration {count}: {self.for_loop.var} = {iter_var}")
-                    # update variable (in params, if expected there, else in assignments)
-                    if self.for_loop.var in self.inputs_outputs:
-                        params[self.for_loop.var] = iter_var
-                    else:
-                        self.assign[self.for_loop.var] = iter_var
-                    # update variable index
-                    self.assign[f"{self.for_loop.var}@index"] = count
-                    # update alias
-                    self._update_aliases(self.for_loop.var, iter_var)
-                    stimelogging.declare_subtask_attributes(f"{count+1}/{len(self._for_loop_values)}")
-
                 # reevaluate recipe level assignments (info.fqname etc. have changed)
                 self.update_assignments(subst, params=params)
                 # evaluate step-level assignments

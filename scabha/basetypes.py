@@ -21,6 +21,8 @@ class Unresolved(object):
             self.value = "; ".join(map(str, self.errors))
         if not self.errors:
             self.errors = [UnsetError(f"'{self.value}' undefined")]
+        # prevent {}-substitutions on Unresolved message
+        self.value = self.value.replace("{", "{{").replace("}", "}}")
 
     def __str__(self):
         return f"Unresolved({self.value})"

@@ -18,6 +18,9 @@ class DefinitionError(StimelaBaseException):
 class StepValidationError(StimelaBaseException):
     pass
 
+class StepSelectionError(StimelaBaseException):
+    pass
+
 class RecipeValidationError(StimelaBaseException):
     pass
 

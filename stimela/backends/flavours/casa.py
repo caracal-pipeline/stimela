@@ -81,7 +81,7 @@ def stringify(x):
     return str(x) if type(x) is unicode else ([stringify(y) for y in x] if type(x) is list else x);
 kw={{key: stringify(value) for key, value in kw.items()}}; {command}(**kw);"""
 
-        args =  [casa] + casa_opts.strip().split() + ["-c", code, params_string]
+        args =  casa.strip().split() + casa_opts.strip().split() + ["-c", code, params_string]
         return args
 
 

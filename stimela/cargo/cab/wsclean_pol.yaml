@@ -24,11 +24,6 @@ inputs:
 outputs:
   _use: lib.params.wsclean.base_outputs
 
-  dirty:
-    info: Dirty images
-    dtype: List[File]
-    implicit: "=GLOB({current.prefix}-[0-9][0-9][0-9][0-9]-[IQUV]-dirty.fits)"
-    must_exist: false
   restored: 
     info: Restored images
     dtype: List[File]
@@ -58,6 +53,12 @@ outputs:
     dtype: List[File]
     implicit: "=GLOB({current.prefix}-MFS-[IQUV]-residual.fits)"
     must_exist: false
+  residual-mfs-stokes:
+    v:
+      info: Residual MFS images
+      dtype: File
+      implicit: "=GLOB({current.prefix}-MFS-V-residual.fits)"
+      must_exist: false
   model-mfs:
     info: Model MFS images
     dtype: List[File]
@@ -68,3 +69,19 @@ outputs:
     dtype: List[File]
     implicit: "=GLOB({current.prefix}-MFS-[IQUV]-dirty.fits)"
     must_exist: false
+  dirty:
+    stokes:
+      info: Dirty images
+      dtype: List[File]
+      implicit: "=GLOB({current.prefix}-[0-9][0-9][0-9][0-9]-[IQUV]-dirty.fits)"
+      must_exist: false
+    i:
+      info: Dirty I image
+      dtype: File
+      implicit: "{current.prefix}-I-dirty.fits"
+      must_exist: false
+    v:
+      info: Dirty V image
+      dtype: File
+      implicit: "{current.prefix}-V-dirty.fits"
+      must_exist: false
