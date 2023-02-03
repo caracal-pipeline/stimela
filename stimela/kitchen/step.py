@@ -238,7 +238,7 @@ class Step:
             # if logger is not provided, then init one
             if log is None:
                 log = stimela.logger().getChild(self.fqname)
-                log.propagate = True
+                log.propagate = False
 
             # finalize the cargo
             self.cargo.finalize(config, log=log, fqname=self.fqname, nesting=nesting)
@@ -421,7 +421,7 @@ class Step:
                     parent_log_info("checking if file-type outputs of step are fresh")
                     for name, value in params.items():
                         schema = self.inputs_outputs[name]
-                        if schema.is_input and schema.is_file_type and os.path.exists(value):
+                        if schema.is_input and schema.is_file_type and type(value) is str and os.path.exists(value):
                             mtime = os.path.getmtime(value)
                             if mtime > max_mtime:
                                 max_mtime = mtime

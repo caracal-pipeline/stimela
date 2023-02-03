@@ -1,4 +1,4 @@
-import re, logging, json
+import re, logging, json, yaml
 from typing import Any, List, Dict, Optional, Union
 from omegaconf import ListConfig
 
@@ -185,13 +185,16 @@ class DeclareSuccess(_BaseWrangler):
 class ParseOutput(_BaseWrangler):
     """
     This wrangler will parse a named output parameter out of the output. Specified as 
-    PARSE_OUTPUT:name:type. The matching pattern must have a ()-group with the same name,
-    or else the first ()-group will be parsed.
+    PARSE_OUTPUT:name:type or PARSE_OUTPUT:name:group:type. 
+    In the first case, the matching pattern must have a ()-group with the same name.
+    In the second case, a ()-group name (or number) is explicitly specified.
     Type can be an atomic Python type (str, bool, int, float, complex), or 'json' to use
-    json.loads().
+    json.loads(), or 'yaml' to use yaml.safe_load
     """
 
-    loaders = dict(str=str, bool=bool, int=int, float=float, complex=complex, json=json.loads, JSON=json.loads)
+    loaders = dict(str=str, bool=bool, int=int, float=float, complex=complex, 
+        json=json.loads, JSON=json.loads,
+        yaml=yaml.safe_load, YAML=yaml.safe_load)
     specifier = f"PARSE_OUTPUT:((?P<name>.*):)?(?P<group>.*):(?P<dtype>{'|'.join(loaders.keys())})"
 
     def __init__(self, regex: re.Pattern, spec: str, name: Optional[str], group: str, dtype: str):

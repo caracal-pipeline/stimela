@@ -53,6 +53,12 @@ outputs:
     dtype: List[File]
     implicit: "=GLOB({current.prefix}-MFS-[IQUV]-residual.fits)"
     must_exist: false
+  residual-mfs-stokes:
+    v:
+      info: Residual MFS images
+      dtype: File
+      implicit: "=GLOB({current.prefix}-MFS-V-residual.fits)"
+      must_exist: false
   model-mfs:
     info: Model MFS images
     dtype: List[File]
