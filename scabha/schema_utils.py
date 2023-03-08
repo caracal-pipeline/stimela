@@ -122,19 +122,23 @@ def clickify_parameters(schemas: Dict[str, Any]):
 
             name = name.replace("_", "-")
             optname = f"--{name}"
+            multiple = False
+            dtype = schema.dtype
 
             # sort out option type
-            if schema.dtype == "bool":
+            if dtype == "bool":
                 optname = f"{optname}/--no-{name}"
                 dtype = bool
-            elif schema.dtype == "str":
+            elif dtype == "str":
                 dtype = str
-            elif schema.dtype == "int":
+            elif dtype == "int":
                 dtype = int
-            elif schema.dtype == "float":
+            elif dtype == "float":
                 dtype = float
-            elif schema.dtype == "MS":
-                dtype = click.Path(exists=True)
+            elif dtype in ("MS", "File", "Directory"):
+                dtype = click.Path(exists=(io is schemas.inputs))
+            else:
+                dtype = str
 
             # choices?
             if schema.choices:

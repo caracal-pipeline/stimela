@@ -235,17 +235,37 @@ class Cargo(object):
                 continue
             name = f"{prefix}{name}"
             if not isinstance(value, Parameter):
-                if not isinstance(value, (DictConfig, dict)):
-                    raise SchemaError(f"{label}.{name} is not a valid schema")
-                # try to treat as Parameter based on field names
-                if not (set(value.keys()) - ParameterFields):
-                    try:
-                        value = OmegaConf.unsafe_merge(ParameterSchema.copy(), value)
-                        io_dest[name] = Parameter(**value)
-                    except Exception as exc0:
-                        raise SchemaError(f"{label}.{name} is not a valid parameter definition", exc0)
+                if isinstance(value, str):
+                    schema = {}
+                    value = value.strip()
+                    # if value ends with a double-quoted string, parse that out
+                    if value.endswith('"') and '"' in value[:-1]:
+                        value, info, _ = value.rsplit('"', 2)
+                        schema['info'] = info
+                    if "=" in value:
+                        value, default  = value.split("=", 1)
+                        value = value.strip()
+                        default = default.strip()
+                        if (default.startswith('"') and default.endswith('"')) or \
+                           (default.startswith("'") and default.endswith("'")): 
+                           default = default[1:-1]
+                        schema['default'] = default
+                    schema['dtype'] = value
+                    io_dest[name] = Parameter(**schema)
+                # else proper dict schema, or subsection
                 else:
-                    Cargo.flatten_schemas(io_dest, value, label=label, prefix=f"{name}.")
+                    if not isinstance(value, (DictConfig, dict)):
+                        raise SchemaError(f"{label}.{name} is not a valid schema")
+                    # try to treat as Parameter based on field names
+                    if not (set(value.keys()) - ParameterFields):
+                        try:
+                            value = OmegaConf.unsafe_merge(ParameterSchema.copy(), value)
+                            io_dest[name] = Parameter(**value)
+                        except Exception as exc0:
+                            raise SchemaError(f"{label}.{name} is not a valid parameter definition", exc0)
+                    # else assume subsection and recurse in
+                    else:
+                        Cargo.flatten_schemas(io_dest, value, label=label, prefix=f"{name}.")
         return io_dest
 
     def flatten_param_dict(self, output_params, input_params, prefix=""):
@@ -427,3 +447,12 @@ class Cargo(object):
         """
         raise AssignmentError(f"{self.name}: invalid assignment {key}={value}")
 
+    @staticmethod
+    def add_parameter_summary(params: Dict[str, Any], lines: List[str] = []):
+        for name, value in params.items():
+            if isinstance(value, (list, tuple)) and len(value) > 10:
+                sep1, sep2 = "()" if isinstance(value, tuple) else "[]" 
+                lines.append(f"  {name} = {sep1}{value[0]}, {value[1]}, ..., {value[-1]}{sep2}")
+            else:
+                lines.append(f"  {name} = {value}")
+        return lines

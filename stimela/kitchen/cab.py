@@ -92,11 +92,7 @@ class Cab(Cargo):
     def summary(self, params=None, recursive=True, ignore_missing=False):
         lines = [f"cab {self.name}:"] 
         if params is not None:
-            for name, value in params.items():
-                # if type(value) is validate.Error:
-                #     lines.append(f"  {name} = ERR: {value}")
-                # else:
-                lines.append(f"  {name} = {value}")
+            Cargo.add_parameter_summary(params, lines)
             lines += [f"  {name} = ???" for name, schema in self.inputs_outputs.items()
                         if name not in params and (not ignore_missing or schema.required)]
         return lines

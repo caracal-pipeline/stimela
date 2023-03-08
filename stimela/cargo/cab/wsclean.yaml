@@ -27,6 +27,11 @@ outputs:
     dtype: List[File]
     implicit: "=GLOB({current.prefix}-[0-9][0-9][0-9][0-9]-image.fits)"
     must_exist: false
+  dirty-timeint: 
+    info: Dirty images per time interval
+    dtype: List[File]
+    implicit: "=GLOB({current.prefix}-t[0-9][0-9][0-9][0-9]-dirty.fits)"
+    must_exist: false
   restored-timeint: 
     info: Restored images per time interval
     dtype: List[File]

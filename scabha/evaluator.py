@@ -151,6 +151,11 @@ class FunctionHandler(ResultsHandler):
             return list(x)
         return self.evaluate_generic_callable(evaluator, "LIST", make_list, args)
 
+    def RANGE(self, evaluator, args):
+        def make_range(*x):
+            return list(range(*x))
+        return self.evaluate_generic_callable(evaluator, "RANGE", make_range, args, min_args=1, max_args=3)
+
     def MIN(self, evaluator, args):
         return self.evaluate_generic_callable(evaluator, "MIN", min, args, min_args=1)
 
@@ -264,7 +269,7 @@ def construct_parser():
     
     # functions
     functions = reduce(operator.or_, map(Keyword, ["IF", "IFSET", "GLOB", "EXISTS", "LIST", 
-        "BASENAME", "DIRNAME", "EXTENSION", "STRIPEXT", "MIN", "MAX"]))
+        "BASENAME", "DIRNAME", "EXTENSION", "STRIPEXT", "MIN", "MAX", "RANGE"]))
     # these functions take one argument, which could also be a sequence
     anyseq_functions = reduce(operator.or_, map(Keyword, ["GLOB", "EXISTS"]))
 
