@@ -6,15 +6,10 @@ cabs:
       skip_implicits: True
     # simms
     inputs:
-      msname:
-        dtype: str
-        required: true
-      tel:
-        dtype: str
-      dtime:
-        dtype: int
-      synthesis:
-        dtype: float
+      msname: str * "* marks required value"
+      tel: str
+      dtime: int
+      synthesis: float
     outputs:
       ms:
         dtype: MS

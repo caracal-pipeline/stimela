@@ -238,10 +238,12 @@ class Cargo(object):
                 if isinstance(value, str):
                     schema = {}
                     value = value.strip()
-                    # if value ends with a double-quoted string, parse that out
+                    # if value ends with a double-quoted string, parse out the docstring
                     if value.endswith('"') and '"' in value[:-1]:
                         value, info, _ = value.rsplit('"', 2)
+                        value = value.strip()
                         schema['info'] = info
+                    # does value contain "="? Parse it as "type = default" then
                     if "=" in value:
                         value, default  = value.split("=", 1)
                         value = value.strip()
@@ -250,6 +252,10 @@ class Cargo(object):
                            (default.startswith("'") and default.endswith("'")): 
                            default = default[1:-1]
                         schema['default'] = default
+                    # does value end with "*"? Mark as required
+                    elif value.endswith("*"):
+                        schema['required'] = True
+                        value = value[:-1]
                     schema['dtype'] = value
                     io_dest[name] = Parameter(**schema)
                 # else proper dict schema, or subsection

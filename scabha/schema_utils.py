@@ -122,7 +122,6 @@ def clickify_parameters(schemas: Dict[str, Any]):
 
             name = name.replace("_", "-")
             optname = f"--{name}"
-            multiple = False
             dtype = schema.dtype
 
             # sort out option type
