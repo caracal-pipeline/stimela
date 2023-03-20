@@ -150,9 +150,11 @@ As we saw above, a parameter value starting with ``=`` invokes the formula parse
 
   * ``GLOB(`` *pattern* ``)`` returns a list of filenames matching the given pattern. 
 
-  * ``MIN(`` *arg1[, arg2[,...]]* ``)``  and ``MAX( *arg1[, arg2[,...]]* ``)``, return the min/max of the arguments.
+  * ``MIN(`` *arg1[, arg2[,...]]* ``)``  and ``MAX(`` *arg1[, arg2[,...]]* ``)``, return the min/max of the arguments.
 
   * ``LIST(`` *arg1[, arg2[,...]]* ``)`` returns a list composed of the arguments.
+
+  * ``RANGE(`` *N* ``)`` returns a list of integers from 0 to *N-1*. It also supports the ``RANGE(start, end)`` and ``RANGE(start, end, step)`` forms.
 
   * ``EXISTS(`` *path* ``)`` returns true if the file or path exists. 
 

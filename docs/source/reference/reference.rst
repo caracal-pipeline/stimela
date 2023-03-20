@@ -9,8 +9,10 @@ Stimela reference
    :maxdepth: 3
    :caption: stimela reference:
 
+   cabdefs
    logfiles
    options
    policies
+   containers
    
 

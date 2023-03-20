@@ -10,21 +10,19 @@ Tim Towdy is not a real person -- TIMTOWDY is just an acronym for the actual phr
 
 Stimela (in its second, reborn version) is fairly new and we the developers are also the front-line users. We are still learning how to use it best. One day, we will hopefully have a comprehensive set of :ref:`best_practices` to guide the newbies. For now, keep Tim Towdy in mind as you read the below. 
 
-"There is more than one way to skin a cat." *--unknown, traditional, with no disrespect meant to cats. Even if a cat might be entitled to disagree.*
+"There is more than one way to skin a cat." *--traditional, with no disrespect meant to cats. Even if a cat might be entitled to disagree.*
 
 .. toctree::
    :maxdepth: 1
    :caption: Fundamentals:
 
-   recipes
+   basics
    params
    substitutions
    include
-   self_docs
    variables
    aliases
    skips
    for_loops
-   flavours
    anatomy
    best_practices
