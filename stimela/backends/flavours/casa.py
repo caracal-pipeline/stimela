@@ -75,11 +75,21 @@ class CasaTaskFlavour(_CallableFlavour):
         params_string = json.dumps(pass_params)
 
         code = f"""
-import sys, json;
-kw=json.loads(sys.argv[-1]);
+import sys, json
+kw = json.loads(sys.argv[-1])
 def stringify(x):
-    return str(x) if type(x) is unicode else ([stringify(y) for y in x] if type(x) is list else x);
-kw={{key: stringify(value) for key, value in kw.items()}}; {command}(**kw);"""
+    if isinstance(x, bytes):
+        return str(x)
+    elif isinstance(x, list):
+        return [stringify(y) for y in x]
+    else:
+        return x
+
+kw = {{key: stringify(value) for key, value in kw.items()}}
+
+{command}(**kw)
+
+"""
 
         args =  casa.strip().split() + casa_opts.strip().split() + ["-c", code, params_string]
         return args
