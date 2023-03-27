@@ -7,9 +7,7 @@ opts:
 cabs:
   casa.listobs:
     command: listobs
-    flavour:
-      kind: casa-task
-      casa: /home/sphemakh/builds/casa-release-5.7.0-134.el7/bin/casa
+    flavour: casa-task
     inputs:
       vis:
         dtype: MS
