@@ -7,21 +7,19 @@ Welcome to the stimela 2.0 documentation page
 =========================================================
 
 .. toctree::
-   :maxdepth: 3
+   :maxdepth: 1
    :caption: Contents:
 
-   readme
    installation
-   usage
-   concepts
-   api
+   fundamentals/fundamentals.rst
+   reference/reference.rst
    authors
    citation
    
 
-Indices and tables
-==================
+.. Indices and tables
+.. ==================
 
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+.. * :ref:`genindex`
+.. * :ref:`modindex`
+.. * :ref:`search`

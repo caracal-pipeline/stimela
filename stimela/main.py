@@ -16,6 +16,8 @@ LOG_FILE = stimela.LOG_FILE
 
 log = None
 
+_command_aliases = dict(exec="run", help="doc")
+
 class RunExecGroup(click.Group):
     """ Makes the run and exec commands point to the same thing
 
@@ -27,9 +29,8 @@ class RunExecGroup(click.Group):
         if rv is not None:
             return rv
 
-        alias = "exec"
-        if cmd_name == alias :  
-            return click.Group.get_command(self, ctx, "run")
+        if cmd_name in _command_aliases:  
+            return click.Group.get_command(self, ctx, _command_aliases[cmd_name])
         ctx.fail("Uknown command or alias")
 
     def resolve_command(self, ctx, args):
@@ -121,7 +122,7 @@ def cli(backend, config_files=[], config_dotlist=[], include=[], verbose=False, 
 
 
 # import commands
-from stimela.commands import run, images, build, push, save_config, help
+from stimela.commands import doc, run, images, build, push, save_config
 
 ## the ones not listed above haven't been converted to click yet. They are:
 # cabs, clean, containers, kill, ps, pull

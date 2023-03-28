@@ -20,9 +20,9 @@ from stimela.exceptions import RecipeValidationError
 
 from .run import load_recipe_file
 
-@cli.command("help",
+@cli.command("doc",
     help="""
-    Print help on a cab or a recipe.
+    Print documentation on a cab or a recipe.
     """)
 @click.option("do_list", "-l", "--list", is_flag=True,
                 help="""Lists the available cabs and recipes, including custom-defined ones.""")
@@ -35,10 +35,10 @@ from .run import load_recipe_file
 @click.option("-R", "--required", is_flag=True,
                 help="""Decreases level of detail to include required inputs/outputs only.""")
 @click.argument("items", nargs=-1, metavar="filename.yml|cab name|recipe name|...") 
-def help(items: List[str] = [], do_list=False, implicit=False, obscure=False, all=False, required=False):
+def doc(items: List[str] = [], do_list=False, implicit=False, obscure=False, all=False, required=False):
 
     log = logger()
-    top_tree = Tree(f"stimela help {' '.join(items)}", guide_style="dim")
+    top_tree = Tree(f"stimela doc {' '.join(items)}", guide_style="dim")
     found_something = False
     default_recipe = None
 
@@ -126,7 +126,7 @@ def help(items: List[str] = [], do_list=False, implicit=False, obscure=False, al
                 table.add_row(f"[bold]{name}[/bold]", recipe.info)
             subtree.add(table)
         elif not do_list and not found_something:
-            log.error(f"nothing particular to help on, perhaps specify a recipe name or a cab name, or use -l/--list")
+            log.error(f"nothing particular to document, please specify a recipe name or a cab name, or use -l/--list")
             sys.exit(2)
 
     if default_recipe and not found_something:
