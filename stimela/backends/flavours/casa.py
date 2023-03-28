@@ -74,11 +74,18 @@ class CasaTaskFlavour(_CallableFlavour):
         pass_params = cab.filter_input_params(params)
         params_string = json.dumps(pass_params)
 
+        # unicode instance only exists in python2, python3 bytes
         code = f"""
 import sys, json
 kw = json.loads(sys.argv[-1])
+
+try:
+    utype = unicode
+except NameError:
+    utype = bytes
+
 def stringify(x):
-    if isinstance(x, bytes):
+    if isinstance(x, (utype, str)):
         return str(x)
     elif isinstance(x, list):
         return [stringify(y) for y in x]
