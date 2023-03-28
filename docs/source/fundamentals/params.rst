@@ -71,7 +71,7 @@ Named and implicit outputs
 
 Consider the ``output-file`` output above. Let's say ``mycab`` is a command-line tool that generates an output file, and that the name of the file **must** be specified as ``-output-file NAME``. This is an example of a *named output*. Named outputs must be included in the parameters when validating a task (in some sense, the *filename* is actually a required input of sorts, while the *file* itself is the output.)
 
-There are other command-line tools that name their output files automatically (using hardwired names, or some kind of naming convention derived from an input value). For these cases, stimela supports an ``implicit`` property, which tells it how the output file is named. For example::
+There are also command-line tools that name their output files automatically (using hardwired names, or some kind of naming convention derived from an input value). For these cases, stimela supports an ``implicit`` property, which tells it how the output file is named. For example::
 
     inputs:
         input-file: 

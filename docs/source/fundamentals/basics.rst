@@ -16,7 +16,7 @@ Stimela is *workflow management* framework. The two basic elements of stimela ar
    
   * a CASA task
      
-  A *cab definition* (see :ref:`cabdes`) is a YaML document that tells stimela how to invoke the task, and what its inputs and outputs are (this is collectively known as a *schema*). You can write your own cab definitions, and mix-and-match them with standard cabs shipped in stimela's companion ``cult-cargo`` package.
+  A *cab definition* (see :ref:`cabdefs`) is a YaML document that tells stimela how to invoke the task, and what its inputs and outputs are (this is collectively known as a *schema*). You can write your own cab definitions, and mix-and-match them with standard cabs shipped in stimela's companion ``cult-cargo`` package.
 
   Cabs cab be executed natively (i.e. directly on the host OS), inside a Python virtual environment, or in a :ref:`container <containers>`. The latter option is key to making reproducable workflows.
 
