@@ -10,10 +10,10 @@
 import stimela
 from datetime import date
 
+author = 'Sphesihle Makhathini, Oleg Smirnov and RATT'
 project = 'stimela'
-copyright = f'{date.today().year}, Sphesihle Makhathini, Oleg Smirnov and RATT'
+copyright = f'{date.today().year}, {author}'
 
-author = stimela.__author__
 release = stimela.__version__
 version = stimela.__version__
 
