@@ -53,10 +53,11 @@ class RunExecGroup(click.Group):
 @click.option('--clear-cache', '-C', is_flag=True, 
                 help="Reset the configuration cache. First thing to try in case of strange configuration errors.")
 @click.option('--verbose', '-v', is_flag=True, help='Be extra verbose in output.')
+@click.option('--dev', '-dev', is_flag=True, help='Dev mode, disables progress bar allowing cmd line debug.')
 @click.version_option(str(stimela.__version__))
-def cli(backend, config_files=[], config_dotlist=[], include=[], verbose=False, no_sys_config=False, clear_cache=False):
+def cli(backend, config_files=[], config_dotlist=[], include=[], verbose=False, no_sys_config=False, clear_cache=False, dev=False):
     global log
-    log = stimela.logger(loglevel=logging.DEBUG if verbose else logging.INFO)
+    log = stimela.logger(loglevel=logging.DEBUG if verbose else logging.INFO, dev=dev)
     log.info(f"starting")        # remove this eventually, but it's handy for timing things right now
 
     stimela.VERBOSE = verbose

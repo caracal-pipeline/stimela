@@ -136,7 +136,7 @@ def declare_chapter(title: str, **kw):
     progress_console.rule(title, **kw)
 
 
-def logger(name="STIMELA", propagate=False, boring=False, loglevel="INFO"):
+def logger(name="STIMELA", propagate=False, boring=False, loglevel="INFO", dev=False):
     """Returns the global Stimela logger (initializing if not already done so, with the given values)"""
     global _logger
     if _logger is None:
@@ -154,7 +154,7 @@ def logger(name="STIMELA", propagate=False, boring=False, loglevel="INFO"):
 
         log_formatter = log_boring_formatter if boring else log_colourful_formatter
 
-        progress_bar, progress_console = task_stats.init_progress_bar()
+        progress_bar, progress_console = task_stats.init_progress_bar(dev=dev)
 
         log_console_handler = rich.logging.RichHandler(console=progress_console,
                             highlighter=rich.highlighter.NullHighlighter(), markup=True,
