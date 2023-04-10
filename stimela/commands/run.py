@@ -203,7 +203,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, last_recip
             recipe_name = all_recipe_names[-1]
         else:
             print(f"This file contains the following recipes: {', '.join(all_recipe_names)}")
-            log_exception(f"multiple recipes found, please specify one on the command line")
+            log_exception(f"multiple recipes found, please specify one on the command line, or use -l/--last-recipe")
             sys.exit(2)
         
         log.info(f"selected recipe is '{recipe_name}'")
@@ -224,7 +224,13 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, last_recip
 
         # wrap it in an outer step and prevalidate (to set up loggers etc.)
         recipe.fqname = recipe_name
-        recipe.finalize()
+        try:
+            recipe.finalize()
+        except Exception as exc:
+            log_exception(RecipeValidationError(f"error validating recipe '{recipe_name}'", exc))
+            for line in traceback.format_exc().split("\n"):
+                log.debug(line)
+            sys.exit(1)        
         
         for key, value in params.items():
             recipe.assign_value(key, value, override=True)
@@ -278,7 +284,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, last_recip
         return str(datetime.now() - start_time).split('.', 1)[0]
 
     try:
-        outputs = outer_step.run()
+        outputs = outer_step.run(backend=stimela.CONFIG.opts.backend)
     except Exception as exc:
         task_stats.save_profiling_stats(outer_step.log, 
             print_depth=profile if profile is not None else stimela.CONFIG.opts.profile.print_depth,

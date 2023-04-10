@@ -28,4 +28,7 @@ class BinaryFlavour(_BaseFlavour):
             args = ["/bin/bash", "--rcfile", f"{venv}/bin/activate", "-c", " ".join(shlex.quote(arg) for arg in args)]
 
         return args
+    
+    def get_image_name(self, cab: Cab):
+        return cab.image        
 

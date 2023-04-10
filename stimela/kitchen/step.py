@@ -6,10 +6,10 @@ from omegaconf.errors import OmegaConfBaseException
 from collections import OrderedDict
 from contextlib import nullcontext
 
-from stimela import config
 from stimela.config import EmptyDictDefault, EmptyListDefault
 import stimela
 from stimela import log_exception, stimelogging
+from stimela.backends import StimelaBackendSchema, runner
 from stimela.exceptions import *
 import scabha.exceptions
 from scabha.exceptions import SubstitutionError, SubstitutionErrorList
@@ -56,7 +56,6 @@ class Step:
     skip: Optional[str] = None                      # if this evaluates to True, step is skipped.  
     skip_if_outputs: Optional[str] = None           # skip if outputs "exist' or "fresh"
     tags: List[str] = EmptyListDefault()
-    backend: Optional["stimela.config.Backend"] = None                   # backend setting, overrides opts.config.backend if set
 
     name: str = ''                                  # step's internal name
     fqname: str = ''                                # fully-qualified name e.g. recipe_name.step_label
@@ -66,8 +65,8 @@ class Step:
     assign_based_on: Dict[str, Any] = EmptyDictDefault()
                                                     # assigns recipe-level variables when step is executed based on value of another variable
 
-    # runtime settings
-    runtime: Dict[str, Any] = EmptyDictDefault()
+    # optional backend settings
+    backend: Optional[Dict[str, Any]] = None
 
     # _skip: Conditional = None                       # skip this step if conditional evaluates to true
     # _break_on: Conditional = None                   # break out (of parent recipe) if conditional evaluates to true
@@ -80,6 +79,12 @@ class Step:
             raise StepValidationError(f"step '{self.name}': step can't specify both a cab and a nested recipe")
         self.cargo = self.config = None
         self.tags = set(self.tags)
+        # check backend setting
+        if self.backend:
+            try:
+                OmegaConf.merge(StimelaBackendSchema, self.backend)
+            except OmegaConfBaseException as exc:
+                raise StepValidationError(f"step '{self.name}': invalid backend setting", exc)
         # convert params into standard dict, else lousy stuff happens when we insert non-standard objects
         if isinstance(self.params, DictConfig):
             self.params = OmegaConf.to_container(self.params)
@@ -173,7 +178,7 @@ class Step:
 
     _instantiated_cabs = {}
 
-    def finalize(self, config=None, log=None, fqname=None, nesting=0):
+    def finalize(self, config=None, log=None, fqname=None, backend=None, nesting=0):
         from .recipe import Recipe, RecipeSchema
         if not self.finalized:
             if fqname is not None:
@@ -241,7 +246,7 @@ class Step:
                 log.propagate = False
 
             # finalize the cargo
-            self.cargo.finalize(config, log=log, fqname=self.fqname, nesting=nesting)
+            self.cargo.finalize(config, log=log, fqname=self.fqname, backend=backend, nesting=nesting)
 
             # build dictionary of defaults from cargo
             self.defaults = {name: schema.default for name, schema in self.cargo.inputs_outputs.items() 
@@ -254,22 +259,8 @@ class Step:
                     self.params[name] = value
 
             # check for valid backend
-            if type(self.cargo) is Cab:
-                if self.backend is not None:
-                    self._backend = self.backend
-                    if self._backend.name not in stimela.config.AVAILABLE_BACKENDS:
-                        status = stimela.config.get_backend_status(self._backend.name)
-                        raise StepValidationError(f"backend '{self._backend.name}' is not available ({status})")
-                elif self.cargo.backend is not None:
-                    self._backend = self.cargo.backend
-                    if self._backend.name not in stimela.config.AVAILABLE_BACKENDS:
-                        status = stimela.config.get_backend_status(self._backend.name)
-                        raise StepValidationError(f"backend '{self._backend.name}' specified by cab is not available ({status})")
-                # no need to check this, it's checked at startup
-                else:
-                    self._backend =  stimela.CONFIG.opts.backend
-            else:
-                self._backend = None
+            runner.validate_backend_settings(OmegaConf.merge(backend or {}, self.cargo.backend or {}, self.backend or {}))
+
 
     def prevalidate(self, subst: Optional[SubstitutionNS]=None, root=False):
         self.finalize()
@@ -320,10 +311,9 @@ class Step:
         else:
             self.cargo.assign_value(key, value, override=override, subst=subst)
 
-    def run(self, subst=None, batch=None, parent_log=None):
+    def run(self, backend={}, subst=None, parent_log=None):
         """Runs the step"""
         from .recipe import Recipe
-        from . import runners
 
         # some messages go to the parent logger -- if not defined, default to our own logger
         if parent_log is None:
@@ -466,15 +456,11 @@ class Step:
                                 os.unlink(path)
 
                 if type(self.cargo) is Recipe:
-                    self.cargo._run(params, subst)
+                    backend = OmegaConf.merge(backend, self.cargo.backend or {}, self.backend or {})
+                    self.cargo._run(params, subst, backend=backend)
                 elif type(self.cargo) is Cab:
-                    if self.backend is not None:
-                        backend = self.backend
-                    elif self.cargo.backend is not None:
-                        backend = self.cargo.backend
-                    else:
-                        backend =  stimela.CONFIG.opts.backend
-                    cabstat = runners.run_cab(self, params, backend=backend, subst=subst, batch=batch)
+                    backend = OmegaConf.merge(backend, self.cargo.backend or {}, self.backend or {})
+                    cabstat = runner.run_cab(self, params, backend=backend, subst=subst)
                     # check for runstate
                     if cabstat.success is False:
                         raise StimelaCabRuntimeError(f"error running cab '{self.cargo.name}'", cabstat.errors)

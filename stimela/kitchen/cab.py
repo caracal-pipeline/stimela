@@ -4,13 +4,14 @@ from collections import OrderedDict
 from enum import Enum, IntEnum
 from dataclasses import dataclass
 from omegaconf import MISSING, OmegaConf
+from omegaconf.errors import OmegaConfBaseException
 import rich.markup
 
 from scabha.cargo import Parameter, Cargo, ListOrString, ParameterPolicies, ParameterCategory
 from stimela.exceptions import CabValidationError, StimelaCabRuntimeError
 from scabha.exceptions import SchemaError
 from scabha.basetypes import EmptyDictDefault, EmptyListDefault
-from stimela.backends import flavours
+from stimela.backends import flavours, StimelaBackendSchema
 import stimela
 from . import wranglers
 from scabha.substitutions import substitutions_from
@@ -52,6 +53,9 @@ class Cab(Cargo):
     # a string flavour, or a mapping to specify options (see backends.flavours)
     flavour: Optional[Any] = None
 
+    # overrides backend options
+    backend: Optional[Dict[str, Any]] = None
+
     # controls how params are passed. args: via command line argument, yml: via a single yml string
     parameter_passing: ParameterPassingMechanism = ParameterPassingMechanism.args
 
@@ -67,18 +71,24 @@ class Cab(Cargo):
     return_outputs: Optional[str] = "{}" 
 
     # runtime settings
-    backend: Optional['stimela.config.Backend']
     runtime: Dict[str, Any] = EmptyDictDefault()
 
     _path: Optional[str] = None   # path to image definition yaml file, if any
 
     def __post_init__ (self):
         if self.name is None:
-            self.name = self.image or self.command.split()[0]
+            self.name = self.command.split()[0] or self.image
         Cargo.__post_init__(self)
         for param in self.inputs.keys():
             if param in self.outputs:
                 raise CabValidationError(f"cab {self.name}: parameter '{param}' appears in both inputs and outputs")
+            
+        # check backend setting
+        if self.backend:
+            try:
+                OmegaConf.merge(StimelaBackendSchema, self.backend)
+            except OmegaConfBaseException as exc:
+                raise CabValidationError(f"cab {self.name}: invalid backend setting", exc)
 
         # setup wranglers
         self._wranglers = []

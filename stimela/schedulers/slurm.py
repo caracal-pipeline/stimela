@@ -1,6 +1,5 @@
 import shlex
 from typing import Dict, Optional, Any 
-from stimela.kitchen.cab import Cab
 from stimela.kitchen.batch import Batch
 from stimela import logger
 from stimela.utils.xrun_poll import xrun

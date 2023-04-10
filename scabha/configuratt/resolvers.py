@@ -186,20 +186,30 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
 
             # handle _include entries
             if includes:
-                include_files = pop_conf(conf, "_include", None)
-                if include_files:
+                include_directive = pop_conf(conf, "_include", None)
+                if include_directive:
                     updated = True
-                    if isinstance(include_files, str):
-                        include_files = [include_files]
-                    elif not isinstance(include_files, (tuple, list, ListConfig)) or not all(isinstance(x, str) for x in include_files):
-                        raise ConfigurattError(f"{errloc}: _include: must be a string or a list of strings")
+                    include_files = []
+                    # process includes recursively
+                    def process_include_directive(directive: str, subpath=None):
+                        if isinstance(directive, str):
+                            include_files.append(directive if subpath is None else f"{subpath}/{directive}")
+                        elif isinstance(directive, (tuple, list, ListConfig)):
+                            for dir1 in directive:
+                                process_include_directive(dir1, subpath)
+                        elif isinstance(directive, DictConfig):
+                            for key, value in directive.items_ex():
+                                process_include_directive(value, subpath=key if subpath is None else f"{subpath}/{key}")
+                        else:
+                            raise ConfigurattError(f"{errloc}: _include contains invalid entry of type {type(directive)}")
+                    process_include_directive(include_directive)
 
                     # load includes
                     accum_incl_conf = OmegaConf.create()
                     for incl in include_files:
                         if not incl:
                             raise ConfigurattError(f"{errloc}: empty _include specifier")
-                        # check for flags
+                        # check for [flags] at end of specifier
                         match = re.match("^(.*)\[(.*)\]$", incl)
                         if match:
                             incl = match.group(1)
@@ -207,8 +217,8 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                         else:
                             flags = {}
 
-                        # check for (module)filename.yaml style
-                        match = re.match("^\\((.+)\\)(.+)$", incl)
+                        # check for (module)filename.yaml or (module)/filename.yaml style
+                        match = re.match("^\\((.+)\\)/?(.+)$", incl)
                         if match:
                             modulename, filename = match.groups()
                             try:

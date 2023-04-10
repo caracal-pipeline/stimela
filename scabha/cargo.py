@@ -307,7 +307,7 @@ class Cargo(object):
         return [name for name, value in params.items() if isinstance(value, Unresolved)]
 
 
-    def finalize(self, config=None, log=None, fqname=None, nesting=0):
+    def finalize(self, config=None, log=None, fqname=None, backend=None, nesting=0):
         if not self.finalized:
             if fqname is not None:
                 self.fqname = fqname

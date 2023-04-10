@@ -10,8 +10,45 @@ import time
 import datetime
 import subprocess
 import yaml
-from typing import Dict, Union
-from stimela.config import StimelaImage
+from typing import Dict, Union, Optional
+from typing import Any, List, Dict, Optional, Union
+from dataclasses import dataclass
+from omegaconf.omegaconf import MISSING, OmegaConf
+from omegaconf.errors import OmegaConfBaseException
+from collections import OrderedDict
+from scabha.basetypes import EmptyDictDefault, EmptyListDefault
+
+
+
+import stimela
+from stimela.exceptions import *
+from stimela import log_exception
+
+def is_available():
+    return False
+
+def get_status():
+    return "not yet implemented"
+
+
+@dataclass
+class ImageBuildInfo:
+    info: Optional[str] = ""
+    dockerfile: Optional[str] = "Dockerfile"
+    production: Optional[bool] = True          # False can be used to mark test (non-production) images 
+
+
+@dataclass
+class StimelaImage:
+    name: str = MISSING
+    info: str = "image description"
+    images: Dict[str, ImageBuildInfo] = MISSING
+    _path: Optional[str] = None   # path to image definition yaml file, if any
+
+    # optional library of common parameter sets
+    params: Dict[str, Any] = EmptyDictDefault()
+
+
 
 class DockerError(Exception):
     pass

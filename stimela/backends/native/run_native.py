@@ -3,10 +3,8 @@ import logging, datetime, resource
 from typing import Dict, Optional, Any
 
 import stimela
-from stimela.kitchen.cab import Cab
+import stimela.kitchen
 from stimela.utils.xrun_asyncio import xrun
-from stimela.schedulers.slurm import SlurmBatch
-from stimela.schedulers import SlurmBatch
 from stimela.exceptions import StimelaProcessRuntimeError
 
 
@@ -30,8 +28,13 @@ def update_rlimits(rlimits: Dict[str, Any], log: logging.Logger):
         log.debug(f"setting soft limit {name}={limit} (hard limit is {hard})")
 
 
-def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
-        log: logging.Logger, subst: Optional[Dict[str, Any]] = None, batch=None):
+
+def build_command_line(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], subst: Optional[Dict[str, Any]] = None):
+    return cab.flavour.get_arguments(cab, params, subst)
+
+
+def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
+        log: logging.Logger, subst: Optional[Dict[str, Any]] = None):
     """Runs cab contents
 
     Args:
@@ -44,7 +47,7 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
     """
     update_rlimits(stimela.CONFIG.opts.rlimits, log)
 
-    args = cab.flavour.get_arguments(cab, params, subst)
+    args = build_command_line(cab, params, subst)
 
     log.debug(f"command line is {args}")
 
@@ -52,17 +55,6 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
 
     command_name = cab.flavour.command_name
 
-    if batch:
-        batch = SlurmBatch(**batch)
-        batch.__init_cab__(cabstat.cab, params, subst, log)
-        runcmd = "/bin/bash -c" + " ".join(args)
-        jobfile = "foo-bar.job"
-        batch.name = "foo-bar"
-        batch.submit(jobfile=jobfile, runcmd=runcmd)
-
-        return
-
-    #-------------------------------------------------------
     # run command
     start_time = datetime.datetime.now()
     def elapsed(since=None):

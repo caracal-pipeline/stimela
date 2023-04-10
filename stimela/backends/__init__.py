@@ -1,32 +1,91 @@
 import os.path
 from dataclasses import dataclass
-from typing import Union, Dict, Any, List
+from typing import Union, Dict, Any, List, Optional
+from enum import Enum
+from omegaconf import OmegaConf, MISSING
 
-from stimela.kitchen.cab import Parameter
-
+import stimela.kitchen
 from stimela.exceptions import SchemaError
-from scabha.basetypes import File, Directory, MS
+from scabha.basetypes import File, Directory, MS, EmptyDictDefault, EmptyListDefault
 
+
+# @dataclass
+# class StimelaImageBuildInfo:
+#     stimela_version: str = ""
+#     user: str = ""
+#     date: str = ""
+#     host: str = ""  
+
+# @dataclass
+# class StimelaImageInfo:
+#     name: str = ""
+#     version: str = ""
+#     full_name: str = ""
+#     iid: str = ""
+#     build: Union[StimelaImageBuildInfo, None] = None
+
+# @dataclass
+# class ImageBuildInfo:
+#     info: Optional[str] = ""
+#     dockerfile: Optional[str] = "Dockerfile"
+#     production: Optional[bool] = True          # False can be used to mark test (non-production) images 
 
 @dataclass
-class StimelaImageBuildInfo:
-    stimela_version: str = ""
-    user: str = ""
-    date: str = ""
-    host: str = ""  
+class StimelaImage:
+    name: str
+    version: str
+    # name: str = MISSING
+    # info: str = "image description"
+    # images: Dict[str, ImageBuildInfo] = MISSING
+    # _path: Optional[str] = None   # path to image definition yaml file, if any
 
-@dataclass
-class StimelaImageInfo:
-    name: str = ""
-    version: str = ""
-    full_name: str = ""
-    iid: str = ""
-    build: Union[StimelaImageBuildInfo, None] = None
+    # # optional library of common parameter sets
+    # params: Dict[str, Any] = EmptyDictDefault()
+
+
+from .singularity import SingularityBackendOptions
+from .kubernetes import KubernetesBackendOptions
+
+#Backend = Enum("Backend", "docker singularity podman kubernetes native", module=__name__)
+Backend = Enum("Backend", "singularity kubernetes native", module=__name__)
+
+SUPPORTED_BACKENDS = set(Backend.__members__)
+
+
+def get_backend(name: str):
+    if name not in SUPPORTED_BACKENDS:
+        return None
+    backend = __import__(f"stimela.backends.{name}", fromlist=[name])
+    if backend.is_available():
+        return backend
+    return None
+
+
+def get_backend_status(name: str):
+    if name not in SUPPORTED_BACKENDS:
+        return "unknown backend"
+    backend = __import__(f"stimela.backends.{name}", fromlist=[name])
+    return backend.get_status()
+
+
+@dataclass 
+class StimelaBackendOptions(object):
+    registry: str = "quay.io/stimela2"
+    
+    singularity: Optional[SingularityBackendOptions] = None
+    kube: Optional[KubernetesBackendOptions] = None
+    native: Optional[Dict] = None  # native backend has no options for now 
+    docker: Optional[Dict] = None  # placeholder for future impl
+    slurm: Optional[Dict] = None   # placeholder for future impl
+
+StimelaBackendSchema = OmegaConf.structured(StimelaBackendOptions)
+
+
 
 
 def resolve_required_mounts(params: Dict[str, Any], 
-                            inputs: Dict[str, Parameter], 
-                            outputs: Dict[str, Parameter],
+                            inputs: Dict[str, 'stimela.kitchen.cab.Parameter'], 
+                            outputs: Dict[str, 'stimela.kitchen.cab.Parameter'],
                             prior_mounts: Dict[str, bool]):
 
     targets = {}

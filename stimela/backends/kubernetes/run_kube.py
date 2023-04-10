@@ -2,16 +2,13 @@ from dataclasses import dataclass
 import logging, time, json, datetime, yaml, os.path, uuid, pathlib
 
 from typing import Dict, List, Optional, Any
-from enum import Enum
-from collections import OrderedDict
 
 from omegaconf import OmegaConf, DictConfig, ListConfig
 from scabha.basetypes import EmptyDictDefault, EmptyListDefault
 
 import stimela
 from stimela.kitchen.cab import Cab
-from stimela.kitchen.step import Step
-from stimela.utils.xrun_asyncio import xrun, dispatch_to_log
+from stimela.utils.xrun_asyncio import dispatch_to_log
 from stimela.exceptions import StimelaCabParameterError, StimelaCabRuntimeError, CabValidationError
 from stimela.stimelogging import log_exception
 from stimela.backends import resolve_required_mounts
@@ -24,47 +21,7 @@ from kubernetes.client.rest import ApiException
 from kubernetes.stream import stream
 from dask_kubernetes import make_pod_spec, KubeCluster
 
-@dataclass
-class KubernetesDaskRuntime(object):
-    num_workers: int = 0
-    cpu_limit: int = 1
-    memory_limit: Optional[str] = None
-    threads_per_worker: int = 1
-    name: Optional[str] = None
-    persist: bool = False
-
-# dict of methods for converting an object to text format
-_InjectedFileFormatters = dict(
-    yaml = yaml.dump,
-    json = json.dumps,
-    txt = str
-)
-
-InjectedFileFormats = Enum("InjectedFileFormats", " ".join(_InjectedFileFormatters.keys()), module=__name__)
-
-@dataclass
-class KubernetesFileInjection(object):
-    format: InjectedFileFormats = "txt"
-    content: Any = ""
-
-@dataclass
-class KubernetesLocalMount(object):
-    path: str
-    dest: str = ""              # destination path -- same as local if empty
-    readonly: bool = False      # mount as readonly, but it doesn't work (yet?)
-    mkdir: bool = False         # create dir, if it is missing
-
-@dataclass
-class KubernetesRuntime(object):
-    namespace: str
-    dask_cluster: KubernetesDaskRuntime = KubernetesDaskRuntime()
-    inject_files: Dict[str, KubernetesFileInjection] = EmptyDictDefault()
-    pre_commands: List[str] = EmptyListDefault()
-    local_mounts: Dict[str, KubernetesLocalMount] = EmptyDictDefault()
-    env: Dict[str, str] = EmptyDictDefault()
-    run_dir: str = "."          # directory to run in inside container
-
-KubernetesRuntimeSchema = OmegaConf.structured(KubernetesRuntime)
+from . import KubernetesRuntimeSchema
 
 _kube_client = _kube_config = None
 
@@ -81,7 +38,7 @@ def get_kube_api():
 
 
 def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
-        log: logging.Logger, subst: Optional[Dict[str, Any]] = None, batch=None):
+        log: logging.Logger, subst: Optional[Dict[str, Any]] = None):
     """Runs cab contents
 
     Args:
