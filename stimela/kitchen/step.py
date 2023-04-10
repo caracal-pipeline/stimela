@@ -405,7 +405,7 @@ class Step:
                     raise StepValidationError(f"step '{self.name}': invalid inputs: {join_quote(invalid)}", log=self.log)
 
             ## check if we need to skip based on existing file outputs
-            if self.skip_if_outputs:
+            if not skip and self.skip_if_outputs:
                 max_mtime, max_mtime_path = 0, None
                 if self.skip_if_outputs == OUTPUTS_FRESH:
                     parent_log_info("checking if file-type outputs of step are fresh")
@@ -425,7 +425,7 @@ class Step:
                 for name, value in params.items():
                     schema = self.inputs_outputs[name]
                     if schema.is_output and schema.is_file_type:
-                        if os.path.exists(value):
+                        if type(value) is str and os.path.exists(value):
                             if max_mtime:
                                 mtime = os.path.getmtime(value)
                                 if mtime < max_mtime:
@@ -449,7 +449,7 @@ class Step:
                 for name, schema in self.outputs.items():
                     if name in params and schema.remove_if_exists and schema.is_file_type:
                         path = params[name]
-                        if os.path.exists(path):
+                        if type(path) is str and os.path.exists(path):
                             if os.path.isdir(path) and not os.path.islink(path):
                                 shutil.rmtree(path)
                             else:

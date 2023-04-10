@@ -990,7 +990,7 @@ class Recipe(Cargo):
     def summary(self, params: Dict[str, Any], recursive=True, ignore_missing=False):
         """Returns list of lines with a summary of the recipe state
         """
-        lines = [f"recipe '{self.name}':"] + [f"  {name} = {value}" for name, value in params.items()]
+        lines = [f"recipe '{self.name}':"] + Cargo.add_parameter_summary(params)
         if not ignore_missing:
             lines += [f"  {name} = ???" for name in self.inputs_outputs if name not in params]
         if recursive:
