@@ -70,7 +70,7 @@ def get_backend_status(name: str):
 
 @dataclass 
 class StimelaBackendOptions(object):
-    registry: str = "quay.io/stimela2"
+    default_registry: str = "quay.io/stimela2"
     
     singularity: Optional[SingularityBackendOptions] = None
     kube: Optional[KubernetesBackendOptions] = None

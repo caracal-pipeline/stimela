@@ -9,7 +9,7 @@ from stimela.kitchen import wranglers
 from scabha.substitutions import substitutions_from
 
 from . import _CallableFlavour, _BaseFlavour
-
+import stimela
 
 @dataclass
 class BinaryFlavour(_BaseFlavour):
@@ -21,7 +21,7 @@ class BinaryFlavour(_BaseFlavour):
     def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any]):
 
         # build command line from parameters
-        args, venv = cab.build_command_line(params, subst)
+        args, venv = cab.build_command_line(params, subst, search=False)
 
         # prepend virtual env invocation, if asked
         if venv:
@@ -29,6 +29,6 @@ class BinaryFlavour(_BaseFlavour):
 
         return args
     
-    def get_image_name(self, cab: Cab):
-        return cab.image        
+    def get_image_name(self, cab: Cab, backend: 'stimela.backend.StimelaBackendOptions'):
+        return cab.image.to_string(backend.default_registry)        
 

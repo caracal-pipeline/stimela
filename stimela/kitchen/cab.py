@@ -3,7 +3,7 @@ from typing import Any, List, Dict, Optional, Union
 from collections import OrderedDict
 from enum import Enum, IntEnum
 from dataclasses import dataclass
-from omegaconf import MISSING, OmegaConf
+from omegaconf import MISSING, OmegaConf, DictConfig
 from omegaconf.errors import OmegaConfBaseException
 import rich.markup
 
@@ -20,11 +20,40 @@ ParameterPassingMechanism = Enum("ParameterPassingMechanism", "args yaml", modul
 
 
 @dataclass 
-class CabManagement:        # defines common cab management behaviours
+class CabManagement(object):        # defines common cab management behaviours
     environment: Optional[Dict[str, str]] = EmptyDictDefault()
     cleanup: Optional[Dict[str, ListOrString]]     = EmptyDictDefault()   
     wranglers: Optional[Dict[str, ListOrString]]   = EmptyDictDefault()   
 
+@dataclass
+class ImageInfo(object):
+    name: str                           # image name
+    registry: Optional[str] = None      # registry/org or org (for Dockerhub)
+    version: str = "latest"
+
+    @staticmethod
+    def from_string(spec: str):
+        """Creates ImageInfo from string"""
+        # get version specs
+        if ":" in spec:
+            spec, version = spec.rsplit(":", 1)
+        else:
+            version = "latest"
+        # get registry
+        if "/" in spec:
+            registry, name = spec.rsplit("/", 1)
+        else:
+            registry, name = None, spec
+        return ImageInfo(name, registry, version)
+    
+    def to_string(self, default_registry=None):
+        registry = self.registry or default_registry
+        if registry:
+            return f"{self.registry}/{self.name}:{self.version}"
+        else:        
+            return f"{self.name}:{self.version}"
+
+ImageInfoSchema = OmegaConf.structured(ImageInfo)
 
 @dataclass
 class Cab(Cargo):
@@ -41,7 +70,7 @@ class Cab(Cargo):
     """
     # if set, the cab is run in a container, and this is the image name
     # if not set, commands are run by the native runner
-    image: Optional[str] = None                   
+    image: Optional[Any] = None                   
 
     # command to run, inside the container or natively
     command: str = MISSING
@@ -82,6 +111,18 @@ class Cab(Cargo):
         for param in self.inputs.keys():
             if param in self.outputs:
                 raise CabValidationError(f"cab {self.name}: parameter '{param}' appears in both inputs and outputs")
+            
+        # check image setting
+        if self.image:
+            if type(self.image) is str:
+                self.image = ImageInfo.from_string(self.image)
+            elif isinstance(self.image, DictConfig):
+                try:
+                    self.image = OmegaConf.to_container(OmegaConf.merge(ImageInfoSchema, self.image))
+                except OmegaConfBaseException as exc:
+                    raise CabValidationError(f"cab {self.name}: invalid image setting", exc)
+            else:
+                raise CabValidationError(f"cab {self.name}: invalid image setting")
             
         # check backend setting
         if self.backend:

@@ -90,9 +90,9 @@ class PythonCallableFlavour(_CallableFlavour):
         else:
             self._yield_output = ""
 
-    def get_image_name(self, cab: Cab):
+    def get_image_name(self, cab: Cab, backend: 'stimela.backend.StimelaBackendOptions'):
         from stimela import CONFIG
-        return cab.image or CONFIG.images['default-python']
+        return cab.image(backend.default_registry) or CONFIG.images['default-python']
 
     def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any]):
         # substitute command and split into module/function
@@ -167,9 +167,9 @@ class PythonCodeFlavour(_BaseFlavour):
         cab._wranglers.append((pattern, wrangs))
         self.command_name = "[python]"
 
-    def get_image_name(self, cab: Cab):
+    def get_image_name(self, cab: Cab, backend: 'stimela.backend.StimelaBackendOptions'):
         from stimela import CONFIG
-        return cab.image or CONFIG.images['default-python']
+        return cab.image(backend.default_registry) or CONFIG.images['default-python']
 
     def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any]):
         # do substitutions on command, if necessary

@@ -122,7 +122,13 @@ def cli(config_files=[], config_dotlist=[], include=[], verbose=False, no_sys_co
 
 
 # import commands
-from stimela.commands import doc, run, images, build, push, save_config
+from stimela.commands import doc, run, save_config
 
-## the ones not listed above haven't been converted to click yet. They are:
-# cabs, clean, containers, kill, ps, pull
+## These one needs to be reimplemented, current backed auto-pulls and auto-builds:
+# images, pull, build, clean
+
+## this one is deprecated, stimela doc does the trick
+# cabs
+
+## the ones below should be deprecated, since we don't do async containers anymore
+# containers, kill, ps

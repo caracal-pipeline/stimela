@@ -42,11 +42,23 @@ cabs:
       skip_implicits: True
     inputs:
       ms:
+        dtype: MS
         must_exist: false  # for testing
+      prefix:
+        dtype: str
+      scale:
+        dtype: str
+      size:
+        dtype: int
       dummy:
         dtype: str
       dummy2:
         dtype: str
+    outputs:
+      restored:
+        implicit: "foo"
+      dirty:
+        implicit: "foo"
 
   aimfast:
     command: /bin/true ## dummy command for now, since this is just a dummy example step

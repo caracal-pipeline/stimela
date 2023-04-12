@@ -34,6 +34,7 @@ def build_command_line(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], s
 
 
 def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
+        backend: 'stimela.backend.StimelaBackendOptions',
         log: logging.Logger, subst: Optional[Dict[str, Any]] = None):
     """Runs cab contents
 

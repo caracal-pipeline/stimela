@@ -9,6 +9,9 @@ class BackendError(StimelaBaseException):
 class CabValidationError(StimelaBaseException):
     pass
 
+class ImageSpecificationError(StimelaBaseException):
+    pass
+
 class SchemaError(StimelaBaseException):
     pass
 
