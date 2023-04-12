@@ -21,7 +21,7 @@ from kubernetes.client.rest import ApiException
 from kubernetes.stream import stream
 from dask_kubernetes import make_pod_spec, KubeCluster
 
-from . import KubernetesRuntimeSchema
+from . import KubernetesRuntimeSchema, _InjectedFileFormatters
 
 _kube_client = _kube_config = None
 

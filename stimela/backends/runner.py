@@ -41,9 +41,9 @@ def validate_backend_settings(backend_opts: Dict[str, Any]):
     # check if slurm wrapper is to be applied
     wrapper = None
     if False:   # placeholder -- should be: if backend.slurm and backed.slurm.enable
-        if 'slurm' not in AVAILABLE_BACKENDS:
-            raise BackendError(f"backend 'slurm' not available ({BACKEND_STATUS['slurm']})")
-        wrapper = AVAILABLE_BACKENDS['slurm']
+        wrapper = get_backend('slurm') 
+        if wrapper is None:
+            raise BackendError(f"backend 'slurm' not available ({get_backend_status('slurm')})")
 
     return backend_opts, main_backend, wrapper
 
