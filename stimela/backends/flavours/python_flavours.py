@@ -92,7 +92,7 @@ class PythonCallableFlavour(_CallableFlavour):
 
     def get_image_name(self, cab: Cab, backend: 'stimela.backend.StimelaBackendOptions'):
         from stimela import CONFIG
-        return cab.image(backend.default_registry) or CONFIG.images['default-python']
+        return cab.image.to_string(backend.default_registry) if cab.image else CONFIG.images['default-python']
 
     def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any]):
         # substitute command and split into module/function
@@ -169,7 +169,7 @@ class PythonCodeFlavour(_BaseFlavour):
 
     def get_image_name(self, cab: Cab, backend: 'stimela.backend.StimelaBackendOptions'):
         from stimela import CONFIG
-        return cab.image(backend.default_registry) or CONFIG.images['default-python']
+        return cab.image.to_string(backend.default_registry) if cab.image else CONFIG.images['default-python']
 
     def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any]):
         # do substitutions on command, if necessary

@@ -50,7 +50,7 @@ class CasaTaskFlavour(_CallableFlavour):
 
     def get_image_name(self, cab: Cab, backend: 'stimela.backend.StimelaBackendOptions'):
         from stimela import CONFIG
-        return cab.image(backend.default_registry) or CONFIG.images['default-casa']
+        return cab.image.to_string(backend.default_registry) if cab.image else CONFIG.images['default-casa']
 
     def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any]):
         with substitutions_from(subst, raise_errors=True) as context:
