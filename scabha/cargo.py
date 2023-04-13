@@ -427,8 +427,17 @@ class Cargo(object):
         """Generates help into a rich.tree.Tree object"""
         if self.info:
             tree.add("Description:").add(Markdown(self.info))
+        # extra documentation?
+        for section, content in self.extra_info.items():
+            if not section.lower().endswith("inputs") and not section.lower().endswith("outputs"):
+                tree.add(f"{section}:").add(Markdown(content))
         # adds tables for inputs and outputs
         for io, title in (self.inputs, "inputs"), (self.outputs, "outputs"):
+            # add extra help sections
+            for section, content in self.extra_info.items():
+                if section.lower().endswith(title):
+                    tree.add(f"{section}:").add(Markdown(content))
+            # add parameters by category
             for cat in ParameterCategory:
                 schemas = [(name, schema) for name, schema in io.items() if schema.get_category() == cat]
                 if not schemas:
