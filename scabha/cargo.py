@@ -215,7 +215,9 @@ class Cargo(object):
     name: Optional[str] = None                    # cab name (if None, use image or command name)
     fqname: Optional[str] = None                  # fully-qualified name (recipe_name.step_label.etc.etc.)
 
-    info: Optional[str] = None                    # description
+    info: Optional[str] = None                    # help string
+
+    extra_info: Dict[str, str] = EmptyDictDefault() # optional, additional help sections
 
     # schemas are postentially nested (dicts of dicts), which omegaconf doesn't quite recognize,
     # (or in my ignorance I can't specify it -- in any case Union support is weak), so do a dict to Any
@@ -358,6 +360,20 @@ class Cargo(object):
                         except Exception  as exc:
                             raise SchemaError(f"error in dynamic schema for parameter 'name'", exc)
                         io[name] = Parameter(**schema)
+            # re-resolve implicits
+            self._resolve_implicit_parameters(params)
+
+    def _resolve_implicit_parameters(self, params):
+        self._implicit_params = set()
+        for name, schema in self.inputs_outputs.items():
+            if schema.implicit is not None and type(schema.implicit) is not Unresolved:
+                if name in params and name not in self._implicit_params and params[name] != schema.implicit:
+                    raise ParameterValidationError(f"implicit parameter {name} was supplied explicitly")
+                if name in self.defaults:
+                   raise SchemaError(f"implicit parameter {name} also has a default value")
+                params[name] = schema.implicit
+                self._implicit_params.add(name)
+
 
     def prevalidate(self, params: Optional[Dict[str, Any]], subst: Optional[SubstitutionNS]=None, root=False):
         """Does pre-validation.
@@ -365,14 +381,7 @@ class Cargo(object):
         A dynamic schema, if defined, is applied at this point."""
         self.finalize()
         # add implicits, if resolved
-        for name, schema in self.inputs_outputs.items():
-            if schema.implicit is not None and type(schema.implicit) is not Unresolved:
-                if name in params and name not in self._implicit_params:
-                    raise ParameterValidationError(f"implicit parameter {name} was supplied explicitly")
-                if name in self.defaults:
-                   raise SchemaError(f"implicit parameter {name} also has a default value")
-                params[name] = schema.implicit
-                self._implicit_params.add(name)
+        self._resolve_implicit_parameters(params)
         # assign unset categories
         for name, schema in self.inputs_outputs.items():
             schema.get_category()
