@@ -19,7 +19,7 @@ from stimela import stimelogging
 import stimela.config
 from stimela.config import ConfigExceptionTypes
 from stimela import logger, log_exception
-from stimela.exceptions import RecipeValidationError, StimelaRuntimeError, StepSelectionError
+from stimela.exceptions import RecipeValidationError, StimelaRuntimeError, StepSelectionError, StimelaBaseException
 from stimela.main import cli
 from stimela.kitchen.recipe import Recipe, Step, RecipeSchema, join_quote
 from stimela import task_stats
@@ -233,7 +233,11 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, last_recip
             sys.exit(1)        
         
         for key, value in params.items():
-            recipe.assign_value(key, value, override=True)
+            try:
+                recipe.assign_value(key, value, override=True)
+            except ScabhaBaseException as exc:
+                log_exception(exc)
+                sys.exit(1)
 
         # split out parameters
         params = {key: value for key, value in params.items() if key in recipe.inputs_outputs}

@@ -309,7 +309,10 @@ class Step:
                 del self.validated_params[key]
         # else delegate to cargo to assign
         else:
-            self.cargo.assign_value(key, value, override=override, subst=subst)
+            try:
+                self.cargo.assign_value(key, value, override=override)
+            except ScabhaBaseException as exc:
+                raise AssignmentError(f"{self.name}: invalid assignment {key}={value}", exc)
 
     def run(self, backend={}, subst=None, parent_log=None):
         """Runs the step"""
