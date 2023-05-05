@@ -1,7 +1,7 @@
 from typing import Dict, Optional, Any
 from omegaconf import OmegaConf
 from omegaconf.errors import OmegaConfBaseException 
-from stimela.backends import StimelaBackendSchema
+from stimela.backends import StimelaBackendOptions, StimelaBackendSchema
 from stimela.exceptions import StimelaCabRuntimeError, BackendError
 import stimela.kitchen
 
@@ -15,28 +15,23 @@ def validate_backend_settings(backend_opts: Dict[str, Any]):
     """
     # construct backend object
     try:
-        backend_opts = OmegaConf.merge(StimelaBackendSchema, backend_opts)
+        backend_opts = StimelaBackendOptions(**OmegaConf.merge(StimelaBackendSchema, backend_opts))
     except OmegaConfBaseException as exc:
         raise BackendError("invalid backend specification", exc)
 
     main = main_backend = None
+    selected = backend_opts.select or ['native']
     # select containerization engine, if any
-    for engine in 'singularity', 'kube', 'docker', 'native':
-        if backend_opts[engine] and backend_opts[engine].enable:
-            if main:
-                raise BackendError(f"can't use both '{engine}' and '{main}'")
+    for engine in selected: 
+        # check that backend has not been disabled
+        opts = getattr(backend_opts, engine, None)
+        if not opts or opts.enable:
             main_backend = get_backend(engine)
-            if main_backend is None:
-                raise BackendError(f"backend '{engine}' not available ({get_backend_status(engine)})")
-            main = engine
-    
-    if main is None:
-        main = 'native'
-        main_backend = get_backend('native')
-
-    # check that selected backend is enabled 
-    if main_backend is None:
-        raise BackendError(f"backend '{main}' not available ({get_backend_status(main)})")
+            if main_backend is not None:
+                main = engine
+                break
+    else:
+        raise BackendError(f"selected backends ({', '.join(selected)}) not available")
     
     # check if slurm wrapper is to be applied
     wrapper = None

@@ -2,49 +2,15 @@ import os.path
 from dataclasses import dataclass
 from typing import Union, Dict, Any, List, Optional
 from enum import Enum
-from omegaconf import OmegaConf, MISSING
+from omegaconf import ListConfig, OmegaConf
+from stimela.exceptions import BackendSpecificationError
+from scabha.basetypes import EmptyDictDefault
 
 import stimela.kitchen
-from stimela.exceptions import SchemaError
-from scabha.basetypes import File, Directory, MS, EmptyDictDefault, EmptyListDefault
-
-
-# @dataclass
-# class StimelaImageBuildInfo:
-#     stimela_version: str = ""
-#     user: str = ""
-#     date: str = ""
-#     host: str = ""  
-
-# @dataclass
-# class StimelaImageInfo:
-#     name: str = ""
-#     version: str = ""
-#     full_name: str = ""
-#     iid: str = ""
-#     build: Union[StimelaImageBuildInfo, None] = None
-
-# @dataclass
-# class ImageBuildInfo:
-#     info: Optional[str] = ""
-#     dockerfile: Optional[str] = "Dockerfile"
-#     production: Optional[bool] = True          # False can be used to mark test (non-production) images 
-
-@dataclass
-class StimelaImage:
-    name: str
-    version: str
-    # name: str = MISSING
-    # info: str = "image description"
-    # images: Dict[str, ImageBuildInfo] = MISSING
-    # _path: Optional[str] = None   # path to image definition yaml file, if any
-
-    # # optional library of common parameter sets
-    # params: Dict[str, Any] = EmptyDictDefault()
-
 
 from .singularity import SingularityBackendOptions
 from .kubernetes import KubernetesBackendOptions
+from .native import NativeBackendOptions
 
 #Backend = Enum("Backend", "docker singularity podman kubernetes native", module=__name__)
 Backend = Enum("Backend", "singularity kubernetes native", module=__name__)
@@ -71,16 +37,39 @@ def get_backend_status(name: str):
 @dataclass 
 class StimelaBackendOptions(object):
     default_registry: str = "quay.io/stimela2"
+
+    select: Any = ""   # should be Union[str, List[str]], but OmegaConf doesn't support it, so handle in __post_init__ for now
     
     singularity: Optional[SingularityBackendOptions] = None
     kube: Optional[KubernetesBackendOptions] = None
-    native: Optional[Dict] = None  # native backend has no options for now 
+    native: Optional[NativeBackendOptions] = None 
     docker: Optional[Dict] = None  # placeholder for future impl
     slurm: Optional[Dict] = None   # placeholder for future impl
 
+    ## Resource limits applied during run -- see resource module
+    rlimits: Dict[str, Any] = EmptyDictDefault()
+
+    def __post_init__(self):
+        # resolve "select" field
+        if type(self.select) is str:
+            if not self.select:
+                self.select = []
+            else:
+                self.select = [x.strip() for x in self.select.split(",")]
+        elif isinstance(self.select, (list, tuple, ListConfig)):
+            self.select = list(self.select)
+        else:
+            raise BackendSpecificationError(f"invalid backend.select setting of type {self.select}")
+        # provide default options for available backends
+        if self.singularity is None and get_backend("singularity"):
+            self.singularity = SingularityBackendOptions()
+        if self.native is None and get_backend("native"):
+            self.native = NativeBackendOptions()
+        if self.kube is None and get_backend("kubernetes"):
+            self.kube = KubernetesBackendOptions()
+                        
+
 StimelaBackendSchema = OmegaConf.structured(StimelaBackendOptions)
-
-
 
 
 def resolve_required_mounts(params: Dict[str, Any], 

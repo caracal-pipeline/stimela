@@ -178,4 +178,17 @@ Formula evaluation errors
 
 From the list of functions above, it should be clear that some functions expect arguments of a specific type (e.g. the pathname manipulation functions expect a string argument), while others (e.g. ``IF()``) are completely permissive. Bear this in mind if you're confounded by a strange error during parameter validation. Stimela strives to give sensible and descriptive error messages, however, the formula engine is one area where the range of possible errors is so vast that the occasional opaque message will slip through.
 
+OmegaConf interpolations
+------------------------
+
+A related, but more basic, kind of substitution is invoked via the ``${}`` construct. This invokes the `OmegaConf variable interpolation <https://omegaconf.readthedocs.io/en/usage.html#variable-interpolation>`_ mechanism::
+
+   cabs:
+        breizorro:
+            command: breizorro
+            image: ${vars.cult-cargo.registry}/breizorro:cc${vars.cult-cargo.version}
+ 
+
+
+
 

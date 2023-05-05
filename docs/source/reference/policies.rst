@@ -1,5 +1,5 @@
 .. highlight: yml
-.. _policies_reference:
+.. _policies:
 
 Parameter policies reference
 ============================

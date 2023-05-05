@@ -19,8 +19,6 @@ cabs:
   cubical:
     command: echo
     # gocubical
-    virtual_env: 
-    # ~/.venv/cc
     inputs:
       ms:
         dtype: MS

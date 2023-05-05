@@ -76,7 +76,7 @@ Two special ``assign`` subsections are ``log`` and ``config``::
                 name: log-{info.fqname}-{recipe.foo}
                 nest: 2
                 symlink: log
-            config.opts.rlimits.NOFILE: 10000
+            config.opts.backend.rlimits.NOFILE: 10000
 
 The ``config`` subsection gives access to the entire :ref:`configuration namespace <options>`. You can use this if you want to tweak some configuration setting on a per-recipe or per-step basis. In the example above, we're changing a resource limit -- in particular, the number of open files that a process may have. See https://docs.python.org/3/library/resource.html for details. 
 

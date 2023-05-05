@@ -17,7 +17,7 @@ from . import native, docker
 
 @dataclass
 class SingularityBackendOptions(object):
-    enable: bool = False
+    enable: bool = True
     image_dir: str = os.path.expanduser("~/.singularity")
     auto_build: bool = True
     rebuild: bool = False
@@ -107,7 +107,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     Returns:
         Any: return value (e.g. exit code) of content
     """
-    native.update_rlimits(stimela.CONFIG.opts.rlimits, log)
+    native.update_rlimits(backend.rlimits, log)
 
     image_name, simg_path = get_image_info(cab, backend)
 

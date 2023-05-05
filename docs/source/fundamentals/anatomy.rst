@@ -33,7 +33,8 @@ Next, we might want to set some stimela configuration options. This is done by t
             name: log-{info.fqname}
             nest: 2
             symlink: log
-        rlimits:
+        backend:
+          rlimits:
             NOFILE: 100000  # set high limit on number of open files
 
 The first of these have to do with logfile handling (see :ref:`logfiles` for details). Logfiles are extremely useful, since they
@@ -47,7 +48,7 @@ capture the entire output of all the steps of a recipe. Here, we're telling Stim
 
 4. We want a symlink named ``logs/log`` to be updated to point to the latest log subdirectory -- this allows for quick examination of logs from the latest run.
 
-The ``opts.rlimits`` setting above adjusts a process resource limit (the max number of open files, in this case. The normal default of 1024 may be too small for some operations.) See https://docs.python.org/3/library/resource.html for details of the resource limits that may be adjusted. 
+The ``opts.backend.rlimits`` setting above adjusts a process resource limit (the max number of open files, in this case. The normal default of 1024 may be too small for some operations.) See https://docs.python.org/3/library/resource.html for details of the resource limits that may be adjusted. 
 
 Body of the recipe
 ******************

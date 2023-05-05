@@ -53,10 +53,6 @@ class StimelaOptions(object):
     log: StimelaLogConfig = StimelaLogConfig()
     ## list of paths to search with _include
     include: List[str] = EmptyListDefault()
-    ## For distributed computes and cpu allocation
-    dist: Dict[str, Any] = EmptyDictDefault()  
-    ## Resource limits -- see resource module
-    rlimits: Dict[str, Any] = EmptyDictDefault()
     ## Miscellaneous runtime option 
     runtime: Dict[str, Any] = EmptyDictDefault()
     ## Profiling options
@@ -160,8 +156,6 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
         steps: Dict[str, Any] = EmptyDictDefault()
         misc: Dict[str, Any] = EmptyDictDefault()
         wisdom: Dict[str, Any] = EmptyDictDefault()
-
-    from stimela.backends import StimelaImage
 
     @dataclass 
     class StimelaConfig:

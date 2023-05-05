@@ -75,8 +75,9 @@ class Cab(Cargo):
     # command to run, inside the container or natively
     command: str = MISSING
 
-    # if set, activates this virtual environment first before running the command (not much sense doing this inside the container)
-    virtual_env: Optional[str] = None
+    ## moved to backend: native
+    # # if set, activates this virtual environment first before running the command (not much sense doing this inside the container)
+    # virtual_env: Optional[str] = None
 
     # cab flavour. Default will run the command as a binary (inside image or virtual_env). Otherwise specify
     # a string flavour, or a mapping to specify options (see backends.flavours)
@@ -152,8 +153,9 @@ class Cab(Cargo):
         tree.add(f"command: {self.command}")
         if self.image:
             tree.add(f"image: {self.image}")
-        if self.virtual_env:
-            tree.add(f"virtual environment: {self.virtual_env}")
+        ## moved to backend.native options
+        # if self.virtual_env:
+        #     tree.add(f"virtual environment: {self.virtual_env}")
         Cargo.rich_help(self, tree, max_category=max_category)
 
     def get_schema_policy(self, schema, policy, default=None):
@@ -167,41 +169,33 @@ class Cab(Cargo):
         else:
             return default
 
-    def build_command_line(self, params: Dict[str, Any], subst: Optional[Dict[str, Any]] = None, search=True):
-
+    def build_command_line(self, params: Dict[str, Any], 
+                           subst: Optional[Dict[str, Any]] = None, 
+                           virtual_env: Optional[str] = None):
+        
         try:
             with substitutions_from(subst, raise_errors=True) as context:
-                venv = context.evaluate(self.virtual_env, location=["virtual_env"])
                 command = context.evaluate(self.command, location=["command"])
         except Exception as exc:
             raise CabValidationError(f"error constructing cab command", exc)
-
-        if venv:
-            venv = os.path.expanduser(venv)
-            if not os.path.isfile(f"{venv}/bin/activate"):
-                raise CabValidationError(f"virtual environment {venv} doesn't exist")
-            self.log.debug(f"virtual environment is {venv}")
-        else:
-            venv = None
 
         command_line = shlex.split(os.path.expanduser(command))
         command = command_line[0]
         args = command_line[1:]
         # collect command
-        if search:
-            if "/" not in command:
-                from scabha.proc_utils import which
-                command0 = command
-                command = which(command, extra_paths=venv and [f"{venv}/bin"])
-                if command is None:
-                    raise CabValidationError(f"{command0}: not found", log=self.log)
-            else:
-                if not os.path.isfile(command) or not os.stat(command).st_mode & stat.S_IXUSR:
-                    raise CabValidationError(f"{command} doesn't exist or is not executable")
+        if "/" not in command:
+            from scabha.proc_utils import which
+            command0 = command
+            command = which(command, extra_paths=virtual_env and [f"{virtual_env}/bin"])
+            if command is None:
+                raise CabValidationError(f"{command0}: not found", log=self.log)
+        else:
+            if not os.path.isfile(command) or not os.stat(command).st_mode & stat.S_IXUSR:
+                raise CabValidationError(f"{command} doesn't exist or is not executable")
 
         self.log.debug(f"command is {command}")
 
-        return ([command] + args + self.build_argument_list(params)), venv
+        return [command] + args + self.build_argument_list(params)
 
     def update_environment(self, subst):
         try:

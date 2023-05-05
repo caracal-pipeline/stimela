@@ -33,7 +33,7 @@ def form_python_function_call(function: str, cab: Cab, params: Dict[str, Any]):
     return f"{function}({', '.join(arguments)})"
 
 
-def get_python_interpreter_args(cab: Cab, subst: Dict[str, Any]):
+def get_python_interpreter_args(cab: Cab, subst: Dict[str, Any], virtual_env: Optional[str]=None):
     """
     Helper. Given a cab definition, forms up appropriate argument list to
     invoke the interpreter. Invokes a virtual environment as appropriate.
@@ -49,14 +49,11 @@ def get_python_interpreter_args(cab: Cab, subst: Dict[str, Any]):
         List[str]: [command, arguments, ...] needed to invoke the interpreter
     """    
     # get virtual env, if specified
-    with substitutions_from(subst, raise_errors=True) as context:
-        venv = context.evaluate(cab.virtual_env, location=["virtual_env"])
-
-    if venv:
-        venv = os.path.expanduser(venv)
-        interpreter = f"{venv}/bin/python"
+    if virtual_env:
+        virtual_env = os.path.expanduser(virtual_env)
+        interpreter = f"{virtual_env}/bin/python"
         if not os.path.isfile(interpreter):
-            raise CabValidationError(f"virtual environment {venv} doesn't exist")
+            raise CabValidationError(f"virtual environment {virtual_env} doesn't exist")
     else:
         interpreter = "python"
 
@@ -94,7 +91,7 @@ class PythonCallableFlavour(_CallableFlavour):
         from stimela import CONFIG
         return cab.image.to_string(backend.default_registry) if cab.image else CONFIG.images['default-python']
 
-    def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any]):
+    def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any], virtual_env: Optional[str]=None):
         # substitute command and split into module/function
         with substitutions_from(subst, raise_errors=True) as context:
             try:
@@ -135,7 +132,7 @@ _result = {py_function}(**_inputs)
 {self._yield_output}
         """
 
-        args = get_python_interpreter_args(cab, subst)
+        args = get_python_interpreter_args(cab, subst, virtual_env=virtual_env)
         args += ["-c", code, params_string]
         return args
 
@@ -171,7 +168,7 @@ class PythonCodeFlavour(_BaseFlavour):
         from stimela import CONFIG
         return cab.image.to_string(backend.default_registry) if cab.image else CONFIG.images['default-python']
 
-    def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any]):
+    def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any], virtual_env: Optional[str]=None):
         # do substitutions on command, if necessary
         if self.subst:
             with substitutions_from(subst, raise_errors=True) as context:
@@ -209,6 +206,6 @@ class PythonCodeFlavour(_BaseFlavour):
                     post_command += f"yield_output(**{{'{name}': {var_name}}})\n"                
 
         # form up interpreter invocation
-        args = get_python_interpreter_args(cab, subst)
+        args = get_python_interpreter_args(cab, subst, virtual_env=virtual_env)
         args += ["-c", pre_command + command + post_command, params_arg]
         return args

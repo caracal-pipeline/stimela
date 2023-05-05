@@ -21,7 +21,10 @@ class _BaseFlavour(object):
         """Finalizes flavour definition, given a cab"""
         self.command_name = cab.command.split()[0]
 
-    def get_arguments(self, cab: "stimela.kitchen.cab.Cab", params: Dict[str, Any], subst: Dict[str, Any]):
+    def get_arguments(self, cab: "stimela.kitchen.cab.Cab", 
+                            params: Dict[str, Any], 
+                            subst: Dict[str, Any],
+                            virtual_env: Optional[str]=None):
         """Returns command line arguments for running this flavour of task, given
         a cab and a set of parameters. 
 
@@ -29,6 +32,7 @@ class _BaseFlavour(object):
             cab (Cab):               cab definition
             params (Dict[str, Any]): parameter dict
             subst (Dict[str, Any]):  substitution namespace 
+            virtual_env (Optional[str]): virtual environment to run in
         """
         pass
 

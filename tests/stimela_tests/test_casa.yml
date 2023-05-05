@@ -12,6 +12,20 @@ cabs:
       vis:
         dtype: MS
         required: true
+  casa.concat:
+    command:  concat
+    flavour: casa-task
+    inputs:
+      vis:
+        dtype: List[MS]
+        required: true
+        must_exist: false
+      timesort:
+        dtype: bool  
+    outputs:
+      concatvis:
+        dtype: MS
+        required: true
   casa.split:
     command: split
     flavour: casa-task
@@ -43,3 +57,9 @@ test_casa:
         vis: demo-D147.ms
         outputvis: demo-D147-ant1.ms
         antenna: 1
+
+    s3:
+      cab: casa.concat
+      params:
+        vis: [demo-D147.ms, demo-D147.ms]
+        concatvis: concat.ms

@@ -1,18 +1,19 @@
-import logging, datetime, resource
+import logging, datetime, resource, os.path
 
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 
 import stimela
 import stimela.kitchen
 from stimela.utils.xrun_asyncio import xrun
-from stimela.exceptions import StimelaProcessRuntimeError
+from stimela.exceptions import StimelaProcessRuntimeError, BackendSpecificationError
+from scabha.substitutions import substitutions_from
 
 
 def update_rlimits(rlimits: Dict[str, Any], log: logging.Logger):
     for name, limit in rlimits.items():
         rname = f"RLIMIT_{name}"
         if not hasattr(resource, rname):
-            raise StimelaProcessRuntimeError(f"unknown resource limit 'opts.rlimits.{name}'")
+            raise StimelaProcessRuntimeError(f"unknown resource limit 'backend.rlimits.{name}'")
         rconst = getattr(resource, rname)
         # get current limits
         soft, hard = resource.getrlimit(rconst)
@@ -20,17 +21,18 @@ def update_rlimits(rlimits: Dict[str, Any], log: logging.Logger):
         if limit is None:
             limit = resource.RLIM_INFINITY
             if hard != resource.RLIM_INFINITY:
-                raise StimelaProcessRuntimeError(f"can't set opts.rlimits.{name}=unlimited: hard limit is {hard}")
+                raise StimelaProcessRuntimeError(f"can't set backend.rlimits.{name}=unlimited: hard limit is {hard}")
         else:
             if limit > hard:
-                raise StimelaProcessRuntimeError(f"can't set opts.rlimits.{name}={limit}: hard limit is {hard}")
+                raise StimelaProcessRuntimeError(f"can't set backend.rlimits.{name}={limit}: hard limit is {hard}")
         resource.setrlimit(rconst, (limit, hard))
         log.debug(f"setting soft limit {name}={limit} (hard limit is {hard})")
 
 
 
-def build_command_line(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], subst: Optional[Dict[str, Any]] = None):
-    return cab.flavour.get_arguments(cab, params, subst)
+def build_command_line(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], subst: Optional[Dict[str, Any]] = None,
+                        virtual_env: Optional[str] = None):
+    return cab.flavour.get_arguments(cab, params, subst, virtual_env=virtual_env)
 
 
 def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
@@ -46,9 +48,23 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     Returns:
         Any: return value (e.g. exit code) of content
     """
-    update_rlimits(stimela.CONFIG.opts.rlimits, log)
+    update_rlimits(backend.rlimits, log)
 
-    args = build_command_line(cab, params, subst)
+    venv = search = None
+    if backend.native and backend.native.virtual_env:
+        try:
+            with substitutions_from(subst, raise_errors=True) as context:
+                venv = context.evaluate(backend.native.virtual_env, 
+                                        location=["backend.native.virtual_env"])
+        except Exception as exc:
+            raise BackendSpecificationError(f"error evaluating backend.native.virtual_env", exc)
+        if venv:
+            venv = os.path.expanduser(venv)
+            if not os.path.isfile(f"{venv}/bin/activate"):
+                raise BackendSpecificationError(f"virtual environment {venv} doesn't exist")
+            log.debug(f"virtual environment is {venv}")
+
+    args = build_command_line(cab, params, subst, virtual_env=venv)
 
     log.debug(f"command line is {args}")
 
