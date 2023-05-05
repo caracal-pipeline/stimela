@@ -52,6 +52,9 @@ class ImageInfo(object):
             return f"{self.registry}/{self.name}:{self.version}"
         else:        
             return f"{self.name}:{self.version}"
+        
+    def __str__(self):
+        return self.to_string()
 
 ImageInfoSchema = OmegaConf.structured(ImageInfo)
 
