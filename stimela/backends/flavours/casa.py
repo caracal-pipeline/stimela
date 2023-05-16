@@ -16,21 +16,6 @@ from . import _CallableFlavour, _BaseFlavour
 from .python_flavours import form_python_function_call
 
 
-def get_python_interpreter_args(cab: Cab, subst: Dict[str, Any]):
-    # get virtual env, if specified
-    with substitutions_from(subst, raise_errors=True) as context:
-        venv = context.evaluate(cab.virtual_env, location=["virtual_env"])
-
-    if venv:
-        venv = os.path.expanduser(venv)
-        interpreter = f"{venv}/bin/python"
-        if not os.path.isfile(interpreter):
-            raise CabValidationError(f"virtual environment {venv} doesn't exist")
-    else:
-        interpreter = "python"
-
-    return [interpreter]
-
 
 @dataclass
 class CasaTaskFlavour(_CallableFlavour):
@@ -48,7 +33,11 @@ class CasaTaskFlavour(_CallableFlavour):
             ]
         ))
 
-    def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any]):
+    def get_image_name(self, cab: Cab, backend: 'stimela.backend.StimelaBackendOptions'):
+        from stimela import CONFIG
+        return cab.image.to_string(backend.default_registry) if cab.image else CONFIG.images['default-casa']
+
+    def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any], virtual_env: Optional[str]=None):
         with substitutions_from(subst, raise_errors=True) as context:
             try:
                 command = context.evaluate(cab.command, location=["command"])
@@ -68,6 +57,10 @@ class CasaTaskFlavour(_CallableFlavour):
                     raise SubstitutionError(f"error substituting casa options '{casa_opts}'", exc)
             else:
                 casa_opts = stimela.CONFIG.opts.runtime.get('casa_opts', "--log2term --nologger --nologfile")
+
+        # check for virtual_env
+        if virtual_env and "/" not in command:
+            command = f"{virtual_env}/bin/{command}"
 
         self.command_name = command
         # convert inputs into a JSON string

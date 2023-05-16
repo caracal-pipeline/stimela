@@ -16,30 +16,7 @@ CONFIG_FILE = os.path.expanduser("~/.config/stimela.conf")
 
 from scabha import configuratt
 from scabha.cargo import ListOrString, EmptyDictDefault, EmptyListDefault
-from stimela.kitchen.cab import CabManagement 
-
-
-## schema for a stimela image
-
-@dataclass
-class ImageBuildInfo:
-    info: Optional[str] = ""
-    dockerfile: Optional[str] = "Dockerfile"
-    production: Optional[bool] = True          # False can be used to mark test (non-production) images 
-
-
-@dataclass
-class StimelaImage:
-    name: str = MISSING
-    info: str = "image description"
-    images: Dict[str, ImageBuildInfo] = MISSING
-    _path: Optional[str] = None   # path to image definition yaml file, if any
-
-    # optional library of common parameter sets
-    params: Dict[str, Any] = EmptyDictDefault()
-
-    # optional library of common management settings
-    management: Dict[str, CabManagement] = EmptyDictDefault()
+from stimela.backends import StimelaBackendOptions
 
 
 @dataclass 
@@ -64,26 +41,6 @@ class StimelaLogConfig(object):
 
 import stimela.backends
 
-Backend = Enum("Backend", "docker singularity podman kubernetes native", module=__name__)
-
-SUPPORTED_BACKENDS = set(Backend.__members__)
-AVAILABLE_BACKENDS = {}
-BACKEND_STATUS = {}
-
-for _name in SUPPORTED_BACKENDS:
-    backend = __import__(f"stimela.backends.{_name}", fromlist=[_name])
-    if getattr(backend, 'AVAILABLE', None):
-        AVAILABLE_BACKENDS[_name] = backend
-        BACKEND_STATUS[_name] = backend.STATUS
-    else:
-        if hasattr(backend, 'STATUS'):
-            BACKEND_STATUS[_name] = backend.STATUS
-        else:
-            BACKEND_STATUS[_name] = "not implemented"
-
-def get_backend_status(name):
-    return BACKEND_STATUS.get(name, "unknown status")
-
 
 @dataclass
 class StimelaProfilingOptions(object):
@@ -92,17 +49,10 @@ class StimelaProfilingOptions(object):
 
 @dataclass
 class StimelaOptions(object):
-    backend: Backend = "native" #TODO(Sphe):: Maybe docker/singularity makes more sense
-    registry: str = "quay.io"
-    basename: str = "stimela/v2-"
-    singularity_image_dir: str = "~/.singularity"
+    backend: StimelaBackendOptions = StimelaBackendOptions()
     log: StimelaLogConfig = StimelaLogConfig()
     ## list of paths to search with _include
     include: List[str] = EmptyListDefault()
-    ## For distributed computes and cpu allocation
-    dist: Dict[str, Any] = EmptyDictDefault()  
-    ## Resource limits -- see resource module
-    rlimits: Dict[str, Any] = EmptyDictDefault()
     ## Miscellaneous runtime option 
     runtime: Dict[str, Any] = EmptyDictDefault()
     ## Profiling options
@@ -117,6 +67,7 @@ _STIMELA_CONFDIR = os.path.os.path.expanduser("~/.stimela")
 
 # dict of config file locations to check, in order of preference
 CONFIG_LOCATIONS = OrderedDict(
+    package = os.path.join(os.path.dirname(__file__), _CONFIG_BASENAME),
     local   = _CONFIG_BASENAME,
     venv    = os.environ.get('VIRTUAL_ENV', None) and os.path.join(os.environ['VIRTUAL_ENV'], _CONFIG_BASENAME),
     stimela = os.path.isdir(_STIMELA_CONFDIR) and os.path.join(_STIMELA_CONFDIR, _CONFIG_BASENAME),
@@ -208,20 +159,23 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
 
     @dataclass 
     class StimelaConfig:
-        base: Dict[str, StimelaImage] = EmptyDictDefault()
+        images: Dict[str, str] = EmptyDictDefault()
         lib: StimelaLibrary = StimelaLibrary()
         cabs: Dict[str, Cab] = EmptyDictDefault()
         opts: StimelaOptions = StimelaOptions()
         vars: Dict[str, Any] = EmptyDictDefault()
         run:  Dict[str, Any] = EmptyDictDefault()
 
-    base_configs_glob = f"{STIMELA_DIR}/cargo/base/*/*.yaml"
-    lib_configs_glob = f"{STIMELA_DIR}/cargo/lib/params/*.yaml"
-    cab_configs_glob = f"{STIMELA_DIR}/cargo/cab/*.yaml"
+    ## replaced by cult-cargo
+    #
+    # base_configs_glob = f"{STIMELA_DIR}/cargo/base/*/*.yaml"
+    # lib_configs_glob = f"{STIMELA_DIR}/cargo/lib/params/*.yaml"
+    # cab_configs_glob = f"{STIMELA_DIR}/cargo/cab/*.yaml"
 
-    base_configs = glob.glob(base_configs_glob)
-    lib_configs = glob.glob(lib_configs_glob)
-    cab_configs = glob.glob(cab_configs_glob)
+    # base_configs = glob.glob(base_configs_glob)
+    # lib_configs = glob.glob(lib_configs_glob)
+    # cab_configs = glob.glob(cab_configs_glob)
+    base_configs = lib_configs = cab_configs = []
 
     if use_sys_config:
         sys_configs = [config_file for config_file in CONFIG_LOCATIONS.values()
@@ -240,23 +194,12 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
         dependencies = get_initial_deps()
 
         # start with empty structured config containing schema
-        base_schema = OmegaConf.structured(StimelaImage) 
         cab_schema = OmegaConf.structured(Cab)
         opts_schema = OmegaConf.structured(StimelaOptions)
 
         StimelaConfigSchema = OmegaConf.structured(StimelaConfig)
 
         conf = StimelaConfigSchema.copy()
-
-        # merge base/*/*yaml files into the config, under base.imagename
-        try:
-            conf.base, deps = configuratt.load_nested(base_configs, use_sources=[conf], structured=base_schema, 
-                                                        nameattr='name', include_path='_path', location='base', 
-                                                        use_cache=False, verbose=verbose)
-            dependencies.update(deps)
-        except Exception as exc:
-            log_exception(ConfigError(f"error loading base configuration", exc))
-            return None
 
         # merge lib/params/*yaml files into the config
         try:
@@ -309,7 +252,7 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
         if not CONFIG_LOADED:
             log.info("no user-supplied configuration files given, using defaults")
 
-        dependencies.replace((base_configs_glob, cab_configs_glob, lib_configs_glob), STIMELA_DIR)
+        # dependencies.replace((base_configs_glob, cab_configs_glob, lib_configs_glob), STIMELA_DIR)
 
         configuratt.save_cache(all_configs, conf, dependencies, extra_keys=extra_cache_keys, verbose=verbose)
 

@@ -215,7 +215,9 @@ class Cargo(object):
     name: Optional[str] = None                    # cab name (if None, use image or command name)
     fqname: Optional[str] = None                  # fully-qualified name (recipe_name.step_label.etc.etc.)
 
-    info: Optional[str] = None                    # description
+    info: Optional[str] = None                    # help string
+
+    extra_info: Dict[str, str] = EmptyDictDefault() # optional, additional help sections
 
     # schemas are postentially nested (dicts of dicts), which omegaconf doesn't quite recognize,
     # (or in my ignorance I can't specify it -- in any case Union support is weak), so do a dict to Any
@@ -235,17 +237,43 @@ class Cargo(object):
                 continue
             name = f"{prefix}{name}"
             if not isinstance(value, Parameter):
-                if not isinstance(value, (DictConfig, dict)):
-                    raise SchemaError(f"{label}.{name} is not a valid schema")
-                # try to treat as Parameter based on field names
-                if not (set(value.keys()) - ParameterFields):
-                    try:
-                        value = OmegaConf.unsafe_merge(ParameterSchema.copy(), value)
-                        io_dest[name] = Parameter(**value)
-                    except Exception as exc0:
-                        raise SchemaError(f"{label}.{name} is not a valid parameter definition", exc0)
+                if isinstance(value, str):
+                    schema = {}
+                    value = value.strip()
+                    # if value ends with a double-quoted string, parse out the docstring
+                    if value.endswith('"') and '"' in value[:-1]:
+                        value, info, _ = value.rsplit('"', 2)
+                        value = value.strip()
+                        schema['info'] = info
+                    # does value contain "="? Parse it as "type = default" then
+                    if "=" in value:
+                        value, default  = value.split("=", 1)
+                        value = value.strip()
+                        default = default.strip()
+                        if (default.startswith('"') and default.endswith('"')) or \
+                           (default.startswith("'") and default.endswith("'")): 
+                           default = default[1:-1]
+                        schema['default'] = default
+                    # does value end with "*"? Mark as required
+                    elif value.endswith("*"):
+                        schema['required'] = True
+                        value = value[:-1]
+                    schema['dtype'] = value
+                    io_dest[name] = Parameter(**schema)
+                # else proper dict schema, or subsection
                 else:
-                    Cargo.flatten_schemas(io_dest, value, label=label, prefix=f"{name}.")
+                    if not isinstance(value, (DictConfig, dict)):
+                        raise SchemaError(f"{label}.{name} is not a valid schema")
+                    # try to treat as Parameter based on field names
+                    if not (set(value.keys()) - ParameterFields):
+                        try:
+                            value = OmegaConf.unsafe_merge(ParameterSchema.copy(), value)
+                            io_dest[name] = Parameter(**value)
+                        except Exception as exc0:
+                            raise SchemaError(f"{label}.{name} is not a valid parameter definition", exc0)
+                    # else assume subsection and recurse in
+                    else:
+                        Cargo.flatten_schemas(io_dest, value, label=label, prefix=f"{name}.")
         return io_dest
 
     def flatten_param_dict(self, output_params, input_params, prefix=""):
@@ -307,7 +335,7 @@ class Cargo(object):
         return [name for name, value in params.items() if isinstance(value, Unresolved)]
 
 
-    def finalize(self, config=None, log=None, fqname=None, nesting=0):
+    def finalize(self, config=None, log=None, fqname=None, backend=None, nesting=0):
         if not self.finalized:
             if fqname is not None:
                 self.fqname = fqname
@@ -332,6 +360,20 @@ class Cargo(object):
                         except Exception  as exc:
                             raise SchemaError(f"error in dynamic schema for parameter 'name'", exc)
                         io[name] = Parameter(**schema)
+            # re-resolve implicits
+            self._resolve_implicit_parameters(params)
+
+    def _resolve_implicit_parameters(self, params):
+        self._implicit_params = set()
+        for name, schema in self.inputs_outputs.items():
+            if schema.implicit is not None and type(schema.implicit) is not Unresolved:
+                if name in params and name not in self._implicit_params and params[name] != schema.implicit:
+                    raise ParameterValidationError(f"implicit parameter {name} was supplied explicitly")
+                if name in self.defaults:
+                   raise SchemaError(f"implicit parameter {name} also has a default value")
+                params[name] = schema.implicit
+                self._implicit_params.add(name)
+
 
     def prevalidate(self, params: Optional[Dict[str, Any]], subst: Optional[SubstitutionNS]=None, root=False):
         """Does pre-validation.
@@ -339,14 +381,7 @@ class Cargo(object):
         A dynamic schema, if defined, is applied at this point."""
         self.finalize()
         # add implicits, if resolved
-        for name, schema in self.inputs_outputs.items():
-            if schema.implicit is not None and type(schema.implicit) is not Unresolved:
-                if name in params and name not in self._implicit_params:
-                    raise ParameterValidationError(f"implicit parameter {name} was supplied explicitly")
-                if name in self.defaults:
-                   raise SchemaError(f"implicit parameter {name} also has a default value")
-                params[name] = schema.implicit
-                self._implicit_params.add(name)
+        self._resolve_implicit_parameters(params)
         # assign unset categories
         for name, schema in self.inputs_outputs.items():
             schema.get_category()
@@ -392,8 +427,17 @@ class Cargo(object):
         """Generates help into a rich.tree.Tree object"""
         if self.info:
             tree.add("Description:").add(Markdown(self.info))
+        # extra documentation?
+        for section, content in self.extra_info.items():
+            if not section.lower().endswith("inputs") and not section.lower().endswith("outputs"):
+                tree.add(f"{section}:").add(Markdown(content))
         # adds tables for inputs and outputs
         for io, title in (self.inputs, "inputs"), (self.outputs, "outputs"):
+            # add extra help sections
+            for section, content in self.extra_info.items():
+                if section.lower().endswith(title):
+                    tree.add(f"{section}:").add(Markdown(content))
+            # add parameters by category
             for cat in ParameterCategory:
                 schemas = [(name, schema) for name, schema in io.items() if schema.get_category() == cat]
                 if not schemas:
@@ -427,3 +471,12 @@ class Cargo(object):
         """
         raise AssignmentError(f"{self.name}: invalid assignment {key}={value}")
 
+    @staticmethod
+    def add_parameter_summary(params: Dict[str, Any], lines: List[str] = []):
+        for name, value in params.items():
+            if isinstance(value, (list, tuple)) and len(value) > 10:
+                sep1, sep2 = "()" if isinstance(value, tuple) else "[]" 
+                lines.append(f"  {name} = {sep1}{value[0]}, {value[1]}, ..., {value[-1]}{sep2}")
+            else:
+                lines.append(f"  {name} = {value}")
+        return lines

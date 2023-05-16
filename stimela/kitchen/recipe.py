@@ -2,6 +2,7 @@ import os, os.path, re, fnmatch, copy, traceback
 from typing import Any, Tuple, List, Dict, Optional, Union
 from dataclasses import dataclass
 from omegaconf import MISSING, OmegaConf, DictConfig, ListConfig
+from omegaconf.errors import OmegaConfBaseException
 from collections import OrderedDict
 from collections.abc import Mapping
 import rich.table
@@ -12,7 +13,7 @@ from stimela.config import EmptyDictDefault, EmptyListDefault
 import stimela
 from stimela import log_exception, stimelogging
 from stimela.exceptions import *
-from scabha.basetypes import SkippedOutput
+from stimela.backends import StimelaBackendSchema
 from scabha.validate import evaluate_and_substitute, Unresolved, join_quote
 from scabha.substitutions import SubstitutionNS
 from scabha.cargo import Parameter, Cargo, ParameterCategory
@@ -21,6 +22,7 @@ from .cab import Cab
 from .batch import Batch
 from .step import Step
 from stimela import task_stats 
+from stimela.backends import StimelaBackendSchema
 
 
 class DeferredAlias(Unresolved):
@@ -65,6 +67,9 @@ class Recipe(Cargo):
 
     aliases: Dict[str, Any] = EmptyDictDefault()
 
+    # overrides backend options
+    backend: Optional[Dict[str, Any]] = None
+
     # make recipe a for_loop-gather (i.e. parallel for loop)
     for_loop: Optional[ForLoopClause] = None
 
@@ -72,6 +77,8 @@ class Recipe(Cargo):
     init_logname: Optional[str] = None
     logname: Optional[str] = None
     batch: Optional[Batch] = None
+
+    #
     
     # # if not None, do a while loop with the conditional
     # _while: Conditional = None
@@ -80,6 +87,12 @@ class Recipe(Cargo):
 
     def __post_init__ (self):
         Cargo.__post_init__(self)
+        # check backend setting
+        if self.backend:
+            try:
+                OmegaConf.merge(StimelaBackendSchema, self.backend)
+            except OmegaConfBaseException as exc:
+                raise RecipeValidationError(f"recipe '{self.name}': invalid backend setting", exc)
         # flatten aliases and assignments
         self.aliases = self.flatten_param_dict(OrderedDict(), self.aliases)
         # check that schemas are valid
@@ -592,9 +605,11 @@ class Recipe(Cargo):
             self._alias_map[step_label, step_param_name] = alias_name, orig_schema
             self._alias_list.setdefault(alias_name, []).append(Recipe.AliasInfo(step_label, step, step_param_name, io))
 
-    def finalize(self, config=None, log=None, name=None, fqname=None, nesting=0):
+    def finalize(self, config=None, log=None, name=None, fqname=None, backend=None, nesting=0):
         if not self.finalized:
             config = config or stimela.CONFIG
+
+            backend = OmegaConf.merge(backend or config.opts.backend, self.backend or {})
 
             # fully qualified name, i.e. recipe_name.step_name.step_name etc.
             self.fqname = fqname = fqname or self.fqname or self.name
@@ -619,7 +634,7 @@ class Recipe(Cargo):
                 step_log = log.getChild(label)
                 step_log.propagate = False
                 try:
-                    step.finalize(config, log=step_log, fqname=f"{fqname}.{label}", nesting=nesting+1)
+                    step.finalize(config, log=step_log, fqname=f"{fqname}.{label}", backend=backend, nesting=nesting+1)
                     # check that per-step assignments don't clash with i/o parameters
                     step.assign = self.flatten_param_dict(OrderedDict(), step.assign)
                     self.validate_assignments(step.assign, step.assign_based_on, f"{fqname}.{label}")
@@ -975,7 +990,7 @@ class Recipe(Cargo):
     def summary(self, params: Dict[str, Any], recursive=True, ignore_missing=False):
         """Returns list of lines with a summary of the recipe state
         """
-        lines = [f"recipe '{self.name}':"] + [f"  {name} = {value}" for name, value in params.items()]
+        lines = [f"recipe '{self.name}':"] + Cargo.add_parameter_summary(params)
         if not ignore_missing:
             lines += [f"  {name} = ???" for name in self.inputs_outputs if name not in params]
         if recursive:
@@ -1024,7 +1039,7 @@ class Recipe(Cargo):
                 alias.step.update_parameter(alias.param, value)
 
 
-    def _iterate_loop_worker(self, params, info, subst, count, iter_var, raise_exc=True):
+    def _iterate_loop_worker(self, params, info, subst, backend, count, iter_var, raise_exc=True):
         """"
         Needed for concurrency
         """
@@ -1079,7 +1094,7 @@ class Recipe(Cargo):
                         self.log.info(f"  ({step.info})", extra=dict(color="GREEN", boldface=True))
                 try:
                     #step_params = step.run(subst=subst.copy(), batch=batch)  # make a copy of the subst dict since recipe might modify
-                    step_params = step.run(subst=subst.copy(), parent_log=self.log)  # make a copy of the subst dict since recipe might modify
+                    step_params = step.run(backend=backend, subst=subst.copy(), parent_log=self.log)  # make a copy of the subst dict since recipe might modify
                 except ScabhaBaseException as exc:
                     newexc = StimelaStepExecutionError(f"step '{step.fqname}' has failed, aborting the recipe", exc)
                     if not exc.logged:
@@ -1113,7 +1128,7 @@ class Recipe(Cargo):
 
         return task_stats.collect_stats(), outputs, exception, tb
 
-    def _run(self, params, subst=None) -> Dict[str, Any]:
+    def _run(self, params, subst=None, backend={}) -> Dict[str, Any]:
         """Internal recipe run method. Meant to be called from a wrapper Step object (which validates the parameters, etc.)
 
         Parameters
@@ -1128,6 +1143,8 @@ class Recipe(Cargo):
         ------
         RecipeValidationError
         """
+        # set up backend
+        backend = OmegaConf.merge(backend, self.backend or {})
 
         # set up substitution namespace
         subst_outer = subst
@@ -1180,7 +1197,7 @@ class Recipe(Cargo):
             # form list of arguments for each invocation of the loop worker
             loop_worker_args = []
             for count, iter_var in enumerate(self._for_loop_values):
-                loop_worker_args.append((params, info, subst, count, iter_var))
+                loop_worker_args.append((params, info, subst, backend, count, iter_var))
 
             # if scatter is enabled, use a process pool
             if self._for_loop_scatter:

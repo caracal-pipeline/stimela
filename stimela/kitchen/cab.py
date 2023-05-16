@@ -3,14 +3,15 @@ from typing import Any, List, Dict, Optional, Union
 from collections import OrderedDict
 from enum import Enum, IntEnum
 from dataclasses import dataclass
-from omegaconf import MISSING, OmegaConf
+from omegaconf import MISSING, OmegaConf, DictConfig
+from omegaconf.errors import OmegaConfBaseException
 import rich.markup
 
 from scabha.cargo import Parameter, Cargo, ListOrString, ParameterPolicies, ParameterCategory
 from stimela.exceptions import CabValidationError, StimelaCabRuntimeError
 from scabha.exceptions import SchemaError
 from scabha.basetypes import EmptyDictDefault, EmptyListDefault
-from stimela.backends import flavours
+from stimela.backends import flavours, StimelaBackendSchema
 import stimela
 from . import wranglers
 from scabha.substitutions import substitutions_from
@@ -19,11 +20,43 @@ ParameterPassingMechanism = Enum("ParameterPassingMechanism", "args yaml", modul
 
 
 @dataclass 
-class CabManagement:        # defines common cab management behaviours
+class CabManagement(object):        # defines common cab management behaviours
     environment: Optional[Dict[str, str]] = EmptyDictDefault()
     cleanup: Optional[Dict[str, ListOrString]]     = EmptyDictDefault()   
     wranglers: Optional[Dict[str, ListOrString]]   = EmptyDictDefault()   
 
+@dataclass
+class ImageInfo(object):
+    name: str                           # image name
+    registry: Optional[str] = None      # registry/org or org (for Dockerhub)
+    version: str = "latest"
+
+    @staticmethod
+    def from_string(spec: str):
+        """Creates ImageInfo from string"""
+        # get version specs
+        if ":" in spec:
+            spec, version = spec.rsplit(":", 1)
+        else:
+            version = "latest"
+        # get registry
+        if "/" in spec:
+            registry, name = spec.rsplit("/", 1)
+        else:
+            registry, name = None, spec
+        return ImageInfo(name, registry, version)
+    
+    def to_string(self, default_registry=None):
+        registry = self.registry or default_registry
+        if registry:
+            return f"{self.registry}/{self.name}:{self.version}"
+        else:        
+            return f"{self.name}:{self.version}"
+        
+    def __str__(self):
+        return self.to_string()
+
+ImageInfoSchema = OmegaConf.structured(ImageInfo)
 
 @dataclass
 class Cab(Cargo):
@@ -40,17 +73,21 @@ class Cab(Cargo):
     """
     # if set, the cab is run in a container, and this is the image name
     # if not set, commands are run by the native runner
-    image: Optional[str] = None                   
+    image: Optional[Any] = None                   
 
     # command to run, inside the container or natively
     command: str = MISSING
 
-    # if set, activates this virtual environment first before running the command (not much sense doing this inside the container)
-    virtual_env: Optional[str] = None
+    ## moved to backend: native
+    # # if set, activates this virtual environment first before running the command (not much sense doing this inside the container)
+    # virtual_env: Optional[str] = None
 
     # cab flavour. Default will run the command as a binary (inside image or virtual_env). Otherwise specify
     # a string flavour, or a mapping to specify options (see backends.flavours)
     flavour: Optional[Any] = None
+
+    # overrides backend options
+    backend: Optional[Dict[str, Any]] = None
 
     # controls how params are passed. args: via command line argument, yml: via a single yml string
     parameter_passing: ParameterPassingMechanism = ParameterPassingMechanism.args
@@ -67,18 +104,36 @@ class Cab(Cargo):
     return_outputs: Optional[str] = "{}" 
 
     # runtime settings
-    backend: Optional['stimela.config.Backend']
     runtime: Dict[str, Any] = EmptyDictDefault()
 
     _path: Optional[str] = None   # path to image definition yaml file, if any
 
     def __post_init__ (self):
         if self.name is None:
-            self.name = self.image or self.command.split()[0]
+            self.name = self.command.split()[0] or self.image
         Cargo.__post_init__(self)
         for param in self.inputs.keys():
             if param in self.outputs:
                 raise CabValidationError(f"cab {self.name}: parameter '{param}' appears in both inputs and outputs")
+            
+        # check image setting
+        if self.image:
+            if type(self.image) is str:
+                self.image = ImageInfo.from_string(self.image)
+            elif isinstance(self.image, DictConfig):
+                try:
+                    self.image = OmegaConf.to_container(OmegaConf.merge(ImageInfoSchema, self.image))
+                except OmegaConfBaseException as exc:
+                    raise CabValidationError(f"cab {self.name}: invalid image setting", exc)
+            else:
+                raise CabValidationError(f"cab {self.name}: invalid image setting")
+            
+        # check backend setting
+        if self.backend:
+            try:
+                OmegaConf.merge(StimelaBackendSchema, self.backend)
+            except OmegaConfBaseException as exc:
+                raise CabValidationError(f"cab {self.name}: invalid backend setting", exc)
 
         # setup wranglers
         self._wranglers = []
@@ -92,11 +147,7 @@ class Cab(Cargo):
     def summary(self, params=None, recursive=True, ignore_missing=False):
         lines = [f"cab {self.name}:"] 
         if params is not None:
-            for name, value in params.items():
-                # if type(value) is validate.Error:
-                #     lines.append(f"  {name} = ERR: {value}")
-                # else:
-                lines.append(f"  {name} = {value}")
+            Cargo.add_parameter_summary(params, lines)
             lines += [f"  {name} = ???" for name, schema in self.inputs_outputs.items()
                         if name not in params and (not ignore_missing or schema.required)]
         return lines
@@ -105,8 +156,9 @@ class Cab(Cargo):
         tree.add(f"command: {self.command}")
         if self.image:
             tree.add(f"image: {self.image}")
-        if self.virtual_env:
-            tree.add(f"virtual environment: {self.virtual_env}")
+        ## moved to backend.native options
+        # if self.virtual_env:
+        #     tree.add(f"virtual environment: {self.virtual_env}")
         Cargo.rich_help(self, tree, max_category=max_category)
 
     def get_schema_policy(self, schema, policy, default=None):
@@ -120,41 +172,33 @@ class Cab(Cargo):
         else:
             return default
 
-    def build_command_line(self, params: Dict[str, Any], subst: Optional[Dict[str, Any]] = None, search=True):
-
+    def build_command_line(self, params: Dict[str, Any], 
+                           subst: Optional[Dict[str, Any]] = None, 
+                           virtual_env: Optional[str] = None):
+        
         try:
             with substitutions_from(subst, raise_errors=True) as context:
-                venv = context.evaluate(self.virtual_env, location=["virtual_env"])
                 command = context.evaluate(self.command, location=["command"])
         except Exception as exc:
             raise CabValidationError(f"error constructing cab command", exc)
-
-        if venv:
-            venv = os.path.expanduser(venv)
-            if not os.path.isfile(f"{venv}/bin/activate"):
-                raise CabValidationError(f"virtual environment {venv} doesn't exist")
-            self.log.debug(f"virtual environment is {venv}")
-        else:
-            venv = None
 
         command_line = shlex.split(os.path.expanduser(command))
         command = command_line[0]
         args = command_line[1:]
         # collect command
-        if search:
-            if "/" not in command:
-                from scabha.proc_utils import which
-                command0 = command
-                command = which(command, extra_paths=venv and [f"{venv}/bin"])
-                if command is None:
-                    raise CabValidationError(f"{command0}: not found", log=self.log)
-            else:
-                if not os.path.isfile(command) or not os.stat(command).st_mode & stat.S_IXUSR:
-                    raise CabValidationError(f"{command} doesn't exist or is not executable")
+        if "/" not in command:
+            from scabha.proc_utils import which
+            command0 = command
+            command = which(command, extra_paths=virtual_env and [f"{virtual_env}/bin"])
+            if command is None:
+                raise CabValidationError(f"{command0}: not found", log=self.log)
+        else:
+            if not os.path.isfile(command) or not os.stat(command).st_mode & stat.S_IXUSR:
+                raise CabValidationError(f"{command} doesn't exist or is not executable")
 
         self.log.debug(f"command is {command}")
 
-        return ([command] + args + self.build_argument_list(params)), venv
+        return [command] + args + self.build_argument_list(params)
 
     def update_environment(self, subst):
         try:

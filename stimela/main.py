@@ -7,7 +7,7 @@ import datetime
 from dataclasses import dataclass
 from omegaconf import OmegaConf
 import stimela
-from stimela import config, stimelogging
+from stimela import config, stimelogging, backends
 
 UID = stimela.UID
 GID = stimela.GID
@@ -40,8 +40,8 @@ class RunExecGroup(click.Group):
 
 
 @click.group(cls=RunExecGroup)
-@click.option('--backend', '-b', type=click.Choice(config.Backend._member_names_), 
-                help="Backend to use (for containerization).")
+@click.option('--backend', '-b', type=click.Choice(backends.SUPPORTED_BACKENDS), 
+                 help="Backend to use (for containerization).")
 @click.option('--config', '-c', 'config_files', metavar='FILE', multiple=True,
                 help="Extra user-defined config file(s) to load.")
 @click.option('--set', '-s', 'config_dotlist', metavar='SECTION.VAR=VALUE', multiple=True,
@@ -54,7 +54,7 @@ class RunExecGroup(click.Group):
                 help="Reset the configuration cache. First thing to try in case of strange configuration errors.")
 @click.option('--verbose', '-v', is_flag=True, help='Be extra verbose in output.')
 @click.version_option(str(stimela.__version__))
-def cli(backend, config_files=[], config_dotlist=[], include=[], verbose=False, no_sys_config=False, clear_cache=False):
+def cli(config_files=[], config_dotlist=[], include=[], backend=None, verbose=False, no_sys_config=False, clear_cache=False):
     global log
     log = stimela.logger(loglevel=logging.DEBUG if verbose else logging.INFO)
     log.info(f"starting")        # remove this eventually, but it's handy for timing things right now
@@ -85,6 +85,14 @@ def cli(backend, config_files=[], config_dotlist=[], include=[], verbose=False, 
     if config.CONFIG_LOADED:
         log.info(f"loaded config from {config.CONFIG_LOADED}") 
 
+    # select backend
+    if backend:
+        if backends.get_backend(backend) is None:
+            log.error(f"backend '{backend}' not available: {backends.get_backend_status(backend)}")
+            sys.exit(1)
+
+        stimela.CONFIG.opts.backend.select = [backend]
+
     # enable logfiles and such
     if stimela.CONFIG.opts.log.enable:
         if verbose:
@@ -94,22 +102,6 @@ def cli(backend, config_files=[], config_dotlist=[], include=[], verbose=False, 
                     info=OmegaConf.create(dict(fqname='stimela')), 
                     config=stimela.CONFIG))
         stimelogging.update_file_logger(log, stimela.CONFIG.opts.log, nesting=-1, subst=subst)
-
-
-    # print backends
-    log.info(f"available backends: {' '.join(config.AVAILABLE_BACKENDS)}")
-
-    # get default backend module
-    global BACKEND 
-    if backend:
-        stimela.CONFIG.opts.backend = backend
-
-    if stimela.CONFIG.opts.backend.name not in config.AVAILABLE_BACKENDS:
-        status = config.get_backend_status(stimela.CONFIG.opts.backend.name)
-        log.error(f"the backend '{stimela.CONFIG.opts.backend.name}' is not available: {status}")
-        sys.exit(1)
-
-    log.info(f"default backend is {stimela.CONFIG.opts.backend.name}")
 
     # report dependencies
     for filename, attrs in config.CONFIG_DEPS.get_description().items():
@@ -122,7 +114,13 @@ def cli(backend, config_files=[], config_dotlist=[], include=[], verbose=False, 
 
 
 # import commands
-from stimela.commands import doc, run, images, build, push, save_config
+from stimela.commands import doc, run, save_config
 
-## the ones not listed above haven't been converted to click yet. They are:
-# cabs, clean, containers, kill, ps, pull
+## These one needs to be reimplemented, current backed auto-pulls and auto-builds:
+# images, pull, build, clean
+
+## this one is deprecated, stimela doc does the trick
+# cabs
+
+## the ones below should be deprecated, since we don't do async containers anymore
+# containers, kill, ps

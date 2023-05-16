@@ -91,6 +91,7 @@ def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, o
         
         proc = loop.run_until_complete(
                 asyncio.create_subprocess_exec(*command,
+                    limit=1024**3,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE))
 
