@@ -200,7 +200,7 @@ class ParseOutput(_BaseWrangler):
 
     def __init__(self, regex: re.Pattern, spec: str, name: Optional[str], group: str, dtype: str):
         super().__init__(regex, spec, name=name)
-        self.loader = self.loadersWARNING[dtype]
+        self.loader = self.loaders[dtype]
         self.name = name or group
         if group in regex.groupindex:
             self.gid = group
