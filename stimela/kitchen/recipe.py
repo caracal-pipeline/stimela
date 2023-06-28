@@ -1232,10 +1232,6 @@ class Recipe(Cargo):
             # current namespace becomes recipe again
             subst.current = subst.recipe
             
-            # # evaluate implicit outputs
-            # implicits = {name: schema.implcit for name, schema in self.outputs if schema.implicit}
-            # params.update(**evaluate_and_substitute(implicits, subst, subst.current, location=self.fqname))
-
             self.log.info(f"recipe '{self.name}' executed successfully")
             return OrderedDict((name, value) for name, value in params.items() if name in self.outputs)
         finally:

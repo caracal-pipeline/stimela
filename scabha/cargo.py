@@ -131,6 +131,9 @@ class Parameter(object):
     # if None, then the default logic applies: inputs must exist, and outputs don't
     must_exist: Optional[bool] = None
 
+    # for file and dir-type parameters: if True, ignore them when making processing logic decisions based on file freshness
+    skip_freshness_checks: Optional[bool] = None
+
     # For output File-type parameters. If True, and the output exists, remove before running
     remove_if_exists: bool = False
 
@@ -154,6 +157,8 @@ class Parameter(object):
     # arbitrary metadata associated with parameter
     metadata: Dict[str, Any] = EmptyDictDefault()
 
+    _file_types = (File, MS, Directory)
+
     def __post_init__(self):
         def natify(value):
             # convert OmegaConf lists and dicts to native types
@@ -172,6 +177,9 @@ class Parameter(object):
         # see e.g. https://stackoverflow.com/questions/67500755/python-convert-type-hint-string-representation-from-docstring-to-actual-type-t
         # The alternative is a non-standard API call i.e. typing._eval_type()
         self._dtype = eval(self.dtype, globals())
+
+        self._is_file_type = any(self._dtype == t for t in self._file_types)
+        self._is_file_list_type = any(self._dtype == List[t] for t in self._file_types)
 
         self._is_input = True
 
@@ -194,12 +202,15 @@ class Parameter(object):
     def is_output(self):
         return not self._is_input
 
-    _filename_types = (File, MS, Directory, "File", "MS", "Directory")
-
     @property
     def is_file_type(self):
         """True if parameter is a file or directory type"""
-        return self.dtype in self._filename_types
+        return self._is_file_type 
+
+    @property
+    def is_file_list_type(self):
+        """True if parameter is a file or directory type"""
+        return self._is_file_list_type
 
     @property
     def is_named_output(self):
@@ -360,6 +371,9 @@ class Cargo(object):
                         except Exception  as exc:
                             raise SchemaError(f"error in dynamic schema for parameter 'name'", exc)
                         io[name] = Parameter(**schema)
+            # new outputs may have been added
+            for schema in self.outputs.values():
+                schema._is_input = False
             # re-resolve implicits
             self._resolve_implicit_parameters(params)
 
@@ -387,7 +401,8 @@ class Cargo(object):
             schema.get_category()
 
         params = validate_parameters(params, self.inputs_outputs, defaults=self.defaults, subst=subst, fqname=self.fqname,
-                                          check_unknowns=True, check_required=False, check_exist=False,
+                                          check_unknowns=True, check_required=False, 
+                                          check_inputs_exist=False, check_outputs_exist=False,
                                           create_dirs=False, ignore_subst_errors=True)
 
         return params
@@ -398,14 +413,17 @@ class Cargo(object):
         This is used when skipping a step.
         """
         assert(self.finalized)
+        self._resolve_implicit_parameters(params)
 
         # check inputs
         params1 = validate_parameters(params, self.inputs, defaults=self.defaults, subst=subst, fqname=self.fqname,
-                                                check_unknowns=False, check_required=not loosely, check_exist=not loosely,
+                                                check_unknowns=False, check_required=not loosely, 
+                                                check_inputs_exist=not loosely, check_outputs_exist=False,
                                                 create_dirs=not loosely)
         # check outputs
         params1.update(**validate_parameters(params, self.outputs, defaults=self.defaults, subst=subst, fqname=self.fqname,
-                                                check_unknowns=False, check_required=False, check_exist=False,
+                                                check_unknowns=False, check_required=False, 
+                                                check_inputs_exist=not loosely, check_outputs_exist=False,
                                                 create_dirs=not loosely))
         return params1
 
@@ -420,7 +438,9 @@ class Cargo(object):
             if type(impl) is not Unresolved:
                 params[name] = self.inputs_outputs[name].implicit
         params.update(**validate_parameters(params, self.outputs, defaults=self.defaults, subst=subst, fqname=self.fqname,
-                                                check_unknowns=False, check_required=not loosely, check_exist=not loosely))
+                                                check_unknowns=False, check_required=not loosely, 
+                                                check_inputs_exist=not loosely, check_outputs_exist=not loosely,
+                                                ))
         return params
 
     def rich_help(self, tree, max_category=ParameterCategory.Optional):

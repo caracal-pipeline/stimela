@@ -74,7 +74,8 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
                         fqname: str = "",
                         check_unknowns=True,    
                         check_required=True,
-                        check_exist=True,
+                        check_inputs_exist=True,
+                        check_outputs_exist=True,
                         create_dirs=False,
                         ignore_subst_errors=False,
                         ) -> Dict[str, Any]:
@@ -90,8 +91,10 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
 
         check_unknowns (bool): if True, unknown parameters (not in schema) raise an error
         check_required (bool): if True, missing parameters with required=True will raise an error
-        check_exist (bool): if True, files with must_exist={None,True} in schema must exist, or will raise an error. 
-                            If False, only files with must_exist=True must exist.
+        check_inputs_exist (bool): if True, input files with must_exist={None,True} in schema must exist, or will raise an error. 
+                                   If False, doesn't check.
+        check_outputs_exist (bool): if True, output files with must_exist=True in schema must exist, or will raise an error. 
+                                   If False, doesn't check.
         create_dirs (bool): if True, non-existing directories in filenames (and parameters with mkdir=True in schema) 
                             will be created.
         ignore_subst_errors (bool): if True, substitution errors will be ignored
@@ -195,7 +198,10 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
         is_file_list = is_filelist_type(dtype)
 
         # must this file exist? Schema may force this check, otherwise follow the default check_exist policy
-        must_exist = check_exist if schema.must_exist is None else schema.must_exist
+        if schema.is_input:
+            must_exist = check_inputs_exist and schema.must_exist is not False
+        elif schema.is_output:
+            must_exist = check_outputs_exist and schema.must_exist
 
         if is_file or is_file_list:
             # match to existing file(s)

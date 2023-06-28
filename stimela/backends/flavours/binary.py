@@ -18,10 +18,11 @@ class BinaryFlavour(_BaseFlavour):
     """
     kind: str = "binary"
 
-    def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any], virtual_env: Optional[str]=None):
+    def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any], 
+                      virtual_env: Optional[str]=None, check_executable: bool = True):
 
         # build command line from parameters
-        args = cab.build_command_line(params, subst, virtual_env=virtual_env)
+        args = cab.build_command_line(params, subst, virtual_env=virtual_env, check_executable=check_executable)
 
         # prepend virtual env invocation, if asked
         if virtual_env:

@@ -164,7 +164,8 @@ class Cab(Cargo):
 
     def build_command_line(self, params: Dict[str, Any], 
                            subst: Optional[Dict[str, Any]] = None, 
-                           virtual_env: Optional[str] = None):
+                           virtual_env: Optional[str] = None,
+                           check_executable: bool = True):
         
         try:
             with substitutions_from(subst, raise_errors=True) as context:
@@ -176,15 +177,16 @@ class Cab(Cargo):
         command = command_line[0]
         args = command_line[1:]
         # collect command
-        if "/" not in command:
-            from scabha.proc_utils import which
-            command0 = command
-            command = which(command, extra_paths=virtual_env and [f"{virtual_env}/bin"])
-            if command is None:
-                raise CabValidationError(f"{command0}: not found", log=self.log)
-        else:
-            if not os.path.isfile(command) or not os.stat(command).st_mode & stat.S_IXUSR:
-                raise CabValidationError(f"{command} doesn't exist or is not executable")
+        if check_executable:
+            if "/" not in command:
+                from scabha.proc_utils import which
+                command0 = command
+                command = which(command, extra_paths=virtual_env and [f"{virtual_env}/bin"])
+                if command is None:
+                    raise CabValidationError(f"{command0}: not found", log=self.log)
+            else:
+                if not os.path.isfile(command) or not os.stat(command).st_mode & stat.S_IXUSR:
+                    raise CabValidationError(f"{command} doesn't exist or is not executable")
 
         self.log.debug(f"command is {command}")
 

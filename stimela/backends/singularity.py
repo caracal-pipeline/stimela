@@ -85,7 +85,7 @@ def build_command_line(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend
                         subst: Optional[Dict[str, Any]] = None,
                         binary: Optional[str] = None,
                         simg_path: Optional[str] = None):
-    args = cab.flavour.get_arguments(cab, params, subst)
+    args = cab.flavour.get_arguments(cab, params, subst, check_executable=False)
 
     if simg_path is None:
         _, simg_path = get_image_info(cab, backend)

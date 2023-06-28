@@ -139,7 +139,7 @@ class SubstitutionNS(OrderedDict):
     def __setitem__(self, k: str, v: Any) -> None:
         SubstitutionNS._add_(self, k, v)
 
-    def get(self, name, default=None):
+    def get(self, name, default=None, subst=True):
         context = SubstitutionContext.current()
         # keep track of nested lookups, if doing substitutions
         nestloc = context.nested_location if context else None
@@ -162,7 +162,7 @@ class SubstitutionNS(OrderedDict):
                 if context:
                     if context.raise_errors and type(value) is Unresolved:
                         raise SubstitutionError(f"unresolved substitution for {name} ({value})")
-                    if not self._nosubst_:
+                    if subst and not self._nosubst_:
                         # recursive=False will invoke substitution on strings, but will return containers as is
                         value = context.evaluate(value, location=nestloc, recursive=False)
                 return value

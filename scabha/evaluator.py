@@ -217,7 +217,9 @@ class FunctionHandler(ResultsHandler):
         path = evaluator._evaluate_result(args[0])
         if type(path) is UNSET:
             return path
-        return os.path.dirname(str(path))
+        if not isinstance(path, str):
+            raise FormulaError(f"DIRNAME() expects a string, got a {str(type(path))}") 
+        return os.path.dirname(path)
 
     def BASENAME(self, evaluator, args):
         if len(args) != 1:
@@ -225,7 +227,9 @@ class FunctionHandler(ResultsHandler):
         path = evaluator._evaluate_result(args[0])
         if type(path) is UNSET:
             return path
-        return os.path.basename(str(path))
+        if not isinstance(path, str):
+            raise FormulaError(f"BASENAME() expects a string, got a {str(type(path))}") 
+        return os.path.basename(path)
 
     def EXTENSION(self, evaluator, args):
         if len(args) != 1:
@@ -233,7 +237,9 @@ class FunctionHandler(ResultsHandler):
         path = evaluator._evaluate_result(args[0])
         if type(path) is UNSET:
             return path
-        return os.path.splitext(str(path))[1]
+        if not isinstance(path, str):
+            raise FormulaError(f"EXTENSION() expects a string, got a {str(type(path))}") 
+        return os.path.splitext(path)[1]
 
     def STRIPEXT(self, evaluator, args):
         if len(args) != 1:
@@ -241,7 +247,14 @@ class FunctionHandler(ResultsHandler):
         path = evaluator._evaluate_result(args[0])
         if type(path) is UNSET:
             return path
-        return os.path.splitext(str(path))[0]
+        if not isinstance(path, str):
+            raise FormulaError(f"STRIPEXT() expects a string, got a {str(type(path))}") 
+        return os.path.splitext(path)[0]
+
+    def NOSUBST(self, evaluator, args):
+        if len(args) != 1:
+            raise FormulaError(f"{'.'.join(evaluator.location)}: NOSUBST() expects 1 argument, got {len(args)}")
+        return evaluator._evaluate_result(args[0], subst=False)
 
 def construct_parser():
     lparen = Literal("(").suppress()
@@ -269,7 +282,7 @@ def construct_parser():
     
     # functions
     functions = reduce(operator.or_, map(Keyword, ["IF", "IFSET", "GLOB", "EXISTS", "LIST", 
-        "BASENAME", "DIRNAME", "EXTENSION", "STRIPEXT", "MIN", "MAX", "RANGE"]))
+        "BASENAME", "DIRNAME", "EXTENSION", "STRIPEXT", "MIN", "MAX", "RANGE", "NOSUBST"]))
     # these functions take one argument, which could also be a sequence
     anyseq_functions = reduce(operator.or_, map(Keyword, ["GLOB", "EXISTS"]))
 
@@ -350,13 +363,13 @@ class Evaluator(object):
         self.location = location
         self.allow_unresolved = allow_unresolved
 
-    def _resolve(self, value, in_formula=True):
+    def _resolve(self, value, in_formula=True, subst=True):
         if type(value) is str:
             if in_formula and value == "SELF":
                 return SELF
             elif in_formula and value == "UNSET":
                 return UNSET
-            elif self.subst_context is not None:
+            elif self.subst_context is not None and subst:
                 try:
                     value = self.subst_context.evaluate(value, location=self.location)
                 except (KeyError, AttributeError) as exc:
@@ -365,22 +378,22 @@ class Evaluator(object):
                     raise SubstitutionError(f"{value}: {exc}")
         return value
 
-    def empty(self, *args):
+    def empty(self, *args, **kw):
         return ""
 
-    def unset(self, *args):
+    def unset(self, *args, **kw):
         return UNSET
 
-    def self_value(self, *args):
+    def self_value(self, *args, **kw):
         return SELF
 
-    def constant(self, value):
-        return self._resolve(value)
+    def constant(self, value, subst=True, **kw):
+        return self._resolve(value, subst=subst)
 
-    def subexpression(self, value):
-        return self._evaluate_result(value, allow_unset=True)
+    def subexpression(self, value, subst=True):
+        return self._evaluate_result(value, allow_unset=True, subst=subst)
     
-    def namespace_lookup(self, *args):
+    def namespace_lookup(self, *args, subst=True):
         if len(args) == 1 and type(args[0]) is ParseResults:
             args = args[0]
             assert args._name == "namespace_lookup"
@@ -401,12 +414,12 @@ class Evaluator(object):
                     return UNSET('.'.join(args))
             # this can still throw an error if a nested interpolation is invoked
             try:
-                value = value[fld]
+                value = value.get(fld, subst=subst)
             except (KeyError, AttributeError) as exc:
                 raise SubstitutionError(f"{'.'.join(self.location)}: '{'.'.join(args)}' unresolved (at '{exc}')")
-        return self._resolve(value)
+        return self._resolve(value, subst=subst)
 
-    def _evaluate_result(self, parse_result, allow_unset=False):
+    def _evaluate_result(self, parse_result, allow_unset=False, subst=True):
         allow_unset = allow_unset or self.allow_unresolved
         # if result is a handler, use evaluate
         if isinstance(parse_result, ResultsHandler):
@@ -414,7 +427,7 @@ class Evaluator(object):
 
         # if result is already a constant, resolve it
         elif type(parse_result) is not ParseResults:
-            return self._resolve(parse_result)
+            return self._resolve(parse_result, subst=subst)
         
         # lookup processing method based on name
         else:
@@ -424,7 +437,7 @@ class Evaluator(object):
                 raise ParserError(f"{'.'.join(self.location)}: don't know how to deal with an element of type '{method}'")
 
             try:
-                value = getattr(self, method)(*parse_result)
+                value = getattr(self, method)(*parse_result, subst=subst)
             except SubstitutionError as exc:
                 if allow_unset:
                     return UNSET("", [exc])

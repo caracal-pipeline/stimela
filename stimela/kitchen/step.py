@@ -311,6 +311,7 @@ class Step:
             except ScabhaBaseException as exc:
                 raise AssignmentError(f"{self.name}: invalid assignment {key}={value}", exc)
 
+
     def run(self, backend={}, subst=None, parent_log=None):
         """Runs the step"""
         from .recipe import Recipe
@@ -404,42 +405,92 @@ class Step:
                 else:
                     raise StepValidationError(f"step '{self.name}': invalid inputs: {join_quote(invalid)}", log=self.log)
 
-            ## check if we need to skip based on existing file outputs
+            ## check if we need to skip based on existing/fresh file outputs
+            ## if skip on fresh outputs is in effect, find mtime of most recent input 
             if not skip and self.skip_if_outputs:
+                # max_mtime will remain 0 if we're not echecking for freshness, or if there are no file-type inputs
                 max_mtime, max_mtime_path = 0, None
                 if self.skip_if_outputs == OUTPUTS_FRESH:
                     parent_log_info("checking if file-type outputs of step are fresh")
                     for name, value in params.items():
                         schema = self.inputs_outputs[name]
-                        if schema.is_input and schema.is_file_type and type(value) is str and os.path.exists(value):
-                            mtime = os.path.getmtime(value)
-                            if mtime > max_mtime:
-                                max_mtime = mtime
-                                max_mtime_path = value
+                        if schema.is_input and not schema.skip_freshness_checks:
+                            if schema.is_file_type:
+                                values = [value]
+                            elif schema.is_file_list_type:
+                                values = value
+                            else:
+                                continue
+                            for filename in values:
+                                if type(filename) is str and os.path.exists(filename):
+                                    mtime = os.path.getmtime(filename)
+                                    if mtime > max_mtime:
+                                        max_mtime = mtime
+                                        max_mtime_path = filename
                     if max_mtime:
                         parent_log_info(f"  most recently modified input is {max_mtime_path} ({time.ctime(max_mtime)})")
                 else:
                     parent_log_info("checking if file-type outputs of step exist")
 
+                ## now go through outputs -- all_exist flag will be cleared if we find one that doesn't exist,
+                ## or is older than an input
                 all_exist = True
-                for name, value in params.items():
-                    schema = self.inputs_outputs[name]
-                    if schema.is_output and schema.is_file_type:
-                        if type(value) is str and os.path.exists(value):
-                            if max_mtime:
-                                mtime = os.path.getmtime(value)
-                                if mtime < max_mtime:
-                                    parent_log_info(f"  {name} = {value} is not fresh")
+                for name, schema in self.outputs.items():
+                    # ignore outputs not in params (implicit outputs will be already in there thanks to validation above)
+                    if name in params:
+                        # check for files or lists of files, and skip otherwise
+                        if schema.is_file_type:
+                            filenames = [params[name]]
+                        elif schema.is_file_list_type:
+                            filenames = params[name]
+                            # empty list of files treated as non-existing output
+                            if not filenames:
+                                if schema.must_exist:
                                     all_exist = False
-                                    break
+                                    parent_log_info(f"  {name}: no existing file(s)")
+                                    break  # abort the check
                                 else:
-                                    parent_log_info(f"  {name} = {value} is fresh")
-                            else:
-                                parent_log_info(f"  {name} = {value} already exists")
+                                    parent_log_info(f"  {name}: no existing file(s), but they are not required")
+                                    continue
                         else:
-                            all_exist = False
-                            parent_log_info(f"  {name} = {value} doesn't exist")
+                            continue # go on to next parameter
+                        # collect messages rather than logging them directly, to avoid log diarrhea for long file lists
+                        messages = []
+                        # ok, we have a list of files to check
+                        for num, value in enumerate(filenames):
+                            if type(value) is not str:  # skip funny values that aren't strings
+                                continue
+                            # form up label for messages
+                            label = f"{name}[{num}]" if schema.is_file_list_type else name
+                            if os.path.exists(value):
+                                # max_mtime==0 means we're only checking for existence, not freshness
+                                if max_mtime:
+                                    if schema.skip_freshness_checks:
+                                        messages.append(f"{label} = {value} marked as skipped from freshness checks")
+                                    else:
+                                        mtime = os.path.getmtime(value)
+                                        if mtime < max_mtime:
+                                            parent_log_info(f"{label} = {value} is not fresh")
+                                            all_exist = False
+                                            break
+                                        else:
+                                            messages.append(f"{label} = {value} is fresh")
+                                else:
+                                    messages.append(f"{label} = {value} exists")
+                            elif schema.must_exist is not False:
+                                all_exist = False
+                                parent_log_info(f"  {label} = {value} doesn't exist")
+                                break
+                            else:
+                                messages.append(f"{label} = {value} doesn't exist, but is not required to")
+                        # abort the checks if we encountered a fail
+                        if not all_exist:
                             break
+                        # else log the collected messages
+                        if len(messages) > 2:
+                            messages = [messages[0], "  ...", messages[-1]]
+                        for msg in messages:
+                            parent_log_info(f"  {msg}")
                 if all_exist:
                     parent_log_info("all required outputs are OK, skipping this step")
                     skip = True
