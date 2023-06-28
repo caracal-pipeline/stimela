@@ -68,9 +68,6 @@ class Step:
     # optional backend settings
     backend: Optional[Dict[str, Any]] = None
 
-    # _skip: Conditional = None                       # skip this step if conditional evaluates to true
-    # _break_on: Conditional = None                   # break out (of parent recipe) if conditional evaluates to true
-
     def __post_init__(self):
         self.fqname = self.fqname or self.name
         if not bool(self.cab) and not bool(self.recipe):

@@ -166,15 +166,6 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
         vars: Dict[str, Any] = EmptyDictDefault()
         run:  Dict[str, Any] = EmptyDictDefault()
 
-    ## replaced by cult-cargo
-    #
-    # base_configs_glob = f"{STIMELA_DIR}/cargo/base/*/*.yaml"
-    # lib_configs_glob = f"{STIMELA_DIR}/cargo/lib/params/*.yaml"
-    # cab_configs_glob = f"{STIMELA_DIR}/cargo/cab/*.yaml"
-
-    # base_configs = glob.glob(base_configs_glob)
-    # lib_configs = glob.glob(lib_configs_glob)
-    # cab_configs = glob.glob(cab_configs_glob)
     base_configs = lib_configs = cab_configs = []
 
     if use_sys_config:

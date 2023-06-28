@@ -98,16 +98,6 @@ class Cab(Cargo):
     # default parameter conversion policies
     policies: ParameterPolicies = ParameterPolicies()
 
-    # For callable-type cabs, determines how the return value is treated.
-    # None to ignore, "{}" to treat it as a dict of outputs, else an output name to 
-    # treat it as a single output
-    return_outputs: Optional[str] = "{}" 
-
-    # runtime settings
-    runtime: Dict[str, Any] = EmptyDictDefault()
-
-    _path: Optional[str] = None   # path to image definition yaml file, if any
-
     def __post_init__ (self):
         if self.name is None:
             self.name = self.command.split()[0] or self.image

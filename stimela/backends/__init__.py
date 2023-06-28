@@ -12,7 +12,8 @@ from .singularity import SingularityBackendOptions
 from .kubernetes import KubernetesBackendOptions
 from .native import NativeBackendOptions
 
-#Backend = Enum("Backend", "docker singularity podman kubernetes native", module=__name__)
+## left as memo to self
+# Backend = Enum("Backend", "docker singularity podman kubernetes native", module=__name__)
 Backend = Enum("Backend", "singularity kubernetes native", module=__name__)
 
 SUPPORTED_BACKENDS = set(Backend.__members__)
