@@ -6,15 +6,13 @@ from omegaconf import ListConfig, OmegaConf
 from stimela.exceptions import BackendSpecificationError
 from scabha.basetypes import EmptyDictDefault
 
-import stimela.kitchen
-
 from .singularity import SingularityBackendOptions
-from .kubernetes import KubernetesBackendOptions
+from .kube import KubernetesBackendOptions
 from .native import NativeBackendOptions
 
 ## left as memo to self
 # Backend = Enum("Backend", "docker singularity podman kubernetes native", module=__name__)
-Backend = Enum("Backend", "singularity kubernetes native", module=__name__)
+Backend = Enum("Backend", "singularity kube native", module=__name__)
 
 SUPPORTED_BACKENDS = set(Backend.__members__)
 
@@ -66,9 +64,8 @@ class StimelaBackendOptions(object):
             self.singularity = SingularityBackendOptions()
         if self.native is None and get_backend("native"):
             self.native = NativeBackendOptions()
-        if self.kube is None and get_backend("kubernetes"):
+        if self.kube is None and get_backend("kube"):
             self.kube = KubernetesBackendOptions()
-                        
 
 StimelaBackendSchema = OmegaConf.structured(StimelaBackendOptions)
 

@@ -333,7 +333,12 @@ class Step:
         if self.validated_params is None:
             self.prevalidate(self.params)
 
-        with context as subtask:
+        # validate backend settings
+        backend = OmegaConf.merge(backend, self.cargo.backend or {}, self.backend or {})
+        backend_opts, backend_main, backend_wrapper =  runner.validate_backend_settings(backend)
+        remote_backend = backend_main.is_remote()
+
+        with context:
             # evaluate the skip attribute (it can be a formula and/or a {}-substititon)
             skip = self._skip
             if self._skip is None and subst is not None:
@@ -358,7 +363,7 @@ class Step:
             self.log.debug(f"validating inputs {subst and list(subst.keys())}")
             validated = None
             try:
-                params = self.cargo.validate_inputs(params, loosely=skip, subst=subst)
+                params = self.cargo.validate_inputs(params, loosely=skip or remote_backend, subst=subst)
                 validated = True
 
             except ScabhaBaseException as exc:
@@ -407,7 +412,7 @@ class Step:
 
             ## check if we need to skip based on existing/fresh file outputs
             ## if skip on fresh outputs is in effect, find mtime of most recent input 
-            if not skip and self.skip_if_outputs:
+            if not remote_backend and not skip and self.skip_if_outputs:
                 # max_mtime will remain 0 if we're not echecking for freshness, or if there are no file-type inputs
                 max_mtime, max_mtime_path = 0, None
                 if self.skip_if_outputs == OUTPUTS_FRESH:
@@ -497,21 +502,20 @@ class Step:
 
             if not skip:
                 # check for outputs that need removal
-                for name, schema in self.outputs.items():
-                    if name in params and schema.remove_if_exists and schema.is_file_type:
-                        path = params[name]
-                        if type(path) is str and os.path.exists(path):
-                            if os.path.isdir(path) and not os.path.islink(path):
-                                shutil.rmtree(path)
-                            else:
-                                os.unlink(path)
+                if not remote_backend:
+                    for name, schema in self.outputs.items():
+                        if name in params and schema.remove_if_exists and schema.is_file_type:
+                            path = params[name]
+                            if type(path) is str and os.path.exists(path):
+                                if os.path.isdir(path) and not os.path.islink(path):
+                                    shutil.rmtree(path)
+                                else:
+                                    os.unlink(path)
 
                 if type(self.cargo) is Recipe:
-                    backend = OmegaConf.merge(backend, self.cargo.backend or {}, self.backend or {})
                     self.cargo._run(params, subst, backend=backend)
                 elif type(self.cargo) is Cab:
-                    backend = OmegaConf.merge(backend, self.cargo.backend or {}, self.backend or {})
-                    cabstat = runner.run_cab(self, params, backend=backend, subst=subst)
+                    cabstat = backend_main.run(self.cargo, params=params, log=self.log, subst=subst, backend=backend_opts, fqname=self.fqname)
                     # check for runstate
                     if cabstat.success is False:
                         raise StimelaCabRuntimeError(f"error running cab '{self.cargo.name}'", cabstat.errors)
@@ -530,7 +534,7 @@ class Step:
             validated = False
 
             try:
-                params = self.cargo.validate_outputs(params, loosely=skip, subst=subst)
+                params = self.cargo.validate_outputs(params, loosely=skip or remote_backend, subst=subst)
                 validated = True
             except ScabhaBaseException as exc:
                 severity = "warning" if skip else "error"

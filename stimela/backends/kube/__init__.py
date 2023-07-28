@@ -24,6 +24,10 @@ def is_available():
 def get_status():
     return STATUS
 
+def is_remote():
+    return True
+
+from .run_kube import run
 
 @dataclass
 class KubernetesDaskRuntime(object):
@@ -55,14 +59,24 @@ class KubernetesLocalMount(object):
     readonly: bool = False      # mount as readonly, but it doesn't work (yet?)
     mkdir: bool = False         # create dir, if it is missing
 
+
 @dataclass
 class KubernetesBackendOptions(object):
-    namespace: str
-    dask_cluster: KubernetesDaskRuntime = KubernetesDaskRuntime()
-    inject_files: Dict[str, KubernetesFileInjection] = EmptyDictDefault()
-    pre_commands: List[str] = EmptyListDefault()
-    local_mounts: Dict[str, KubernetesLocalMount] = EmptyDictDefault()
-    env: Dict[str, str] = EmptyDictDefault()
-    run_dir: str = "."          # directory to run in inside container
+    enable:         bool = True
+    namespace:      Optional[str] = None
+    dask_cluster:   KubernetesDaskRuntime = KubernetesDaskRuntime()
+    inject_files:   Dict[str, KubernetesFileInjection] = EmptyDictDefault()
+    pre_commands:   List[str] = EmptyListDefault()
+    local_mounts:   Dict[str, KubernetesLocalMount] = EmptyDictDefault()
+    volumes:        Dict[str, str] = EmptyDictDefault()
+    env:            Dict[str, str] = EmptyDictDefault()
+    dir:            Optional[str] = None                 # change to specific directory inside container
+    # user and group IDs -- if None, use local user
+    uid:            Optional[int] = None
+    gid:            Optional[int] = None
+    # memory requirement
+    memory:         Optional[str] = None
+    # arbitrary structure copied into the pod spec
+    pod_spec:       Dict[str, Any] = EmptyDictDefault()  
 
 KubernetesBackendSchema = OmegaConf.structured(KubernetesBackendOptions)

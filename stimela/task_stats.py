@@ -76,6 +76,9 @@ class _CommandContext(object):
         update_process_status(command=command)
     def ctrl_c(self):
         update_process_status(command=f"{self.command}(^C)")
+    def update_status(self, status):
+        update_process_status(command=f"{self.command} ({status})")
+
 
 
 @contextlib.contextmanager

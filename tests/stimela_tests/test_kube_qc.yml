@@ -1,0 +1,78 @@
+_include:
+  - omstimelation/oms-cabs.yml
+
+cabs:
+  quarticube:
+    _use: cabs.quartical
+    virtual_env:
+    image: quartical-kubetest:local
+    backend: kubernetes
+    command: goquartical
+    runtime:
+      kube:
+        namespace: rarg
+        # dask cluster settings
+        dask_cluster:
+          name: qc-test-cluster
+          persist: true
+          num_workers: 4
+          cpu_limit: 4
+          memory_limit: "16Gi"
+          threads_per_worker: 4
+        # list of file/directories to be exposed
+        local_mounts:
+          cwd:
+            path: .
+          dask-storage-config:
+            path: test_dask_storage_options.yaml
+            dest: /.config/dask-ms/storage_options.yaml
+          numba-cache:
+            path: ~/.cache/numba
+            mkdir: true
+          root:
+            path: /etc
+            dest: /test/etc
+        # list of environment variables
+        env:
+          NUMBA_CACHE_DIR: ~/.cache/numba
+        # list of files to be injected into pod
+        # inject_files:
+        #   ~/.config/dask-ms/storage_options.json:
+        #     format: json
+        #     content:
+        #       key: simon
+        #       secret: simon123
+        #       client_kwargs:
+        #         endpoint_url: https://minio:443
+        #         region_name: af-cpt
+        #         verify: false
+
+        # list of command to be executed inside the pod before launching the main command
+        pre_commands:
+          - echo $HOME
+          - cat ~/.config/dask-ms/storage_options.json  # just for testing, to make sure it is mounted properly
+          - cat /test/etc/shadow
+
+opts:
+  log:
+    dir: test-logs/logs-{config.run.datetime}
+    nest: 3
+    symlink: logs
+
+
+recipe:
+  name: "demo recipe"
+  info: 'top level recipe definition'
+  steps:
+      test_qc:
+        cab: quarticube
+        params:
+          input_ms.path: s3://binface/C147.zarr
+          dask.address: qc-test-cluster:8786
+          dask.scheduler: distributed
+          input_model.recipe: MODEL_DATA
+          input_model.apply_p_jones: false
+          output.apply_p_jones_inv: false
+          output.gain_directory: s3://binface/gains.qc
+          output.log_directory: test-logs/logs.qc
+          output.overwrite: true

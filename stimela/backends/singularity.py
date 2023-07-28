@@ -50,6 +50,8 @@ def get_status():
     is_available()
     return STATUS
 
+def is_remote():
+    return False
 
 def get_image_info(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBackendOptions'):
     """returns image name/path corresponding to cab

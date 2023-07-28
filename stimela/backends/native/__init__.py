@@ -7,6 +7,9 @@ def is_available():
 def get_status():
     return "OK"
 
+def is_remote():
+    return False
+
 from .run_native import run, build_command_line, update_rlimits
 
 @dataclass

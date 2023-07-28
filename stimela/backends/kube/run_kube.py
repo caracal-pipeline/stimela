@@ -7,21 +7,20 @@ from omegaconf import OmegaConf, DictConfig, ListConfig
 from scabha.basetypes import EmptyDictDefault, EmptyListDefault
 
 import stimela
-from stimela.kitchen.cab import Cab
 from stimela.utils.xrun_asyncio import dispatch_to_log
 from stimela.exceptions import StimelaCabParameterError, StimelaCabRuntimeError, CabValidationError
 from stimela.stimelogging import log_exception
-from stimela.backends import resolve_required_mounts
+#from stimela.backends import resolve_required_mounts
 # these are used to drive the status bar
-from stimela.stimelogging import declare_subcommand, declare_subtask, update_process_status
+from stimela.stimelogging import declare_subcommand, declare_subtask, declare_subtask_attributes, update_process_status
+
+# needs pip install kubernetes dask-kubernetes
 
 import kubernetes
 from kubernetes.client.api import core_v1_api
 from kubernetes.client.rest import ApiException
 from kubernetes.stream import stream
 from dask_kubernetes import make_pod_spec, KubeCluster
-
-from . import KubernetesRuntimeSchema, _InjectedFileFormatters
 
 _kube_client = _kube_config = None
 
@@ -36,8 +35,8 @@ def get_kube_api():
     return core_v1_api.CoreV1Api()
 
 
-
-def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
+def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
+        backend: 'stimela.backend.StimelaBackendOptions',
         log: logging.Logger, subst: Optional[Dict[str, Any]] = None):
     """Runs cab contents
 
@@ -49,25 +48,19 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
     Returns:
         Any: return value (e.g. exit code) of content
     """
+
+    from . import _InjectedFileFormatters
+
     if not cab.image:
         raise StimelaCabRuntimeError(f"kubernetes runner requires cab.image to be set")
 
-    if 'kube' in stimela.CONFIG.opts.runtime:
-        kube = OmegaConf.merge(KubernetesRuntimeSchema, stimela.CONFIG.opts.runtime.kube)
-
-    # get kube info from cab's runtime section
-    if 'kube' in cab.runtime:
-        kube = OmegaConf.merge(KubernetesRuntimeSchema, cab.runtime.kube)
-
-    # augment with step-specific one
-    if 'kube' in runtime:
-        kube = OmegaConf.merge(KubernetesRuntimeSchema, runtime.kube)
+    kube = backend.kube
 
     namespace = kube.namespace
     if not namespace:
         raise StimelaCabRuntimeError(f"runtime.kube.namespace must be set")
 
-    args = cab.flavour.get_arguments(cab, params, subst)
+    args = cab.flavour.get_arguments(cab, params, subst, check_executable=False)
     log.debug(f"command line is {args}")
 
     cabstat = cab.reset_status()
@@ -92,7 +85,7 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
     numba_cache_dir = os.path.expanduser("~/.cache/numba")
     pathlib.Path(numba_cache_dir).mkdir(parents=True, exist_ok=True)
 
-    with declare_subtask(f"kubernetes:{os.path.basename(command_name)}"):
+    with declare_subtask(f"(kube){os.path.basename(command_name)}"):
         try:
             if kube.dask_cluster.num_workers:
                 cluster_name = kube.dask_cluster.name
@@ -125,20 +118,31 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
                 metadata    = dict(name = podname),
                 spec        = dict(
                     containers = [dict(
-                            image   = cab.image,
+                            image   = str(cab.image),
+                            imagePullPolicy = 'IfNotPresent',
                             name    = podname,
                             args    = ["/bin/sh", "-c", "while true;do date;sleep 5; done"],
                             env     = [],
                             securityContext = dict(
                                     runAsNonRoot = True,
-                                    runAsUser = os.getuid(),
-                                    runAsGroup = os.getgid()
+                                    runAsUser = os.getuid() if kube.uid is None else kube.uid,
+                                    runAsGroup = os.getgid() if kube.gid is None else kube.gid
                             ),
                             volumeMounts = []
                     )],
                     volumes = []
                 )
             )
+            # add pod spec
+            pod_manifest['spec'].update(**OmegaConf.to_container(kube.pod_spec))
+
+            # add RAM resources
+            if kube.memory is not None:
+                res = pod_manifest['spec']['containers'][0].setdefault('resources', {})
+                res.setdefault('requests', {})['memory'] = kube.memory
+                res.setdefault('limits', {})['memory'] = kube.memory
+                log.info(f"setting memory request/limit to {kube.memory}")
+
             # add runtime env settings
             for name, value in kube.env.items():
                 value = os.path.expanduser(value)
@@ -167,26 +171,39 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
                     prior_mounts[path] = not mount.readonly
 
             # add local mounts to support parameters
-            req_mounts = resolve_required_mounts(params, cab.inputs, cab.outputs, prior_mounts=prior_mounts)
+            req_mounts = {} # resolve_required_mounts(params, cab.inputs, cab.outputs, prior_mounts=prior_mounts)
             for i, (path, readwrite) in enumerate(req_mounts.items()):
                 log.info(f"adding local mount {path} (readwrite={readwrite})")
                 add_local_mount(f"automount-{i}", path, path, not readwrite)
 
+            # add persistent volumes
+            pvcs = {}
+            for i, (name, path) in enumerate(kube.volumes.items()):
+                volume_name = pvcs.get(name)
+                if volume_name is None:
+                    volume_name = pvcs[name] = name
+                    pod_manifest['spec']['volumes'].append(dict(
+                        name = volume_name,
+                        persistentVolumeClaim = dict(claimName=name)
+                    ))
+                pod_manifest['spec']['containers'][0]['volumeMounts'].append(dict(name=volume_name, mountPath=path))
+
             # start pod and wait for it to come up
-            with declare_subcommand("starting pod"):
+            with declare_subcommand("starting pod") as subcommand:
                 log.info(f"starting pod {podname} for {command_name}")
                 resp = kube_api.create_namespaced_pod(body=pod_manifest, namespace=namespace)
                 log.debug(f"create_namespaced_pod({podname}): {resp}")
 
                 while True:
                     update_status()
-                    resp = kube_api.read_namespaced_pod(name=podname, namespace=namespace)
-                    log.debug(f"read_namespaced_pod({podname}): {resp}")
-                    if resp.status.phase != 'Pending':
+                    resp = kube_api.read_namespaced_pod_status(name=podname, namespace=namespace)
+                    log.debug(f"read_namespaced_pod_status({podname}): {resp.status}")
+                    phase = resp.status.phase
+                    if phase == 'Running':
                         break
+                    subcommand.update_status(f"phase: {phase}")
                     time.sleep(.5)
                 log.info(f"  pod started after {elapsed()}")
-
 
             def run_pod_command(command, cmdname, input=None, wrangler=None):
                 if type(command) is str:
@@ -253,9 +270,8 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
                             log.info(f"pre-command successful after {elapsed()}")
 
             # do we need to chdir
-            if kube.run_dir:
-                rundir = os.path.abspath(kube.run_dir)
-                args = ["python", "-c", f"import os,sys; os.chdir('{rundir}'); os.execlp('{args[0]}', *sys.argv[1:])"] + list(args)
+            if kube.dir:
+                args = ["python", "-c", f"import os,sys; os.chdir('{kube.dir}'); os.execlp('{args[0]}', *sys.argv[1:])"] + list(args)
 
             log.info(f"running {command_name} in pod {podname}")
             with declare_subcommand(os.path.basename(command_name)):
@@ -268,6 +284,8 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
             # if retcode != 0 and not explicitly marked as success, mark as failed
             if retcode and cabstat.success is not True:
                 cabstat.declare_failure(f"{command_name} returns error code {retcode} after {elapsed()}")
+                if retcode == 137:
+                    log.error(f"the pod was killed with an out-of-memory condition (backend.kube.memory setting is {kube.memory})")
             else:
                 log.info(f"{command_name} returns exit code {retcode} after {elapsed()}")
 
@@ -288,6 +306,8 @@ def run(cab: Cab, params: Dict[str, Any], runtime: Dict[str, Any], fqname: str,
             raise
         except Exception as exc:
             log.error(f"kubernetes invocation of {command_name} failed after {elapsed()}")
+            import traceback
+            traceback.print_exc()
             raise StimelaCabRuntimeError("kubernetes backend error", exc)
 
         # cleanup
