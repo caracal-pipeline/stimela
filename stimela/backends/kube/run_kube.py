@@ -50,6 +50,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     """
 
     from . import _InjectedFileFormatters
+    from stimela.backends import resolve_registry_name
 
     if not cab.image:
         raise StimelaCabRuntimeError(f"kubernetes runner requires cab.image to be set")
@@ -85,6 +86,8 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     numba_cache_dir = os.path.expanduser("~/.cache/numba")
     pathlib.Path(numba_cache_dir).mkdir(parents=True, exist_ok=True)
 
+    pod_created = None
+
     with declare_subtask(f"(kube){os.path.basename(command_name)}"):
         try:
             if kube.dask_cluster.num_workers:
@@ -111,30 +114,44 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                         update_status()
 
             podname = fqname.replace(".", "--").replace("_", "--") + "--" + uuid.uuid4().hex
+            image_name = resolve_registry_name(backend, str(cab.image))
+            log.info(f"using image {image_name}")
 
             pod_manifest = dict(
                 apiVersion  =  'v1',
                 kind        =  'Pod',
-                metadata    = dict(name = podname),
-                spec        = dict(
-                    containers = [dict(
-                            image   = str(cab.image),
-                            imagePullPolicy = 'IfNotPresent',
-                            name    = podname,
-                            args    = ["/bin/sh", "-c", "while true;do date;sleep 5; done"],
-                            env     = [],
-                            securityContext = dict(
-                                    runAsNonRoot = True,
-                                    runAsUser = os.getuid() if kube.uid is None else kube.uid,
-                                    runAsGroup = os.getgid() if kube.gid is None else kube.gid
-                            ),
-                            volumeMounts = []
-                    )],
-                    volumes = []
-                )
+                metadata    = dict(name=podname),
             )
-            # add pod spec
-            pod_manifest['spec'].update(**OmegaConf.to_container(kube.pod_spec))
+            # form up pod spec
+            pod_spec = dict(
+                containers = [dict(
+                        image   = image_name,
+                        imagePullPolicy = 'IfNotPresent',
+                        name    = podname,
+                        args    = ["/bin/sh", "-c", "while true;do date;sleep 5; done"],
+                        env     = [],
+                        securityContext = dict(
+                                runAsNonRoot = True,
+                                runAsUser = os.getuid() if kube.uid is None else kube.uid,
+                                runAsGroup = os.getgid() if kube.gid is None else kube.gid
+                        ),
+                        volumeMounts = []
+                )],
+                volumes = []
+            )
+            # apply predefined types
+            if kube.pod_type is not None:
+                log.info(f"selecting predefined pod type '{kube.pod_type}'")
+                predefined_pod_spec = kube.predefined_pod_types.get(kube.pod_type)
+                if predefined_pod_spec is None:
+                    raise StimelaCabRuntimeError(f"backend.kube.pod_type={kube.pod_type} not found in predefined_pod_types")
+            else:
+                predefined_pod_spec = {}
+            # apply custom type and merge
+            if predefined_pod_spec or kube.custom_pod_spec: 
+                pod_spec = OmegaConf.to_container(OmegaConf.merge(pod_spec, predefined_pod_spec, kube.custom_pod_spec)) 
+            
+            pod_manifest['spec'] = pod_spec
 
             # add RAM resources
             if kube.memory is not None:
@@ -188,11 +205,25 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                     ))
                 pod_manifest['spec']['containers'][0]['volumeMounts'].append(dict(name=volume_name, mountPath=path))
 
+            if kube.verbose > 0:
+                reported_events = set()
+                field_selector = f"involvedObject.name={podname}"
+                def log_pod_events():
+                    # get new events
+                    events = kube_api.list_namespaced_event(namespace=namespace, field_selector=field_selector)
+                    for event in events.items:
+                        if event.metadata.uid not in reported_events:
+                            log.info(f"  \[type: {event.type}, reason: {event.reason}] {event.message}")
+                            reported_events.add(event.metadata.uid)
+            else:
+                log_pod_events = lambda:None
+
             # start pod and wait for it to come up
             with declare_subcommand("starting pod") as subcommand:
                 log.info(f"starting pod {podname} for {command_name}")
                 resp = kube_api.create_namespaced_pod(body=pod_manifest, namespace=namespace)
                 log.debug(f"create_namespaced_pod({podname}): {resp}")
+                pod_created = resp
 
                 while True:
                     update_status()
@@ -202,8 +233,11 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                     if phase == 'Running':
                         break
                     subcommand.update_status(f"phase: {phase}")
-                    time.sleep(.5)
+                    log_pod_events()
+                    time.sleep(1)
                 log.info(f"  pod started after {elapsed()}")
+                # resp = kube_api.read_namespaced_pod(name=podname, namespace=namespace)
+                # log.info(f"  read_namespaced_pod {resp}")
 
             def run_pod_command(command, cmdname, input=None, wrangler=None):
                 if type(command) is str:
@@ -233,6 +267,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                             input = None
                         else:
                             break
+                    log_pod_events()
 
                 retcode = resp.returncode
                 resp.close()
@@ -276,6 +311,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
             log.info(f"running {command_name} in pod {podname}")
             with declare_subcommand(os.path.basename(command_name)):
                 retcode = run_pod_command(args, command_name, wrangler=cabstat.apply_wranglers)
+            log_pod_events()
 
             # check if output marked it as a fail
             if cabstat.success is False:
@@ -317,7 +353,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                 log.info(f"stopping dask cluster {cluster_name}")
                 log.info(f"cluster logs: {cluster.get_logs()}")
                 cluster.close()
-            if podname:
+            if podname and pod_created:
                 try:
                     update_status()
                     log.info(f"deleting pod {podname}")
@@ -328,6 +364,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                     #     log.debug(f"read_namespaced_pod({podname}): {resp}")
                     #     log.info(f"  pod phase is {resp.status.phase} after {elapsed()}")
                     #     time.sleep(.5)
+                    log_pod_events()
                 except ApiException as exc:
                     body = json.loads(exc.body)
                     log_exception(StimelaCabRuntimeError(f"kubernetes API error while deleting pod {podname}", (exc, body)), severity="warning")

@@ -37,6 +37,9 @@ def get_backend_status(name: str):
 class StimelaBackendOptions(object):
     default_registry: str = "quay.io/stimela2"
 
+    # overrides registries -- useful if you have a pull-through cache set up
+    override_registries: Dict[str, str] = EmptyDictDefault()
+    
     select: Any = ""   # should be Union[str, List[str]], but OmegaConf doesn't support it, so handle in __post_init__ for now
     
     singularity: Optional[SingularityBackendOptions] = None
@@ -68,6 +71,17 @@ class StimelaBackendOptions(object):
             self.kube = KubernetesBackendOptions()
 
 StimelaBackendSchema = OmegaConf.structured(StimelaBackendOptions)
+
+
+def resolve_registry_name(backend: StimelaBackendOptions, image_name: str):
+    """
+    Resolves image name -- applies override registries, if any exist
+    """
+    for src, dest in backend.override_registries.items():
+        if image_name.startswith(src + "/"):
+            image_name = f"{dest}/{image_name[len(src)+1:]}"
+    return image_name
+
 
 ## commenting out for now -- will need to fix when we reactive the kube backend (and have tests for it)
 

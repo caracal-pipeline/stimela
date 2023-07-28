@@ -75,6 +75,9 @@ def get_image_info(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.Sti
     if ":" not in image_name:
         image_name = f"{image_name}:latest"
 
+    from stimela.backends import resolve_registry_name
+    image_name = resolve_registry_name(image_name)
+
     # convert to filename
     simg_name = image_name.replace("/", "-") + ".simg"
     simg_path = os.path.join(backend.singularity.image_dir, simg_name) 

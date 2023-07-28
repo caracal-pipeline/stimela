@@ -71,12 +71,25 @@ class KubernetesBackendOptions(object):
     volumes:        Dict[str, str] = EmptyDictDefault()
     env:            Dict[str, str] = EmptyDictDefault()
     dir:            Optional[str] = None                 # change to specific directory inside container
+
+    # if >0, events will be collected and reported
+    verbose:        int = 0
+
     # user and group IDs -- if None, use local user
     uid:            Optional[int] = None
     gid:            Optional[int] = None
-    # memory requirement
+    # memory limit/requirement
     memory:         Optional[str] = None
-    # arbitrary structure copied into the pod spec
-    pod_spec:       Dict[str, Any] = EmptyDictDefault()  
+
+    # user-defined set of pod types -- each is a pod spec structure
+    predefined_pod_types: Dict[str, Dict[str, Any]] = EmptyDictDefault()
+
+    # selects a specific pod type from the defined set
+    pod_type:       Optional[str] = None
+
+    # arbitrary additional structure copied into the pod spec
+    custom_pod_spec:  Dict[str, Any] = EmptyDictDefault()  
+
+
 
 KubernetesBackendSchema = OmegaConf.structured(KubernetesBackendOptions)
