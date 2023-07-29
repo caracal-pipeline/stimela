@@ -933,7 +933,7 @@ class Recipe(Cargo):
         else:
             self._for_loop_values = [None]
 
-    def validate_inputs(self, params: Dict[str, Any], subst: Optional[SubstitutionNS]=None, loosely=False):
+    def validate_inputs(self, params: Dict[str, Any], subst: Optional[SubstitutionNS]=None, loosely=False, remote_fs=False):
 
         params, _ = self._preprocess_parameters(params)
 
@@ -951,7 +951,7 @@ class Recipe(Cargo):
         
         self.update_assignments(subst, params=params, ignore_subst_errors=True)
 
-        params = Cargo.validate_inputs(self, params, subst=subst, loosely=loosely)
+        params = Cargo.validate_inputs(self, params, subst=subst, loosely=loosely, remote_fs=remote_fs)
 
         self.validate_for_loop(params, strict=True)
 

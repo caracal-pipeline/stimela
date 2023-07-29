@@ -1,5 +1,9 @@
 opts:
   backend:
+    # we have this set up on AWS as a pull-through cache for the quay.io registry
+    override_registries:
+      quay.io/stimela2: 800133935729.dkr.ecr.af-south-1.amazonaws.com/quay/stimela2
+
     kube:
       namespace: rarg-test-compute
       verbose_events: 1   # to get events printed
@@ -10,8 +14,9 @@ opts:
       ## override user/group ID
       uid: 1669
       gid: 1669
+
       ## you can specify a global memory default for pods here,
-      ## otherwise go on a per-cab or per-step basis
+      ## but also do this on a per-cab or per-step basis of course
       # memory: 64Gi
 
       ## some predefined pod specs
@@ -31,9 +36,6 @@ opts:
       ## default pod type to use -- keys into predefined_pod_types
       pod_type: admin 
 
-    # we have this set up on AWS as a pull-through cache for the quay.io registry
-    override_registries:
-      quay.io/stimela2: 800133935729.dkr.ecr.af-south-1.amazonaws.com/quay/stimela2
 
 ## some cab-specific backend tweaks
 cabs:

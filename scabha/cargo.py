@@ -407,10 +407,11 @@ class Cargo(object):
 
         return params
 
-    def validate_inputs(self, params: Dict[str, Any], subst: Optional[SubstitutionNS]=None, loosely=False):
+    def validate_inputs(self, params: Dict[str, Any], subst: Optional[SubstitutionNS]=None, loosely=False, remote_fs=False):
         """Validates inputs.
         If loosely is True, then doesn't check for required parameters, and doesn't check for files to exist etc.
         This is used when skipping a step.
+        If remote_fs is True, doesn't check files and directories.
         """
         assert(self.finalized)
         self._resolve_implicit_parameters(params)
@@ -418,18 +419,19 @@ class Cargo(object):
         # check inputs
         params1 = validate_parameters(params, self.inputs, defaults=self.defaults, subst=subst, fqname=self.fqname,
                                                 check_unknowns=False, check_required=not loosely, 
-                                                check_inputs_exist=not loosely, check_outputs_exist=False,
-                                                create_dirs=not loosely)
+                                                check_inputs_exist=not loosely and not remote_fs, check_outputs_exist=False,
+                                                create_dirs=not loosely and not remote_fs)
         # check outputs
         params1.update(**validate_parameters(params, self.outputs, defaults=self.defaults, subst=subst, fqname=self.fqname,
                                                 check_unknowns=False, check_required=False, 
-                                                check_inputs_exist=not loosely, check_outputs_exist=False,
-                                                create_dirs=not loosely))
+                                                check_inputs_exist=not loosely and not remote_fs, check_outputs_exist=False,
+                                                create_dirs=not loosely and not remote_fs))
         return params1
 
-    def validate_outputs(self, params: Dict[str, Any], subst: Optional[SubstitutionNS]=None, loosely=False):
+    def validate_outputs(self, params: Dict[str, Any], subst: Optional[SubstitutionNS]=None, loosely=False, remote_fs=False):
         """Validates outputs. Parameter substitution is done.
         If loosely is True, then doesn't check for required parameters, and doesn't check for files to exist etc.
+        If remote_fs is True, doesn't check files and directories.
         """
         assert(self.finalized)
         # update implicits that weren't marked as unresolved
@@ -439,7 +441,8 @@ class Cargo(object):
                 params[name] = self.inputs_outputs[name].implicit
         params.update(**validate_parameters(params, self.outputs, defaults=self.defaults, subst=subst, fqname=self.fqname,
                                                 check_unknowns=False, check_required=not loosely, 
-                                                check_inputs_exist=not loosely, check_outputs_exist=not loosely,
+                                                check_inputs_exist=not loosely and not remote_fs, 
+                                                check_outputs_exist=not loosely and not remote_fs,
                                                 ))
         return params
 

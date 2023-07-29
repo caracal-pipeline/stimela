@@ -363,7 +363,7 @@ class Step:
             self.log.debug(f"validating inputs {subst and list(subst.keys())}")
             validated = None
             try:
-                params = self.cargo.validate_inputs(params, loosely=skip or remote_backend, subst=subst)
+                params = self.cargo.validate_inputs(params, loosely=skip, remote_fs=remote_backend, subst=subst)
                 validated = True
 
             except ScabhaBaseException as exc:
@@ -534,7 +534,7 @@ class Step:
             validated = False
 
             try:
-                params = self.cargo.validate_outputs(params, loosely=skip or remote_backend, subst=subst)
+                params = self.cargo.validate_outputs(params, loosely=skip,remote_fs=remote_backend, subst=subst)
                 validated = True
             except ScabhaBaseException as exc:
                 severity = "warning" if skip else "error"

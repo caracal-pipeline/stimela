@@ -1,5 +1,6 @@
 _include:
   - (cultcargo)breizorro.yml
+  # note that this looks in . first, then at the location of testy_kube.yml, if different
   - test_kube_config.yml
 
 opts:

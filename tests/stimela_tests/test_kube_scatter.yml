@@ -30,4 +30,4 @@ recipe:
         # just to show that you can tweak the backend settings per step
         backend:
           kube:
-            pod_type: fat
+            pod_type: thin
