@@ -252,7 +252,7 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                             filename = incl
                         # relative path -- scan PATH for candidates
                         else:
-                            paths = [os.path.dirname(pathname)] + PATH
+                            paths = ['.', os.path.dirname(pathname)] + PATH
                             candidates = [os.path.join(p, incl) for p in paths] 
                             for filename in candidates:
                                 if os.path.exists(filename):

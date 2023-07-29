@@ -1201,7 +1201,11 @@ class Recipe(Cargo):
 
             # if scatter is enabled, use a process pool
             if self._for_loop_scatter:
-                num_workers = self._for_loop_scatter if self._for_loop_scatter > 0 else len(loop_worker_args)
+                nloop = len(loop_worker_args)
+                if self._for_loop_scatter < 0:
+                    num_workers = nloop
+                else:
+                    num_workers = min(self._for_loop_scatter, nloop) 
                 with ProcessPoolExecutor(num_workers) as pool:
                     # submit each iterant to pool
                     futures = [pool.submit(self._iterate_loop_worker, *args, raise_exc=False) for args in loop_worker_args]

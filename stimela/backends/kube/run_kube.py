@@ -88,7 +88,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
     pod_created = None
 
-    with declare_subtask(f"(kube){os.path.basename(command_name)}"):
+    with declare_subtask(f"{os.path.basename(command_name)}:kube"):
         try:
             if kube.dask_cluster.num_workers:
                 cluster_name = kube.dask_cluster.name
@@ -205,7 +205,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                     ))
                 pod_manifest['spec']['containers'][0]['volumeMounts'].append(dict(name=volume_name, mountPath=path))
 
-            if kube.verbose > 0:
+            if kube.verbose_events > 0:
                 reported_events = set()
                 field_selector = f"involvedObject.name={podname}"
                 def log_pod_events():
@@ -213,14 +213,14 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                     events = kube_api.list_namespaced_event(namespace=namespace, field_selector=field_selector)
                     for event in events.items:
                         if event.metadata.uid not in reported_events:
-                            log.info(f"  \[type: {event.type}, reason: {event.reason}] {event.message}")
+                            log.info(kube.verbose_event_format.format(event=event))
                             reported_events.add(event.metadata.uid)
             else:
                 log_pod_events = lambda:None
 
             # start pod and wait for it to come up
             with declare_subcommand("starting pod") as subcommand:
-                log.info(f"starting pod {podname} for {command_name}")
+                log.info(f"starting pod {podname} to run {command_name}")
                 resp = kube_api.create_namespaced_pod(body=pod_manifest, namespace=namespace)
                 log.debug(f"create_namespaced_pod({podname}): {resp}")
                 pod_created = resp

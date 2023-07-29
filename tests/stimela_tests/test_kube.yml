@@ -1,63 +1,24 @@
 _include:
   - (cultcargo)breizorro.yml
+  - test_kube_config.yml
 
 opts:
-  log:
-    dir: test-logs/logs-{config.run.datetime}
-    nest: 3
-    symlink: logs
   backend:
     select: kube
-    kube:
-      verbose: 1   # to get events printed
-      dir: /mnt/data/stimela-test
-      namespace: rarg-test-compute
-      volumes:
-        rarg-test-compute-pvc: /mnt/data
-
-      ## override user/group ID
-      uid: 1669
-      gid: 1669
-      ## you can specify a global memory default for pods here,
-      ## otherwise go on a per-cab or per-step basis
-      # memory: 64Gi
-
-      ## some predefined pod specs
-      predefined_pod_types:
-        admin:
-          nodeSelector:
-            rarg/node-class: admin
-        thin:
-          nodeSelector:
-            rarg/node-class: compute
-            rarg/instance-type: m5.large
-        fat:
-          nodeSelector:
-            rarg/node-class: compute
-            rarg/instance-type: m6i.4xlarge
-
-      ## default type to use
-      pod_type: admin 
-
-    # we have this set up a a pull-through cache for the standard registry
-    override_registries:
-      quay.io/stimela2: 800133935729.dkr.ecr.af-south-1.amazonaws.com/quay/stimela2
-            
-
-
-cabs:
-  breizorro:     # ask for more RAM for breizorro pod
-    backend:
-      kube:
-        pod_type: thin
-
 
 recipe:
   name: "demo recipe"
   info: 'top level recipe definition'
   steps:
-      test_breizorro:
+      mask1:
         cab: breizorro
         params:
           restored-image: im3-MFS-image.fits
           mask: =STRIPEXT(current.restored-image) + ".mask.fits"
+      mask2:
+        recipe:
+        cab: breizorro
+        params:
+          mask-image: =previous.mask
+          dilate: 2
+          mask: =STRIPEXT(previous.restored-image) + ".mask2.fits"
