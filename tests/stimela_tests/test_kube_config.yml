@@ -43,5 +43,5 @@ cabs:
     backend:
       kube:
         pod_type: thin
-        memory: 6Gi
+        memory: 3.5Gi
 

@@ -37,6 +37,7 @@ class KubernetesDaskRuntime(object):
     threads_per_worker: int = 1
     name: Optional[str] = None
     persist: bool = False
+    extra_pod_config: Dict[str, Any] = EmptyDictDefault()
 
 # dict of methods for converting an object to text format
 _InjectedFileFormatters = dict(

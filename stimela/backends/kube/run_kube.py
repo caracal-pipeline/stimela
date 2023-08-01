@@ -90,6 +90,10 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
     with declare_subtask(f"{os.path.basename(command_name)}:kube"):
         try:
+            podname = fqname.replace(".", "--").replace("_", "--") + "--" + uuid.uuid4().hex
+            image_name = resolve_registry_name(backend, str(cab.image))
+            log.info(f"using image {image_name}")
+
             if kube.dask_cluster.num_workers:
                 cluster_name = kube.dask_cluster.name
                 if kube.dask_cluster.persist:
@@ -103,19 +107,16 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                 if cluster is None:
                     with declare_subcommand("starting dask cluster"):
                         log.info(f"starting dask cluster {cluster_name} for {command_name}")
-                        pod_spec = make_pod_spec(image=cab.image,
+                        pod_spec = make_pod_spec(image=image_name,
                                                 cpu_limit=kube.dask_cluster.cpu_limit,
                                                 memory_limit=kube.dask_cluster.memory_limit,
-                                                threads_per_worker=kube.dask_cluster.num_workers)
+                                                threads_per_worker=kube.dask_cluster.num_workers,
+                                                extra_pod_config=kube.dask_cluster.extra_pod_config)
 
                         cluster = KubeCluster(pod_spec, name=cluster_name, namespace=namespace, shutdown_on_close=not kube.dask_cluster.persist)
                         update_status()
                         cluster.scale(kube.dask_cluster.num_workers)
                         update_status()
-
-            podname = fqname.replace(".", "--").replace("_", "--") + "--" + uuid.uuid4().hex
-            image_name = resolve_registry_name(backend, str(cab.image))
-            log.info(f"using image {image_name}")
 
             pod_manifest = dict(
                 apiVersion  =  'v1',
