@@ -229,15 +229,6 @@ def render(args):
     worker_spec = d["spec"]["cluster"]["spec"]["worker"]["spec"]
     scheduler_spec = d["spec"]["cluster"]["spec"]["scheduler"]["spec"]
 
-    for container in worker_spec["containers"]:
-        container["resources"] = {
-            "limits": {"cpu": str(args.cpu_limit), "memory": str(args.mem_limit)},
-            "requests": {"cpu": str(args.cpu_request), "memory": str(args.mem_request)},
-        }
-
-    if args.cmdline:
-        job_spec["containers"][0]["args"] = args.cmdline
-
     if args.service_account:
         for entry in [job_spec, worker_spec, scheduler_spec]:
             entry["serviceAccountName"] = args.service_account

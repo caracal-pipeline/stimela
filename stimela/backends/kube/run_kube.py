@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 import logging, time, json, datetime, yaml, os.path, uuid, pathlib
-
+from enum import Enum
 from typing import Dict, List, Optional, Any
 
 from omegaconf import OmegaConf, DictConfig, ListConfig
@@ -21,10 +21,90 @@ from kubernetes.client import CustomObjectsApi
 from kubernetes.client.api import core_v1_api
 from kubernetes.client.rest import ApiException
 from kubernetes.stream import stream
-from dask_kubernetes import make_pod_spec, KubeCluster
+
 import rich
 
 _kube_client = _kube_config = None
+
+# dict of methods for converting an object to text format
+_InjectedFileFormatters = dict(
+    yaml = yaml.dump,
+    json = json.dumps,
+    txt = str
+)
+
+InjectedFileFormats = Enum("InjectedFileFormats", " ".join(_InjectedFileFormatters.keys()), module=__name__)
+
+@dataclass
+class KubernetesFileInjection(object):
+    format: InjectedFileFormats = "txt"
+    content: Any = ""
+
+@dataclass
+class KubernetesLocalMount(object):
+    path: str
+    dest: str = ""              # destination path -- same as local if empty
+    readonly: bool = False      # mount as readonly, but it doesn't work (yet?)
+    mkdir: bool = False         # create dir, if it is missing
+
+@dataclass
+class KubernetesPodLimits(object):
+    request: Optional[str] = None
+    limit: Optional[str] = None
+
+@dataclass
+class KubernetesPodSpec(object):
+    # selects a specific pod type from the defined set
+    type:           Optional[str] = None
+    # memory limit/requirement
+    memory:         Optional[KubernetesPodLimits] = None
+    cpu:            Optional[KubernetesPodLimits] = None
+    # arbitrary additional structure copied into the pod spec
+    custom_pod_spec:  Dict[str, Any] = EmptyDictDefault()  
+
+
+def _apply_pod_spec(kps, pod_spec: Dict[str, Any], predefined_pod_specs: Dict[str, Dict[str, Any]], log: logging.Logger,  kind: str) -> Dict[str, Any]:
+    """applies this pod spec, as long with any predefined specs"""
+    if kps:
+        # apply predefined types
+        if kps.type is not None:
+            log.info(f"selecting predefined pod type '{kps.type}' for {kind}")
+            predefined_pod_spec = predefined_pod_specs.get(kps.type)
+            if predefined_pod_spec is None:
+                raise StimelaCabRuntimeError(f"'{kps.type}' not found in predefined_pod_specs")
+        else:
+            predefined_pod_spec = {}
+        # apply custom type and merge
+        if predefined_pod_spec or kps.custom_pod_spec: 
+            pod_spec = OmegaConf.to_container(OmegaConf.merge(pod_spec, predefined_pod_spec, kps.custom_pod_spec)) 
+        
+        # add RAM resources
+        if kps.memory is not None:
+            res = pod_spec['containers'][0].setdefault('resources', {})
+            # good practice to set these equal
+            if kps.memory.request:
+                res.setdefault('requests', {})['memory'] = kps.memory.request or kps.memory.limit
+            if kps.memory.limit:
+                res.setdefault('limits', {})['memory'] = kps.memory.limit or kps.memory.request
+            log.info(f"setting {kind} memory resources to {res['limits']['memory']}")
+        if kps.cpu is not None:
+            res = pod_spec['containers'][0].setdefault('resources', {})
+            if kps.cpu.request:
+                res.setdefault('requests', {})['cpu'] = kps.cpu.request
+            if kps.cpu.limit:
+                res.setdefault('limits', {})['cpu'] = kps.cpu.limit
+            log.info(f"setting {kind} CPU resources to {res['limits']['cpu']}")
+
+    return pod_spec
+
+
+@dataclass
+class KubernetesDaskCluster(object):
+    name: Optional[str] = None
+    num_workers: int = 0
+    threads_per_worker: int = 1
+    worker_pod: KubernetesPodSpec = KubernetesPodSpec()
+    scheduler_pod: KubernetesPodSpec = KubernetesPodSpec()
 
 def get_kube_api():
     global _kube_client
@@ -35,6 +115,7 @@ def get_kube_api():
         kubernetes.config.load_kube_config()
 
     return core_v1_api.CoreV1Api(), CustomObjectsApi()
+
 
 
 def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
@@ -51,7 +132,6 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
         Any: return value (e.g. exit code) of content
     """
 
-    from . import _InjectedFileFormatters
     from stimela.backends import resolve_registry_name
 
     if not cab.image:
@@ -70,7 +150,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
     command_name = cab.flavour.command_name
 
-    cluster = podname = cluster_name = None
+    podname = None
     kube_api, custom_obj_api = get_kube_api()
 
     start_time = datetime.datetime.now()
@@ -92,12 +172,14 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
     with declare_subtask(f"{os.path.basename(command_name)}:kube"):
         try:
-            podname = fqname.replace(".", "--").replace("_", "--") + "--" + uuid.uuid4().hex
+            podname = os.getlogin() + "--" + fqname.replace(".", "--").replace("_", "--") + "--" + uuid.uuid4().hex
             image_name = resolve_registry_name(backend, str(cab.image))
             log.info(f"using image {image_name}")
 
             # depending on whether or not a dask cluster is configured, we do either a DaskJob or a regular pod 
-            if kube.dask_cluster.num_workers:
+            if kube.dask_cluster and kube.dask_cluster.num_workers:
+                log.info(f"defining dask job with a cluster of {kube.dask_cluster.num_workers} workers")
+
                 from . import daskjob 
                 dask_job_name = f"dj-{podname}"
                 dask_job_spec = daskjob.render(OmegaConf.create(dict(
@@ -106,13 +188,21 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                     image=image_name,
                     nworkers=kube.dask_cluster.num_workers,
                     cmdline=["/bin/sh", "-c", "while true;do date;sleep 5; done"],
-                    cpu_limit=kube.dask_cluster.cpu_limit,
-                    mem_limit=kube.dask_cluster.memory_limit,
-                    cpu_request="", mem_request="",
                     service_account=None,
                     mount_file=None,
                     volume=[f"{name}:{path}" for name, path in kube.volumes.items()]
                 )))
+
+                # apply pod type specifications
+                if kube.dask_cluster.worker_pod:
+                    dask_job_spec[0]["spec"]["cluster"]["spec"]["worker"]["spec"] = \
+                        _apply_pod_spec(kube.dask_cluster.worker_pod, dask_job_spec[0]["spec"]["cluster"]["spec"]["worker"]["spec"],
+                                                           kube.predefined_pod_specs, log, kind='worker')
+                if kube.dask_cluster.scheduler_pod:
+                    dask_job_spec[0]["spec"]["cluster"]["spec"]["scheduler"]["spec"] = \
+                        _apply_pod_spec(kube.dask_cluster.scheduler_pod, dask_job_spec[0]["spec"]["cluster"]["spec"]["scheduler"]["spec"],
+                                                           kube.predefined_pod_specs, log, kind='scheduler')
+
             else:
                 dask_job_spec = dask_job_name = None
 
@@ -140,26 +230,11 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                 )],
                 volumes = []
             )
-            # apply predefined types
-            if kube.pod_type is not None:
-                log.info(f"selecting predefined pod type '{kube.pod_type}'")
-                predefined_pod_spec = kube.predefined_pod_types.get(kube.pod_type)
-                if predefined_pod_spec is None:
-                    raise StimelaCabRuntimeError(f"backend.kube.pod_type={kube.pod_type} not found in predefined_pod_types")
-            else:
-                predefined_pod_spec = {}
-            # apply custom type and merge
-            if predefined_pod_spec or kube.custom_pod_spec: 
-                pod_spec = OmegaConf.to_container(OmegaConf.merge(pod_spec, predefined_pod_spec, kube.custom_pod_spec)) 
-            
-            pod_manifest['spec'] = pod_spec
 
-            # add RAM resources
-            if kube.memory is not None:
-                res = pod_manifest['spec']['containers'][0].setdefault('resources', {})
-                res.setdefault('requests', {})['memory'] = kube.memory
-                res.setdefault('limits', {})['memory'] = kube.memory
-                log.info(f"setting memory request/limit to {kube.memory}")
+            # apply pod specification            
+            pod_spec = _apply_pod_spec(kube.job_pod, pod_spec, kube.predefined_pod_specs, log, kind='job')
+
+            pod_manifest['spec'] = pod_spec
 
             # add runtime env settings
             for name, value in kube.env.items():
@@ -256,7 +331,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                         resp = custom_obj_api.get_namespaced_custom_object_status(group, version, namespace, plural, 
                                                                                 name=dask_job_name)
                         job_status = 'status' in resp and resp['status']['jobStatus'] 
-                        rich.print(resp)
+                        # rich.print(resp)
                         subcommand.update_status(f"status: {job_status}")
                         if job_status == 'Running':
                             podname = resp['status']['jobRunnerPodName']
