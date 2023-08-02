@@ -288,23 +288,22 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                     ))
                 pod_manifest['spec']['containers'][0]['volumeMounts'].append(dict(name=volume_name, mountPath=path))
 
+            # set up a function to log events -- seems to be the only way to detect image pull errors
             label_selector = f"stimela_job={podname}" 
-            if kube.verbose_events > 0:
-                reported_events = set()
-                def log_pod_events(*names):
-                    pods = kube_api.list_namespaced_pod(namespace=namespace, label_selector=label_selector)
-                    for pod in pods.items:
-                        # get new events
-                        events = kube_api.list_namespaced_event(namespace=namespace, field_selector=f"involvedObject.kind=Pod,involvedObject.name={pod.metadata.name}")
-                        for event in events.items:
-                            if event.metadata.uid not in reported_events:
+            reported_events = set()
+            def log_pod_events(*names):
+                pods = kube_api.list_namespaced_pod(namespace=namespace, label_selector=label_selector)
+                for pod in pods.items:
+                    # get new events
+                    events = kube_api.list_namespaced_event(namespace=namespace, field_selector=f"involvedObject.kind=Pod,involvedObject.name={pod.metadata.name}")
+                    for event in events.items:
+                        if event.metadata.uid not in reported_events:
+                            if kube.verbose_events:
                                 log.info(kube.verbose_event_format.format(event=event))
-                                reported_events.add(event.metadata.uid)
-                                if event.message.startswith("Failed to pull image"):
-                                    rich.print(event)
-                                    # rich.print(kube_api.read_namespaced_pod_status(namespace=namespace, name=pod))
-            else:
-                log_pod_events = lambda *names:None
+                            reported_events.add(event.metadata.uid)
+                            if event.message.startswith("Error: ErrImagePull"):
+                                raise StimelaCabRuntimeError(f"kubernetes failed to pull the image '{image_name}'. Preceding log messages may contain extra information.")
+
 
             # start pod and wait for it to come up
             if dask_job_spec is None:
