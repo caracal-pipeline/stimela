@@ -174,9 +174,9 @@ def daskjob_template(args):
                                     "args": [
                                         "dask-worker",
                                         "--name",
+                                        "$(DASK_WORKER_NAME)",
                                         "--nworkers", '1',
                                         "--nthreads", str(args.threads_per_worker),
-                                        "$(DASK_WORKER_NAME)",
                                         "$(DASK_SCHEDULER_ADDRESS)",
                                     ],
                                     "env": [
