@@ -221,7 +221,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
             pod_spec = dict(
                 containers = [dict(
                         image   = image_name,
-                        imagePullPolicy = 'IfNotPresent',
+                        imagePullPolicy = 'Always' if kube.always_pull_images else 'IfNotPresent',
                         name    = podname,
                         args    = ["/bin/sh", "-c", "while true;do date;sleep 5; done"],
                         env     = [],
@@ -300,6 +300,9 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                             if event.metadata.uid not in reported_events:
                                 log.info(kube.verbose_event_format.format(event=event))
                                 reported_events.add(event.metadata.uid)
+                                if event.message.startswith("Failed to pull image"):
+                                    rich.print(event)
+                                    # rich.print(kube_api.read_namespaced_pod_status(namespace=namespace, name=pod))
             else:
                 log_pod_events = lambda *names:None
 

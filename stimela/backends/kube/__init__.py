@@ -41,6 +41,8 @@ class KubernetesBackendOptions(object):
     env:            Dict[str, str] = EmptyDictDefault()
     dir:            Optional[str] = None                 # change to specific directory inside container
 
+    always_pull_images: bool = False                            # change to True to repull
+
     job_pod:        KubernetesPodSpec = KubernetesPodSpec()
 
     # if >0, events will be collected and reported
