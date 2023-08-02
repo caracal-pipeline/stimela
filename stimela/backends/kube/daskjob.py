@@ -88,10 +88,12 @@ def split_args(args):
 
 
 def daskjob_template(args):
+    labels = dict(args.labels)
+
     return {
         "apiVersion": "kubernetes.dask.org/v1",
         "kind": "DaskJob",
-        "metadata": {"name": args.job_name, "namespace": args.namespace},
+        "metadata": {"name": args.job_name, "namespace": args.namespace, "labels": labels },
         "spec": {
             "cluster": {
                 "spec": {
@@ -117,6 +119,7 @@ def daskjob_template(args):
                             },
                             "type": "ClusterIP",
                         },
+                        "metadata": { "labels": labels },
                         "spec": {
                             "containers": [
                                 {
@@ -164,6 +167,7 @@ def daskjob_template(args):
                     },
                     "worker": {
                         "replicas": args.nworkers,
+                        "metadata": { "labels": labels },
                         "spec": {
                             "containers": [
                                 {
@@ -188,6 +192,7 @@ def daskjob_template(args):
                 }
             },
             "job": {
+                "metadata": { "labels": labels},
                 "spec": {
                     "containers": [
                         {

@@ -176,14 +176,17 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
             image_name = resolve_registry_name(backend, str(cab.image))
             log.info(f"using image {image_name}")
 
-            # depending on whether or not a dask cluster is configured, we do either a DaskJob or a regular pod
+            pod_labels = dict(stimela_job=podname, stimela_user=os.getlogin(), stimela_fqname=fqname, stimela_cab=cab.name)
+
+            # depending on whether or not a dask cluster is configured, we do either a DaskJob or a regular pod 
             if kube.dask_cluster and kube.dask_cluster.num_workers:
                 log.info(f"defining dask job with a cluster of {kube.dask_cluster.num_workers} workers")
 
                 from . import daskjob
                 dask_job_name = f"dj-{podname}"
                 dask_job_spec = daskjob.render(OmegaConf.create(dict(
-                    job_name=dask_job_name,
+                    job_name=dask_job_name, 
+                    labels=pod_labels,
                     namespace=namespace,
                     image=image_name,
                     nworkers=kube.dask_cluster.num_workers,
@@ -211,7 +214,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
             pod_manifest = dict(
                 apiVersion  =  'v1',
                 kind        =  'Pod',
-                metadata    = dict(name=podname),
+                metadata    = dict(name=podname, labels=pod_labels),
             )
 
             # form up pod spec
@@ -241,6 +244,9 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
             for name, value in kube.env.items():
                 value = os.path.expanduser(value)
                 pod_manifest['spec']['containers'][0]['env'].append(dict(name=name, value=value))
+            if dask_job_spec:
+                pod_manifest['spec']['containers'][0]['env'].append(dict(name="DASK_SCHEDULER_ADDRESS", 
+                                                                        value=f"tcp://{dask_job_name}-scheduler.{namespace}.svc.cluster.local:8786"))
 
             # add local mounts
             def add_local_mount(name, path, dest, readonly):
@@ -282,16 +288,18 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                     ))
                 pod_manifest['spec']['containers'][0]['volumeMounts'].append(dict(name=volume_name, mountPath=path))
 
+            label_selector = f"stimela_job={podname}" 
             if kube.verbose_events > 0:
                 reported_events = set()
                 def log_pod_events(*names):
-                    field_selector = ",".join([f"involvedObject.name={name}" for name in names])
-                    # get new events
-                    events = kube_api.list_namespaced_event(namespace=namespace, field_selector=field_selector)
-                    for event in events.items:
-                        if event.metadata.uid not in reported_events:
-                            log.info(kube.verbose_event_format.format(event=event))
-                            reported_events.add(event.metadata.uid)
+                    pods = kube_api.list_namespaced_pod(namespace=namespace, label_selector=label_selector)
+                    for pod in pods.items:
+                        # get new events
+                        events = kube_api.list_namespaced_event(namespace=namespace, field_selector=f"involvedObject.kind=Pod,involvedObject.name={pod.metadata.name}")
+                        for event in events.items:
+                            if event.metadata.uid not in reported_events:
+                                log.info(kube.verbose_event_format.format(event=event))
+                                reported_events.add(event.metadata.uid)
             else:
                 log_pod_events = lambda *names:None
 
@@ -326,6 +334,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                     log.debug(f"create_namespaced_custom_object({dask_job_name}): {resp}")
                     dask_job_created = resp
                     job_status = None
+                    log_pod_events(podname, dask_job_name)
 
                     while job_status != 'Running':
                         update_status()
@@ -454,7 +463,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
         # cleanup
         finally:
-            if podname and pod_created or dask_job_created:
+            if podname and pod_created: # or dask_job_created:
                 try:
                     update_status()
                     log.info(f"deleting pod {podname}")
