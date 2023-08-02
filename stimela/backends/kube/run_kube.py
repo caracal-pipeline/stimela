@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-import logging, time, json, datetime, yaml, os.path, uuid, pathlib
+import logging, time, json, datetime, yaml, os.path, uuid, pathlib, getpass, secrets
 from enum import Enum
 from typing import Dict, List, Optional, Any
 
@@ -172,18 +172,19 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
     with declare_subtask(f"{os.path.basename(command_name)}:kube"):
         try:
-            podname = os.getlogin() + "--" + fqname.replace(".", "--").replace("_", "--") + "--" + uuid.uuid4().hex
+            username = getpass.getuser() 
+            podname = username + "--" + fqname.replace(".", "--").replace("_", "--") + "--" + uuid.uuid4().hex
             image_name = resolve_registry_name(backend, str(cab.image))
             log.info(f"using image {image_name}")
 
-            pod_labels = dict(stimela_job=podname, stimela_user=os.getlogin(), stimela_fqname=fqname, stimela_cab=cab.name)
+            pod_labels = dict(stimela_job=podname, user=username, stimela_fqname=fqname, stimela_cab=cab.name)
 
             # depending on whether or not a dask cluster is configured, we do either a DaskJob or a regular pod 
             if kube.dask_cluster and kube.dask_cluster.num_workers:
                 log.info(f"defining dask job with a cluster of {kube.dask_cluster.num_workers} workers")
 
                 from . import daskjob
-                dask_job_name = f"dj-{podname}"
+                dask_job_name = f"dj-{secrets.token_hex(4)}"
                 dask_job_spec = daskjob.render(OmegaConf.create(dict(
                     job_name=dask_job_name, 
                     labels=pod_labels,
