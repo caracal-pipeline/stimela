@@ -170,6 +170,8 @@ def daskjob_template(args):
                                     "args": [
                                         "dask-worker",
                                         "--name",
+                                        "--nworkers", '1',
+                                        "--nthreads", str(args.threads_per_worker),
                                         "$(DASK_WORKER_NAME)",
                                         "$(DASK_SCHEDULER_ADDRESS)",
                                     ],

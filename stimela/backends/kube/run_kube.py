@@ -60,7 +60,7 @@ class KubernetesPodSpec(object):
     memory:         Optional[KubernetesPodLimits] = None
     cpu:            Optional[KubernetesPodLimits] = None
     # arbitrary additional structure copied into the pod spec
-    custom_pod_spec:  Dict[str, Any] = EmptyDictDefault()  
+    custom_pod_spec:  Dict[str, Any] = EmptyDictDefault()
 
 
 def _apply_pod_spec(kps, pod_spec: Dict[str, Any], predefined_pod_specs: Dict[str, Dict[str, Any]], log: logging.Logger,  kind: str) -> Dict[str, Any]:
@@ -75,9 +75,9 @@ def _apply_pod_spec(kps, pod_spec: Dict[str, Any], predefined_pod_specs: Dict[st
         else:
             predefined_pod_spec = {}
         # apply custom type and merge
-        if predefined_pod_spec or kps.custom_pod_spec: 
-            pod_spec = OmegaConf.to_container(OmegaConf.merge(pod_spec, predefined_pod_spec, kps.custom_pod_spec)) 
-        
+        if predefined_pod_spec or kps.custom_pod_spec:
+            pod_spec = OmegaConf.to_container(OmegaConf.merge(pod_spec, predefined_pod_spec, kps.custom_pod_spec))
+
         # add RAM resources
         if kps.memory is not None:
             res = pod_spec['containers'][0].setdefault('resources', {})
@@ -176,17 +176,18 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
             image_name = resolve_registry_name(backend, str(cab.image))
             log.info(f"using image {image_name}")
 
-            # depending on whether or not a dask cluster is configured, we do either a DaskJob or a regular pod 
+            # depending on whether or not a dask cluster is configured, we do either a DaskJob or a regular pod
             if kube.dask_cluster and kube.dask_cluster.num_workers:
                 log.info(f"defining dask job with a cluster of {kube.dask_cluster.num_workers} workers")
 
-                from . import daskjob 
+                from . import daskjob
                 dask_job_name = f"dj-{podname}"
                 dask_job_spec = daskjob.render(OmegaConf.create(dict(
-                    job_name=dask_job_name, 
+                    job_name=dask_job_name,
                     namespace=namespace,
                     image=image_name,
                     nworkers=kube.dask_cluster.num_workers,
+                    threads_per_worker=kube.dask_cluster.threads_per_worker,
                     cmdline=["/bin/sh", "-c", "while true;do date;sleep 5; done"],
                     service_account=None,
                     mount_file=None,
@@ -206,7 +207,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
             else:
                 dask_job_spec = dask_job_name = None
 
-            # form up normal pod spec -- either to be run directly, or injected into the dask job  
+            # form up normal pod spec -- either to be run directly, or injected into the dask job
             pod_manifest = dict(
                 apiVersion  =  'v1',
                 kind        =  'Pod',
@@ -231,7 +232,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                 volumes = []
             )
 
-            # apply pod specification            
+            # apply pod specification
             pod_spec = _apply_pod_spec(kube.job_pod, pod_spec, kube.predefined_pod_specs, log, kind='job')
 
             pod_manifest['spec'] = pod_spec
@@ -328,9 +329,9 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
                     while job_status != 'Running':
                         update_status()
-                        resp = custom_obj_api.get_namespaced_custom_object_status(group, version, namespace, plural, 
+                        resp = custom_obj_api.get_namespaced_custom_object_status(group, version, namespace, plural,
                                                                                 name=dask_job_name)
-                        job_status = 'status' in resp and resp['status']['jobStatus'] 
+                        job_status = 'status' in resp and resp['status']['jobStatus']
                         # rich.print(resp)
                         subcommand.update_status(f"status: {job_status}")
                         if job_status == 'Running':
