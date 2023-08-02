@@ -292,7 +292,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
             # set up a function to log events -- seems to be the only way to detect image pull errors
             label_selector = f"stimela_job={podname}" 
             reported_events = set()
-            def log_pod_events(*names):
+            def log_pod_events():
                 pods = kube_api.list_namespaced_pod(namespace=namespace, label_selector=label_selector)
                 for pod in pods.items:
                     # get new events
@@ -322,7 +322,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                         if phase == 'Running':
                             break
                         subcommand.update_status(f"phase: {phase}")
-                        log_pod_events(podname)
+                        log_pod_events()
                         time.sleep(1)
             # else dask job
             else:
@@ -337,7 +337,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                     log.debug(f"create_namespaced_custom_object({dask_job_name}): {resp}")
                     dask_job_created = resp
                     job_status = None
-                    log_pod_events(podname, dask_job_name)
+                    log_pod_events()
 
                     while job_status != 'Running':
                         update_status()
@@ -350,7 +350,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                             podname = resp['status']['jobRunnerPodName']
                             log.info(f"job running as pod {podname}")
 
-                        log_pod_events(podname, dask_job_name)
+                        log_pod_events()
                         time.sleep(1)
 
             log.info(f"  pod started after {elapsed()}")
@@ -385,7 +385,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                             input = None
                         else:
                             break
-                    log_pod_events(podname)
+                    log_pod_events()
 
                 retcode = resp.returncode
                 resp.close()
