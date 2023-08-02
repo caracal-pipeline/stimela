@@ -46,9 +46,8 @@ class ImageInfo(object):
             registry, name = None, spec
         return ImageInfo(name, registry, version)
     
-    def to_string(self, default_registry=None):
-        registry = self.registry or default_registry
-        if registry:
+    def to_string(self):
+        if self.registry:
             return f"{self.registry}/{self.name}:{self.version}"
         else:        
             return f"{self.name}:{self.version}"
@@ -99,8 +98,6 @@ class Cab(Cargo):
     policies: ParameterPolicies = ParameterPolicies()
 
     def __post_init__ (self):
-        if self.name is None:
-            self.name = self.command.split()[0] or self.image
         Cargo.__post_init__(self)
         for param in self.inputs.keys():
             if param in self.outputs:
@@ -112,12 +109,16 @@ class Cab(Cargo):
                 self.image = ImageInfo.from_string(self.image)
             elif isinstance(self.image, DictConfig):
                 try:
-                    self.image = OmegaConf.to_container(OmegaConf.merge(ImageInfoSchema, self.image))
+                    self.image = ImageInfo(**OmegaConf.merge(ImageInfoSchema, self.image))
                 except OmegaConfBaseException as exc:
                     raise CabValidationError(f"cab {self.name}: invalid image setting", exc)
             else:
                 raise CabValidationError(f"cab {self.name}: invalid image setting")
-            
+
+        # set name from command or image
+        if self.name is None:
+            self.name = self.command.split()[0] or self.image
+
         # check backend setting
         if self.backend:
             try:

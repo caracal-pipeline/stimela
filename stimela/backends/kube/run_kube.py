@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import logging, time, json, datetime, yaml, os.path, uuid, pathlib, getpass, secrets
+import traceback
 from enum import Enum
 from typing import Dict, List, Optional, Any
 
@@ -100,6 +101,8 @@ def _apply_pod_spec(kps, pod_spec: Dict[str, Any], predefined_pod_specs: Dict[st
 
 @dataclass
 class KubernetesDaskCluster(object):
+    capture_logs: bool = True
+    capture_logs_style: Optional[str] = "blue"
     name: Optional[str] = None
     num_workers: int = 0
     threads_per_worker: int = 1
@@ -132,7 +135,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
         Any: return value (e.g. exit code) of content
     """
 
-    from stimela.backends import resolve_registry_name
+    from stimela.backends import resolve_image_name
 
     if not cab.image:
         raise StimelaCabRuntimeError(f"kubernetes runner requires cab.image to be set")
@@ -174,7 +177,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
         try:
             username = getpass.getuser() 
             podname = username + "--" + fqname.replace(".", "--").replace("_", "--") + "--" + uuid.uuid4().hex
-            image_name = resolve_registry_name(backend, str(cab.image))
+            image_name = resolve_image_name(backend, cab.image)
             log.info(f"using image {image_name}")
 
             pod_labels = dict(stimela_job=podname, user=username, stimela_fqname=fqname, stimela_cab=cab.name)
@@ -305,8 +308,8 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                             if event.message.startswith("Error: ErrImagePull"):
                                 raise StimelaCabRuntimeError(f"kubernetes failed to pull the image '{image_name}'. Preceding log messages may contain extra information.")
 
-
             # start pod and wait for it to come up
+            aux_pod_threads = {}
             if dask_job_spec is None:
                 with declare_subcommand("starting pod") as subcommand:
                     log.info(f"starting pod {podname} to run {command_name}")
@@ -352,6 +355,37 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
                         log_pod_events()
                         time.sleep(1)
+
+                    def print_logs(name):
+                        style = kube.dask_cluster.capture_logs_style
+                        try:
+                            dispatch_to_log(log, f"started logging thread", command_name, "stdout", prefix=f"{name}#", style=style, output_wrangler=None)
+                            # rich.print(f"[yellow]started log thread for {name}[/yellow]")
+                            # Open a stream to the logs
+                            stream = None
+                            while stream is None:
+                                try:
+                                    stream = kube_api.read_namespaced_pod_log(name=name, namespace=namespace, _preload_content=False)
+                                except ApiException as exc:
+                                    # rich.print(f"[yellow]error starting stream for {name}, sleeping[/yellow]")
+                                    time.sleep(2)
+                            for line in stream:
+                                dispatch_to_log(log, line.decode().rstrip(), command_name, "stdout", prefix=f"{name}#", style=style, output_wrangler=None)
+                            stream.close()
+                        finally:
+                            dispatch_to_log(log, f"exiting logging thread", command_name, "stdout", prefix=f"{name}#", style=style, output_wrangler=None)
+                        # rich.print(f"[yellow]stopped log thread for {name}[/yellow]")
+
+                    # get other pods associated with DaskJob
+                    if kube.dask_cluster.capture_logs:
+                        pods = kube_api.list_namespaced_pod(namespace=namespace, label_selector=label_selector)
+                        for pod in pods.items:
+                            # get new events
+                            name = pod.metadata.name
+                            if name != podname:
+                                import threading
+                                aux_pod_threads[name] = threading.Thread(target=print_logs, kwargs=dict(name=name))
+                                aux_pod_threads[name].start()
 
             log.info(f"  pod started after {elapsed()}")
             # resp = kube_api.read_namespaced_pod(name=podname, namespace=namespace)
@@ -429,7 +463,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
             log.info(f"running {command_name} in pod {podname}")
             with declare_subcommand(os.path.basename(command_name)):
                 retcode = run_pod_command(args, command_name, wrangler=cabstat.apply_wranglers)
-            log_pod_events(podname)
+            log_pod_events()
 
             # check if output marked it as a fail
             if cabstat.success is False:
@@ -452,6 +486,8 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
         except ApiException as exc:
             if exc.body:
                 exc = (exc, json.loads(exc.body))
+            import traceback
+            traceback.print_exc()
             log.error(f"kubernetes invocation of {command_name} failed with an ApiException after {elapsed()}")
             raise StimelaCabRuntimeError("kubernetes API error", exc)
         # this drops out as a normal error response
@@ -466,33 +502,67 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
         # cleanup
         finally:
-            if podname and pod_created: # or dask_job_created:
-                try:
-                    update_status()
-                    log.info(f"deleting pod {podname}")
-                    resp = kube_api.delete_namespaced_pod(name=podname, namespace=namespace)
-                    log.debug(f"delete_namespaced_pod({podname}): {resp}")
-                    # while True:
-                    #     resp = kube_api.read_namespaced_pod(name=podname, namespace=namespace)
-                    #     log.debug(f"read_namespaced_pod({podname}): {resp}")
-                    #     log.info(f"  pod phase is {resp.status.phase} after {elapsed()}")
-                    #     time.sleep(.5)
-                    log_pod_events(podname)
-                except ApiException as exc:
-                    body = json.loads(exc.body)
-                    log_exception(StimelaCabRuntimeError(f"kubernetes API error while deleting pod {podname}", (exc, body)), severity="warning")
-                except Exception as exc:
-                    log_exception(StimelaCabRuntimeError(f"kubernetes API error while deleting pod {podname}: {exc}"), severity="warning")
-            if dask_job_created:
-                try:
-                    update_status()
-                    log.info(f"deleting dask job {dask_job_name}")
-                    custom_obj_api.delete_namespaced_custom_object(group, version, namespace, plural, dask_job_name)
-                except ApiException as exc:
-                    body = json.loads(exc.body)
-                    log_exception(StimelaCabRuntimeError(f"kubernetes API error while deleting dask job {dask_job_name}", (exc, body)), severity="warning")
-                except Exception as exc:
-                    log_exception(StimelaCabRuntimeError(f"kubernetes API error while deleting dask job {dask_job_name}: {exc}"), severity="warning")
+            try:
+                if podname and pod_created: # or dask_job_created:
+                    try:
+                        update_status()
+                        log.info(f"deleting pod {podname}")
+                        resp = kube_api.delete_namespaced_pod(name=podname, namespace=namespace)
+                        log.debug(f"delete_namespaced_pod({podname}): {resp}")
+                        # while True:
+                        #     resp = kube_api.read_namespaced_pod(name=podname, namespace=namespace)
+                        #     log.debug(f"read_namespaced_pod({podname}): {resp}")
+                        #     log.info(f"  pod phase is {resp.status.phase} after {elapsed()}")
+                        #     time.sleep(.5)
+                        log_pod_events()
+                    except ApiException as exc:
+                        body = json.loads(exc.body)
+                        log_exception(StimelaCabRuntimeError(f"kubernetes API error while deleting pod {podname}", (exc, body)), severity="warning")
+                    except Exception as exc:
+                        log_exception(StimelaCabRuntimeError(f"kubernetes API error while deleting pod {podname}: {exc}"), severity="warning")
+                if dask_job_created:
+                    try:
+                        update_status()
+                        log.info(f"deleting dask job {dask_job_name}")
+                        custom_obj_api.delete_namespaced_custom_object(group, version, namespace, plural, dask_job_name)
+                    except ApiException as exc:
+                        body = json.loads(exc.body)
+                        log_exception(StimelaCabRuntimeError(f"kubernetes API error while deleting dask job {dask_job_name}", (exc, body)), severity="warning")
+                    except Exception as exc:
+                        log_exception(StimelaCabRuntimeError(f"kubernetes API error while deleting dask job {dask_job_name}: {exc}"), severity="warning")
+                # wait for aux pod threads
+                cleanup_time = datetime.datetime.now()
+                def cleanup_elapsed():
+                    return (datetime.datetime.now() - cleanup_time).total_seconds()
+                while aux_pod_threads and cleanup_elapsed() < 5:
+                    for name, thread in list(aux_pod_threads.items()):
+                        if thread.is_alive():
+                            log.info(f"rejoining log thread for {name}")
+                            thread.join(0.01)
+                        if thread.is_alive():
+                            log.info(f"logging thread alive, trying to delete auxuliary pod {name}")
+                            try:
+                                kube_api.delete_namespaced_pod(name=name, namespace=namespace)
+                            except ApiException as exc:
+                                log.warning(f"deleting pod {name} failed: {exc}")
+                                pass
+                        if not thread.is_alive():
+                            del aux_pod_threads[name]
+                    if aux_pod_threads:
+                        log.warning(f"{len(aux_pod_threads)} logging threads for sub-pods still alive, sleeping for a bit")
+                        time.sleep(2)
+                if aux_pod_threads:
+                    log.info(f"{len(aux_pod_threads)} logging threads for sub-pods still alive after {cleanup_elapsed():.1}s, giving up on the cleanup")
+            except KeyboardInterrupt:
+                log.error(f"kubernetes cleanup interrupted with Ctrl+C after {elapsed()}")
+                raise StimelaCabRuntimeError(f"{command_name} cleanup interrupted with Ctrl+C after {elapsed()}")
+            except Exception as exc:
+                log.error(f"kubernetes cleanup failed after {elapsed()}")
+                import traceback
+                traceback.print_exc()
+                raise StimelaCabRuntimeError("kubernetes backend clanup error", exc)
+
+
 
 
 # kubectl -n rarg get pods -A
