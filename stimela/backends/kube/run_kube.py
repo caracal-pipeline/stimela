@@ -17,10 +17,12 @@ from stimela.stimelogging import declare_subcommand, declare_subtask, declare_su
 # needs pip install kubernetes dask-kubernetes
 
 import kubernetes
+from kubernetes.client import CustomObjectsApi
 from kubernetes.client.api import core_v1_api
 from kubernetes.client.rest import ApiException
 from kubernetes.stream import stream
 from dask_kubernetes import make_pod_spec, KubeCluster
+import rich
 
 _kube_client = _kube_config = None
 
@@ -32,7 +34,7 @@ def get_kube_api():
         _kube_config = True
         kubernetes.config.load_kube_config()
 
-    return core_v1_api.CoreV1Api()
+    return core_v1_api.CoreV1Api(), CustomObjectsApi()
 
 
 def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
@@ -69,7 +71,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     command_name = cab.flavour.command_name
 
     cluster = podname = cluster_name = None
-    kube_api = get_kube_api()
+    kube_api, custom_obj_api = get_kube_api()
 
     start_time = datetime.datetime.now()
     def elapsed(since=None):
@@ -86,7 +88,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     numba_cache_dir = os.path.expanduser("~/.cache/numba")
     pathlib.Path(numba_cache_dir).mkdir(parents=True, exist_ok=True)
 
-    pod_created = None
+    pod_created = dask_job_created = None
 
     with declare_subtask(f"{os.path.basename(command_name)}:kube"):
         try:
@@ -94,35 +96,33 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
             image_name = resolve_registry_name(backend, str(cab.image))
             log.info(f"using image {image_name}")
 
+            # depending on whether or not a dask cluster is configured, we do either a DaskJob or a regular pod 
             if kube.dask_cluster.num_workers:
-                cluster_name = kube.dask_cluster.name
-                if kube.dask_cluster.persist:
-                    try:
-                        resp = kube_api.read_namespaced_service(name=cluster_name, namespace=namespace)
-                        cluster = True
-                        log.info(f"persistent dask cluster {cluster_name} appears to be up")
-                    except ApiException as exc:
-                        log.info(f"persistent dask cluster {cluster_name} is not up")
+                from . import daskjob 
+                dask_job_name = f"dj-{podname}"
+                dask_job_spec = daskjob.render(OmegaConf.create(dict(
+                    job_name=dask_job_name, 
+                    namespace=namespace,
+                    image=image_name,
+                    nworkers=kube.dask_cluster.num_workers,
+                    cmdline=["/bin/sh", "-c", "while true;do date;sleep 5; done"],
+                    cpu_limit=kube.dask_cluster.cpu_limit,
+                    mem_limit=kube.dask_cluster.memory_limit,
+                    cpu_request="", mem_request="",
+                    service_account=None,
+                    mount_file=None,
+                    volume=[f"{name}:{path}" for name, path in kube.volumes.items()]
+                )))
+            else:
+                dask_job_spec = dask_job_name = None
 
-                if cluster is None:
-                    with declare_subcommand("starting dask cluster"):
-                        log.info(f"starting dask cluster {cluster_name} for {command_name}")
-                        pod_spec = make_pod_spec(image=image_name,
-                                                cpu_limit=kube.dask_cluster.cpu_limit,
-                                                memory_limit=kube.dask_cluster.memory_limit,
-                                                threads_per_worker=kube.dask_cluster.num_workers,
-                                                extra_pod_config=kube.dask_cluster.extra_pod_config)
-
-                        cluster = KubeCluster(pod_spec, name=cluster_name, namespace=namespace, shutdown_on_close=not kube.dask_cluster.persist)
-                        update_status()
-                        cluster.scale(kube.dask_cluster.num_workers)
-                        update_status()
-
+            # form up normal pod spec -- either to be run directly, or injected into the dask job  
             pod_manifest = dict(
                 apiVersion  =  'v1',
                 kind        =  'Pod',
                 metadata    = dict(name=podname),
             )
+
             # form up pod spec
             pod_spec = dict(
                 containers = [dict(
@@ -208,8 +208,8 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
             if kube.verbose_events > 0:
                 reported_events = set()
-                field_selector = f"involvedObject.name={podname}"
-                def log_pod_events():
+                def log_pod_events(*names):
+                    field_selector = ",".join([f"involvedObject.name={name}" for name in names])
                     # get new events
                     events = kube_api.list_namespaced_event(namespace=namespace, field_selector=field_selector)
                     for event in events.items:
@@ -217,28 +217,57 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                             log.info(kube.verbose_event_format.format(event=event))
                             reported_events.add(event.metadata.uid)
             else:
-                log_pod_events = lambda:None
+                log_pod_events = lambda *names:None
 
             # start pod and wait for it to come up
-            with declare_subcommand("starting pod") as subcommand:
-                log.info(f"starting pod {podname} to run {command_name}")
-                resp = kube_api.create_namespaced_pod(body=pod_manifest, namespace=namespace)
-                log.debug(f"create_namespaced_pod({podname}): {resp}")
-                pod_created = resp
+            if dask_job_spec is None:
+                with declare_subcommand("starting pod") as subcommand:
+                    log.info(f"starting pod {podname} to run {command_name}")
+                    resp = kube_api.create_namespaced_pod(body=pod_manifest, namespace=namespace)
+                    log.debug(f"create_namespaced_pod({podname}): {resp}")
+                    pod_created = resp
 
-                while True:
-                    update_status()
-                    resp = kube_api.read_namespaced_pod_status(name=podname, namespace=namespace)
-                    log.debug(f"read_namespaced_pod_status({podname}): {resp.status}")
-                    phase = resp.status.phase
-                    if phase == 'Running':
-                        break
-                    subcommand.update_status(f"phase: {phase}")
-                    log_pod_events()
-                    time.sleep(1)
-                log.info(f"  pod started after {elapsed()}")
-                # resp = kube_api.read_namespaced_pod(name=podname, namespace=namespace)
-                # log.info(f"  read_namespaced_pod {resp}")
+                    while True:
+                        update_status()
+                        resp = kube_api.read_namespaced_pod_status(name=podname, namespace=namespace)
+                        log.debug(f"read_namespaced_pod_status({podname}): {resp.status}")
+                        phase = resp.status.phase
+                        if phase == 'Running':
+                            break
+                        subcommand.update_status(f"phase: {phase}")
+                        log_pod_events(podname)
+                        time.sleep(1)
+            # else dask job
+            else:
+                with declare_subcommand("starting dask job") as subcommand:
+                    log.info(f"starting dask job {dask_job_name} to run {command_name}")
+                    dask_job_spec[0]["spec"]["job"]["spec"] = pod_spec
+                    dask_job_spec[0]["spec"]["job"]["metadata"] = dict(name=podname)
+                    group = 'kubernetes.dask.org'  # the CRD's group name
+                    version = 'v1'  # the CRD's version
+                    plural = 'daskjobs'  # the plural name of the CRD
+                    resp = custom_obj_api.create_namespaced_custom_object(group, version, namespace, plural, dask_job_spec[0])
+                    log.debug(f"create_namespaced_custom_object({dask_job_name}): {resp}")
+                    dask_job_created = resp
+                    job_status = None
+
+                    while job_status != 'Running':
+                        update_status()
+                        resp = custom_obj_api.get_namespaced_custom_object_status(group, version, namespace, plural, 
+                                                                                name=dask_job_name)
+                        job_status = 'status' in resp and resp['status']['jobStatus'] 
+                        rich.print(resp)
+                        subcommand.update_status(f"status: {job_status}")
+                        if job_status == 'Running':
+                            podname = resp['status']['jobRunnerPodName']
+                            log.info(f"job running as pod {podname}")
+
+                        log_pod_events(podname, dask_job_name)
+                        time.sleep(1)
+
+            log.info(f"  pod started after {elapsed()}")
+            # resp = kube_api.read_namespaced_pod(name=podname, namespace=namespace)
+            # log.info(f"  read_namespaced_pod {resp}")
 
             def run_pod_command(command, cmdname, input=None, wrangler=None):
                 if type(command) is str:
@@ -268,7 +297,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                             input = None
                         else:
                             break
-                    log_pod_events()
+                    log_pod_events(podname)
 
                 retcode = resp.returncode
                 resp.close()
@@ -312,7 +341,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
             log.info(f"running {command_name} in pod {podname}")
             with declare_subcommand(os.path.basename(command_name)):
                 retcode = run_pod_command(args, command_name, wrangler=cabstat.apply_wranglers)
-            log_pod_events()
+            log_pod_events(podname)
 
             # check if output marked it as a fail
             if cabstat.success is False:
@@ -349,12 +378,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
         # cleanup
         finally:
-            if cluster and not kube.dask_cluster.persist:
-                update_status()
-                log.info(f"stopping dask cluster {cluster_name}")
-                log.info(f"cluster logs: {cluster.get_logs()}")
-                cluster.close()
-            if podname and pod_created:
+            if podname and pod_created or dask_job_created:
                 try:
                     update_status()
                     log.info(f"deleting pod {podname}")
@@ -365,12 +389,22 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                     #     log.debug(f"read_namespaced_pod({podname}): {resp}")
                     #     log.info(f"  pod phase is {resp.status.phase} after {elapsed()}")
                     #     time.sleep(.5)
-                    log_pod_events()
+                    log_pod_events(podname)
                 except ApiException as exc:
                     body = json.loads(exc.body)
                     log_exception(StimelaCabRuntimeError(f"kubernetes API error while deleting pod {podname}", (exc, body)), severity="warning")
                 except Exception as exc:
                     log_exception(StimelaCabRuntimeError(f"kubernetes API error while deleting pod {podname}: {exc}"), severity="warning")
+            if dask_job_created:
+                try:
+                    update_status()
+                    log.info(f"deleting dask job {dask_job_name}")
+                    custom_obj_api.delete_namespaced_custom_object(group, version, namespace, plural, dask_job_name)
+                except ApiException as exc:
+                    body = json.loads(exc.body)
+                    log_exception(StimelaCabRuntimeError(f"kubernetes API error while deleting dask job {dask_job_name}", (exc, body)), severity="warning")
+                except Exception as exc:
+                    log_exception(StimelaCabRuntimeError(f"kubernetes API error while deleting dask job {dask_job_name}: {exc}"), severity="warning")
 
 
 # kubectl -n rarg get pods -A
