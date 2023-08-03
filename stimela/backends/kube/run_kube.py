@@ -175,28 +175,28 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
     with declare_subtask(f"{os.path.basename(command_name)}:kube"):
         try:
-            username = getpass.getuser() 
+            username = getpass.getuser()
             podname = username + "--" + fqname.replace(".", "--").replace("_", "--") + "--" + uuid.uuid4().hex
             image_name = resolve_image_name(backend, cab.image)
             log.info(f"using image {image_name}")
 
             pod_labels = dict(stimela_job=podname, user=username, stimela_fqname=fqname, stimela_cab=cab.name)
 
-            # depending on whether or not a dask cluster is configured, we do either a DaskJob or a regular pod 
+            # depending on whether or not a dask cluster is configured, we do either a DaskJob or a regular pod
             if kube.dask_cluster and kube.dask_cluster.num_workers:
                 log.info(f"defining dask job with a cluster of {kube.dask_cluster.num_workers} workers")
 
                 from . import daskjob
                 dask_job_name = f"dj-{secrets.token_hex(4)}"
                 dask_job_spec = daskjob.render(OmegaConf.create(dict(
-                    job_name=dask_job_name, 
+                    job_name=dask_job_name,
                     labels=pod_labels,
                     namespace=namespace,
                     image=image_name,
                     nworkers=kube.dask_cluster.num_workers,
                     threads_per_worker=kube.dask_cluster.threads_per_worker,
                     cmdline=["/bin/sh", "-c", "while true;do date;sleep 5; done"],
-                    service_account=None,
+                    service_account="dask-runner",
                     mount_file=None,
                     volume=[f"{name}:{path}" for name, path in kube.volumes.items()]
                 )))
@@ -249,7 +249,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                 value = os.path.expanduser(value)
                 pod_manifest['spec']['containers'][0]['env'].append(dict(name=name, value=value))
             if dask_job_spec:
-                pod_manifest['spec']['containers'][0]['env'].append(dict(name="DASK_SCHEDULER_ADDRESS", 
+                pod_manifest['spec']['containers'][0]['env'].append(dict(name="DASK_SCHEDULER_ADDRESS",
                                                                         value=f"tcp://{dask_job_name}-scheduler.{namespace}.svc.cluster.local:8786"))
 
             # add local mounts
@@ -293,7 +293,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                 pod_manifest['spec']['containers'][0]['volumeMounts'].append(dict(name=volume_name, mountPath=path))
 
             # set up a function to log events -- seems to be the only way to detect image pull errors
-            label_selector = f"stimela_job={podname}" 
+            label_selector = f"stimela_job={podname}"
             reported_events = set()
             def log_pod_events():
                 pods = kube_api.list_namespaced_pod(namespace=namespace, label_selector=label_selector)
