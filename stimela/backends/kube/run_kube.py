@@ -176,7 +176,11 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     with declare_subtask(f"{os.path.basename(command_name)}:kube"):
         try:
             username = getpass.getuser()
-            podname = username + "--" + fqname.replace(".", "--").replace("_", "--") + "--" + uuid.uuid4().hex
+            token_hex = secrets.token_hex(4)
+            # we do not know how long this is ging to be so truncate to 50 char
+            tmp_name = username + "--" + fqname.replace(".", "--").replace("_", "--")
+            podname = tmp_name[0:50] + "--" + token_hex
+
             image_name = resolve_image_name(backend, cab.image)
             log.info(f"using image {image_name}")
 
@@ -187,7 +191,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                 log.info(f"defining dask job with a cluster of {kube.dask_cluster.num_workers} workers")
 
                 from . import daskjob
-                dask_job_name = f"dj-{secrets.token_hex(4)}"
+                dask_job_name = f"dj-{token_hex}"
                 dask_job_spec = daskjob.render(OmegaConf.create(dict(
                     job_name=dask_job_name,
                     labels=pod_labels,
