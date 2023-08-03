@@ -117,9 +117,9 @@ def nested_schema_to_dataclass(nested: Dict[str, Dict], class_name: str, bases=(
 
 _atomic_types = dict(bool=bool, str=str, int=int, float=float)
 
-def _validate_list(text: str, element_type, element_type_name, default=[]):
+def _validate_list(text: str, element_type, schema):
     if not text:
-        return default
+        return schema.default
     if text == "[]":
         return []
     if text[0] == "[" and text[-1] == "]":
@@ -127,7 +127,7 @@ def _validate_list(text: str, element_type, element_type_name, default=[]):
     try:
         return [element_type(x) for x in text.split(",")]
     except ValueError:
-        raise click.BadParameter(f"can't convert list element to type '{element_type_name}'")
+        raise click.BadParameter(f"can't convert to '{schema.dtype}'")
 
 def clickify_parameters(schemas: Dict[str, Any]):
 
@@ -156,8 +156,7 @@ def clickify_parameters(schemas: Dict[str, Any]):
                     elem_type_name = match.group(1)
                     # convert "x" to type object -- unknown element types will get treated as a string
                     elem_type = _atomic_types.get(elem_type_name, str)
-                    validator = lambda ctx, param, value: _validate_list(value, element_type=elem_type, 
-                                                                         element_type_name=elem_type_name, default=schema.default)
+                    validator = lambda ctx, param, value: _validate_list(value, element_type=elem_type, schema=schema)
                 # anything else will be just a string
                 dtype = str
 
