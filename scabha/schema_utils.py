@@ -156,7 +156,7 @@ def clickify_parameters(schemas: Dict[str, Any]):
                     elem_type_name = match.group(1)
                     # convert "x" to type object -- unknown element types will get treated as a string
                     elem_type = _atomic_types.get(elem_type_name, str)
-                    validator = lambda ctx, param, value: _validate_list(value, element_type=elem_type, schema=schema)
+                    validator = lambda ctx, param, value, etype=elem_type, schema=schema: _validate_list(value, element_type=etype, schema=schema)
                 # anything else will be just a string
                 dtype = str
 
