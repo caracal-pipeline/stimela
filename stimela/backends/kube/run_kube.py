@@ -236,7 +236,9 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                         ),
                         volumeMounts = []
                 )],
-                volumes = []
+                volumes = [],
+                serviceAccountName = 'dask-runner',
+                automountServiceAccountToken = True
             )
 
             # apply pod specification
