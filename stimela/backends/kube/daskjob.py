@@ -177,6 +177,7 @@ def daskjob_template(args):
                                         "$(DASK_WORKER_NAME)",
                                         "--nworkers", '1',
                                         "--nthreads", str(args.threads_per_worker),
+                                        "--memory-limit", str(args.memory_limit),
                                         "$(DASK_SCHEDULER_ADDRESS)",
                                     ],
                                     "env": [
