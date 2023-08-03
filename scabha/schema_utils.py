@@ -1,3 +1,4 @@
+import re
 import click
 from scabha.exceptions import SchemaError
 from .cargo import Parameter
@@ -114,6 +115,18 @@ def nested_schema_to_dataclass(nested: Dict[str, Dict], class_name: str, bases=(
     return make_dataclass(class_name, fields, bases=bases)
 
 
+_atomic_types = dict(bool=bool, str=str, int=int, float=float)
+
+def _validate_list(text: str, element_type, element_type_name):
+    if not text or text == "[]":
+        return []
+    if text[0] == "[" and text[-1] == "]":
+        text = text[1:-1]
+    try:
+        return [element_type(x) for x in text.split(",")]
+    except ValueError:
+        raise click.BadParameter(f"can't convert list element to type '{element_type_name}'")
+
 def clickify_parameters(schemas: Dict[str, Any]):
 
     decorator_chain = None
@@ -123,20 +136,25 @@ def clickify_parameters(schemas: Dict[str, Any]):
             name = name.replace("_", "-")
             optname = f"--{name}"
             dtype = schema.dtype
+            validator = None
 
-            # sort out option type
-            if dtype == "bool":
-                optname = f"{optname}/--no-{name}"
-                dtype = bool
-            elif dtype == "str":
-                dtype = str
-            elif dtype == "int":
-                dtype = int
-            elif dtype == "float":
-                dtype = float
+            # sort out option type. Atomic type?
+            if dtype in _atomic_types:
+                dtype = _atomic_types[dtype]
+                if dtype is bool:
+                    optname = f"{optname}/--no-{name}"
+            # file type?
             elif dtype in ("MS", "File", "Directory"):
                 dtype = click.Path(exists=(io is schemas.inputs))
             else:
+                match = re.fullmatch("List\[(.*)\]", dtype)
+                # List[x] type? Add validation callback to convert elements
+                if match:
+                    elem_type_name = match.group(1)
+                    # convert "x" to type object -- unknown element types will get treated as a string
+                    elem_type = _atomic_types.get(elem_type_name, str)
+                    validator = lambda ctx, param, value: _validate_list(value, element_type=elem_type, element_type_name=elem_type_name)
+                # anything else will be just a string
                 dtype = str
 
             # choices?
@@ -149,13 +167,13 @@ def clickify_parameters(schemas: Dict[str, Any]):
                 optnames.append(f"-{schema.abbreviation}")
 
             if schema.default is UNSET:
-                deco = click.option(*optnames, type=dtype,
+                deco = click.option(*optnames, type=dtype, callback=validator,
                                     required=schema.required,
-                                    metavar=schema.metavar,help=schema.info)
+                                    metavar=schema.metavar, help=schema.info)
             else:
-                deco = click.option(*optnames, type=dtype,
+                deco = click.option(*optnames, type=dtype, callback=validator,
                                     default=schema.default, required=schema.required,
-                                    metavar=schema.metavar,help=schema.info)
+                                    metavar=schema.metavar, help=schema.info)
 
             if decorator_chain is None:
                 decorator_chain = deco
