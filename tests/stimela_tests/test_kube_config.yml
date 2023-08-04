@@ -20,7 +20,7 @@ opts:
       # memory: 64Gi
 
       ## some predefined pod specs
-      predefined_pod_types:
+      predefined_pod_specs:
         admin:
           nodeSelector:
             rarg/node-class: admin
@@ -34,7 +34,8 @@ opts:
             rarg/instance-type: m6i.4xlarge
 
       ## default pod type to use -- keys into predefined_pod_types
-      pod_type: admin 
+      job_pod:
+        type: admin 
 
 
 ## some cab-specific backend tweaks
@@ -42,6 +43,17 @@ cabs:
   breizorro:     
     backend:
       kube:
-        pod_type: thin
-        memory: 3.5Gi
+        job_pod:
+          type: thin
+          memory: 
+            limit: 3Gi
+        dask_cluster:
+          num_workers: 4
+          name: qc-test-cluster
+          threads_per_worker: 4
+          worker_pod:
+            type: thin
+          scheduler_pod:
+            type: admin
 
+  

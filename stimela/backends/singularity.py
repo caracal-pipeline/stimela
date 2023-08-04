@@ -64,20 +64,12 @@ def get_image_info(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.Sti
         name, path: tuple of docker image name, and path to singularity image on disk
     """
 
-    image_name = cab.flavour.get_image_name(cab, backend)
+    from stimela.backends import resolve_image_name
+    image_name = resolve_image_name(cab, backend)
 
     if not image_name:
         raise BackendError(f"cab '{cab.name}' (singularity backend): image name not defined")
     
-    # form up full image name (with registry and version)
-    if "/" not in image_name:
-        image_name = f"{backend.registry}/{image_name}"
-    if ":" not in image_name:
-        image_name = f"{image_name}:latest"
-
-    from stimela.backends import resolve_registry_name
-    image_name = resolve_registry_name(image_name)
-
     # convert to filename
     simg_name = image_name.replace("/", "-") + ".simg"
     simg_path = os.path.join(backend.singularity.image_dir, simg_name) 

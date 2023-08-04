@@ -1,4 +1,3 @@
-import os.path
 from dataclasses import dataclass
 from typing import Union, Dict, Any, List, Optional
 from enum import Enum
@@ -9,6 +8,8 @@ from scabha.basetypes import EmptyDictDefault
 from .singularity import SingularityBackendOptions
 from .kube import KubernetesBackendOptions
 from .native import NativeBackendOptions
+
+import stimela
 
 ## left as memo to self
 # Backend = Enum("Backend", "docker singularity podman kubernetes native", module=__name__)
@@ -73,14 +74,22 @@ class StimelaBackendOptions(object):
 StimelaBackendSchema = OmegaConf.structured(StimelaBackendOptions)
 
 
-def resolve_registry_name(backend: StimelaBackendOptions, image_name: str):
+def resolve_image_name(backend: StimelaBackendOptions, image: 'stimela.kitchen.Cab.ImageInfo', default_image: str = None):
     """
     Resolves image name -- applies override registries, if any exist
     """
-    for src, dest in backend.override_registries.items():
-        if image_name.startswith(src + "/"):
-            image_name = f"{dest}/{image_name[len(src)+1:]}"
-    return image_name
+    image_name = image.name or default_image
+    registry_name = image.registry
+    if image.registry == "DEFAULT" or not image.registry:
+        registry_name = backend.default_registry
+    elif registry_name == "LOCAL":
+        registry_name = ''
+    if registry_name in backend.override_registries:
+        registry_name = backend.override_registries[registry_name]
+    if registry_name:
+        return f"{registry_name}/{image_name}:{image.version}"
+    else:
+        return f"{image_name}:{image.version}"
 
 
 ## commenting out for now -- will need to fix when we reactive the kube backend (and have tests for it)

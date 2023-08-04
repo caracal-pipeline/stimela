@@ -1,6 +1,7 @@
 from dataclasses import dataclass
-import logging, time, json, datetime, yaml, os.path, uuid, pathlib
-
+import logging, time, json, datetime, yaml, os.path, uuid, pathlib, getpass, secrets
+import traceback
+from enum import Enum
 from typing import Dict, List, Optional, Any
 
 from omegaconf import OmegaConf, DictConfig, ListConfig
@@ -17,12 +18,96 @@ from stimela.stimelogging import declare_subcommand, declare_subtask, declare_su
 # needs pip install kubernetes dask-kubernetes
 
 import kubernetes
+from kubernetes.client import CustomObjectsApi
 from kubernetes.client.api import core_v1_api
 from kubernetes.client.rest import ApiException
 from kubernetes.stream import stream
-from dask_kubernetes import make_pod_spec, KubeCluster
+
+import rich
 
 _kube_client = _kube_config = None
+
+# dict of methods for converting an object to text format
+_InjectedFileFormatters = dict(
+    yaml = yaml.dump,
+    json = json.dumps,
+    txt = str
+)
+
+InjectedFileFormats = Enum("InjectedFileFormats", " ".join(_InjectedFileFormatters.keys()), module=__name__)
+
+@dataclass
+class KubernetesFileInjection(object):
+    format: InjectedFileFormats = "txt"
+    content: Any = ""
+
+@dataclass
+class KubernetesLocalMount(object):
+    path: str
+    dest: str = ""              # destination path -- same as local if empty
+    readonly: bool = False      # mount as readonly, but it doesn't work (yet?)
+    mkdir: bool = False         # create dir, if it is missing
+
+@dataclass
+class KubernetesPodLimits(object):
+    request: Optional[str] = None
+    limit: Optional[str] = None
+
+@dataclass
+class KubernetesPodSpec(object):
+    # selects a specific pod type from the defined set
+    type:           Optional[str] = None
+    # memory limit/requirement
+    memory:         Optional[KubernetesPodLimits] = None
+    cpu:            Optional[KubernetesPodLimits] = None
+    # arbitrary additional structure copied into the pod spec
+    custom_pod_spec:  Dict[str, Any] = EmptyDictDefault()
+
+
+def _apply_pod_spec(kps, pod_spec: Dict[str, Any], predefined_pod_specs: Dict[str, Dict[str, Any]], log: logging.Logger,  kind: str) -> Dict[str, Any]:
+    """applies this pod spec, as long with any predefined specs"""
+    if kps:
+        # apply predefined types
+        if kps.type is not None:
+            log.info(f"selecting predefined pod type '{kps.type}' for {kind}")
+            predefined_pod_spec = predefined_pod_specs.get(kps.type)
+            if predefined_pod_spec is None:
+                raise StimelaCabRuntimeError(f"'{kps.type}' not found in predefined_pod_specs")
+        else:
+            predefined_pod_spec = {}
+        # apply custom type and merge
+        if predefined_pod_spec or kps.custom_pod_spec:
+            pod_spec = OmegaConf.to_container(OmegaConf.merge(pod_spec, predefined_pod_spec, kps.custom_pod_spec))
+
+        # add RAM resources
+        if kps.memory is not None:
+            res = pod_spec['containers'][0].setdefault('resources', {})
+            # good practice to set these equal
+            if kps.memory.request:
+                res.setdefault('requests', {})['memory'] = kps.memory.request or kps.memory.limit
+            if kps.memory.limit:
+                res.setdefault('limits', {})['memory'] = kps.memory.limit or kps.memory.request
+            log.info(f"setting {kind} memory resources to {res['limits']['memory']}")
+        if kps.cpu is not None:
+            res = pod_spec['containers'][0].setdefault('resources', {})
+            if kps.cpu.request:
+                res.setdefault('requests', {})['cpu'] = kps.cpu.request
+            if kps.cpu.limit:
+                res.setdefault('limits', {})['cpu'] = kps.cpu.limit
+            log.info(f"setting {kind} CPU resources to {res['limits']['cpu']}")
+
+    return pod_spec
+
+
+@dataclass
+class KubernetesDaskCluster(object):
+    capture_logs: bool = True
+    capture_logs_style: Optional[str] = "blue"
+    name: Optional[str] = None
+    num_workers: int = 0
+    threads_per_worker: int = 1
+    worker_pod: KubernetesPodSpec = KubernetesPodSpec()
+    scheduler_pod: KubernetesPodSpec = KubernetesPodSpec()
 
 def get_kube_api():
     global _kube_client
@@ -32,7 +117,8 @@ def get_kube_api():
         _kube_config = True
         kubernetes.config.load_kube_config()
 
-    return core_v1_api.CoreV1Api()
+    return core_v1_api.CoreV1Api(), CustomObjectsApi()
+
 
 
 def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
@@ -49,8 +135,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
         Any: return value (e.g. exit code) of content
     """
 
-    from . import _InjectedFileFormatters
-    from stimela.backends import resolve_registry_name
+    from stimela.backends import resolve_image_name
 
     if not cab.image:
         raise StimelaCabRuntimeError(f"kubernetes runner requires cab.image to be set")
@@ -68,8 +153,8 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
     command_name = cab.flavour.command_name
 
-    cluster = podname = cluster_name = None
-    kube_api = get_kube_api()
+    podname = None
+    kube_api, custom_obj_api = get_kube_api()
 
     start_time = datetime.datetime.now()
     def elapsed(since=None):
@@ -86,85 +171,95 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     numba_cache_dir = os.path.expanduser("~/.cache/numba")
     pathlib.Path(numba_cache_dir).mkdir(parents=True, exist_ok=True)
 
-    pod_created = None
+    pod_created = dask_job_created = None
 
     with declare_subtask(f"{os.path.basename(command_name)}:kube"):
         try:
-            podname = fqname.replace(".", "--").replace("_", "--") + "--" + uuid.uuid4().hex
-            image_name = resolve_registry_name(backend, str(cab.image))
+            username = getpass.getuser()
+            token_hex = secrets.token_hex(4)
+            # we do not know how long this is ging to be so truncate to 50 char
+            tmp_name = username + "--" + fqname.replace(".", "--").replace("_", "--")
+            podname = tmp_name[0:50] + "--" + token_hex
+
+            image_name = resolve_image_name(backend, cab.image)
             log.info(f"using image {image_name}")
 
-            if kube.dask_cluster.num_workers:
-                cluster_name = kube.dask_cluster.name
-                if kube.dask_cluster.persist:
-                    try:
-                        resp = kube_api.read_namespaced_service(name=cluster_name, namespace=namespace)
-                        cluster = True
-                        log.info(f"persistent dask cluster {cluster_name} appears to be up")
-                    except ApiException as exc:
-                        log.info(f"persistent dask cluster {cluster_name} is not up")
+            pod_labels = dict(stimela_job=podname, user=username, stimela_fqname=fqname, stimela_cab=cab.name)
 
-                if cluster is None:
-                    with declare_subcommand("starting dask cluster"):
-                        log.info(f"starting dask cluster {cluster_name} for {command_name}")
-                        pod_spec = make_pod_spec(image=image_name,
-                                                cpu_limit=kube.dask_cluster.cpu_limit,
-                                                memory_limit=kube.dask_cluster.memory_limit,
-                                                threads_per_worker=kube.dask_cluster.num_workers,
-                                                extra_pod_config=kube.dask_cluster.extra_pod_config)
+            # depending on whether or not a dask cluster is configured, we do either a DaskJob or a regular pod
+            if kube.dask_cluster and kube.dask_cluster.num_workers:
+                log.info(f"defining dask job with a cluster of {kube.dask_cluster.num_workers} workers")
 
-                        cluster = KubeCluster(pod_spec, name=cluster_name, namespace=namespace, shutdown_on_close=not kube.dask_cluster.persist)
-                        update_status()
-                        cluster.scale(kube.dask_cluster.num_workers)
-                        update_status()
+                from . import daskjob
+                dask_job_name = f"dj-{token_hex}"
+                dask_job_spec = daskjob.render(OmegaConf.create(dict(
+                    job_name=dask_job_name,
+                    labels=pod_labels,
+                    namespace=namespace,
+                    image=image_name,
+                    memory_limit=kube.dask_cluster.worker_pod.memory.limit,
+                    nworkers=kube.dask_cluster.num_workers,
+                    threads_per_worker=kube.dask_cluster.threads_per_worker,
+                    cmdline=["/bin/sh", "-c", "while true;do date;sleep 5; done"],
+                    service_account="dask-runner",
+                    mount_file=None,
+                    volume=[f"{name}:{path}" for name, path in kube.volumes.items()]
+                )))
 
+                # apply pod type specifications
+                if kube.dask_cluster.worker_pod:
+                    dask_job_spec[0]["spec"]["cluster"]["spec"]["worker"]["spec"] = \
+                        _apply_pod_spec(kube.dask_cluster.worker_pod, dask_job_spec[0]["spec"]["cluster"]["spec"]["worker"]["spec"],
+                                                           kube.predefined_pod_specs, log, kind='worker')
+                if kube.dask_cluster.scheduler_pod:
+                    dask_job_spec[0]["spec"]["cluster"]["spec"]["scheduler"]["spec"] = \
+                        _apply_pod_spec(kube.dask_cluster.scheduler_pod, dask_job_spec[0]["spec"]["cluster"]["spec"]["scheduler"]["spec"],
+                                                           kube.predefined_pod_specs, log, kind='scheduler')
+
+            else:
+                dask_job_spec = dask_job_name = None
+
+            # form up normal pod spec -- either to be run directly, or injected into the dask job
             pod_manifest = dict(
                 apiVersion  =  'v1',
                 kind        =  'Pod',
-                metadata    = dict(name=podname),
+                metadata    = dict(name=podname, labels=pod_labels),
             )
+
             # form up pod spec
+            uid = os.getuid() if kube.uid is None else kube.uid
+            gid = os.getgod() if kube.gid is None else kube.gid
             pod_spec = dict(
                 containers = [dict(
                         image   = image_name,
-                        imagePullPolicy = 'IfNotPresent',
+                        imagePullPolicy = 'Always' if kube.always_pull_images else 'IfNotPresent',
                         name    = podname,
                         args    = ["/bin/sh", "-c", "while true;do date;sleep 5; done"],
                         env     = [],
                         securityContext = dict(
-                                runAsNonRoot = True,
-                                runAsUser = os.getuid() if kube.uid is None else kube.uid,
-                                runAsGroup = os.getgid() if kube.gid is None else kube.gid
+                                runAsNonRoot = uid!=0,
+                                runAsUser = uid,
+                                runAsGroup = gid,
                         ),
                         volumeMounts = []
                 )],
-                volumes = []
+                volumes = [],
+                serviceAccountName = 'dask-runner',
+                automountServiceAccountToken = True
             )
-            # apply predefined types
-            if kube.pod_type is not None:
-                log.info(f"selecting predefined pod type '{kube.pod_type}'")
-                predefined_pod_spec = kube.predefined_pod_types.get(kube.pod_type)
-                if predefined_pod_spec is None:
-                    raise StimelaCabRuntimeError(f"backend.kube.pod_type={kube.pod_type} not found in predefined_pod_types")
-            else:
-                predefined_pod_spec = {}
-            # apply custom type and merge
-            if predefined_pod_spec or kube.custom_pod_spec: 
-                pod_spec = OmegaConf.to_container(OmegaConf.merge(pod_spec, predefined_pod_spec, kube.custom_pod_spec)) 
-            
-            pod_manifest['spec'] = pod_spec
 
-            # add RAM resources
-            if kube.memory is not None:
-                res = pod_manifest['spec']['containers'][0].setdefault('resources', {})
-                res.setdefault('requests', {})['memory'] = kube.memory
-                res.setdefault('limits', {})['memory'] = kube.memory
-                log.info(f"setting memory request/limit to {kube.memory}")
+            # apply pod specification
+            pod_spec = _apply_pod_spec(kube.job_pod, pod_spec, kube.predefined_pod_specs, log, kind='job')
+
+            pod_manifest['spec'] = pod_spec
 
             # add runtime env settings
             for name, value in kube.env.items():
                 value = os.path.expanduser(value)
                 pod_manifest['spec']['containers'][0]['env'].append(dict(name=name, value=value))
+            if dask_job_spec:
+                pod_manifest['spec']['containers'][0]['env'].append(dict(name="DASK_SCHEDULER_ADDRESS",
+                                                                        value=f"tcp://{dask_job_name}-scheduler.{namespace}.svc.cluster.local:8786"))
 
             # add local mounts
             def add_local_mount(name, path, dest, readonly):
@@ -206,39 +301,104 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                     ))
                 pod_manifest['spec']['containers'][0]['volumeMounts'].append(dict(name=volume_name, mountPath=path))
 
-            if kube.verbose_events > 0:
-                reported_events = set()
-                field_selector = f"involvedObject.name={podname}"
-                def log_pod_events():
+            # set up a function to log events -- seems to be the only way to detect image pull errors
+            label_selector = f"stimela_job={podname}"
+            reported_events = set()
+            def log_pod_events():
+                pods = kube_api.list_namespaced_pod(namespace=namespace, label_selector=label_selector)
+                for pod in pods.items:
                     # get new events
-                    events = kube_api.list_namespaced_event(namespace=namespace, field_selector=field_selector)
+                    events = kube_api.list_namespaced_event(namespace=namespace, field_selector=f"involvedObject.kind=Pod,involvedObject.name={pod.metadata.name}")
                     for event in events.items:
                         if event.metadata.uid not in reported_events:
-                            log.info(kube.verbose_event_format.format(event=event))
+                            if kube.verbose_events:
+                                log.info(kube.verbose_event_format.format(event=event))
                             reported_events.add(event.metadata.uid)
-            else:
-                log_pod_events = lambda:None
+                            if event.message.startswith("Error: ErrImagePull"):
+                                raise StimelaCabRuntimeError(f"kubernetes failed to pull the image '{image_name}'. Preceding log messages may contain extra information.")
 
             # start pod and wait for it to come up
-            with declare_subcommand("starting pod") as subcommand:
-                log.info(f"starting pod {podname} to run {command_name}")
-                resp = kube_api.create_namespaced_pod(body=pod_manifest, namespace=namespace)
-                log.debug(f"create_namespaced_pod({podname}): {resp}")
-                pod_created = resp
+            aux_pod_threads = {}
+            if dask_job_spec is None:
+                with declare_subcommand("starting pod") as subcommand:
+                    log.info(f"starting pod {podname} to run {command_name}")
+                    resp = kube_api.create_namespaced_pod(body=pod_manifest, namespace=namespace)
+                    log.debug(f"create_namespaced_pod({podname}): {resp}")
+                    pod_created = resp
 
-                while True:
-                    update_status()
-                    resp = kube_api.read_namespaced_pod_status(name=podname, namespace=namespace)
-                    log.debug(f"read_namespaced_pod_status({podname}): {resp.status}")
-                    phase = resp.status.phase
-                    if phase == 'Running':
-                        break
-                    subcommand.update_status(f"phase: {phase}")
+                    while True:
+                        update_status()
+                        resp = kube_api.read_namespaced_pod_status(name=podname, namespace=namespace)
+                        log.debug(f"read_namespaced_pod_status({podname}): {resp.status}")
+                        phase = resp.status.phase
+                        if phase == 'Running':
+                            break
+                        subcommand.update_status(f"phase: {phase}")
+                        log_pod_events()
+                        time.sleep(1)
+            # else dask job
+            else:
+                with declare_subcommand("starting dask job") as subcommand:
+                    log.info(f"starting dask job {dask_job_name} to run {command_name}")
+                    dask_job_spec[0]["spec"]["job"]["spec"] = pod_spec
+                    dask_job_spec[0]["spec"]["job"]["metadata"] = dict(name=podname)
+                    group = 'kubernetes.dask.org'  # the CRD's group name
+                    version = 'v1'  # the CRD's version
+                    plural = 'daskjobs'  # the plural name of the CRD
+                    resp = custom_obj_api.create_namespaced_custom_object(group, version, namespace, plural, dask_job_spec[0])
+                    log.debug(f"create_namespaced_custom_object({dask_job_name}): {resp}")
+                    dask_job_created = resp
+                    job_status = None
                     log_pod_events()
-                    time.sleep(1)
-                log.info(f"  pod started after {elapsed()}")
-                # resp = kube_api.read_namespaced_pod(name=podname, namespace=namespace)
-                # log.info(f"  read_namespaced_pod {resp}")
+
+                    while job_status != 'Running':
+                        update_status()
+                        resp = custom_obj_api.get_namespaced_custom_object_status(group, version, namespace, plural,
+                                                                                name=dask_job_name)
+                        job_status = 'status' in resp and resp['status']['jobStatus']
+                        # rich.print(resp)
+                        subcommand.update_status(f"status: {job_status}")
+                        if job_status == 'Running':
+                            podname = resp['status']['jobRunnerPodName']
+                            log.info(f"job running as pod {podname}")
+
+                        log_pod_events()
+                        time.sleep(1)
+
+                    def print_logs(name):
+                        style = kube.dask_cluster.capture_logs_style
+                        try:
+                            dispatch_to_log(log, f"started logging thread", command_name, "stdout", prefix=f"{name}#", style=style, output_wrangler=None)
+                            # rich.print(f"[yellow]started log thread for {name}[/yellow]")
+                            # Open a stream to the logs
+                            stream = None
+                            while stream is None:
+                                try:
+                                    stream = kube_api.read_namespaced_pod_log(name=name, namespace=namespace, _preload_content=False)
+                                except ApiException as exc:
+                                    # rich.print(f"[yellow]error starting stream for {name}, sleeping[/yellow]")
+                                    time.sleep(2)
+                            for line in stream:
+                                dispatch_to_log(log, line.decode().rstrip(), command_name, "stdout", prefix=f"{name}#", style=style, output_wrangler=None)
+                            stream.close()
+                        finally:
+                            dispatch_to_log(log, f"exiting logging thread", command_name, "stdout", prefix=f"{name}#", style=style, output_wrangler=None)
+                        # rich.print(f"[yellow]stopped log thread for {name}[/yellow]")
+
+                    # get other pods associated with DaskJob
+                    if kube.dask_cluster.capture_logs:
+                        pods = kube_api.list_namespaced_pod(namespace=namespace, label_selector=label_selector)
+                        for pod in pods.items:
+                            # get new events
+                            name = pod.metadata.name
+                            if name != podname:
+                                import threading
+                                aux_pod_threads[name] = threading.Thread(target=print_logs, kwargs=dict(name=name))
+                                aux_pod_threads[name].start()
+
+            log.info(f"  pod started after {elapsed()}")
+            # resp = kube_api.read_namespaced_pod(name=podname, namespace=namespace)
+            # log.info(f"  read_namespaced_pod {resp}")
 
             def run_pod_command(command, cmdname, input=None, wrangler=None):
                 if type(command) is str:
@@ -335,6 +495,8 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
         except ApiException as exc:
             if exc.body:
                 exc = (exc, json.loads(exc.body))
+            import traceback
+            traceback.print_exc()
             log.error(f"kubernetes invocation of {command_name} failed with an ApiException after {elapsed()}")
             raise StimelaCabRuntimeError("kubernetes API error", exc)
         # this drops out as a normal error response
@@ -349,28 +511,67 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
         # cleanup
         finally:
-            if cluster and not kube.dask_cluster.persist:
-                update_status()
-                log.info(f"stopping dask cluster {cluster_name}")
-                log.info(f"cluster logs: {cluster.get_logs()}")
-                cluster.close()
-            if podname and pod_created:
-                try:
-                    update_status()
-                    log.info(f"deleting pod {podname}")
-                    resp = kube_api.delete_namespaced_pod(name=podname, namespace=namespace)
-                    log.debug(f"delete_namespaced_pod({podname}): {resp}")
-                    # while True:
-                    #     resp = kube_api.read_namespaced_pod(name=podname, namespace=namespace)
-                    #     log.debug(f"read_namespaced_pod({podname}): {resp}")
-                    #     log.info(f"  pod phase is {resp.status.phase} after {elapsed()}")
-                    #     time.sleep(.5)
-                    log_pod_events()
-                except ApiException as exc:
-                    body = json.loads(exc.body)
-                    log_exception(StimelaCabRuntimeError(f"kubernetes API error while deleting pod {podname}", (exc, body)), severity="warning")
-                except Exception as exc:
-                    log_exception(StimelaCabRuntimeError(f"kubernetes API error while deleting pod {podname}: {exc}"), severity="warning")
+            try:
+                if podname and pod_created: # or dask_job_created:
+                    try:
+                        update_status()
+                        log.info(f"deleting pod {podname}")
+                        resp = kube_api.delete_namespaced_pod(name=podname, namespace=namespace)
+                        log.debug(f"delete_namespaced_pod({podname}): {resp}")
+                        # while True:
+                        #     resp = kube_api.read_namespaced_pod(name=podname, namespace=namespace)
+                        #     log.debug(f"read_namespaced_pod({podname}): {resp}")
+                        #     log.info(f"  pod phase is {resp.status.phase} after {elapsed()}")
+                        #     time.sleep(.5)
+                        log_pod_events()
+                    except ApiException as exc:
+                        body = json.loads(exc.body)
+                        log_exception(StimelaCabRuntimeError(f"kubernetes API error while deleting pod {podname}", (exc, body)), severity="warning")
+                    except Exception as exc:
+                        log_exception(StimelaCabRuntimeError(f"kubernetes API error while deleting pod {podname}: {exc}"), severity="warning")
+                if dask_job_created:
+                    try:
+                        update_status()
+                        log.info(f"deleting dask job {dask_job_name}")
+                        custom_obj_api.delete_namespaced_custom_object(group, version, namespace, plural, dask_job_name)
+                    except ApiException as exc:
+                        body = json.loads(exc.body)
+                        log_exception(StimelaCabRuntimeError(f"kubernetes API error while deleting dask job {dask_job_name}", (exc, body)), severity="warning")
+                    except Exception as exc:
+                        log_exception(StimelaCabRuntimeError(f"kubernetes API error while deleting dask job {dask_job_name}: {exc}"), severity="warning")
+                # wait for aux pod threads
+                cleanup_time = datetime.datetime.now()
+                def cleanup_elapsed():
+                    return (datetime.datetime.now() - cleanup_time).total_seconds()
+                while aux_pod_threads and cleanup_elapsed() < 5:
+                    for name, thread in list(aux_pod_threads.items()):
+                        if thread.is_alive():
+                            log.info(f"rejoining log thread for {name}")
+                            thread.join(0.01)
+                        if thread.is_alive():
+                            log.info(f"logging thread alive, trying to delete auxuliary pod {name}")
+                            try:
+                                kube_api.delete_namespaced_pod(name=name, namespace=namespace)
+                            except ApiException as exc:
+                                log.warning(f"deleting pod {name} failed: {exc}")
+                                pass
+                        if not thread.is_alive():
+                            del aux_pod_threads[name]
+                    if aux_pod_threads:
+                        log.warning(f"{len(aux_pod_threads)} logging threads for sub-pods still alive, sleeping for a bit")
+                        time.sleep(2)
+                if aux_pod_threads:
+                    log.info(f"{len(aux_pod_threads)} logging threads for sub-pods still alive after {cleanup_elapsed():.1}s, giving up on the cleanup")
+            except KeyboardInterrupt:
+                log.error(f"kubernetes cleanup interrupted with Ctrl+C after {elapsed()}")
+                raise StimelaCabRuntimeError(f"{command_name} cleanup interrupted with Ctrl+C after {elapsed()}")
+            except Exception as exc:
+                log.error(f"kubernetes cleanup failed after {elapsed()}")
+                import traceback
+                traceback.print_exc()
+                raise StimelaCabRuntimeError("kubernetes backend clanup error", exc)
+
+
 
 
 # kubectl -n rarg get pods -A

@@ -31,5 +31,6 @@ class BinaryFlavour(_BaseFlavour):
         return args
     
     def get_image_name(self, cab: Cab, backend: 'stimela.backend.StimelaBackendOptions'):
-        return cab.image.to_string(backend.default_registry)        
+        from stimela.backends import resolve_image_name
+        return resolve_image_name(cab.image)        
 

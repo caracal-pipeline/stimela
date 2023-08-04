@@ -23,17 +23,17 @@ def get_stimela_logger():
         return None
 
 
-def dispatch_to_log(log, line, command_name, stream_name, output_wrangler):
+def dispatch_to_log(log, line, command_name, stream_name, output_wrangler, style=None, prefix=None):
     # dispatch output to log
     extra = dict()
     # severity = logging.WARNING if fobj is proc.stderr else logging.INFO
     severity = logging.INFO
-    if stream_name == 'stdout':
-        extra['style'] = 'dim'
-        extra['prefix'] = "#"
-    else:
-        extra['style'] = 'white'
-        extra['prefix'] = "#"
+    if style is not None:
+        extra['style'] = style
+    if prefix is not None:
+        extra['prefix'] = prefix
+    extra.setdefault('style', 'dim' if stream_name == 'stdout' else 'white')
+    extra.setdefault('prefix', "#")
     # feed through wrangler to adjust severity and content
     if output_wrangler is not None:
         line, severity = output_wrangler(escape(line), severity)

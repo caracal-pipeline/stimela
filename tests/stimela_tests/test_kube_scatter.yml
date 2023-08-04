@@ -30,4 +30,5 @@ recipe:
         # just to show that you can tweak the backend settings per step
         backend:
           kube:
-            pod_type: thin
+            job_pod:
+              type: thin
