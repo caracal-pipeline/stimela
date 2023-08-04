@@ -227,6 +227,8 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
             )
 
             # form up pod spec
+            uid = os.getuid() if kube.uid is None else kube.uid
+            gid = os.getgod() if kube.gid is None else kube.gid
             pod_spec = dict(
                 containers = [dict(
                         image   = image_name,
@@ -235,9 +237,9 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                         args    = ["/bin/sh", "-c", "while true;do date;sleep 5; done"],
                         env     = [],
                         securityContext = dict(
-                                runAsNonRoot = True,
-                                runAsUser = os.getuid() if kube.uid is None else kube.uid,
-                                runAsGroup = os.getgid() if kube.gid is None else kube.gid
+                                runAsNonRoot = uid!=0,
+                                runAsUser = uid,
+                                runAsGroup = gid,
                         ),
                         volumeMounts = []
                 )],
