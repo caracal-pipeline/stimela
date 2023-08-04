@@ -474,7 +474,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                 if kube.dir:
                     log.warning(f"  $ cd {kube.dir}")
                 log.warning(f"  $ {' '.join(args)}")
-                args = ["bash", "-c", "while sleep 2; do echo debug mode; done"]
+                args = ["bash", "-c", "while sleep 600; do echo debug mode still active; done"]
                 log.warning("press Ctrl+C when done debugging")
             else:
                 # do we need to chdir
