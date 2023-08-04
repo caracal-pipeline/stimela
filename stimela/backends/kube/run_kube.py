@@ -465,11 +465,23 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                         else:
                             log.info(f"pre-command successful after {elapsed()}")
 
-            # do we need to chdir
-            if kube.dir:
-                args = ["python", "-c", f"import os,sys; os.chdir('{kube.dir}'); os.execlp('{args[0]}', *sys.argv[1:])"] + list(args)
 
-            log.info(f"running {command_name} in pod {podname}")
+            if kube.debug_mode:
+                log.warning("kube.debug_mode enabled")
+                log.warning(f"to access the pod, run")
+                log.warning(f"  $ kubectl exec -it {podname} -- /bin/bash")
+                log.warning(f"your command line inside the pod is:")
+                if kube.dir:
+                    log.warning(f"  $ cd {kube.dir}")
+                log.warning(f"  $ {' '.join(args)}")
+                args = ["bash", "-c", "while sleep 2; do echo debug mode; done"]
+                log.warning("press Ctrl+C when done debugging")
+            else:
+                # do we need to chdir
+                if kube.dir:
+                    args = ["python", "-c", f"import os,sys; os.chdir('{kube.dir}'); os.execlp('{args[0]}', *sys.argv[1:])"] + list(args)
+                log.info(f"running {command_name} in pod {podname}")
+
             with declare_subcommand(os.path.basename(command_name)):
                 retcode = run_pod_command(args, command_name, wrangler=cabstat.apply_wranglers)
             log_pod_events()

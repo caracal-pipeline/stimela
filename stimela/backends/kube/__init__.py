@@ -43,6 +43,8 @@ class KubernetesBackendOptions(object):
 
     always_pull_images: bool = False                            # change to True to repull
 
+    debug_mode: bool = False                             # in debug mode, payload is not run
+
     job_pod:        KubernetesPodSpec = KubernetesPodSpec()
 
     # if >0, events will be collected and reported
