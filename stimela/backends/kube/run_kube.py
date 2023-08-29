@@ -17,11 +17,15 @@ from stimela.stimelogging import declare_subcommand, declare_subtask, declare_su
 
 # needs pip install kubernetes dask-kubernetes
 
-import kubernetes
-from kubernetes.client import CustomObjectsApi
-from kubernetes.client.api import core_v1_api
-from kubernetes.client.rest import ApiException
-from kubernetes.stream import stream
+try:
+    import kubernetes
+    from kubernetes.client import CustomObjectsApi
+    from kubernetes.client.api import core_v1_api
+    from kubernetes.client.rest import ApiException
+    from kubernetes.stream import stream
+except ImportError:
+    pass  # pesumably handled by disabling the backend in __init__
+
 
 import rich
 

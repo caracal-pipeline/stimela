@@ -65,7 +65,7 @@ def get_image_info(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.Sti
     """
 
     from stimela.backends import resolve_image_name
-    image_name = resolve_image_name(cab, backend)
+    image_name = resolve_image_name(backend, cab.image)
 
     if not image_name:
         raise BackendError(f"cab '{cab.name}' (singularity backend): image name not defined")
