@@ -108,6 +108,7 @@ class KubernetesDaskCluster(object):
     capture_logs: bool = True
     capture_logs_style: Optional[str] = "blue"
     name: Optional[str] = None
+    service_account: str = "compute-runner"
     num_workers: int = 0
     threads_per_worker: int = 1
     worker_pod: KubernetesPodSpec = KubernetesPodSpec()
@@ -202,7 +203,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                     nworkers=kube.dask_cluster.num_workers,
                     threads_per_worker=kube.dask_cluster.threads_per_worker,
                     cmdline=["/bin/sh", "-c", "while true;do date;sleep 5; done"],
-                    service_account="dask-runner",
+                    service_account=kube.service_account,
                     mount_file=None,
                     volume=[f"{name}:{path}" for name, path in kube.volumes.items()]
                 )))
@@ -245,7 +246,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                         volumeMounts = []
                 )],
                 volumes = [],
-                serviceAccountName = 'dask-runner',
+                serviceAccountName = kube.service_account,
                 automountServiceAccountToken = True
             )
 
