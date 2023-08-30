@@ -67,7 +67,7 @@ def get_image_info(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.Sti
     image_name = cab.flavour.get_image_name(cab, backend)
 
     if not image_name:
-        raise BackendError(f"cab '{cab.name}' (singularity backend): image name not defined")
+        raise BackendError(f"cab '{cab.name}' does not define an image")
     
     # convert to filename
     simg_name = image_name.replace("/", "-") + ".simg"

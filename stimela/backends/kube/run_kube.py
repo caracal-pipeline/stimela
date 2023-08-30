@@ -9,7 +9,7 @@ from scabha.basetypes import EmptyDictDefault, EmptyListDefault
 
 import stimela
 from stimela.utils.xrun_asyncio import dispatch_to_log
-from stimela.exceptions import StimelaCabParameterError, StimelaCabRuntimeError, CabValidationError
+from stimela.exceptions import StimelaCabParameterError, StimelaCabRuntimeError, BackendError
 from stimela.stimelogging import log_exception
 #from stimela.backends import resolve_required_mounts
 # these are used to drive the status bar
@@ -184,6 +184,9 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
             podname = tmp_name[0:50] + "--" + token_hex
 
             image_name = cab.flavour.get_image_name(cab, backend)
+            if not image_name:
+                raise BackendError(f"cab '{cab.name}' does not define an image")
+            
             log.info(f"using image {image_name}")
 
             pod_labels = dict(stimela_job=podname, user=username, stimela_fqname=fqname, stimela_cab=cab.name)
