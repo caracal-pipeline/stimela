@@ -18,7 +18,6 @@ from scabha import configuratt
 from scabha.cargo import ListOrString, EmptyDictDefault, EmptyListDefault
 from stimela.backends import StimelaBackendOptions
 
-
 @dataclass 
 class StimelaLogConfig(object):
     enable: bool = True                          
@@ -146,7 +145,7 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
     extra_cache_keys = list(extra_dotlist) + configuratt.PATH
 
     STIMELA_DIR = os.path.dirname(stimela.__file__)
-    from stimela.kitchen.cab import Cab
+    from stimela.kitchen.cab import Cab, ImageInfo
 
     global StimelaConfigSchema, StimelaLibrary, StimelaConfig
     @dataclass
@@ -159,7 +158,7 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
 
     @dataclass 
     class StimelaConfig:
-        images: Dict[str, str] = EmptyDictDefault()
+        images: Dict[str, ImageInfo] = EmptyDictDefault()
         lib: StimelaLibrary = StimelaLibrary()
         cabs: Dict[str, Cab] = EmptyDictDefault()
         opts: StimelaOptions = StimelaOptions()

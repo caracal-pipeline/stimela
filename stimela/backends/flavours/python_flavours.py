@@ -90,7 +90,7 @@ class PythonCallableFlavour(_CallableFlavour):
     def get_image_name(self, cab: Cab, backend: 'stimela.backend.StimelaBackendOptions'):
         from stimela import CONFIG
         from stimela.backends import resolve_image_name
-        return resolve_image_name(backend, cab.image, default_image=CONFIG.images['default-python'])
+        return resolve_image_name(backend, cab.image or CONFIG.images['default-python'])
 
     def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any], 
                       virtual_env: Optional[str]=None, check_executable: bool = True):
@@ -169,7 +169,7 @@ class PythonCodeFlavour(_BaseFlavour):
     def get_image_name(self, cab: Cab, backend: 'stimela.backend.StimelaBackendOptions'):
         from stimela import CONFIG
         from stimela.backends import resolve_image_name
-        return resolve_image_name(backend, cab.image, default_image=CONFIG.images['default-python'])
+        return resolve_image_name(backend, cab.image or CONFIG.images['default-python'])
 
     def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any], 
                       virtual_env: Optional[str]=None, check_executable: bool = True):

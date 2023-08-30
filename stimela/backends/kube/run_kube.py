@@ -138,9 +138,6 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     Returns:
         Any: return value (e.g. exit code) of content
     """
-
-    from stimela.backends import resolve_image_name
-
     if not cab.image:
         raise StimelaCabRuntimeError(f"kubernetes runner requires cab.image to be set")
 
@@ -185,7 +182,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
             tmp_name = username + "--" + fqname.replace(".", "--").replace("_", "--")
             podname = tmp_name[0:50] + "--" + token_hex
 
-            image_name = resolve_image_name(backend, cab.image)
+            image_name = cab.flavour.get_image_name(cab, backend)
             log.info(f"using image {image_name}")
 
             pod_labels = dict(stimela_job=podname, user=username, stimela_fqname=fqname, stimela_cab=cab.name)
