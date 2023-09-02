@@ -110,34 +110,30 @@ class TaskStatsDatum(object):
     num_samples: int    = 0
 
     def __post_init__(self):
-        self.extras = {}
+        self.extras = []
 
     def insert_extra_stats(self, **kw):
-        self.extras.update(**kw)
+        for name, value in kw.items():
+            self.extras.append(name)
+            setattr(self, name, value)
 
     def add(self, other: "TaskStatsDatum"):
-        for f in _taskstats_sample_names:
-            setattr(self, f, getattr(self, f) + getattr(other, f))
-        for name, value in other.extras.items():
-            if name in self.extras:
-                self.extras[name] += value
-            else:
-                self.extras[name] = value
+        for f in _taskstats_sample_names + other.extras:
+            if not hasattr(self, f):
+                self.extras.append(f)
+            setattr(self, f, getattr(self, f, 0) + getattr(other, f))
 
     def peak(self, other: "TaskStatsDatum"):
-        for f in _taskstats_sample_names:
-            setattr(self, f, max(getattr(self, f), getattr(other, f)))
-        for name, value in other.extras.items():
-            if name in self.extras:
-                self.extras[name] = max(self.extras[name], value)
-            else:
-                self.extras[name] = value
+        for f in _taskstats_sample_names + other.extras:
+            if not hasattr(self, f):
+                self.extras.append(f)
+            setattr(self, f, max(getattr(self, f, -1e-9999), getattr(other, f)))
 
     def averaged(self):
         avg = TaskStatsDatum(num_samples=1)
         for f in _taskstats_sample_names:
             setattr(avg, f, getattr(self, f) / self.num_samples)
-        avg.insert_extra_stats({name: value/self.num_samples for name, value in self.extras.items()})
+        avg.insert_extra_stats(**{name: getattr(self, name) / self.num_samples for name in self.extras})
         return avg
 
 
@@ -149,6 +145,14 @@ _task_start_time = OrderedDict()
 
 def collect_stats():
     """Returns dictionary of per-task stats (elapsed time, sums, peaks)"""
+    # cumulative add -- substeps contribute to parent steps
+    for key in list(_taskstats.keys())[::-1]:
+        _, sum, peak = _taskstats[key]
+        key1 = tuple(key[:-1])
+        if key1 in _taskstats:
+            _, sum1, peak1 = _taskstats[key1]
+            sum1.add(sum)
+            peak1.peak(peak)
     return _taskstats
 
 
@@ -216,6 +220,13 @@ def update_process_status(command=None, description=None):
         io = None
     _prev_disk_io = disk_io, now
 
+    # call extra status reporter
+    if _status_reporters and _status_reporters[-1]:
+        extra_info, extra_stats = _status_reporters[-1]()
+        s.insert_extra_stats(**extra_stats)
+    else:
+        extra_info = None
+
     # if a progress bar exists, update it
     if progress_bar is not None:
         if io is not None:
@@ -227,9 +238,8 @@ def update_process_status(command=None, description=None):
         updates = dict(elapsed_time=elapsed,
                     cpu_info=f"CPU [green]{s.cpu:2.1f}%[/green]|RAM [green]{round(s.mem_used):3}[/green]/[green]{round(s.mem_total)}[/green]G|Load [green]{s.load:2.1f}[/green]{ioinfo}")
         
-        # call extra status reporter
-        if _status_reporters and _status_reporters[-1]:
-            updates['cpu_info'] += " " + _status_reporters[-1]().strip()
+        if extra_info:
+            updates['cpu_info'] += extra_info
 
         if command is not None:
             updates['command'] = command
@@ -249,16 +259,19 @@ async def run_process_status_update():
                 await asyncio.sleep(1)
 
 _printed_stats = dict(
+    k8s_cores="k8s cores",
+    k8s_mem="k8s mem GB",
     cpu="CPU %",
     mem_used="Mem GB",
     load="Load",
     read_gbps="R GB/s",
-    write_gbps="W GB/s")
+    write_gbps="W GB/s",
+    )
 
 # these stats are written as sums
 _sum_stats = ("read_count", "read_gb", "read_ms", "write_count", "write_gb", "write_ms")
 
-def render_profiling_summary(stats, max_depth, unroll_loops=False):
+def render_profiling_summary(stats: TaskStatsDatum, max_depth, unroll_loops=False):
 
     table_avg = Table(title=Text("\naverages & total I/O", style="bold"))
     table_avg.add_column("")
@@ -268,9 +281,16 @@ def render_profiling_summary(stats, max_depth, unroll_loops=False):
     table_peak.add_column("")
     table_peak.add_column("time hms", justify="right")
     
+    # accumulate set of all stats available
+    available_stats = set(_taskstats_sample_names)
+    for name, (elapsed, sum, peak) in stats.items():
+        available_stats.update(sum.extras)
+        available_stats.update(peak.extras)
+
     for f, label in _printed_stats.items():
-        table_avg.add_column(label, justify="right")
-        table_peak.add_column(label, justify="right")
+        if f in available_stats:
+            table_avg.add_column(label, justify="right")
+            table_peak.add_column(label, justify="right")
 
     table_avg.add_column("R GB", justify="right")
     table_avg.add_column("W GB", justify="right")
@@ -286,9 +306,10 @@ def render_profiling_summary(stats, max_depth, unroll_loops=False):
             avg_row = [".".join(name), tstr]
             peak_row = avg_row.copy()
             for f, label in _printed_stats.items():
-                if f != "num_samples":
-                    avg_row.append(f"{getattr(avg, f):.2f}")
-                    peak_row.append(f"{getattr(peak, f):.2f}")
+                if f in available_stats:
+                    avg_row.append(f"{getattr(avg, f):.2f}" if hasattr(avg, f) else "")
+                    peak_row.append(f"{getattr(peak, f):.2f}" if hasattr(peak, f) else "")
+
             avg_row += [f"{sum.read_gb:.2f}", f"{sum.write_gb:.2f}"]
             table_avg.add_row(*avg_row)
             table_peak.add_row(*peak_row)
