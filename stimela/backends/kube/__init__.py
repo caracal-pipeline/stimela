@@ -1,8 +1,11 @@
 from typing import Dict, List, Optional, Any
+from enum import Enum
 from omegaconf import OmegaConf
 from dataclasses import dataclass
-from scabha.basetypes import EmptyDictDefault, EmptyListDefault
+import yaml
+import json
 
+from scabha.basetypes import EmptyDictDefault, EmptyListDefault
 
 try:
     import kubernetes
@@ -26,7 +29,53 @@ def is_remote():
     return True
 
 from .run_kube import run
-from .run_kube import KubernetesDaskCluster, KubernetesFileInjection, KubernetesLocalMount, KubernetesPodSpec
+
+# dict of methods for converting an object to text format
+InjectedFileFormatters = dict(
+    yaml = yaml.dump,
+    json = json.dumps,
+    txt = str
+)
+
+InjectedFileFormats = Enum("InjectedFileFormats", " ".join(InjectedFileFormatters.keys()), module=__name__)
+
+@dataclass
+class KubernetesFileInjection(object):
+    format: InjectedFileFormats = "txt"
+    content: Any = ""
+
+@dataclass
+class KubernetesLocalMount(object):
+    path: str
+    dest: str = ""              # destination path -- same as local if empty
+    readonly: bool = False      # mount as readonly, but it doesn't work (yet?)
+    mkdir: bool = False         # create dir, if it is missing
+
+@dataclass
+class KubernetesPodLimits(object):
+    request: Optional[str] = None
+    limit: Optional[str] = None
+
+@dataclass
+class KubernetesPodSpec(object):
+    # selects a specific pod type from the defined set
+    type:           Optional[str] = None
+    # memory limit/requirement
+    memory:         Optional[KubernetesPodLimits] = None
+    cpu:            Optional[KubernetesPodLimits] = None
+    # arbitrary additional structure copied into the pod spec
+    custom_pod_spec:  Dict[str, Any] = EmptyDictDefault()
+
+@dataclass
+class KubernetesDaskCluster(object):
+    capture_logs: bool = True
+    capture_logs_style: Optional[str] = "blue"
+    name: Optional[str] = None
+    num_workers: int = 0
+    threads_per_worker: int = 1
+    worker_pod: KubernetesPodSpec = KubernetesPodSpec()
+    scheduler_pod: KubernetesPodSpec = KubernetesPodSpec()
+
 
 @dataclass
 class KubernetesBackendOptions(object):

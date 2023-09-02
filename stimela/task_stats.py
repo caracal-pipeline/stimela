@@ -17,6 +17,7 @@ progress_bar = progress_task = None
 
 _progress_task_names = []
 _progress_task_names_orig = []
+_status_reporters = []
 
 _start_time = datetime.now()
 _prev_disk_io = None, None
@@ -49,13 +50,15 @@ def destroy_progress_bar():
         progress_bar = None
 
 @contextlib.contextmanager
-def declare_subtask(subtask_name):
+def declare_subtask(subtask_name, status_reporter=None):
+    _status_reporters.append(status_reporter)
     _progress_task_names.append(subtask_name)
     _progress_task_names_orig.append(subtask_name)
     update_process_status(description='.'.join(_progress_task_names))
     try:
         yield subtask_name
     finally:
+        _status_reporters.pop(-1)
         _progress_task_names.pop(-1)
         _progress_task_names_orig.pop(-1)
         update_process_status(progress_task,
@@ -83,7 +86,6 @@ class _CommandContext(object):
 
 @contextlib.contextmanager
 def declare_subcommand(command):
-    update_process_status(command=command)
     progress_bar and progress_bar.reset(progress_task)
     try:
         yield _CommandContext(command)
@@ -107,18 +109,35 @@ class TaskStatsDatum(object):
     write_ms: float     = 0
     num_samples: int    = 0
 
+    def __post_init__(self):
+        self.extras = {}
+
+    def insert_extra_stats(self, **kw):
+        self.extras.update(**kw)
+
     def add(self, other: "TaskStatsDatum"):
         for f in _taskstats_sample_names:
             setattr(self, f, getattr(self, f) + getattr(other, f))
+        for name, value in other.extras.items():
+            if name in self.extras:
+                self.extras[name] += value
+            else:
+                self.extras[name] = value
 
     def peak(self, other: "TaskStatsDatum"):
         for f in _taskstats_sample_names:
             setattr(self, f, max(getattr(self, f), getattr(other, f)))
+        for name, value in other.extras.items():
+            if name in self.extras:
+                self.extras[name] = max(self.extras[name], value)
+            else:
+                self.extras[name] = value
 
     def averaged(self):
         avg = TaskStatsDatum(num_samples=1)
         for f in _taskstats_sample_names:
             setattr(avg, f, getattr(self, f) / self.num_samples)
+        avg.insert_extra_stats({name: value/self.num_samples for name, value in self.extras.items()})
         return avg
 
 
@@ -207,6 +226,11 @@ def update_process_status(command=None, description=None):
 
         updates = dict(elapsed_time=elapsed,
                     cpu_info=f"CPU [green]{s.cpu:2.1f}%[/green]|RAM [green]{round(s.mem_used):3}[/green]/[green]{round(s.mem_total)}[/green]G|Load [green]{s.load:2.1f}[/green]{ioinfo}")
+        
+        # call extra status reporter
+        if _status_reporters and _status_reporters[-1]:
+            updates['cpu_info'] += " " + _status_reporters[-1]().strip()
+
         if command is not None:
             updates['command'] = command
         if description is not None:
