@@ -93,8 +93,6 @@ class KubernetesBackendOptions(object):
 
     always_pull_images: bool = False                            # change to True to repull
 
-    status_bar: bool = True                              # enable status bar display for k8s
-
     debug_mode: bool = False                             # in debug mode, payload is not run
 
     job_pod:        KubernetesPodSpec = KubernetesPodSpec()

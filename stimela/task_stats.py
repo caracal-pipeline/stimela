@@ -125,9 +125,11 @@ class TaskStatsDatum(object):
 
     def peak(self, other: "TaskStatsDatum"):
         for f in _taskstats_sample_names + other.extras:
-            if not hasattr(self, f):
+            if hasattr(self, f):
                 self.extras.append(f)
-            setattr(self, f, max(getattr(self, f, -1e-9999), getattr(other, f)))
+                setattr(self, f, max(getattr(self, f, -1e-9999), getattr(other, f)))
+            else:
+                setattr(self, f, getattr(other, f))
 
     def averaged(self):
         avg = TaskStatsDatum(num_samples=1)

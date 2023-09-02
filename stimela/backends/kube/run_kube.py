@@ -60,7 +60,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     from .kube_utils import StatusReporter
 
     if not cab.image:
-        raise StimelaCabRuntimeError(f"kubernetes runner requires cab.image to be set")
+        raise StimelaCabRuntimeError(f"kube runner requires cab.image to be set")
 
     kube = backend.kube
 
@@ -97,7 +97,14 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
     pod_created = dask_job_created = None
 
-    statrep = StatusReporter(kube_api, custom_obj_api, namespace, podname=podname, log=log, kube=kube, image_name=image_name)
+    def k8s_event_handler(event):
+        if event.message.startswith("Error: ErrImagePull"):
+            raise StimelaCabRuntimeError(f"k8s failed to pull the image {image_name}'. Preceding log messages may contain extra information.")
+        if event.reason == "Failed":
+            raise StimelaCabRuntimeError(f"k8s has reported a 'Failed' event. Preceding log messages may contain extra information.")
+
+    statrep = StatusReporter(kube_api, custom_obj_api, namespace, podname=podname, log=log, kube=kube, 
+                             event_handler=k8s_event_handler)
 
     with declare_subtask(f"{os.path.basename(command_name)}:kube", status_reporter=statrep.update):
         try:
@@ -116,7 +123,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                     labels=pod_labels,
                     namespace=namespace,
                     image=image_name,
-                    memory_limit=kube.dask_cluster.worker_pod.memory.limit,
+                    memory_limit=kube.dask_cluster.worker_pod.memory and kube.dask_cluster.worker_pod.memory.limit,
                     nworkers=kube.dask_cluster.num_workers,
                     threads_per_worker=kube.dask_cluster.threads_per_worker,
                     cmdline=["/bin/sh", "-c", "while true;do date;sleep 5; done"],
@@ -399,24 +406,24 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
         # handle various failure modes by logging errors appropriately
         except KeyboardInterrupt:
-            log.error(f"kubernetes invocation of {command_name} interrupted with Ctrl+C after {elapsed()}")
+            log.error(f"k8s invocation of {command_name} interrupted with Ctrl+C after {elapsed()}")
             raise StimelaCabRuntimeError(f"{command_name} interrupted with Ctrl+C after {elapsed()}")
         except ApiException as exc:
             if exc.body:
                 exc = (exc, json.loads(exc.body))
             import traceback
             traceback.print_exc()
-            log.error(f"kubernetes invocation of {command_name} failed with an ApiException after {elapsed()}")
-            raise StimelaCabRuntimeError("kubernetes API error", exc)
+            log.error(f"k8s invocation of {command_name} failed with an ApiException after {elapsed()}")
+            raise StimelaCabRuntimeError("k8s API error", exc)
         # this drops out as a normal error response
         except StimelaCabRuntimeError as exc:
-            log.error(f"kubernetes invocation of {command_name} failed after {elapsed()}")
+            log.error(f"k8s invocation of {command_name} failed after {elapsed()}")
             raise
         except Exception as exc:
-            log.error(f"kubernetes invocation of {command_name} failed after {elapsed()}")
+            log.error(f"k8s invocation of {command_name} failed after {elapsed()}")
             import traceback
             traceback.print_exc()
-            raise StimelaCabRuntimeError("kubernetes backend error", exc)
+            raise StimelaCabRuntimeError("kube backend error", exc)
 
         # cleanup
         finally:
@@ -435,9 +442,9 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                         update_process_status()
                     except ApiException as exc:
                         body = json.loads(exc.body)
-                        log_exception(StimelaCabRuntimeError(f"kubernetes API error while deleting pod {podname}", (exc, body)), severity="warning")
+                        log_exception(StimelaCabRuntimeError(f"k8s API error while deleting pod {podname}", (exc, body)), severity="warning")
                     except Exception as exc:
-                        log_exception(StimelaCabRuntimeError(f"kubernetes API error while deleting pod {podname}: {exc}"), severity="warning")
+                        log_exception(StimelaCabRuntimeError(f"error while deleting pod {podname}: {exc}"), severity="warning")
                 if dask_job_created:
                     try:
                         update_process_status()
@@ -445,9 +452,9 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                         custom_obj_api.delete_namespaced_custom_object(group, version, namespace, plural, dask_job_name)
                     except ApiException as exc:
                         body = json.loads(exc.body)
-                        log_exception(StimelaCabRuntimeError(f"kubernetes API error while deleting dask job {dask_job_name}", (exc, body)), severity="warning")
+                        log_exception(StimelaCabRuntimeError(f"k8s API error while deleting dask job {dask_job_name}", (exc, body)), severity="warning")
                     except Exception as exc:
-                        log_exception(StimelaCabRuntimeError(f"kubernetes API error while deleting dask job {dask_job_name}: {exc}"), severity="warning")
+                        log_exception(StimelaCabRuntimeError(f"error while deleting dask job {dask_job_name}: {exc}"), severity="warning")
                 # wait for aux pod threads
                 cleanup_time = datetime.datetime.now()
                 def cleanup_elapsed():
@@ -473,13 +480,13 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                 if aux_pod_threads:
                     log.info(f"{len(aux_pod_threads)} logging threads for sub-pods still alive after {cleanup_elapsed():.1}s, giving up on the cleanup")
             except KeyboardInterrupt:
-                log.error(f"kubernetes cleanup interrupted with Ctrl+C after {elapsed()}")
+                log.error(f"kube cleanup interrupted with Ctrl+C after {elapsed()}")
                 raise StimelaCabRuntimeError(f"{command_name} cleanup interrupted with Ctrl+C after {elapsed()}")
             except Exception as exc:
-                log.error(f"kubernetes cleanup failed after {elapsed()}")
+                log.error(f"kube cleanup failed after {elapsed()}")
                 import traceback
                 traceback.print_exc()
-                raise StimelaCabRuntimeError("kubernetes backend clanup error", exc)
+                raise StimelaCabRuntimeError("kube backend cleanup error", exc)
 
 
 
