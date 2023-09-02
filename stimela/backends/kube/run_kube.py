@@ -285,7 +285,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
                     # get other pods associated with DaskJob
                     if kube.dask_cluster.capture_logs:
-                        pods = kube_api.list_namespaced_pod(namespace=namespace, label_selector=label_selector)
+                        pods = kube_api.list_namespaced_pod(namespace=namespace, label_selector=statrep.label_selector)
                         for pod in pods.items:
                             # get new events
                             name = pod.metadata.name
