@@ -281,8 +281,8 @@ class Step:
             for line in self.summary(recursive=False, inputs=inputs, outputs=outputs, ignore_missing=ignore_missing):
                 self.log.log(level, line, extra=extra)
 
-    def log_exception(self, exc, severity="error"):
-        log_exception(exc, severity=severity, log=self.log)
+    def log_exception(self, exc, severity="error", log=None):
+        log_exception(exc, severity=severity, log=log or self.log)
 
     def assign_value(self, key: str, value: Any, override: bool = False):
         """assigns parameter value or nested variable value to this step
@@ -324,7 +324,7 @@ class Step:
         explicit_skip = self.skip is True 
         if explicit_skip:
             context = nullcontext()
-            parent_log_info, parent_log_warning = parent_log.debug, parent_log.debug
+            parent_log_info = parent_log_warning = parent_log.debug
         else:
             context = stimelogging.declare_subtask(self.name)
             stimelogging.declare_chapter(f"{self.fqname}")
@@ -369,15 +369,18 @@ class Step:
             except ScabhaBaseException as exc:
                 severity = "warning" if skip else "error"
                 level = logging.WARNING if skip else logging.ERROR
-                if not exc.logged:
+                if not exc.logged and not explicit_skip:
                     if type(exc) is SubstitutionErrorList:
-                        self.log_exception(StepValidationError(f"unresolved {{}}-substitution(s) in inputs:", exc.nested), severity=severity)
+                        self.log_exception(StepValidationError(f"unresolved {{}}-substitution(s) in inputs:", exc.nested), 
+                                           severity=severity)
                         # for err in exc.errors:
                         #     self.log.log(level, f"  {err}")
                     else:
-                        self.log_exception(StepValidationError(f"error validating inputs:", exc), severity=severity)
+                        self.log_exception(StepValidationError(f"error validating inputs:", exc), 
+                                           severity=severity)
                     exc.logged = True
-                self.log_summary(level, "summary of inputs follows", color="WARNING", inputs=True)
+                if not explicit_skip:
+                    self.log_summary(level, "summary of inputs follows", color="WARNING", inputs=True)
                 # raise up, unless step is being skipped
                 if skip:
                     parent_log_warning("since the step is being skipped, this is not fatal")
