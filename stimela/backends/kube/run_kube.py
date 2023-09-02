@@ -108,7 +108,6 @@ class KubernetesDaskCluster(object):
     capture_logs: bool = True
     capture_logs_style: Optional[str] = "blue"
     name: Optional[str] = None
-    service_account: str = "compute-runner"
     num_workers: int = 0
     threads_per_worker: int = 1
     worker_pod: KubernetesPodSpec = KubernetesPodSpec()
@@ -167,6 +166,8 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     def update_status():
         nonlocal last_update
         if time.time() - last_update >= 1:
+            # # update k8s stats and metrics
+            # custom_obj_api('metrics.k8s.io', version, namespace, plural)
             update_process_status()
             last_update = time.time()
 

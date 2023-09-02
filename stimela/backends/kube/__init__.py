@@ -33,6 +33,7 @@ class KubernetesBackendOptions(object):
     enable:         bool = True
     namespace:      Optional[str] = None
     dask_cluster:   Optional[KubernetesDaskCluster] = None
+    service_account: str = "compute-runner"
     
     inject_files:   Dict[str, KubernetesFileInjection] = EmptyDictDefault()
     pre_commands:   List[str] = EmptyListDefault()
@@ -42,6 +43,8 @@ class KubernetesBackendOptions(object):
     dir:            Optional[str] = None                 # change to specific directory inside container
 
     always_pull_images: bool = False                            # change to True to repull
+
+    status_bar: bool = True                              # enable status bar display for k8s
 
     debug_mode: bool = False                             # in debug mode, payload is not run
 
