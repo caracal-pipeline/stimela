@@ -8,7 +8,7 @@ from omegaconf.errors import OmegaConfBaseException
 import rich.markup
 
 from scabha.cargo import Parameter, Cargo, ListOrString, ParameterPolicies, ParameterCategory
-from stimela.exceptions import CabValidationError, StimelaCabRuntimeError
+from stimela.exceptions import CabValidationError, StimelaCabRuntimeError, StimelaBaseImageError
 from scabha.exceptions import SchemaError
 from scabha.basetypes import EmptyDictDefault, EmptyListDefault
 from stimela.backends import flavours, StimelaBackendSchema
@@ -27,10 +27,16 @@ class CabManagement(object):        # defines common cab management behaviours
 
 @dataclass
 class ImageInfo(object):
-    name: str                           # image name
+    name: Optional[str] = None          # image name
     registry: Optional[str] = None      # registry/org or org (for Dockerhub)
     version: str = "latest"
     path: Optional[str] = None          # prebuilt image path (for some backends only)
+
+    def __post_init__(self):
+        if not self.name:
+            if not self.path:
+                raise StimelaBaseImageError("image name or path must be specified")
+            self.name = os.path.basename(self.path)
 
     @staticmethod
     def from_string(spec: str):
