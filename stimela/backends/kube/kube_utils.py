@@ -184,10 +184,11 @@ class StatusReporter(object):
             totals = dict(cpu=0, memory=0)
             for item in metrics['items']:
                 pname = item['metadata']['name']
-                for container in item['containers']:
-                    usage = container['usage']
-                    totals['cpu'] += resolve_unit(usage.get('cpu'), k8s_cpu_units)
-                    totals['memory'] += resolve_unit(usage.get('memory'), k8s_memory_units_in_bytes)
+                if pname in self.pod_statuses:
+                    for container in item['containers']:
+                        usage = container['usage']
+                        totals['cpu'] += resolve_unit(usage.get('cpu'), k8s_cpu_units)
+                        totals['memory'] += resolve_unit(usage.get('memory'), k8s_memory_units_in_bytes)
                     # print(f"Pod: {pname}, CPU: {usage.get('cpu')}, Memory: {usage.get('memory')}")
         # add main pod/job status
         status = self.main_status
