@@ -158,8 +158,15 @@ class StatusReporter(object):
             for pod in pods.items:
                 pname = pod.metadata.name
                 pod_status = pod.status.phase
+                # if pod.status.container_statuses:
+                #     print(f"Pod: {pname}, status: {pod_status}, {[st.state for st in pod.status.container_statuses]}")
+                # get container states
+                if pod.status.container_statuses:
+                    for cst in pod.status.container_statuses:
+                        for state in cst.state.waiting, cst.state.terminated: 
+                            if hasattr(state, 'reason'):
+                                pod_status += f":{state.reason}"
                 self.pod_statuses[pname] = pod_status
-                # print(f"Pod: {pname}, status: {pod_status}, {pod.status.container_statuses}")
         # get metrics
         if self.enable_metrics:
             try:

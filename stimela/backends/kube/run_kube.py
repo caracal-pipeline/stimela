@@ -110,7 +110,10 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
         try:
             log.info(f"using image {image_name}")
 
-            pod_labels = dict(stimela_job=podname, user=username, stimela_fqname=fqname, stimela_cab=cab.name)
+            pod_labels = dict(stimela_job=podname, 
+                              stimela_user=username, 
+                              stimela_fqname=fqname, 
+                              stimela_cab=cab.name)
 
             # depending on whether or not a dask cluster is configured, we do either a DaskJob or a regular pod
             if kube.dask_cluster and kube.dask_cluster.num_workers:
