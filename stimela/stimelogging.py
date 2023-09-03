@@ -154,7 +154,7 @@ def logger(name="STIMELA", propagate=False, boring=False, loglevel="INFO"):
 
         log_formatter = log_boring_formatter if boring else log_colourful_formatter
 
-        progress_bar, progress_console = task_stats.init_progress_bar()
+        progress_bar, progress_console = task_stats.init_progress_bar(boring=boring)
 
         log_console_handler = rich.logging.RichHandler(console=progress_console,
                             highlighter=rich.highlighter.NullHighlighter(), markup=True,

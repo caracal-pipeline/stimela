@@ -23,7 +23,7 @@ _start_time = datetime.now()
 _prev_disk_io = None, None
 
 
-def init_progress_bar():
+def init_progress_bar(boring=False):
     global progress_console, progress_bar, progress_task
     progress_console = rich.console.Console(file=sys.stdout, highlight=False)
     progress_bar = rich.progress.Progress(
@@ -36,7 +36,8 @@ def init_progress_bar():
         "{task.fields[cpu_info]}",
         refresh_per_second=2,
         console=progress_console,
-        transient=True)
+        transient=True,
+        disable=boring)
 
     progress_task = progress_bar.add_task("stimela", command="starting", cpu_info=" ", elapsed_time="", start=True)
     progress_bar.__enter__()
