@@ -5,7 +5,7 @@ import os.path
 import yaml
 import sys
 import traceback
-
+import atexit
 from datetime import datetime
 from typing import List, Optional, Tuple
 from collections import OrderedDict
@@ -23,6 +23,7 @@ from stimela.exceptions import RecipeValidationError, StimelaRuntimeError, StepS
 from stimela.main import cli
 from stimela.kitchen.recipe import Recipe, Step, RecipeSchema, join_quote
 from stimela import task_stats
+import stimela.backends
 
 def load_recipe_file(filename: str):
     dependencies = stimela.config.get_initial_deps()
@@ -192,6 +193,16 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, last_recip
         except Exception as exc:
             log_exception(f"error applying configuration from {what}", exc)
             sys.exit(2)
+
+        # now that config is loaded, check for kube backend cleanup
+        select = stimela.CONFIG.opts.backend.select 
+        if select and (select == 'kube' or select[0] == 'kube'):
+            if stimela.backends.kube.AVAILABLE:
+                from stimela.backends.kube import kube_utils
+                log.info("checking for k8s pods from other sessions")
+                kube_utils.check_pods_on_startup(stimela.CONFIG.opts.backend.kube)
+                atexit.register(kube_utils.check_pods_on_exit, stimela.CONFIG.opts.backend.kube)
+
 
         log.info(f"{what} contains the following recipe sections: {join_quote(all_recipe_names)}")
 

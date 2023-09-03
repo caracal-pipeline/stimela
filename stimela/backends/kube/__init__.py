@@ -4,8 +4,11 @@ from omegaconf import OmegaConf
 from dataclasses import dataclass
 import yaml
 import json
+import secrets
 
 from scabha.basetypes import EmptyDictDefault, EmptyListDefault
+
+session_id = secrets.token_hex(8)
 
 try:
     import kubernetes
@@ -91,9 +94,14 @@ class KubernetesBackendOptions(object):
     env:            Dict[str, str] = EmptyDictDefault()
     dir:            Optional[str] = None                 # change to specific directory inside container
 
-    always_pull_images: bool = False                            # change to True to repull
+    always_pull_images: bool = False                     # change to True to repull
 
     debug_mode: bool = False                             # in debug mode, payload is not run
+
+    cleanup_pods_on_exit: bool = True                    # extra pod cleanup at exit
+
+    report_pods_on_startup: bool = True                  # report any running pods for this user on startup
+    cleanup_pods_on_startup: bool = True                 # clean up any running pods on startup
 
     job_pod:        KubernetesPodSpec = KubernetesPodSpec()
 

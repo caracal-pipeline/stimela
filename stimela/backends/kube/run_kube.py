@@ -56,7 +56,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     Returns:
         Any: return value (e.g. exit code) of content
     """
-    from . import InjectedFileFormatters
+    from . import InjectedFileFormatters, session_id
     from .kube_utils import StatusReporter
 
     if not cab.image:
@@ -103,7 +103,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
         if event.reason == "Failed":
             raise StimelaCabRuntimeError(f"k8s has reported a 'Failed' event. Preceding log messages may contain extra information.")
 
-    statrep = StatusReporter(kube_api, custom_obj_api, namespace, podname=podname, log=log, kube=kube, 
+    statrep = StatusReporter(namespace, podname=podname, log=log, kube=kube, 
                              event_handler=k8s_event_handler)
 
     with declare_subtask(f"{os.path.basename(command_name)}:kube", status_reporter=statrep.update):
@@ -111,7 +111,8 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
             log.info(f"using image {image_name}")
 
             pod_labels = dict(stimela_job=podname, 
-                              stimela_user=username, 
+                              stimela_user=username,
+                              stimela_session_id=session_id, 
                               stimela_fqname=fqname, 
                               stimela_cab=cab.name)
 

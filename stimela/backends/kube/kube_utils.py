@@ -1,12 +1,13 @@
 import logging
-import time
+import getpass
 from typing import Dict, Any
 import re
+import json
 
 from omegaconf import OmegaConf
 
 from stimela.exceptions import StimelaCabParameterError, StimelaCabRuntimeError, BackendError
-from stimela.stimelogging import update_process_status
+from stimela.stimelogging import update_process_status, log_exception
 
 try:
     from kubernetes.client.rest import ApiException
@@ -81,15 +82,15 @@ def apply_pod_spec(kps, pod_spec: Dict[str, Any], predefined_pod_specs: Dict[str
     return pod_spec
 
 class StatusReporter(object):
-    def __init__(self, kube_api, custom_api, namespace: str, log: logging.Logger, 
+    def __init__(self, namespace: str, log: logging.Logger, 
                  podname: str,
                  kube: 'KubernetesBackendOptions',
                  event_handler: lambda event:None,
                  update_interval: float = 1,
                  enable_metrics: bool = True):
+        from . import run_kube
         self.kube = kube
-        self.kube_api = kube_api
-        self.custom_api = custom_api 
+        self.kube_api, self.custom_api = run_kube.get_kube_api() 
         self.namespace = namespace
         self.log = log
         self.podname = podname
@@ -157,7 +158,10 @@ class StatusReporter(object):
         if pods:
             for pod in pods.items:
                 pname = pod.metadata.name
-                pod_status = pod.status.phase
+                if pod.metadata.deletion_timestamp:
+                    pod_status = "Terminating"
+                else:
+                    pod_status = pod.status.phase
                 # if pod.status.container_statuses:
                 #     print(f"Pod: {pname}, status: {pod_status}, {[st.state for st in pod.status.container_statuses]}")
                 # get container states
@@ -190,8 +194,21 @@ class StatusReporter(object):
         elif self.podname in self.pod_statuses:
             status = f"|[blue]{self.pod_statuses[self.podname]}[/blue]"
         # add count of running pods
-        nrun = sum([stat == "Running" for stat in self.pod_statuses.values()])
-        status = (status or '') + f"|pods [green]{nrun}[/green]/[green]{len(self.pod_statuses)}[/green]" 
+        npods = len(self.pod_statuses)
+        pods = ""
+        nrun = sum([stat.startswith("Running") for stat in self.pod_statuses.values()])
+        if nrun:
+            pods += f"[green]{nrun}[/green]R"
+        npend = sum([stat.startswith("Pending") for stat in self.pod_statuses.values()])
+        if npend:
+            pods += f"[yellow]{npend}[/yellow]P"
+        nterm = sum([stat.startswith("Terminating") for stat in self.pod_statuses.values()])
+        if nterm:
+            pods += f"[blue]{nterm}[/blue]T"
+        nuk = npods - nrun - npend - nterm
+        if nuk:
+            pods += f"[red]{nuk}[/red]U"
+        status = (status or '') + (f"|pods {pods}" if npods else "")
         # add metrics
         if metrics:
             cores = totals['cpu']
@@ -202,3 +219,74 @@ class StatusReporter(object):
             stats = None
         
         return status, stats
+
+
+def check_pods_on_startup(kube: 'KubernetesBackendOptions'):
+    from stimela.stimelogging import logger
+    log = logger()
+    from . import run_kube
+    kube_api, _ = run_kube.get_kube_api() 
+    username = getpass.getuser()
+    try:
+        pods = kube_api.list_namespaced_pod(namespace=kube.namespace, 
+                                            label_selector=f"stimela_user={username}")
+    except ApiException as exc:
+        body = json.loads(exc.body)
+        log_exception(BackendError(f"k8s API error while listing pods", (exc, body)), severity="error")
+        return
+    
+    running_pods = []
+    for pod in pods.items:
+        if pod.status.phase in ("Running", "Pending") and not pod.metadata.deletion_timestamp:
+            running_pods.append(pod.metadata.name)
+
+    if running_pods:
+        if kube.cleanup_pods_on_startup:
+            log.warning(f"k8s: you have {len(running_pods)} pod(s) running from another stimela session")
+            log.warning(f"since kube.cleanup_pods_on_startup is set, these will be terminated")
+            for podname in running_pods:
+                log.info(f"deleting pod {podname}")
+                try:
+                    resp = kube_api.delete_namespaced_pod(name=podname, namespace=kube.namespace)
+                except ApiException as exc:
+                    body = json.loads(exc.body)
+                    log_exception(BackendError(f"k8s API error while deleting pod {podname}", (exc, body)), severity="error")
+                    continue
+                log.debug(f"delete_namespaced_pod({podname}): {resp}")
+
+        elif kube.report_pods_on_startup:
+            log.warning(f"k8s: you have {len(running_pods)} pod(s) running from another stimela session")
+            log.warning(f"set kube.report_pods_on_startup=false to disable this warning")
+
+
+def check_pods_on_exit(kube: 'KubernetesBackendOptions'):
+    from . import run_kube, session_id
+    from stimela.stimelogging import logger
+    log = logger()
+
+    kube_api, _ = run_kube.get_kube_api() 
+    try:
+        pods = kube_api.list_namespaced_pod(namespace=kube.namespace, 
+                                            label_selector=f"stimela_session_id={session_id}")
+    except ApiException as exc:
+        body = json.loads(exc.body)
+        log_exception(BackendError(f"k8s API error while listing pods", (exc, body)), severity="error")
+        return
+    
+    running_pods = []
+    for pod in pods.items:
+        if pod.status.phase in ("Running", "Pending") and not pod.metadata.deletion_timestamp:
+            running_pods.append(pod.metadata.name)
+
+    if running_pods and kube.cleanup_pods_on_exit:
+        log.warning(f"k8s: you have {len(running_pods)} pod(s) still pending or running from this session")
+        log.warning(f"since kube.cleanup_pods_on_exit is set, these will be terminated")
+        for podname in running_pods:
+            log.info(f"deleting pod {podname}")
+            try:
+                resp = kube_api.delete_namespaced_pod(name=podname, namespace=kube.namespace)
+            except ApiException as exc:
+                body = json.loads(exc.body)
+                log_exception(BackendError(f"k8s API error while deleting pod {podname}", (exc, body)), severity="error")
+                continue
+            log.debug(f"delete_namespaced_pod({podname}): {resp}")
