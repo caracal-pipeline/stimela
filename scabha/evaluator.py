@@ -255,6 +255,23 @@ class FunctionHandler(ResultsHandler):
         if len(args) != 1:
             raise FormulaError(f"{'.'.join(evaluator.location)}: NOSUBST() expects 1 argument, got {len(args)}")
         return evaluator._evaluate_result(args[0], subst=False)
+    
+    def SORT(self, evaluator, args):
+        return self._sort_impl(evaluator, args, "SORT")
+    
+    def RSORT(self, evaluator, args):
+        return self._sort_impl(evaluator, args, "RSORT", reverse=True)
+
+    def _sort_impl(self, evaluator, args, funcname, reverse=False):
+        if len(args) != 1:
+            raise FormulaError(f"{'.'.join(evaluator.location)}: {funcname}() expects 1 argument, got {len(args)}")
+        sortlist = evaluator._evaluate_result(args[0])
+        if type(sortlist) is UNSET:
+            return sortlist
+        if not isinstance(sortlist, (list, tuple)):
+            raise FormulaError(f"{funcname}() expects a list, got a {str(type(sortlist))}") 
+        return sorted(sortlist, reverse=reverse)
+    
 
 def construct_parser():
     lparen = Literal("(").suppress()
@@ -282,7 +299,7 @@ def construct_parser():
     
     # functions
     functions = reduce(operator.or_, map(Keyword, ["IF", "IFSET", "GLOB", "EXISTS", "LIST", 
-        "BASENAME", "DIRNAME", "EXTENSION", "STRIPEXT", "MIN", "MAX", "RANGE", "NOSUBST"]))
+        "BASENAME", "DIRNAME", "EXTENSION", "STRIPEXT", "MIN", "MAX", "RANGE", "NOSUBST", "SORT", "RSORT"]))
     # these functions take one argument, which could also be a sequence
     anyseq_functions = reduce(operator.or_, map(Keyword, ["GLOB", "EXISTS"]))
 
