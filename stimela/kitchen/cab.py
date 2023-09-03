@@ -30,6 +30,7 @@ class ImageInfo(object):
     name: str                           # image name
     registry: Optional[str] = None      # registry/org or org (for Dockerhub)
     version: str = "latest"
+    path: Optional[str] = None          # prebuilt image path (for some backends only)
 
     @staticmethod
     def from_string(spec: str):
