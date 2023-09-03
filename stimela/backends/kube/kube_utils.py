@@ -8,6 +8,7 @@ from omegaconf import OmegaConf
 
 from stimela.exceptions import StimelaCabParameterError, StimelaCabRuntimeError, BackendError
 from stimela.stimelogging import update_process_status, log_exception
+import stimela.backends
 
 try:
     from kubernetes.client.rest import ApiException
@@ -84,7 +85,7 @@ def apply_pod_spec(kps, pod_spec: Dict[str, Any], predefined_pod_specs: Dict[str
 class StatusReporter(object):
     def __init__(self, namespace: str, log: logging.Logger, 
                  podname: str,
-                 kube: 'KubernetesBackendOptions',
+                 kube: 'stimela.backends.kube.KubernetesBackendOptions',
                  event_handler: lambda event:None,
                  update_interval: float = 1,
                  enable_metrics: bool = True):
@@ -221,7 +222,7 @@ class StatusReporter(object):
         return status, stats
 
 
-def check_pods_on_startup(kube: 'KubernetesBackendOptions'):
+def check_pods_on_startup(kube: 'stimela.backends.kube.KubernetesBackendOptions'):
     from stimela.stimelogging import logger
     log = logger()
     from . import run_kube
@@ -259,7 +260,7 @@ def check_pods_on_startup(kube: 'KubernetesBackendOptions'):
             log.warning(f"set kube.report_pods_on_startup=false to disable this warning")
 
 
-def check_pods_on_exit(kube: 'KubernetesBackendOptions'):
+def check_pods_on_exit(kube: 'stimela.backends.kube.KubernetesBackendOptions'):
     from . import run_kube, session_id
     from stimela.stimelogging import logger
     log = logger()
