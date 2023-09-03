@@ -141,7 +141,8 @@ class StatusReporter(object):
                         raise
                     # no error from handler, report event if configured to
                     if self.kube.verbose_events:
-                        self.log.info(self.kube.verbose_event_format.format(event=event))
+                        self.log.info(self.kube.verbose_event_format.format(event=event), 
+                                      extra=dict(color=self.kube.verbose_event_color))
                         
 
     def update(self):

@@ -8,10 +8,13 @@ import asyncio
 from typing import OrderedDict
 from omegaconf import OmegaConf
 import psutil
+
 import rich.progress
 import rich.logging
 from rich.table import Table
 from rich.text import Text
+
+from stimela import stimelogging
 
 progress_bar = progress_task = None
 
@@ -317,7 +320,7 @@ def render_profiling_summary(stats: TaskStatsDatum, max_depth, unroll_loops=Fals
             table_avg.add_row(*avg_row)
             table_peak.add_row(*peak_row)
 
-    progress_console.rule("profiling results")
+    stimelogging.declare_chapter("profiling results")
     destroy_progress_bar()
     from rich.columns import Columns
     # progress_console.print(table_avg, justify="center") 

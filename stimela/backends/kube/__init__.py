@@ -112,7 +112,8 @@ class KubernetesBackendOptions(object):
     # if >0, events will be collected and reported
     verbose_events:        int = 0
     # format string for reporting kubernetes events, this can include rich markup
-    verbose_event_format:  str = "[blue]\[kubernetes event type: {event.type}, reason: {event.reason}] {event.message}[/blue]"
+    verbose_event_format:  str = "\[kubernetes event type: {event.type}, reason: {event.reason}] {event.message}"
+    verbose_event_color:   str = "blue"
 
     # user and group IDs -- if None, use local user
     uid:            Optional[int] = None

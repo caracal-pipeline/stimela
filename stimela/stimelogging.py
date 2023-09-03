@@ -126,6 +126,8 @@ class StimelaLogFormatter(logging.Formatter):
 _logger = None
 log_console_handler = log_formatter = log_file_formatter = log_boring_formatter = log_colourful_formatter = None
 
+_boring = False
+
 LOG_DIR = '.'
 
 def is_logger_initialized():
@@ -133,14 +135,22 @@ def is_logger_initialized():
 
 
 def declare_chapter(title: str, **kw):
-    progress_console.rule(title, **kw)
+    if not _boring:
+        progress_console.rule(title, **kw)
+
+def apply_style(text: str, style: str):
+    if _boring:
+        return text
+    else:
+        return f"[{style}]{text}[/{style}]"
 
 
 def logger(name="STIMELA", propagate=False, boring=False, loglevel="INFO"):
     """Returns the global Stimela logger (initializing if not already done so, with the given values)"""
-    global _logger
+    global _logger, _boring
     if _logger is None:
         _logger = logging.getLogger(name)
+        _boring = boring
         if type(loglevel) is str:
             loglevel = getattr(logging, loglevel)
         _logger.setLevel(loglevel)
@@ -323,7 +333,7 @@ def log_exception(*errors, severity="error", log=None):
     else:
         colour = "yellow"
         message_dispatch = (log or logger()).warning
-
+    
     trees = []
     do_log = False
     messages = []
@@ -346,13 +356,13 @@ def log_exception(*errors, severity="error", log=None):
                 if isinstance(exc, ScabhaBaseException) and exc.nested:
                     add_nested(exc.nested, subtree)
             elif type(exc) is TracebackType:
-                subtree = tree.add(f"[dim]Traceback:[/dim]")
+                subtree = tree.add(apply_style("Traceback:", "dim"))
                 for line in traceback.format_tb(exc):
-                    subtree.add(f"[dim]{escape(line.rstrip())}[/dim]")
+                    subtree.add(apply_style(escape(line.rstrip()), "dim"))
             elif type(exc) is FormattedTraceback:
-                subtree = tree.add(f"[dim]Traceback:[/dim]")
+                subtree = tree.add(apply_style("Traceback:", "dim"))
                 for line in exc.lines:
-                    subtree.add(f"[dim]{escape(line)}[/dim]")
+                    subtree.add(apply_style(escape(line), "dim"))
             elif isinstance(exc, (dict, OrderedDict, DictConfig)):
                 add_dict(exc, tree)
             else:
@@ -365,13 +375,17 @@ def log_exception(*errors, severity="error", log=None):
             messages.append(exc.message)
             if not exc.logged:
                 do_log = exc.logged = True
-            tree = Tree(f"[{colour}]:warning: {exc_message(exc)}[/{colour}]", guide_style="dim")
+            tree = Tree(exc_message(exc) if _boring else 
+                            f"[{colour}]:warning: {exc_message(exc)}[/{colour}]", 
+                        guide_style="" if _boring else "dim")
             trees.append(tree)
             if exc.nested:
                 add_nested(exc.nested, tree)
                 has_nesting = True
         else:
-            tree = Tree(f"[{colour}]:warning: {exc_message(exc)}[/{colour}]", guide_style="dim")
+            tree = Tree(exc_message(exc) if _boring else 
+                            f"[{colour}]:warning: {exc_message(exc)}[/{colour}]", 
+                        guide_style="" if _boring else "dim")
             trees.append(tree)
             do_log = True
             messages.append(str(exc))
