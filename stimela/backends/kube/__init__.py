@@ -80,6 +80,7 @@ class KubernetesDaskCluster(object):
     threads_per_worker: int = 1
     worker_pod: KubernetesPodSpec = KubernetesPodSpec()
     scheduler_pod: KubernetesPodSpec = KubernetesPodSpec()
+    forward_dashboard_port: int = 8787          # set to non-0 to forward the http dashboard to this local port
 
 
 @dataclass
@@ -88,7 +89,8 @@ class KubernetesBackendOptions(object):
     namespace:      Optional[str] = None
     dask_cluster:   Optional[KubernetesDaskCluster] = None
     service_account: str = "compute-runner"
-    
+    kubectl_path:   str = "kubectl"
+
     inject_files:   Dict[str, KubernetesFileInjection] = EmptyDictDefault()
     pre_commands:   List[str] = EmptyListDefault()
     local_mounts:   Dict[str, KubernetesLocalMount] = EmptyDictDefault()

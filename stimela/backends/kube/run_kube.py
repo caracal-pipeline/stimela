@@ -1,7 +1,6 @@
-from dataclasses import dataclass
-import logging, time, json, datetime, os.path, pathlib, getpass, secrets
-import traceback
+import logging, time, json, datetime, os.path, pathlib, secrets
 from typing import Dict, Optional, Any
+import subprocess
 
 from omegaconf import OmegaConf, DictConfig, ListConfig
 
@@ -76,8 +75,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     command_name = cab.flavour.command_name
 
     # generate podname
-    username = getpass.getuser()
-    tmp_name = username + "--" + fqname.replace(".", "--").replace("_", "--")
+    tmp_name = session_user + "--" + fqname.replace(".", "--").replace("_", "--")
     token_hex = secrets.token_hex(4)
     podname = tmp_name[0:50] + "--" + token_hex
 
@@ -95,7 +93,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     numba_cache_dir = os.path.expanduser("~/.cache/numba")
     pathlib.Path(numba_cache_dir).mkdir(parents=True, exist_ok=True)
 
-    pod_created = dask_job_created = None
+    pod_created = dask_job_created = port_forward_proc = None
 
     def k8s_event_handler(event):
         if event.message.startswith("Error: ErrImagePull"):
@@ -111,7 +109,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
             log.info(f"using image {image_name}")
 
             pod_labels = dict(stimela_job=podname, 
-                              stimela_user=username,
+                              stimela_user=session_user,
                               stimela_session_id=session_id, 
                               stimela_fqname=fqname, 
                               stimela_cab=cab.name)
@@ -262,16 +260,19 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                     dask_job_created = resp
                     job_status = None
 
-                    while job_status != 'Running':
+                    # wait for dask job to start up
+                    while True:
                         resp = custom_obj_api.get_namespaced_custom_object_status(group, version, namespace, plural,
                                                                                 name=dask_job_name)
-                        statrep.set_main_status('status' in resp and resp['status']['jobStatus'])
+                        job_status = 'status' in resp and resp['status']['jobStatus']
+                        statrep.set_main_status(job_status)
                         update_process_status()
                         # get podname from job once it's running
                         if job_status == 'Running':
                             podname = resp['status']['jobRunnerPodName']
                             statrep.set_pod_name(podname)
                             log.info(f"job running as pod {podname}")
+                            break
                         time.sleep(1)
 
                     def print_logs(name):
@@ -304,6 +305,13 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                                 import threading
                                 aux_pod_threads[name] = threading.Thread(target=print_logs, kwargs=dict(name=name))
                                 aux_pod_threads[name].start()
+
+                    # start port forwarding
+                    if kube.dask_cluster.forward_dashboard_port:
+                        log.info(f"starting port-forward process for http-dashboard to local port {kube.dask_cluster.forward_dashboard_port}")
+                        port_forward_proc = subprocess.Popen([kube.kubectl_path, 
+                            "port-forward", f"service/{dask_job_name}-scheduler",
+                            f"{kube.dask_cluster.forward_dashboard_port}:http-dashboard"])
 
             log.info(f"  pod started after {elapsed()}")
             # resp = kube_api.read_namespaced_pod(name=podname, namespace=namespace)
@@ -432,6 +440,27 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
         # cleanup
         finally:
             try:
+                # clean up port forwarder
+                if port_forward_proc:
+                    retcode = port_forward_proc.poll()
+                    if retcode is not None:
+                        log.warning(f"kubectl port-forward process has died with code {retcode}")
+                        port_forward_proc.wait()
+                    else:
+                        log.info("terminating kubectl port-forward process")
+                        port_forward_proc.terminate()
+                        try:
+                            retcode = port_forward_proc.wait(1)
+                        except subprocess.TimeoutExpired:
+                            log.warning("kubectl port-forward process hasn't terminated -- killing it")
+                            port_forward_proc.kill()
+                            try:
+                                retcode = port_forward_proc.wait(1)
+                            except subprocess.TimeoutExpired:
+                                log.warning("kubectl port-forward process refuses to die")
+                        if retcode is not None:
+                            log.info(f"kubectl port-forward process has exited with code {retcode}")
+
                 if podname and pod_created: # or dask_job_created:
                     try:
                         update_process_status()
