@@ -5,10 +5,12 @@ from dataclasses import dataclass
 import yaml
 import json
 import secrets
+import getpass
 
 from scabha.basetypes import EmptyDictDefault, EmptyListDefault
 
 session_id = secrets.token_hex(8)
+session_user = getpass.getuser()
 
 try:
     import kubernetes

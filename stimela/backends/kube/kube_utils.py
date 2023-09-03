@@ -1,5 +1,4 @@
 import logging
-import getpass
 from typing import Dict, Any
 import re
 import json
@@ -146,13 +145,15 @@ class StatusReporter(object):
                         
 
     def update(self):
+        from . import session_user
         self.log_events()
 
         # update k8s stats and metrics
         pods = metrics = None
         # get pod statuses
         try:
-            pods = self.kube_api.list_namespaced_pod(self.namespace)
+            pods = self.kube_api.list_namespaced_pod(self.namespace,
+                                            label_selector=f"stimela_user={session_user}")
         except ApiException as exc:
             self.report_api_error("list_namespaced_pod", exc)
         # process statuses if we got them
@@ -225,12 +226,11 @@ class StatusReporter(object):
 def check_pods_on_startup(kube: 'stimela.backends.kube.KubernetesBackendOptions'):
     from stimela.stimelogging import logger
     log = logger()
-    from . import run_kube
+    from . import run_kube, session_user
     kube_api, _ = run_kube.get_kube_api() 
-    username = getpass.getuser()
     try:
         pods = kube_api.list_namespaced_pod(namespace=kube.namespace, 
-                                            label_selector=f"stimela_user={username}")
+                                            label_selector=f"stimela_user={session_user}")
     except ApiException as exc:
         body = json.loads(exc.body)
         log_exception(BackendError(f"k8s API error while listing pods", (exc, body)), severity="error")

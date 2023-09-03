@@ -56,7 +56,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     Returns:
         Any: return value (e.g. exit code) of content
     """
-    from . import InjectedFileFormatters, session_id
+    from . import InjectedFileFormatters, session_id, session_user
     from .kube_utils import StatusReporter
 
     if not cab.image:
