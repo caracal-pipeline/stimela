@@ -131,7 +131,7 @@ def daskjob_template(args):
                                         }
                                     ],
                                     "image": args.image,
-                                    "imagePullPolicy": "IfNotPresent",
+                                    "imagePullPolicy": args.imagePullPolicy,
                                     "livenessProbe": {
                                         "httpGet": {
                                             "path": "/health",
@@ -184,7 +184,7 @@ def daskjob_template(args):
                                         {"name": "WORKER_ENV", "value": "hello-world"}
                                     ],
                                     "image": args.image,
-                                    "imagePullPolicy": "IfNotPresent",
+                                    "imagePullPolicy": args.imagePullPolicy,
                                     "name": "worker",
                                 }
                             ],
@@ -198,7 +198,7 @@ def daskjob_template(args):
                     "containers": [
                         {
                             "image": args.image,
-                            "imagePullPolicy": "IfNotPresent",
+                            "imagePullPolicy": args.imagePullPolicy,
                             "name": "job",
                         }
                     ],
