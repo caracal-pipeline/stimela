@@ -8,21 +8,25 @@ import asyncio
 from typing import OrderedDict
 from omegaconf import OmegaConf
 import psutil
+
 import rich.progress
 import rich.logging
 from rich.table import Table
 from rich.text import Text
 
+from stimela import stimelogging
+
 progress_bar = progress_task = None
 
 _progress_task_names = []
 _progress_task_names_orig = []
+_status_reporters = []
 
 _start_time = datetime.now()
 _prev_disk_io = None, None
 
 
-def init_progress_bar():
+def init_progress_bar(boring=False):
     global progress_console, progress_bar, progress_task
     progress_console = rich.console.Console(file=sys.stdout, highlight=False)
     progress_bar = rich.progress.Progress(
@@ -35,7 +39,8 @@ def init_progress_bar():
         "{task.fields[cpu_info]}",
         refresh_per_second=2,
         console=progress_console,
-        transient=True)
+        transient=True,
+        disable=boring)
 
     progress_task = progress_bar.add_task("stimela", command="starting", cpu_info=" ", elapsed_time="", start=True)
     progress_bar.__enter__()
@@ -49,13 +54,15 @@ def destroy_progress_bar():
         progress_bar = None
 
 @contextlib.contextmanager
-def declare_subtask(subtask_name):
+def declare_subtask(subtask_name, status_reporter=None):
+    _status_reporters.append(status_reporter)
     _progress_task_names.append(subtask_name)
     _progress_task_names_orig.append(subtask_name)
     update_process_status(description='.'.join(_progress_task_names))
     try:
         yield subtask_name
     finally:
+        _status_reporters.pop(-1)
         _progress_task_names.pop(-1)
         _progress_task_names_orig.pop(-1)
         update_process_status(progress_task,
@@ -83,7 +90,6 @@ class _CommandContext(object):
 
 @contextlib.contextmanager
 def declare_subcommand(command):
-    update_process_status(command=command)
     progress_bar and progress_bar.reset(progress_task)
     try:
         yield _CommandContext(command)
@@ -107,18 +113,33 @@ class TaskStatsDatum(object):
     write_ms: float     = 0
     num_samples: int    = 0
 
+    def __post_init__(self):
+        self.extras = []
+
+    def insert_extra_stats(self, **kw):
+        for name, value in kw.items():
+            self.extras.append(name)
+            setattr(self, name, value)
+
     def add(self, other: "TaskStatsDatum"):
-        for f in _taskstats_sample_names:
-            setattr(self, f, getattr(self, f) + getattr(other, f))
+        for f in _taskstats_sample_names + other.extras:
+            if not hasattr(self, f):
+                self.extras.append(f)
+            setattr(self, f, getattr(self, f, 0) + getattr(other, f))
 
     def peak(self, other: "TaskStatsDatum"):
-        for f in _taskstats_sample_names:
-            setattr(self, f, max(getattr(self, f), getattr(other, f)))
+        for f in _taskstats_sample_names + other.extras:
+            if hasattr(self, f):
+                self.extras.append(f)
+                setattr(self, f, max(getattr(self, f, -1e-9999), getattr(other, f)))
+            else:
+                setattr(self, f, getattr(other, f))
 
     def averaged(self):
         avg = TaskStatsDatum(num_samples=1)
         for f in _taskstats_sample_names:
             setattr(avg, f, getattr(self, f) / self.num_samples)
+        avg.insert_extra_stats(**{name: getattr(self, name) / self.num_samples for name in self.extras})
         return avg
 
 
@@ -130,6 +151,14 @@ _task_start_time = OrderedDict()
 
 def collect_stats():
     """Returns dictionary of per-task stats (elapsed time, sums, peaks)"""
+    # cumulative add -- substeps contribute to parent steps
+    for key in list(_taskstats.keys())[::-1]:
+        _, sum, peak = _taskstats[key]
+        key1 = tuple(key[:-1])
+        if key1 in _taskstats:
+            _, sum1, peak1 = _taskstats[key1]
+            sum1.add(sum)
+            peak1.peak(peak)
     return _taskstats
 
 
@@ -197,6 +226,13 @@ def update_process_status(command=None, description=None):
         io = None
     _prev_disk_io = disk_io, now
 
+    # call extra status reporter
+    if _status_reporters and _status_reporters[-1]:
+        extra_info, extra_stats = _status_reporters[-1]()
+        s.insert_extra_stats(**extra_stats)
+    else:
+        extra_info = None
+
     # if a progress bar exists, update it
     if progress_bar is not None:
         if io is not None:
@@ -207,6 +243,10 @@ def update_process_status(command=None, description=None):
 
         updates = dict(elapsed_time=elapsed,
                     cpu_info=f"CPU [green]{s.cpu:2.1f}%[/green]|RAM [green]{round(s.mem_used):3}[/green]/[green]{round(s.mem_total)}[/green]G|Load [green]{s.load:2.1f}[/green]{ioinfo}")
+        
+        if extra_info:
+            updates['cpu_info'] += extra_info
+
         if command is not None:
             updates['command'] = command
         if description is not None:
@@ -225,16 +265,19 @@ async def run_process_status_update():
                 await asyncio.sleep(1)
 
 _printed_stats = dict(
+    k8s_cores="k8s cores",
+    k8s_mem="k8s mem GB",
     cpu="CPU %",
     mem_used="Mem GB",
     load="Load",
     read_gbps="R GB/s",
-    write_gbps="W GB/s")
+    write_gbps="W GB/s",
+    )
 
 # these stats are written as sums
 _sum_stats = ("read_count", "read_gb", "read_ms", "write_count", "write_gb", "write_ms")
 
-def render_profiling_summary(stats, max_depth, unroll_loops=False):
+def render_profiling_summary(stats: TaskStatsDatum, max_depth, unroll_loops=False):
 
     table_avg = Table(title=Text("\naverages & total I/O", style="bold"))
     table_avg.add_column("")
@@ -244,9 +287,16 @@ def render_profiling_summary(stats, max_depth, unroll_loops=False):
     table_peak.add_column("")
     table_peak.add_column("time hms", justify="right")
     
+    # accumulate set of all stats available
+    available_stats = set(_taskstats_sample_names)
+    for name, (elapsed, sum, peak) in stats.items():
+        available_stats.update(sum.extras)
+        available_stats.update(peak.extras)
+
     for f, label in _printed_stats.items():
-        table_avg.add_column(label, justify="right")
-        table_peak.add_column(label, justify="right")
+        if f in available_stats:
+            table_avg.add_column(label, justify="right")
+            table_peak.add_column(label, justify="right")
 
     table_avg.add_column("R GB", justify="right")
     table_avg.add_column("W GB", justify="right")
@@ -262,14 +312,15 @@ def render_profiling_summary(stats, max_depth, unroll_loops=False):
             avg_row = [".".join(name), tstr]
             peak_row = avg_row.copy()
             for f, label in _printed_stats.items():
-                if f != "num_samples":
-                    avg_row.append(f"{getattr(avg, f):.2f}")
-                    peak_row.append(f"{getattr(peak, f):.2f}")
+                if f in available_stats:
+                    avg_row.append(f"{getattr(avg, f):.2f}" if hasattr(avg, f) else "")
+                    peak_row.append(f"{getattr(peak, f):.2f}" if hasattr(peak, f) else "")
+
             avg_row += [f"{sum.read_gb:.2f}", f"{sum.write_gb:.2f}"]
             table_avg.add_row(*avg_row)
             table_peak.add_row(*peak_row)
 
-    progress_console.rule("profiling results")
+    stimelogging.declare_chapter("profiling results")
     destroy_progress_bar()
     from rich.columns import Columns
     # progress_console.print(table_avg, justify="center") 

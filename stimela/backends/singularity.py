@@ -61,20 +61,26 @@ def get_image_info(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.Sti
         backend (stimela.backend.StimelaBackendOptions): _description_
 
     Returns:
-        name, path: tuple of docker image name, and path to singularity image on disk
+        name, path, enable_update: tuple of docker image name, path to singularity image on disk, and enable-updates flag
     """
 
-    from stimela.backends import resolve_image_name
-    image_name = resolve_image_name(cab, backend)
+    # prebuilt image
+    if cab.image and cab.image.path:
+        simg_path = cab.image.path
+        if not os.path.exists(simg_path):
+            raise BackendError(f"image {simg_path} for cab '{cab.name}' doesn't exist")
+        return os.path.basename(simg_path), simg_path, False
+
+    image_name = cab.flavour.get_image_name(cab, backend)
 
     if not image_name:
-        raise BackendError(f"cab '{cab.name}' (singularity backend): image name not defined")
+        raise BackendError(f"cab '{cab.name}' does not define an image")
     
     # convert to filename
     simg_name = image_name.replace("/", "-") + ".simg"
     simg_path = os.path.join(backend.singularity.image_dir, simg_name) 
 
-    return image_name, simg_path
+    return image_name, simg_path, True
 
 
 def build_command_line(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBackendOptions',
@@ -106,20 +112,20 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     """
     native.update_rlimits(backend.rlimits, log)
 
-    image_name, simg_path = get_image_info(cab, backend)
+    image_name, simg_path, auto_update = get_image_info(cab, backend)
 
     rebuild = backend.singularity.rebuild  
     cached_image_exists = os.path.exists(simg_path)
 
     # no image? Better have builds enabled then
     if not cached_image_exists:
-        log.info(f"cached singularity image {simg_path} does not exist")
+        log.info(f"singularity image {simg_path} does not exist")
         rebuild = rebuild or backend.singularity.auto_build or backend.singularity.auto_update
         if not rebuild:
             raise BackendError(f"no image, and singularity build options not enabled")
 
     # check if existing image needs to be rebuilt
-    if backend.singularity.auto_update and not rebuild:
+    if auto_update and backend.singularity.auto_update and not rebuild:
         if image_name in _auto_updated_images:
             log.info("image was used earlier in this run, not checking for auto-updates again")
         else:

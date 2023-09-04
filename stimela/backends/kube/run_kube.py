@@ -1,113 +1,35 @@
-from dataclasses import dataclass
-import logging, time, json, datetime, yaml, os.path, uuid, pathlib, getpass, secrets
-import traceback
-from enum import Enum
-from typing import Dict, List, Optional, Any
+import logging, time, json, datetime, os.path, pathlib, secrets
+from typing import Dict, Optional, Any
+import subprocess
 
 from omegaconf import OmegaConf, DictConfig, ListConfig
-from scabha.basetypes import EmptyDictDefault, EmptyListDefault
 
 import stimela
 from stimela.utils.xrun_asyncio import dispatch_to_log
-from stimela.exceptions import StimelaCabParameterError, StimelaCabRuntimeError, CabValidationError
+from stimela.exceptions import StimelaCabParameterError, StimelaCabRuntimeError, BackendError
 from stimela.stimelogging import log_exception
 #from stimela.backends import resolve_required_mounts
 # these are used to drive the status bar
-from stimela.stimelogging import declare_subcommand, declare_subtask, declare_subtask_attributes, update_process_status
+from stimela.stimelogging import declare_subcommand, declare_subtask, update_process_status
 
 # needs pip install kubernetes dask-kubernetes
 
-import kubernetes
-from kubernetes.client import CustomObjectsApi
-from kubernetes.client.api import core_v1_api
-from kubernetes.client.rest import ApiException
-from kubernetes.stream import stream
+try:
+    import kubernetes
+    from kubernetes.client import CustomObjectsApi
+    from kubernetes.client.api import core_v1_api
+    from kubernetes.client.rest import ApiException
+    from kubernetes.stream import stream
+    _enabled = True
+except ImportError:
+    _enabled = False
+    pass  # pesumably handled by disabling the backend in __init__
+
+from .kube_utils import apply_pod_spec
 
 import rich
 
 _kube_client = _kube_config = None
-
-# dict of methods for converting an object to text format
-_InjectedFileFormatters = dict(
-    yaml = yaml.dump,
-    json = json.dumps,
-    txt = str
-)
-
-InjectedFileFormats = Enum("InjectedFileFormats", " ".join(_InjectedFileFormatters.keys()), module=__name__)
-
-@dataclass
-class KubernetesFileInjection(object):
-    format: InjectedFileFormats = "txt"
-    content: Any = ""
-
-@dataclass
-class KubernetesLocalMount(object):
-    path: str
-    dest: str = ""              # destination path -- same as local if empty
-    readonly: bool = False      # mount as readonly, but it doesn't work (yet?)
-    mkdir: bool = False         # create dir, if it is missing
-
-@dataclass
-class KubernetesPodLimits(object):
-    request: Optional[str] = None
-    limit: Optional[str] = None
-
-@dataclass
-class KubernetesPodSpec(object):
-    # selects a specific pod type from the defined set
-    type:           Optional[str] = None
-    # memory limit/requirement
-    memory:         Optional[KubernetesPodLimits] = None
-    cpu:            Optional[KubernetesPodLimits] = None
-    # arbitrary additional structure copied into the pod spec
-    custom_pod_spec:  Dict[str, Any] = EmptyDictDefault()
-
-
-def _apply_pod_spec(kps, pod_spec: Dict[str, Any], predefined_pod_specs: Dict[str, Dict[str, Any]], log: logging.Logger,  kind: str) -> Dict[str, Any]:
-    """applies this pod spec, as long with any predefined specs"""
-    if kps:
-        # apply predefined types
-        if kps.type is not None:
-            log.info(f"selecting predefined pod type '{kps.type}' for {kind}")
-            predefined_pod_spec = predefined_pod_specs.get(kps.type)
-            if predefined_pod_spec is None:
-                raise StimelaCabRuntimeError(f"'{kps.type}' not found in predefined_pod_specs")
-        else:
-            predefined_pod_spec = {}
-        # apply custom type and merge
-        if predefined_pod_spec or kps.custom_pod_spec:
-            pod_spec = OmegaConf.to_container(OmegaConf.merge(pod_spec, predefined_pod_spec, kps.custom_pod_spec))
-
-        # add RAM resources
-        if kps.memory is not None:
-            res = pod_spec['containers'][0].setdefault('resources', {})
-            # good practice to set these equal
-            if kps.memory.request:
-                res.setdefault('requests', {})['memory'] = kps.memory.request or kps.memory.limit
-            if kps.memory.limit:
-                res.setdefault('limits', {})['memory'] = kps.memory.limit or kps.memory.request
-            log.info(f"setting {kind} memory resources to {res['limits']['memory']}")
-        if kps.cpu is not None:
-            res = pod_spec['containers'][0].setdefault('resources', {})
-            if kps.cpu.request:
-                res.setdefault('requests', {})['cpu'] = kps.cpu.request
-            if kps.cpu.limit:
-                res.setdefault('limits', {})['cpu'] = kps.cpu.limit
-            log.info(f"setting {kind} CPU resources to {res['limits']['cpu']}")
-
-    return pod_spec
-
-
-@dataclass
-class KubernetesDaskCluster(object):
-    capture_logs: bool = True
-    capture_logs_style: Optional[str] = "blue"
-    name: Optional[str] = None
-    num_workers: int = 0
-    threads_per_worker: int = 1
-    worker_pod: KubernetesPodSpec = KubernetesPodSpec()
-    scheduler_pod: KubernetesPodSpec = KubernetesPodSpec()
 
 def get_kube_api():
     global _kube_client
@@ -118,7 +40,6 @@ def get_kube_api():
         kubernetes.config.load_kube_config()
 
     return core_v1_api.CoreV1Api(), CustomObjectsApi()
-
 
 
 def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
@@ -134,11 +55,11 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     Returns:
         Any: return value (e.g. exit code) of content
     """
-
-    from stimela.backends import resolve_image_name
+    from . import InjectedFileFormatters, session_id, session_user
+    from .kube_utils import StatusReporter
 
     if not cab.image:
-        raise StimelaCabRuntimeError(f"kubernetes runner requires cab.image to be set")
+        raise StimelaCabRuntimeError(f"kube runner requires cab.image to be set")
 
     kube = backend.kube
 
@@ -153,38 +74,45 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
     command_name = cab.flavour.command_name
 
-    podname = None
+    # generate podname
+    tmp_name = session_user + "--" + fqname.replace(".", "--").replace("_", "--")
+    token_hex = secrets.token_hex(4)
+    podname = tmp_name[0:50] + "--" + token_hex
+
     kube_api, custom_obj_api = get_kube_api()
+
+    image_name = cab.flavour.get_image_name(cab, backend)
+    if not image_name:
+        raise BackendError(f"cab '{cab.name}' does not define an image")
 
     start_time = datetime.datetime.now()
     def elapsed(since=None):
         """Returns string representing elapsed time"""
         return str(datetime.datetime.now() - (since or start_time)).split('.', 1)[0]
 
-    last_update = 0
-    def update_status():
-        nonlocal last_update
-        if time.time() - last_update >= 1:
-            update_process_status()
-            last_update = time.time()
-
     numba_cache_dir = os.path.expanduser("~/.cache/numba")
     pathlib.Path(numba_cache_dir).mkdir(parents=True, exist_ok=True)
 
-    pod_created = dask_job_created = None
+    pod_created = dask_job_created = port_forward_proc = None
 
-    with declare_subtask(f"{os.path.basename(command_name)}:kube"):
+    def k8s_event_handler(event):
+        if event.message.startswith("Error: ErrImagePull"):
+            raise StimelaCabRuntimeError(f"k8s failed to pull the image {image_name}'. Preceding log messages may contain extra information.")
+        if event.reason == "Failed":
+            raise StimelaCabRuntimeError(f"k8s has reported a 'Failed' event. Preceding log messages may contain extra information.")
+
+    statrep = StatusReporter(namespace, podname=podname, log=log, kube=kube,
+                             event_handler=k8s_event_handler)
+
+    with declare_subtask(f"{os.path.basename(command_name)}:kube", status_reporter=statrep.update):
         try:
-            username = getpass.getuser()
-            token_hex = secrets.token_hex(4)
-            # we do not know how long this is ging to be so truncate to 50 char
-            tmp_name = username + "--" + fqname.replace(".", "--").replace("_", "--")
-            podname = tmp_name[0:50] + "--" + token_hex
-
-            image_name = resolve_image_name(backend, cab.image)
             log.info(f"using image {image_name}")
 
-            pod_labels = dict(stimela_job=podname, user=username, stimela_fqname=fqname, stimela_cab=cab.name)
+            pod_labels = dict(stimela_job=podname,
+                              stimela_user=session_user,
+                              stimela_session_id=session_id,
+                              stimela_fqname=fqname,
+                              stimela_cab=cab.name)
 
             # depending on whether or not a dask cluster is configured, we do either a DaskJob or a regular pod
             if kube.dask_cluster and kube.dask_cluster.num_workers:
@@ -198,11 +126,11 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                     namespace=namespace,
                     image=image_name,
                     imagePullPolicy = 'Always' if kube.always_pull_images else 'IfNotPresent',
-                    memory_limit=kube.dask_cluster.worker_pod.memory.limit,
+                    memory_limit==kube.dask_cluster.worker_pod.memory and kube.dask_cluster.worker_pod.memory.limit,
                     nworkers=kube.dask_cluster.num_workers,
                     threads_per_worker=kube.dask_cluster.threads_per_worker,
                     cmdline=["/bin/sh", "-c", "while true;do date;sleep 5; done"],
-                    service_account="dask-runner",
+                    service_account=kube.service_account,
                     mount_file=None,
                     volume=[f"{name}:{path}" for name, path in kube.volumes.items()]
                 )))
@@ -210,11 +138,11 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                 # apply pod type specifications
                 if kube.dask_cluster.worker_pod:
                     dask_job_spec[0]["spec"]["cluster"]["spec"]["worker"]["spec"] = \
-                        _apply_pod_spec(kube.dask_cluster.worker_pod, dask_job_spec[0]["spec"]["cluster"]["spec"]["worker"]["spec"],
+                        apply_pod_spec(kube.dask_cluster.worker_pod, dask_job_spec[0]["spec"]["cluster"]["spec"]["worker"]["spec"],
                                                            kube.predefined_pod_specs, log, kind='worker')
                 if kube.dask_cluster.scheduler_pod:
                     dask_job_spec[0]["spec"]["cluster"]["spec"]["scheduler"]["spec"] = \
-                        _apply_pod_spec(kube.dask_cluster.scheduler_pod, dask_job_spec[0]["spec"]["cluster"]["spec"]["scheduler"]["spec"],
+                        apply_pod_spec(kube.dask_cluster.scheduler_pod, dask_job_spec[0]["spec"]["cluster"]["spec"]["scheduler"]["spec"],
                                                            kube.predefined_pod_specs, log, kind='scheduler')
 
             else:
@@ -245,12 +173,12 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                         volumeMounts = []
                 )],
                 volumes = [],
-                serviceAccountName = 'dask-runner',
+                serviceAccountName = kube.service_account,
                 automountServiceAccountToken = True
             )
 
             # apply pod specification
-            pod_spec = _apply_pod_spec(kube.job_pod, pod_spec, kube.predefined_pod_specs, log, kind='job')
+            pod_spec = apply_pod_spec(kube.job_pod, pod_spec, kube.predefined_pod_specs, log, kind='job')
 
             pod_manifest['spec'] = pod_spec
 
@@ -302,22 +230,6 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                     ))
                 pod_manifest['spec']['containers'][0]['volumeMounts'].append(dict(name=volume_name, mountPath=path))
 
-            # set up a function to log events -- seems to be the only way to detect image pull errors
-            label_selector = f"stimela_job={podname}"
-            reported_events = set()
-            def log_pod_events():
-                pods = kube_api.list_namespaced_pod(namespace=namespace, label_selector=label_selector)
-                for pod in pods.items:
-                    # get new events
-                    events = kube_api.list_namespaced_event(namespace=namespace, field_selector=f"involvedObject.kind=Pod,involvedObject.name={pod.metadata.name}")
-                    for event in events.items:
-                        if event.metadata.uid not in reported_events:
-                            if kube.verbose_events:
-                                log.info(kube.verbose_event_format.format(event=event))
-                            reported_events.add(event.metadata.uid)
-                            if event.message.startswith("Error: ErrImagePull"):
-                                raise StimelaCabRuntimeError(f"kubernetes failed to pull the image '{image_name}'. Preceding log messages may contain extra information.")
-
             # start pod and wait for it to come up
             aux_pod_threads = {}
             if dask_job_spec is None:
@@ -328,14 +240,12 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                     pod_created = resp
 
                     while True:
-                        update_status()
+                        update_process_status()
                         resp = kube_api.read_namespaced_pod_status(name=podname, namespace=namespace)
                         log.debug(f"read_namespaced_pod_status({podname}): {resp.status}")
                         phase = resp.status.phase
                         if phase == 'Running':
                             break
-                        subcommand.update_status(f"phase: {phase}")
-                        log_pod_events()
                         time.sleep(1)
             # else dask job
             else:
@@ -350,20 +260,20 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                     log.debug(f"create_namespaced_custom_object({dask_job_name}): {resp}")
                     dask_job_created = resp
                     job_status = None
-                    log_pod_events()
 
-                    while job_status != 'Running':
-                        update_status()
+                    # wait for dask job to start up
+                    while True:
                         resp = custom_obj_api.get_namespaced_custom_object_status(group, version, namespace, plural,
                                                                                 name=dask_job_name)
                         job_status = 'status' in resp and resp['status']['jobStatus']
-                        # rich.print(resp)
-                        subcommand.update_status(f"status: {job_status}")
+                        statrep.set_main_status(job_status)
+                        update_process_status()
+                        # get podname from job once it's running
                         if job_status == 'Running':
                             podname = resp['status']['jobRunnerPodName']
+                            statrep.set_pod_name(podname)
                             log.info(f"job running as pod {podname}")
-
-                        log_pod_events()
+                            break
                         time.sleep(1)
 
                     def print_logs(name):
@@ -388,7 +298,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
                     # get other pods associated with DaskJob
                     if kube.dask_cluster.capture_logs:
-                        pods = kube_api.list_namespaced_pod(namespace=namespace, label_selector=label_selector)
+                        pods = kube_api.list_namespaced_pod(namespace=namespace, label_selector=statrep.label_selector)
                         for pod in pods.items:
                             # get new events
                             name = pod.metadata.name
@@ -396,6 +306,13 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                                 import threading
                                 aux_pod_threads[name] = threading.Thread(target=print_logs, kwargs=dict(name=name))
                                 aux_pod_threads[name].start()
+
+                    # start port forwarding
+                    if kube.dask_cluster.forward_dashboard_port:
+                        log.info(f"starting port-forward process for http-dashboard to local port {kube.dask_cluster.forward_dashboard_port}")
+                        port_forward_proc = subprocess.Popen([kube.kubectl_path,
+                            "port-forward", f"service/{dask_job_name}-scheduler",
+                            f"{kube.dask_cluster.forward_dashboard_port}:http-dashboard"])
 
             log.info(f"  pod started after {elapsed()}")
             # resp = kube_api.read_namespaced_pod(name=podname, namespace=namespace)
@@ -413,7 +330,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                             _preload_content=False)
 
                 while resp.is_open():
-                    update_status()
+                    update_process_status()
                     resp.update(timeout=1)
                     if resp.peek_stdout():
                         for line in resp.read_stdout().rstrip().split("\n"):
@@ -429,7 +346,6 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                             input = None
                         else:
                             break
-                    log_pod_events()
 
                 retcode = resp.returncode
                 resp.close()
@@ -440,7 +356,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                 with declare_subcommand("configuring pod (inject)"):
                     for filename, injection in kube.inject_files.items_ex():
                         content = injection.content
-                        formatter = _InjectedFileFormatters.get(injection.format.name)
+                        formatter = InjectedFileFormatters.get(injection.format.name)
                         if formatter is None:
                             raise StimelaCabParameterError(f"unsupported format {injection.format.name} for {filename}")
                         # convert content to something serializable
@@ -485,7 +401,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
             with declare_subcommand(os.path.basename(command_name)):
                 retcode = run_pod_command(args, command_name, wrangler=cabstat.apply_wranglers)
-            log_pod_events()
+            update_process_status()
 
             # check if output marked it as a fail
             if cabstat.success is False:
@@ -503,31 +419,52 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
         # handle various failure modes by logging errors appropriately
         except KeyboardInterrupt:
-            log.error(f"kubernetes invocation of {command_name} interrupted with Ctrl+C after {elapsed()}")
+            log.error(f"k8s invocation of {command_name} interrupted with Ctrl+C after {elapsed()}")
             raise StimelaCabRuntimeError(f"{command_name} interrupted with Ctrl+C after {elapsed()}")
         except ApiException as exc:
             if exc.body:
                 exc = (exc, json.loads(exc.body))
             import traceback
             traceback.print_exc()
-            log.error(f"kubernetes invocation of {command_name} failed with an ApiException after {elapsed()}")
-            raise StimelaCabRuntimeError("kubernetes API error", exc)
+            log.error(f"k8s invocation of {command_name} failed with an ApiException after {elapsed()}")
+            raise StimelaCabRuntimeError("k8s API error", exc)
         # this drops out as a normal error response
         except StimelaCabRuntimeError as exc:
-            log.error(f"kubernetes invocation of {command_name} failed after {elapsed()}")
+            log.error(f"k8s invocation of {command_name} failed after {elapsed()}")
             raise
         except Exception as exc:
-            log.error(f"kubernetes invocation of {command_name} failed after {elapsed()}")
+            log.error(f"k8s invocation of {command_name} failed after {elapsed()}")
             import traceback
             traceback.print_exc()
-            raise StimelaCabRuntimeError("kubernetes backend error", exc)
+            raise StimelaCabRuntimeError("kube backend error", exc)
 
         # cleanup
         finally:
             try:
+                # clean up port forwarder
+                if port_forward_proc:
+                    retcode = port_forward_proc.poll()
+                    if retcode is not None:
+                        log.warning(f"kubectl port-forward process has died with code {retcode}")
+                        port_forward_proc.wait()
+                    else:
+                        log.info("terminating kubectl port-forward process")
+                        port_forward_proc.terminate()
+                        try:
+                            retcode = port_forward_proc.wait(1)
+                        except subprocess.TimeoutExpired:
+                            log.warning("kubectl port-forward process hasn't terminated -- killing it")
+                            port_forward_proc.kill()
+                            try:
+                                retcode = port_forward_proc.wait(1)
+                            except subprocess.TimeoutExpired:
+                                log.warning("kubectl port-forward process refuses to die")
+                        if retcode is not None:
+                            log.info(f"kubectl port-forward process has exited with code {retcode}")
+
                 if podname and pod_created: # or dask_job_created:
                     try:
-                        update_status()
+                        update_process_status()
                         log.info(f"deleting pod {podname}")
                         resp = kube_api.delete_namespaced_pod(name=podname, namespace=namespace)
                         log.debug(f"delete_namespaced_pod({podname}): {resp}")
@@ -536,27 +473,28 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                         #     log.debug(f"read_namespaced_pod({podname}): {resp}")
                         #     log.info(f"  pod phase is {resp.status.phase} after {elapsed()}")
                         #     time.sleep(.5)
-                        log_pod_events()
+                        update_process_status()
                     except ApiException as exc:
                         body = json.loads(exc.body)
-                        log_exception(StimelaCabRuntimeError(f"kubernetes API error while deleting pod {podname}", (exc, body)), severity="warning")
+                        log_exception(StimelaCabRuntimeError(f"k8s API error while deleting pod {podname}", (exc, body)), severity="warning")
                     except Exception as exc:
-                        log_exception(StimelaCabRuntimeError(f"kubernetes API error while deleting pod {podname}: {exc}"), severity="warning")
+                        log_exception(StimelaCabRuntimeError(f"error while deleting pod {podname}: {exc}"), severity="warning")
                 if dask_job_created:
                     try:
-                        update_status()
+                        update_process_status()
                         log.info(f"deleting dask job {dask_job_name}")
                         custom_obj_api.delete_namespaced_custom_object(group, version, namespace, plural, dask_job_name)
                     except ApiException as exc:
                         body = json.loads(exc.body)
-                        log_exception(StimelaCabRuntimeError(f"kubernetes API error while deleting dask job {dask_job_name}", (exc, body)), severity="warning")
+                        log_exception(StimelaCabRuntimeError(f"k8s API error while deleting dask job {dask_job_name}", (exc, body)), severity="warning")
                     except Exception as exc:
-                        log_exception(StimelaCabRuntimeError(f"kubernetes API error while deleting dask job {dask_job_name}: {exc}"), severity="warning")
+                        log_exception(StimelaCabRuntimeError(f"error while deleting dask job {dask_job_name}: {exc}"), severity="warning")
                 # wait for aux pod threads
                 cleanup_time = datetime.datetime.now()
                 def cleanup_elapsed():
                     return (datetime.datetime.now() - cleanup_time).total_seconds()
                 while aux_pod_threads and cleanup_elapsed() < 5:
+                    update_process_status()
                     for name, thread in list(aux_pod_threads.items()):
                         if thread.is_alive():
                             log.info(f"rejoining log thread for {name}")
@@ -576,13 +514,13 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                 if aux_pod_threads:
                     log.info(f"{len(aux_pod_threads)} logging threads for sub-pods still alive after {cleanup_elapsed():.1}s, giving up on the cleanup")
             except KeyboardInterrupt:
-                log.error(f"kubernetes cleanup interrupted with Ctrl+C after {elapsed()}")
+                log.error(f"kube cleanup interrupted with Ctrl+C after {elapsed()}")
                 raise StimelaCabRuntimeError(f"{command_name} cleanup interrupted with Ctrl+C after {elapsed()}")
             except Exception as exc:
-                log.error(f"kubernetes cleanup failed after {elapsed()}")
+                log.error(f"kube cleanup failed after {elapsed()}")
                 import traceback
                 traceback.print_exc()
-                raise StimelaCabRuntimeError("kubernetes backend clanup error", exc)
+                raise StimelaCabRuntimeError("kube backend cleanup error", exc)
 
 
 

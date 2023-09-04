@@ -41,7 +41,7 @@ class RunExecGroup(click.Group):
 
 @click.group(cls=RunExecGroup)
 @click.option('--backend', '-b', type=click.Choice(backends.SUPPORTED_BACKENDS), 
-                 help="Backend to use (for containerization).")
+                 help="Backend to use.")
 @click.option('--config', '-c', 'config_files', metavar='FILE', multiple=True,
                 help="Extra user-defined config file(s) to load.")
 @click.option('--set', '-s', 'config_dotlist', metavar='SECTION.VAR=VALUE', multiple=True,
@@ -52,11 +52,15 @@ class RunExecGroup(click.Group):
                 help="Add directory to _include paths. Can be given multiple times.")
 @click.option('--clear-cache', '-C', is_flag=True, 
                 help="Reset the configuration cache. First thing to try in case of strange configuration errors.")
-@click.option('--verbose', '-v', is_flag=True, help='Be extra verbose in output.')
+@click.option('--boring', '-b', is_flag=True, 
+                help="Disables progress bar and any other fancy console outputs.")
+@click.option('--verbose', '-v', is_flag=True, 
+              help='Be extra verbose in output.')
 @click.version_option(str(stimela.__version__))
-def cli(config_files=[], config_dotlist=[], include=[], backend=None, verbose=False, no_sys_config=False, clear_cache=False):
+def cli(config_files=[], config_dotlist=[], include=[], backend=None, 
+        verbose=False, no_sys_config=False, clear_cache=False, boring=False):
     global log
-    log = stimela.logger(loglevel=logging.DEBUG if verbose else logging.INFO)
+    log = stimela.logger(loglevel=logging.DEBUG if verbose else logging.INFO, boring=boring)
     log.info(f"starting")        # remove this eventually, but it's handy for timing things right now
 
     stimela.VERBOSE = verbose

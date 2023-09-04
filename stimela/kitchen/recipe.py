@@ -385,6 +385,7 @@ class Recipe(Cargo):
                 for step_name, step in self.steps.items():
                     if (tags & step.tags):
                         tagged_steps.add(step_name)
+                        self.log.info(f"step '{step_name}' selected based on tags {tags & step.tags}")
                 self.log.info(f"{len(tagged_steps)} of {len(self.steps)} step(s) selected via tags ({', '.join(tags)})")
             # else, use steps without any tag in (skip_tags + {"never"})
             else:

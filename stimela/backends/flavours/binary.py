@@ -32,5 +32,6 @@ class BinaryFlavour(_BaseFlavour):
     
     def get_image_name(self, cab: Cab, backend: 'stimela.backend.StimelaBackendOptions'):
         from stimela.backends import resolve_image_name
-        return resolve_image_name(cab.image)        
+        from stimela import CONFIG
+        return resolve_image_name(backend, cab.image or CONFIG.images['default-python'])
 

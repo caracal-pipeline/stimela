@@ -74,22 +74,26 @@ class StimelaBackendOptions(object):
 StimelaBackendSchema = OmegaConf.structured(StimelaBackendOptions)
 
 
-def resolve_image_name(backend: StimelaBackendOptions, image: 'stimela.kitchen.Cab.ImageInfo', default_image: str = None):
+def resolve_image_name(backend: StimelaBackendOptions, image: 'stimela.kitchen.Cab.ImageInfo'):
     """
     Resolves image name -- applies override registries, if any exist
     """
-    image_name = image.name or default_image
+    # if image is defined, use name and registry within
+    image_name = image.name
     registry_name = image.registry
-    if image.registry == "DEFAULT" or not image.registry:
+    version = image.version or "latest"
+    # resolve registry name
+    if registry_name == "DEFAULT" or not registry_name:
         registry_name = backend.default_registry
     elif registry_name == "LOCAL":
         registry_name = ''
+    # apply any registry overrides
     if registry_name in backend.override_registries:
         registry_name = backend.override_registries[registry_name]
     if registry_name:
-        return f"{registry_name}/{image_name}:{image.version}"
+        return f"{registry_name}/{image_name}:{version}"
     else:
-        return f"{image_name}:{image.version}"
+        return f"{image_name}:{version}"
 
 
 ## commenting out for now -- will need to fix when we reactive the kube backend (and have tests for it)

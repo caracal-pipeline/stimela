@@ -284,7 +284,10 @@ class Cargo(object):
                             raise SchemaError(f"{label}.{name} is not a valid parameter definition", exc0)
                     # else assume subsection and recurse in
                     else:
-                        Cargo.flatten_schemas(io_dest, value, label=label, prefix=f"{name}.")
+                        try:
+                            Cargo.flatten_schemas(io_dest, value, label=label, prefix=f"{name}.")
+                        except SchemaError as exc:
+                            raise SchemaError(f"{label}.{name} is interpreted as nested section, but contains errors", exc)
         return io_dest
 
     def flatten_param_dict(self, output_params, input_params, prefix=""):

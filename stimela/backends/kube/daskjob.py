@@ -24,7 +24,7 @@ def create_parser():
     p.add_argument(
         "-s",
         "--service-account",
-        default="dask-runner",
+        default="compute-runner",
         help="The kubernetes service account which will run the job",
     )
     p.add_argument(
