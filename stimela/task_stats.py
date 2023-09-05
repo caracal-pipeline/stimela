@@ -37,7 +37,7 @@ class TaskInformation(object):
     def description(self):
         name = '.'.join(self.names)
         if self.task_attrs:
-            name += f"\[{self.task_attrs.join(', ')}]"
+            name += f"\[{', '.join(self.task_attrs)}]"
         return name
 
 # stack of task information -- most recent subtask is at the end
