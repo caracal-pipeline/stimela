@@ -192,11 +192,11 @@ class StatusReporter(object):
                         totals['memory'] += resolve_unit(usage.get('memory'), k8s_memory_units_in_bytes)
                     # print(f"Pod: {pname}, CPU: {usage.get('cpu')}, Memory: {usage.get('memory')}")
         # add main pod/job status
-        status = self.main_status
-        if status:
-            status = f"|[blue]{status}[/blue]"
+        report_metrics = []
+        if self.main_status:
+            report_metrics.append(f"[blue]{self.main_status}[/blue]")
         elif self.podname in self.pod_statuses:
-            status = f"|[blue]{self.pod_statuses[self.podname]}[/blue]"
+            report_metrics.append(f"[blue]{self.pod_statuses[self.podname]}[/blue]")
         # add count of running pods
         npods = len(self.pod_statuses)
         pods = ""
@@ -212,17 +212,21 @@ class StatusReporter(object):
         nuk = npods - nrun - npend - nterm
         if nuk:
             pods += f"[red]{nuk}[/red]U"
-        status = (status or '') + (f"|pods {pods}" if npods else "")
+        if npods:
+            report_metrics.append(f"pods {pods}")
         # add metrics
         if metrics:
             cores = totals['cpu']
             mem_gb = round(totals['memory'] / 2**30)
-            status += f"|cores [green]{totals['cpu']:.2f}[/green]|mem [green]{mem_gb}[/green]G"
+            report_metrics += [
+                f"cores [green]{totals['cpu']:.2f}[/green]", 
+                f"mem [green]{mem_gb}[/green]G"
+            ]
             stats = dict(k8s_cores=cores, k8s_mem=mem_gb)
         else:
             stats = None
         
-        return status, stats
+        return report_metrics, stats
 
 
 def check_pods_on_startup(kube: 'stimela.backends.kube.KubernetesBackendOptions'):

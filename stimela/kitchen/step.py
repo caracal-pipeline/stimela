@@ -320,23 +320,23 @@ class Step:
         if parent_log is None:
             parent_log = self.log
 
+        # validate backend settings
+        backend = OmegaConf.merge(backend, self.cargo.backend or {}, self.backend or {})
+        backend_opts, backend_main, backend_wrapper =  runner.validate_backend_settings(backend)
+        remote_backend = backend_main.is_remote()
+
         # if step is being explicitly skipped, omit from profiling, and drop info/warning messages to debug level
         explicit_skip = self.skip is True 
         if explicit_skip:
             context = nullcontext()
             parent_log_info = parent_log_warning = parent_log.debug
         else:
-            context = stimelogging.declare_subtask(self.name)
+            context = stimelogging.declare_subtask(self.name, hide_local_metrics=remote_backend)
             stimelogging.declare_chapter(f"{self.fqname}")
             parent_log_info, parent_log_warning = parent_log.info, parent_log.warning
 
         if self.validated_params is None:
             self.prevalidate(self.params)
-
-        # validate backend settings
-        backend = OmegaConf.merge(backend, self.cargo.backend or {}, self.backend or {})
-        backend_opts, backend_main, backend_wrapper =  runner.validate_backend_settings(backend)
-        remote_backend = backend_main.is_remote()
 
         with context:
             # evaluate the skip attribute (it can be a formula and/or a {}-substititon)
