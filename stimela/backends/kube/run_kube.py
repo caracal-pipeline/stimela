@@ -1,49 +1,31 @@
 import logging, time, json, datetime, os.path, pathlib, secrets
 from typing import Dict, Optional, Any
 import subprocess
+import rich
 
 from omegaconf import OmegaConf, DictConfig, ListConfig
 
-import stimela
 from stimela.utils.xrun_asyncio import dispatch_to_log
 from stimela.exceptions import StimelaCabParameterError, StimelaCabRuntimeError, BackendError
 from stimela.stimelogging import log_exception
-#from stimela.backends import resolve_required_mounts
-# these are used to drive the status bar
 from stimela.stimelogging import declare_subcommand, declare_subtask, update_process_status
+from stimela.backends import StimelaBackendOptions
+from stimela.kitchen.cab import Cab
 
 # needs pip install kubernetes dask-kubernetes
 
-try:
-    import kubernetes
-    from kubernetes.client import CustomObjectsApi
-    from kubernetes.client.api import core_v1_api
-    from kubernetes.client.rest import ApiException
-    from kubernetes.stream import stream
-    _enabled = True
-except ImportError:
-    _enabled = False
-    pass  # pesumably handled by disabling the backend in __init__
+from . import get_kube_api, InjectedFileFormatters, session_id, session_user, resource_labels
+from .kube_utils import StatusReporter
+
+from kubernetes.client.rest import ApiException
+from kubernetes.stream import stream
 
 from .kube_utils import apply_pod_spec
-
-import rich
-
-_kube_client = _kube_config = None
-
-def get_kube_api():
-    global _kube_client
-    global _kube_config
-
-    if _kube_config is None:
-        _kube_config = True
-        kubernetes.config.load_kube_config()
-
-    return core_v1_api.CoreV1Api(), CustomObjectsApi()
+from . import infrastructure
 
 
-def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
-        backend: 'stimela.backend.StimelaBackendOptions',
+def run(cab: Cab, params: Dict[str, Any], fqname: str,
+        backend: StimelaBackendOptions,
         log: logging.Logger, subst: Optional[Dict[str, Any]] = None):
     """Runs cab contents
 
@@ -55,8 +37,6 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     Returns:
         Any: return value (e.g. exit code) of content
     """
-    from . import InjectedFileFormatters, session_id, session_user
-    from .kube_utils import StatusReporter
 
     if not cab.image:
         raise StimelaCabRuntimeError(f"kube runner requires cab.image to be set")
@@ -93,13 +73,24 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     numba_cache_dir = os.path.expanduser("~/.cache/numba")
     pathlib.Path(numba_cache_dir).mkdir(parents=True, exist_ok=True)
 
-    pod_created = dask_job_created = port_forward_proc = None
+    pod_created = dask_job_created = volumes_provisioned = port_forward_proc = None
+
+    aux_pod_threads = {}
 
     def k8s_event_handler(event):
+        objkind = event.involved_object.kind
+        objname = event.involved_object.name
         if event.message.startswith("Error: ErrImagePull"):
-            raise StimelaCabRuntimeError(f"k8s failed to pull the image {image_name}'. Preceding log messages may contain extra information.")
+            raise BackendError(f"{objkind} '{objname}': failed to pull the image '{image_name}'. Preceding log messages may contain extra information.", 
+                               event.to_dict())
         if event.reason == "Failed":
-            raise StimelaCabRuntimeError(f"k8s has reported a 'Failed' event. Preceding log messages may contain extra information.")
+            raise BackendError(f"{objkind} '{objname}' reported a 'Failed' event. Preceding log messages may contain extra information.", 
+                               event.to_dict())
+        if event.reason == "ProvisioningFailed":
+            raise BackendError(f"{objkind} '{objname}' reported a 'ProvisioningFailed' event. Preceding log messages may contain extra information.",
+                              event.to_dict())
+        # if event.reason == "FailedScheduling":
+        #     raise StimelaCabRuntimeError(f"k8s has reported a 'FailedScheduling' event. Preceding log messages may contain extra information.")
 
     statrep = StatusReporter(namespace, podname=podname, log=log, kube=kube, 
                              event_handler=k8s_event_handler)
@@ -108,11 +99,11 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
         try:
             log.info(f"using image {image_name}")
 
+            # create pod labels
             pod_labels = dict(stimela_job=podname, 
-                              stimela_user=session_user,
-                              stimela_session_id=session_id, 
                               stimela_fqname=fqname, 
-                              stimela_cab=cab.name)
+                              stimela_cab=cab.name,
+                              **resource_labels)
 
             # depending on whether or not a dask cluster is configured, we do either a DaskJob or a regular pod
             if kube.dask_cluster and kube.dask_cluster.num_workers:
@@ -218,19 +209,25 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                 add_local_mount(f"automount-{i}", path, path, not readwrite)
 
             # add persistent volumes
-            pvcs = {}
-            for i, (name, path) in enumerate(kube.volumes.items()):
-                volume_name = pvcs.get(name)
-                if volume_name is None:
-                    volume_name = pvcs[name] = name
+            # check that mount paths are set before we try to resolve volumes
+            for name, pvc in kube.volumes.items():
+                if not pvc.mount:
+                    raise BackendError(f"volume {name} does not specify a mount path")
+            # get the PVCs etc for the volumes
+            with declare_subcommand("provisioning storage"):
+                volumes_provisioned = infrastructure.resolve_volumes(kube, log=log, step_token=token_hex)
+                # create volume specs
+                for name, pvc in kube.volumes.items():
                     pod_manifest['spec']['volumes'].append(dict(
-                        name = volume_name,
-                        persistentVolumeClaim = dict(claimName=name)
+                        name = name,
+                        persistentVolumeClaim = dict(claimName=pvc.name)
                     ))
-                pod_manifest['spec']['containers'][0]['volumeMounts'].append(dict(name=volume_name, mountPath=path))
+                    pod_manifest['spec']['containers'][0]['volumeMounts'].append(dict(name=name, mountPath=pvc.mount))
+                # add to status reporter
+                statrep.set_pvcs(kube.volumes)
 
             # start pod and wait for it to come up
-            aux_pod_threads = {}
+            provisioning_deadline = time.time() + (kube.provisioning_timeout or 1e+10)
             if dask_job_spec is None:
                 with declare_subcommand("starting pod") as subcommand:
                     log.info(f"starting pod {podname} to run {command_name}")
@@ -245,6 +242,9 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                         phase = resp.status.phase
                         if phase == 'Running':
                             break
+                        if time.time() >= provisioning_deadline:
+                            log.error("timed out waiting for pod to start. The log above may contain more information.")
+                            raise BackendError(f"pod failed to start after {kube.provisioning_timeout}s")
                         time.sleep(1)
             # else dask job
             else:
@@ -273,6 +273,9 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                             statrep.set_pod_name(podname)
                             log.info(f"job running as pod {podname}")
                             break
+                        if time.time() >= provisioning_deadline:
+                            log.error("timed out waiting for dask job to start. The log above may contain more information.")
+                            raise BackendError(f"job failed to start after {kube.provisioning_timeout}s")
                         time.sleep(1)
 
                     def print_logs(name):
@@ -351,9 +354,9 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                 return retcode
 
             # inject files into pod
-            if 'inject_files' in kube:
+            if kube.inject_files:
                 with declare_subcommand("configuring pod (inject)"):
-                    for filename, injection in kube.inject_files.items_ex():
+                    for filename, injection in kube.inject_files.items():
                         content = injection.content
                         formatter = InjectedFileFormatters.get(injection.format.name)
                         if formatter is None:
@@ -370,7 +373,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                             log.info(f"injection successful after {elapsed()}")
 
 
-            if 'pre_commands' in kube:
+            if kube.pre_commands:
                 with declare_subcommand("configuring pod (pre-commands)"):
                     for pre_command in kube.pre_commands:
                         log.info(f"running pre-command '{pre_command}' in pod {podname}")
@@ -419,23 +422,26 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
         # handle various failure modes by logging errors appropriately
         except KeyboardInterrupt:
             log.error(f"k8s invocation of {command_name} interrupted with Ctrl+C after {elapsed()}")
-            raise StimelaCabRuntimeError(f"{command_name} interrupted with Ctrl+C after {elapsed()}")
+            raise StimelaCabRuntimeError(f"{command_name} interrupted with Ctrl+C after {elapsed()}") from None
         except ApiException as exc:
             if exc.body:
                 exc = (exc, json.loads(exc.body))
             import traceback
             traceback.print_exc()
-            log.error(f"k8s invocation of {command_name} failed with an ApiException after {elapsed()}")
-            raise StimelaCabRuntimeError("k8s API error", exc)
+            log.error(f"k8s API error after {elapsed()}: {exc}")
+            raise BackendError("k8s API error", exc) from None
         # this drops out as a normal error response
         except StimelaCabRuntimeError as exc:
-            log.error(f"k8s invocation of {command_name} failed after {elapsed()}")
+            log.error(f"cab runtime error after {elapsed()}: {exc}")
+            raise
+        except BackendError as exc:
+            log.error(f"kube backend error after {elapsed()}: {exc}")
             raise
         except Exception as exc:
             log.error(f"k8s invocation of {command_name} failed after {elapsed()}")
             import traceback
             traceback.print_exc()
-            raise StimelaCabRuntimeError("kube backend error", exc)
+            raise StimelaCabRuntimeError("kube backend error", exc) from None
 
         # cleanup
         finally:
@@ -460,6 +466,10 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                                 log.warning("kubectl port-forward process refuses to die")
                         if retcode is not None:
                             log.info(f"kubectl port-forward process has exited with code {retcode}")
+
+                # cleean up PVCs
+                if volumes_provisioned:
+                    infrastructure.delete_pvcs(kube, volumes_provisioned, log=log, step=True)
 
                 if podname and pod_created: # or dask_job_created:
                     try:

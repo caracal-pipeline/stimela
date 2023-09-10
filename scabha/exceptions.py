@@ -1,7 +1,9 @@
 import sys
-from typing import List, Union
+from typing import List, Union, Dict
 from typing import Optional as _Optional
 from types import TracebackType
+from collections import OrderedDict
+from omegaconf import DictConfig
 import traceback
 
 logger = None
@@ -24,8 +26,8 @@ class FormattedTraceback(object):
 
 class ScabhaBaseException(Exception):
     def __init__(self, message: str, 
-                 nested: _Optional[Union[Exception, TracebackType, FormattedTraceback, 
-                                    List[Union[Exception, TracebackType, FormattedTraceback]]]] = None, 
+                 nested: _Optional[Union[Exception, TracebackType, FormattedTraceback, Dict,
+                                    List[Union[Exception, TracebackType, FormattedTraceback, Dict]]]] = None, 
                  log=None, tb=False):
         """Initializes exception object
 
@@ -38,7 +40,7 @@ class ScabhaBaseException(Exception):
         # include traceback automatically?
         if isinstance(nested, Exception) and (tb or ALWAYS_REPORT_TRACEBACK) and nested is sys.exc_info()[1]:
             nested = [nested, sys.exc_info()[2]]
-        if isinstance(nested, (Exception, TracebackType)):
+        if isinstance(nested, (Exception, TracebackType, dict, OrderedDict, DictConfig)):
             nested = [nested]
         self.nested = nested or []
         # convert nested tracebacks to formatted ones

@@ -118,7 +118,7 @@ def cli(config_files=[], config_dotlist=[], include=[], backend=None,
 
 
 # import commands
-from stimela.commands import doc, run, save_config
+from stimela.commands import doc, run, save_config, cleanup
 
 ## These one needs to be reimplemented, current backed auto-pulls and auto-builds:
 # images, pull, build, clean

@@ -9,7 +9,8 @@ opts:
       verbose_events: 1   # to get events printed
       dir: /mnt/data/stimela-test
       volumes:
-        rarg-test-compute-pvc: /mnt/data
+        rarg-test-compute-efs-pvc: 
+          mount: /mnt/data
 
       ## override user/group ID
       uid: 1669

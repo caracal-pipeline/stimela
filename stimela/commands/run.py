@@ -19,7 +19,7 @@ from stimela import stimelogging
 import stimela.config
 from stimela.config import ConfigExceptionTypes
 from stimela import logger, log_exception
-from stimela.exceptions import RecipeValidationError, StimelaRuntimeError, StepSelectionError, StimelaBaseException
+from stimela.exceptions import RecipeValidationError, StimelaRuntimeError, StepSelectionError, BackendError
 from stimela.main import cli
 from stimela.kitchen.recipe import Recipe, Step, RecipeSchema, join_quote
 from stimela import task_stats
@@ -194,15 +194,13 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, last_recip
             log_exception(f"error applying configuration from {what}", exc)
             sys.exit(2)
 
-        # now that config is loaded, check for kube backend cleanup
-        select = stimela.CONFIG.opts.backend.select 
-        if select and (select == 'kube' or select[0] == 'kube'):
-            if stimela.backends.kube.AVAILABLE:
-                from stimela.backends.kube import kube_utils
-                log.info("checking for k8s pods from other sessions")
-                kube_utils.check_pods_on_startup(stimela.CONFIG.opts.backend.kube)
-                atexit.register(kube_utils.check_pods_on_exit, stimela.CONFIG.opts.backend.kube)
-
+        # now that config is loaded, initialize all relevant backends
+        try:
+            backend = OmegaConf.to_object(stimela.CONFIG.opts.backend)
+            stimela.backends.init_backends(backend, log)
+        except BackendError as exc:
+            log_exception(exc)
+            return 1
 
         log.info(f"{what} contains the following recipe sections: {join_quote(all_recipe_names)}")
 

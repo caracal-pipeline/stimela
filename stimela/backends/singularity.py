@@ -53,6 +53,9 @@ def get_status():
 def is_remote():
     return False
 
+def init(backend: 'stimela.backend.StimelaBackendOptions', log: logging.Logger):
+    pass
+
 def get_image_info(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBackendOptions'):
     """returns image name/path corresponding to cab
 

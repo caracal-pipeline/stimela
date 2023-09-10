@@ -256,7 +256,12 @@ class Step:
                     self.params[name] = value
 
             # check for valid backend
-            runner.validate_backend_settings(OmegaConf.merge(backend or {}, self.cargo.backend or {}, self.backend or {}))
+            backend_opts = OmegaConf.to_object(OmegaConf.merge(
+                StimelaBackendSchema,
+                backend or {}, 
+                self.cargo.backend or {}, 
+                self.backend or {}))
+            runner.validate_backend_settings(backend_opts)
 
 
     def prevalidate(self, subst: Optional[SubstitutionNS]=None, root=False):
@@ -321,7 +326,7 @@ class Step:
             parent_log = self.log
 
         # validate backend settings
-        backend = OmegaConf.merge(backend, self.cargo.backend or {}, self.backend or {})
+        backend = OmegaConf.to_object(OmegaConf.merge(backend, self.cargo.backend or {}, self.backend or {}))
         backend_opts, backend_main, backend_wrapper =  runner.validate_backend_settings(backend)
         remote_backend = backend_main.is_remote()
 
