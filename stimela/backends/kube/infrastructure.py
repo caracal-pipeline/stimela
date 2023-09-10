@@ -29,8 +29,6 @@ terminating_pvcs: Dict[str, str]
 # logger used for global kube messages
 klog: Optional[logging.Logger] = None
 
-initialized = True
-
 def _delete_pod(kube_api, podname, namespace, log, warn_not_found=True):
     log.info(f"deleting pod {podname}")
     try:
@@ -55,7 +53,7 @@ def init(backend: StimelaBackendOptions, log: logging.Logger, cleanup: bool = Fa
     if cleanup:
         klog.info("cleaning up backend")
     else:
-        atexit.register(teardown, kube)
+        atexit.register(close, kube, klog)
         klog.info("initializing kube backend")
 
     if cleanup or kube.infrastructure.on_startup.report_pods or kube.infrastructure.on_startup.cleanup_pods:
@@ -295,10 +293,10 @@ def delete_pvcs(kube: KubeBackendOptions, pvc_names, log: logging.Logger, force=
             terminating_pvcs[pvc.name] = name
 
 
-def teardown(kube: KubeBackendOptions):
-    global initialized
-    if not initialized:
-        return
+def close(backend: StimelaBackendOptions, log: logging.Logger):
+    kube = backend.kube
+    klog.info("closing kube backend")
+    
     # release PVCs
     delete_pvcs(kube, list(active_pvcs.keys()), log=klog, session=True, step=True, refresh=False)
 
@@ -325,4 +323,5 @@ def teardown(kube: KubeBackendOptions):
             for podname in running_pods:
                 _delete_pod(kube_api, podname, kube.namespace, klog)
 
-    initialized = False
+    atexit.unregister(close)
+

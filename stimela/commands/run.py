@@ -299,6 +299,8 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, last_recip
     try:
         outputs = outer_step.run(backend=stimela.CONFIG.opts.backend)
     except Exception as exc:
+        stimela.backends.close_backends(backend, log)
+
         task_stats.save_profiling_stats(outer_step.log, 
             print_depth=profile if profile is not None else stimela.CONFIG.opts.profile.print_depth,
             unroll_loops=stimela.CONFIG.opts.profile.unroll_loops)
@@ -320,6 +322,8 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, last_recip
                 outer_step.log.debug(f"  {name}: {value}")
     else:
         outer_step.log.info(f"run successful after {elapsed()}")
+
+    stimela.backends.close_backends(backend, log)
 
     task_stats.save_profiling_stats(outer_step.log, 
             print_depth=profile if profile is not None else stimela.CONFIG.opts.profile.print_depth,

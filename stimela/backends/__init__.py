@@ -4,6 +4,7 @@ from typing import Union, Dict, Any, List, Optional
 from enum import Enum
 from omegaconf import ListConfig, OmegaConf
 from stimela.exceptions import BackendSpecificationError, BackendError
+from stimela.stimelogging import log_exception
 from scabha.basetypes import EmptyDictDefault
 
 from .singularity import SingularityBackendOptions
@@ -96,7 +97,7 @@ def resolve_image_name(backend: StimelaBackendOptions, image: 'stimela.kitchen.C
         return f"{image_name}:{version}"
 
 
-def init_backends(backend_opts: StimelaBackendOptions, log: logging.Logger):
+def _call_backends(backend_opts: StimelaBackendOptions, log: logging.Logger, method: str, desc: str, raise_exc: bool=True):
     selected = backend_opts.select or ['native']
     if type(selected) is str:
         selected = [selected]
@@ -106,32 +107,26 @@ def init_backends(backend_opts: StimelaBackendOptions, log: logging.Logger):
         opts = getattr(backend_opts, engine, None)
         if not opts or opts.enable:
             backend = get_backend(engine)
-            if backend:
+            func = backend and getattr(backend, method)
+            if func:
                 try:
-                    backend.init(backend_opts, log)
+                    func(backend_opts, log)
                 except BackendError as exc:
-                    raise BackendError(f"error initializing {engine} backend", exc)
-                
+                    exc1 = BackendError(f"error {desc} {engine} backend", exc)
+                    if raise_exc:
+                        raise exc1 from None
+                    else:
+                        log_exception(exc1, log=log)
+
+
+def init_backends(backend_opts: StimelaBackendOptions, log: logging.Logger):
+    return _call_backends(backend_opts, log, "init", "initializing")
+
+def close_backends(backend_opts: StimelaBackendOptions, log: logging.Logger):
+    return _call_backends(backend_opts, log, "close", "closing")
 
 def cleanup_backends(backend_opts: StimelaBackendOptions, log: logging.Logger):
-    selected = backend_opts.select or ['native']
-    if type(selected) is str:
-        selected = [selected]
-
-    for engine in selected: 
-        # check that backend has not been disabled
-        opts = getattr(backend_opts, engine, None)
-        if not opts or opts.enable:
-            backend = get_backend(engine)
-            if backend:
-                if hasattr(backend, 'cleanup'):
-                    try:
-                        backend.cleanup(backend_opts, log)
-                    except BackendError as exc:
-                        raise BackendError(f"error cleaning up {engine} backend", exc) from None
-                else:
-                    log.info(f"nothing to clean up for {engine} backend")
-
+    return _call_backends(backend_opts, log, "cleanup", "cleaning up")
 
 
 ## commenting out for now -- will need to fix when we reactive the kube backend (and have tests for it)

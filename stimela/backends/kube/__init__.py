@@ -45,6 +45,10 @@ def init(backend: 'stimela.backend.StimelaBackendOptions', log: logging.Logger):
     from . import infrastructure
     infrastructure.init(backend, log)
 
+def close(backend: 'stimela.backend.StimelaBackendOptions', log: logging.Logger):
+    from . import infrastructure
+    infrastructure.close(backend, log)
+
 def cleanup(backend: 'stimela.backend.StimelaBackendOptions', log: logging.Logger):
     from . import infrastructure
     infrastructure.cleanup(backend, log)
