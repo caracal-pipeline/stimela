@@ -264,6 +264,7 @@ def _await_pvc_termination(namespace, pvc: KubeBackendOptions.Volume, log: loggi
 
 def delete_pvcs(kube: KubeBackendOptions, pvc_names, log: logging.Logger, force=False, step=True, session=False, refresh=True):
     kube_api, _ = get_kube_api()
+    global terminating_pvcs
 
     if refresh:
         refresh_pvc_list(kube)
@@ -296,7 +297,7 @@ def delete_pvcs(kube: KubeBackendOptions, pvc_names, log: logging.Logger, force=
 def close(backend: StimelaBackendOptions, log: logging.Logger):
     kube = backend.kube
     klog.info("closing kube backend")
-    
+
     # release PVCs
     delete_pvcs(kube, list(active_pvcs.keys()), log=klog, session=True, step=True, refresh=False)
 
