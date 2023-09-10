@@ -107,7 +107,7 @@ def _call_backends(backend_opts: StimelaBackendOptions, log: logging.Logger, met
         opts = getattr(backend_opts, engine, None)
         if not opts or opts.enable:
             backend = get_backend(engine)
-            func = backend and getattr(backend, method)
+            func = backend and getattr(backend, method, None)
             if func:
                 try:
                     func(backend_opts, log)
