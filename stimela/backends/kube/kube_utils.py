@@ -78,7 +78,7 @@ class StatusReporter(object):
     def __init__(self, namespace: str, log: logging.Logger, 
                  podname: str,
                  kube: KubeBackendOptions,
-                 event_handler: lambda event:None,
+                 event_handler: None,
                  update_interval: float = 1,
                  enable_metrics: bool = True):
         self.kube = kube
@@ -96,6 +96,9 @@ class StatusReporter(object):
         self.pvcs = []
          # API errors added here when reported -- use this dict to avoid reissuing multiple errors
         self.api_errors_reported = {}
+
+    def set_event_handler(self, event_handler):
+        self.event_handler = event_handler
 
     def set_pod_name(self, podname):
         self.podname = podname

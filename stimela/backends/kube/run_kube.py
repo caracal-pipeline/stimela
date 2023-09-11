@@ -182,7 +182,7 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
 
             # add local mounts
             def add_local_mount(name, path, dest, readonly):
-                name = name.replace("_", "-")  # sanizitze name
+                name = name.replace("_", "-")  # sanitize name
                 pod_manifest['spec']['volumes'].append(dict(
                     name = name,
                     hostPath = dict(path=path, type='Directory' if os.path.isdir(path) else 'File')
@@ -445,6 +445,7 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
 
         # cleanup
         finally:
+            statrep.set_event_handler(None)
             try:
                 # clean up port forwarder
                 if port_forward_proc:
