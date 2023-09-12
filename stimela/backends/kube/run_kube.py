@@ -1,4 +1,4 @@
-import logging, time, json, datetime, os.path, pathlib, secrets
+import logging, time, json, datetime, os.path, pathlib, secrets, traceback
 from typing import Dict, Optional, Any
 import subprocess
 import rich
@@ -488,6 +488,7 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                         body = json.loads(exc.body)
                         log_exception(StimelaCabRuntimeError(f"k8s API error while deleting pod {podname}", (exc, body)), severity="warning")
                     except Exception as exc:
+                        traceback.print_exc()
                         log_exception(StimelaCabRuntimeError(f"error while deleting pod {podname}: {exc}"), severity="warning")
                 if dask_job_created:
                     try:
@@ -528,7 +529,6 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                 raise StimelaCabRuntimeError(f"{command_name} cleanup interrupted with Ctrl+C after {elapsed()}")
             except Exception as exc:
                 log.error(f"kube cleanup failed after {elapsed()}")
-                import traceback
                 traceback.print_exc()
                 raise StimelaCabRuntimeError("kube backend cleanup error", exc)
 

@@ -11,7 +11,7 @@ import logging
 import time
 
 import stimela
-from scabha.basetypes import EmptyDictDefault, EmptyListDefault, ListDefault
+from scabha.basetypes import EmptyDictDefault, DictDefault, EmptyListDefault, ListDefault
 
 session_id = secrets.token_hex(8)
 session_user = getpass.getuser()
@@ -200,8 +200,9 @@ class KubeBackendOptions(object):
     # if >0, events will be collected and reported
     verbose_events:        int = 0
     # format string for reporting kubernetes events, this can include rich markup
-    verbose_event_format:  str = "\[kubernetes event type: {event.type}, reason: {event.reason}] {event.message}"
-    verbose_event_color:   str = "blue"
+    verbose_event_format:  str = "\[k8s event type: {event.type}, reason: {event.reason}] {event.message}"
+    verbose_event_colors:  Dict[str, str] = DictDefault(
+                            warning="blue", error="yellow", default="grey50")
 
     # user and group IDs -- if None, use local user
     uid:            Optional[int] = None

@@ -12,6 +12,9 @@ def EmptyListDefault():
 def ListDefault(*args):
     return field(default_factory=lambda:list(args))
 
+def DictDefault(**kw):
+    return field(default_factory=lambda:dict(**kw))
+
 
 @dataclass
 class Unresolved(object):

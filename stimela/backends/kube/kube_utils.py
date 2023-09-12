@@ -134,15 +134,18 @@ class StatusReporter(object):
             for event in events.items:
                 if event.metadata.uid not in self.reported_events:
                     self.reported_events.add(event.metadata.uid)
-                    try:
-                        self.event_handler(event)
-                    except Exception as exc:
-                        self.log.error(self.kube.verbose_event_format.format(event=event))
-                        raise
+                    if self.event_handler:
+                        try:
+                            self.event_handler(event)
+                        except Exception as exc:
+                            self.log.error(self.kube.verbose_event_format.format(event=event))
+                            raise
                     # no error from handler, report event if configured to
                     if self.kube.verbose_events:
+                        color = self.kube.verbose_event_colors.get(event.type.lower()) \
+                                or self.kube.verbose_event_colors.get("default")
                         self.log.info(self.kube.verbose_event_format.format(event=event), 
-                                      extra=dict(color=self.kube.verbose_event_color))
+                                      extra=dict(color=color) if color else {})
 
     def update(self):
         from . import session_user
