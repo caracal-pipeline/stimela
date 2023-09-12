@@ -41,7 +41,7 @@ jobs:
         poetry run flake8 stimela scabha tests docs --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Test command
       run: |
-        stimela --help
+        poetry run stimela --help
     - name: Test with pytest
       run: |
         poetry run pytest tests
