@@ -96,7 +96,13 @@ def build_command_line(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend
     if simg_path is None:
         _, simg_path = get_image_info(cab, backend)
 
-    return [binary or backend.singularity.executable or BINARY, "exec", simg_path] + args
+    cwd = os.getcwd()
+
+    return [binary or backend.singularity.executable or BINARY, 
+            "exec", 
+            "--bind", f"{cwd}:{cwd}",
+            "--pwd", cwd,
+            simg_path] + args
 
 
 
