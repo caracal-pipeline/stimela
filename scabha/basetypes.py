@@ -6,10 +6,15 @@ from .exceptions import UnsetError
 def EmptyDictDefault():
     return field(default_factory=lambda:OrderedDict())
 
-
 def EmptyListDefault():
     return field(default_factory=lambda:[])
-    
+
+def ListDefault(*args):
+    return field(default_factory=lambda:list(args))
+
+def DictDefault(**kw):
+    return field(default_factory=lambda:dict(**kw))
+
 
 @dataclass
 class Unresolved(object):

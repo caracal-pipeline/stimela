@@ -1,10 +1,10 @@
 import re
 import click
 from scabha.exceptions import SchemaError
-from .cargo import Parameter
+from .cargo import Parameter, UNSET, _UNSET_DEFAULT
+from .basetypes import EmptyDictDefault
 from typing import *
-from .cargo import UNSET
-from dataclasses import make_dataclass, field
+from dataclasses import dataclass, make_dataclass, field
 from omegaconf import OmegaConf, MISSING
 from collections.abc import MutableSet, MutableSequence, MutableMapping
 
@@ -129,7 +129,17 @@ def _validate_list(text: str, element_type, schema):
     except ValueError:
         raise click.BadParameter(f"can't convert to '{schema.dtype}'")
 
-def clickify_parameters(schemas: Dict[str, Any]):
+@dataclass
+class Schema(object):
+    inputs: Dict[str, Parameter] = EmptyDictDefault()
+    outputs: Dict[str, Parameter] = EmptyDictDefault()
+
+
+def clickify_parameters(schemas: Union[str, Dict[str, Any]]):
+
+    if type(schemas) is str:
+        schemas = OmegaConf.merge(OmegaConf.structured(Schema), 
+                               OmegaConf.load(schemas))
 
     decorator_chain = None
     for io in schemas.inputs, schemas.outputs:
@@ -139,7 +149,6 @@ def clickify_parameters(schemas: Dict[str, Any]):
             optname = f"--{name}"
             dtype = schema.dtype
             validator = None
-            default_value = schema.default
 
             # sort out option type. Atomic type?
             if dtype in _atomic_types:
@@ -169,14 +178,24 @@ def clickify_parameters(schemas: Dict[str, Any]):
             if schema.abbreviation:
                 optnames.append(f"-{schema.abbreviation}")
 
-            if schema.default is UNSET:
-                deco = click.option(*optnames, type=dtype, callback=validator,
-                                    required=schema.required,
-                                    metavar=schema.metavar, help=schema.info)
+            if schema.policies.positional:
+                if schema.default in (UNSET, _UNSET_DEFAULT):
+                    deco = click.argument(name, type=dtype, callback=validator,
+                                        required=schema.required,
+                                        metavar=schema.metavar)
+                else:
+                    deco = click.argument(name, type=dtype, callback=validator,
+                                        default=schema.default, required=schema.required,
+                                        metavar=schema.metavar)
             else:
-                deco = click.option(*optnames, type=dtype, callback=validator,
-                                    default=schema.default, required=schema.required,
-                                    metavar=schema.metavar, help=schema.info)
+                if schema.default in (UNSET, _UNSET_DEFAULT):
+                    deco = click.option(*optnames, type=dtype, callback=validator,
+                                        required=schema.required,
+                                        metavar=schema.metavar, help=schema.info)
+                else:
+                    deco = click.option(*optnames, type=dtype, callback=validator,
+                                        default=schema.default, required=schema.required,
+                                        metavar=schema.metavar, help=schema.info)
 
             if decorator_chain is None:
                 decorator_chain = deco
