@@ -15,6 +15,7 @@ Lifecycle = KubeBackendOptions.Volume.Lifecycle
 
 from kubernetes import client
 from kubernetes.client.rest import ApiException
+from kubernetes.config import ConfigException
 
 from .kube_utils import resolve_unit
 
@@ -49,17 +50,21 @@ def init(backend: StimelaBackendOptions, log: logging.Logger, cleanup: bool = Fa
     global klog
     klog = log.getChild("kube")
     kube = backend.kube
+    try:
+        kube_api, _ = run_kube.get_kube_api(kube.infrastructure.context) 
+    except ConfigException as exc:
+        log_exception(exc, log=klog)
+        log_exception(BackendError("error initializing kube backend", exc), log=klog)
+        return False
 
     if cleanup:
         klog.info("cleaning up backend")
     else:
-        atexit.register(close, kube, klog)
+        atexit.register(close, backend, klog)
         klog.info("initializing kube backend")
 
     if cleanup or kube.infrastructure.on_startup.report_pods or kube.infrastructure.on_startup.cleanup_pods:
         klog.info("checking for k8s pods from other sessions")
-
-        kube_api, _ = run_kube.get_kube_api() 
 
         try:
             pods = kube_api.list_namespaced_pod(namespace=kube.namespace, 
@@ -109,6 +114,8 @@ def init(backend: StimelaBackendOptions, log: logging.Logger, cleanup: bool = Fa
     # resolve global-level volumes
     if not cleanup and kube.volumes:
         resolve_volumes(kube, log=klog, refresh=False) # no refresh needed
+
+    return True
 
 
 def refresh_pvc_list(kube: KubeBackendOptions):

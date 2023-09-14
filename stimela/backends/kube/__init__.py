@@ -43,11 +43,15 @@ def is_remote():
 
 def init(backend: 'stimela.backend.StimelaBackendOptions', log: logging.Logger):
     from . import infrastructure
-    infrastructure.init(backend, log)
+    global AVAILABLE, STATUS
+    if not infrastructure.init(backend, log):
+        AVAILABLE = False
+        STATUS = "initialization error"
 
 def close(backend: 'stimela.backend.StimelaBackendOptions', log: logging.Logger):
     from . import infrastructure
-    infrastructure.close(backend, log)
+    if not AVAILABLE:
+        infrastructure.close(backend, log)
 
 def cleanup(backend: 'stimela.backend.StimelaBackendOptions', log: logging.Logger):
     from . import infrastructure
@@ -61,13 +65,14 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
 _kube_client = _kube_config = None
 
-def get_kube_api():
+def get_kube_api(context: Optional[str]=None):
     global _kube_client
     global _kube_config
+    global _kube_context
 
     if _kube_config is None:
         _kube_config = True
-        kubernetes.config.load_kube_config()
+        kubernetes.config.load_kube_config(context=context)
 
     return core_v1_api.CoreV1Api(), CustomObjectsApi()
 
@@ -120,8 +125,9 @@ class KubeBackendOptions(object):
             report_pvcs: bool = True                  # report any transient PVCs
             cleanup_pvcs: bool = True                 # cleanup any transient PVCs
 
-        on_exit:    ExitOptions = ExitOptions()                     # startup behaviour options
-        on_startup: StartupOptions = StartupOptions()               # cleanup behaviour options
+        context:    Optional[str] = None                # k8s context -- use default if not given
+        on_exit:    ExitOptions = ExitOptions()         # startup behaviour options
+        on_startup: StartupOptions = StartupOptions()   # cleanup behaviour options
 
     @dataclass 
     class Volume(object):
@@ -174,12 +180,14 @@ class KubeBackendOptions(object):
 
 
     enable:         bool = True
+
+    # infrastructure settings are global and can't be changed per cab or per step
+    infrastructure: Infrastructure = Infrastructure()
+
     namespace:      Optional[str] = None
     dask_cluster:   Optional[DaskCluster] = None
     service_account: str = "compute-runner"
     kubectl_path:   str = "kubectl"
-
-    infrastructure: Infrastructure = Infrastructure()
 
     volumes:        Dict[str, Volume] = EmptyDictDefault()
 
