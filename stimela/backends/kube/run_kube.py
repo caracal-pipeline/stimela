@@ -1,7 +1,9 @@
 import logging, time, json, datetime, os.path, pathlib, secrets, traceback
 from typing import Dict, Optional, Any
+from dataclasses import fields
 import subprocess
 import rich
+import traceback
 
 from omegaconf import OmegaConf, DictConfig, ListConfig
 
@@ -14,7 +16,7 @@ from stimela.kitchen.cab import Cab
 
 # needs pip install kubernetes dask-kubernetes
 
-from . import get_kube_api, InjectedFileFormatters, session_id, session_user, resource_labels
+from . import get_kube_api, InjectedFileFormatters, session_id, session_user, resource_labels, session_user_info, KubeBackendOptions
 from .kube_utils import StatusReporter
 
 from kubernetes.client.rest import ApiException
@@ -145,24 +147,51 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                 metadata    = dict(name=podname, labels=pod_labels),
             )
 
+            # setup user information -- current user info by default, overridden by backend options
+            uinfo = KubeBackendOptions.UserInfo()
+            for fld in fields(uinfo):
+                value = getattr(kube.user, fld.name)
+                setattr(uinfo, fld.name, value if value is not None else getattr(session_user_info, fld.name))
+
+            command = "while true; do date; sleep 5; done"
+            if uinfo.inject_nss:
+                command = \
+                    "cp /etc/passwd $HOME/.passwd; " + \
+                    "cp /etc/group $HOME/.group; " + \
+                    "echo $USER:x:$USER_UID:$USER_GID:$USER_GECOS:$HOME:/bin/sh >> $HOME/.passwd; " + \
+                    "echo $GROUP:x:$USER_GID: >> $HOME/.group; " + \
+                    command
+
             # form up pod spec
-            uid = os.getuid() if kube.uid is None else kube.uid
-            gid = os.getgod() if kube.gid is None else kube.gid
             pod_spec = dict(
                 containers = [dict(
                         image   = image_name,
                         imagePullPolicy = 'Always' if kube.always_pull_images else 'IfNotPresent',
                         name    = podname,
-                        args    = ["/bin/sh", "-c", "while true;do date;sleep 5; done"],
-                        env     = [],
+                        command = ["/bin/sh"],
+                        args    = ["-c", command],
+                        env     = [
+                            dict(name="USER", value=uinfo.name),
+                            dict(name="GROUP", value=uinfo.group),
+                            dict(name="HOME", value=uinfo.home),
+                            dict(name="USER_UID", value=str(uinfo.uid)),
+                            dict(name="USER_GID", value=str(uinfo.gid)),
+                            dict(name="USER_GECOS", value=str(uinfo.gecos))
+                        ],
                         securityContext = dict(
-                                runAsNonRoot = uid!=0,
-                                runAsUser = uid,
-                                runAsGroup = gid,
+                                runAsNonRoot = uinfo.uid!=0,
+                                runAsUser = uinfo.uid,
+                                runAsGroup = uinfo.gid,
                         ),
-                        volumeMounts = []
+                        volumeMounts = [dict(
+                            name = "home-directory",
+                            mountPath = uinfo.home
+                        )]
                 )],
-                volumes = [],
+                volumes = [dict(
+                    name = "home-directory",
+                    emptyDir = dict(medium="Memory") if uinfo.home_ramdisk else {} 
+                )],
                 serviceAccountName = kube.service_account,
                 automountServiceAccountToken = True
             )
@@ -384,9 +413,8 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                         else:
                             log.info(f"pre-command successful after {elapsed()}")
 
-
-            if kube.debug_mode:
-                log.warning("kube.debug_mode enabled")
+            if kube.debug.pause_on_start:
+                log.warning("kube.debug.pause_on_start is enabled")
                 log.warning(f"to access the pod, run")
                 log.warning(f"  $ kubectl exec -it {podname} -- /bin/bash")
                 log.warning(f"your command line inside the pod is:")
@@ -398,7 +426,7 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
             else:
                 # do we need to chdir
                 if kube.dir:
-                    args = ["python", "-c", f"import os,sys; os.chdir('{kube.dir}'); os.execlp('{args[0]}', *sys.argv[1:])"] + list(args)
+                    args = ["python3", "-c", f"import os,sys; os.chdir('{kube.dir}'); os.execlp('{args[0]}', *sys.argv[1:])"] + list(args)
                 log.info(f"running {command_name} in pod {podname}")
 
             with declare_subcommand(os.path.basename(command_name)):
@@ -445,6 +473,14 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
 
         # cleanup
         finally:
+            if kube.debug.pause_on_cleanup:
+                log.warning("kube.debug.pause_on_cleanup is enabled -- pausing -- press Ctrl+C to proceed")
+                try:
+                    while True:
+                        time.sleep(1)
+                except KeyboardInterrupt:
+                    pass
+                log.info("proceeding with cleanup")
             statrep.set_event_handler(None)
             try:
                 # clean up port forwarder

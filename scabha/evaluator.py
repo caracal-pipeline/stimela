@@ -8,6 +8,7 @@ from pyparsing import *
 from pyparsing import common
 from functools import reduce
 import operator
+import dataclasses
 
 from .substitutions import SubstitutionError, SubstitutionContext
 from .basetypes import Unresolved, UNSET
@@ -15,7 +16,7 @@ from .exceptions import *
 
 import typing
 from typing import Dict, List, Any
-
+from omegaconf import DictConfig, ListConfig
 
 _parser = None
 
@@ -487,26 +488,113 @@ class Evaluator(object):
                     except Exception as exc:
                         raise FormulaError(f"{'.'.join(self.location)}: evaluation of '{value}' failed", exc, tb=True)
             else:
-                return self._resolve(value, in_formula=False)
+                try:
+                    return self._resolve(value, in_formula=False)
+                except Exception as exc:
+                    raise SubstitutionError(f"{'.'.join(self.location)}: evaluation of '{value}' failed", exc)
         finally:
             self.location = self.location[:loclen]
+
+    def evaluate_object(self, obj: Any,
+                        sublocation = [],
+                        raise_substitution_errors: bool = True, 
+                        recursion_level: int = 1,
+                        verbose: bool = False):
+        # string? evaluate directly and return
+        if type(obj) is str:
+            try:
+                return self.evaluate(obj, sublocation=sublocation)
+            except AttributeError as err:
+                if raise_substitution_errors:
+                    raise
+                return Unresolved(errors=[err])
+            except SubstitutionError as err:
+                if raise_substitution_errors:
+                    raise
+                return Unresolved(errors=[err])
             
+        # helper function
+        def update(value, sloc):
+            if type(value) is Unresolved:
+                return value, False
+            subloc = sublocation + [sloc]
+            if verbose: 
+                print(f"{subloc}: {value} ...")
+            new_value = self.evaluate_object(value, raise_substitution_errors=raise_substitution_errors,
+                                                recursion_level=recursion_level, verbose=verbose,
+                                                sublocation=subloc)
+            if verbose:
+                print(f"{subloc}: {value} -> {new_value}")
+            # UNSET return means delete or revert to default
+            if new_value is UNSET:
+                raise SubstitutionError(f"{'.'.join(self.location + subloc)}: UNSET not allowed here")
+            # compare
+            if isinstance(value, (dict, DictConfig, list, ListConfig)) or dataclasses.is_dataclass(value):
+                updated = value is not new_value
+            else:
+                updated = value != new_value
+            return new_value, updated
+
+        obj_out = obj
+        # recurse into containers?
+        if recursion_level:
+            recursion_level -= 1
+            # use evaluate_dict() to recurse into dicts
+            if isinstance(obj, (dict, DictConfig)):
+                for key, value in obj.items():
+                    new_value, value_updated = update(value, key)
+                    new_key = self.evaluate(key, sublocation=sublocation)
+                    if new_key != key:
+                        value_updated = True
+                    if value_updated:
+                        if obj_out is obj:
+                            obj_out = obj.copy()
+                        if new_key != key:
+                            del obj_out[key]
+                            key = new_key
+                        obj_out[key] = new_value
+            # recurse into lists
+            elif isinstance(obj, (list, ListConfig)):
+                for i, value in enumerate(obj):
+                    new_value, updated = update(value, f"#{i}")
+                    if updated:
+                        if obj_out is obj:
+                            obj_out = obj.copy()
+                        obj_out[i] = new_value
+            # recurse into dataclasses
+            elif dataclasses.is_dataclass(obj):
+                newvals = {}
+                for fld in dataclasses.fields(obj):
+                    value = getattr(obj, fld.name)
+                    new_value, updated = update(value, fld.name)
+                    if updated:
+                        newvals[fld.name] = new_value
+                if newvals:
+                    obj_out = dataclasses.replace(obj, **newvals)
+
+        return obj_out
+
 
     def evaluate_dict(self, params: Dict[str, Any], 
                     corresponding_ns: typing.Optional[Dict[str, Any]] = None, 
                     defaults: Dict[str, Any] = {}, 
+                    sublocation = [],
                     raise_substitution_errors: bool = True, 
-                    verbose: bool =False):
-        params = params.copy()
+                    recursive: bool = False,
+                    verbose: bool = False):
+        params_out = params
         for name, value in list(params.items()):
-            if type(value) is not Unresolved:
-                retry = True
-                while retry:
-                    retry = False
-                    if verbose: # or type(value) is UNSET:
-                        print(f"{name}: {value} ...")
+            if type(value) is Unresolved:
+                continue
+            # 
+            retry = True
+            while retry:
+                retry = False
+                if verbose: # or type(value) is UNSET:
+                    print(f"{name}: {value} ...")
+                if type(value) is str:
                     try:
-                        new_value = self.evaluate(value, sublocation=[name])
+                        new_value = self.evaluate(value, sublocation=sublocation + [name])
                     except AttributeError as err:
                         if raise_substitution_errors:
                             raise
@@ -519,21 +607,27 @@ class Evaluator(object):
                         print(f"{name}: {value} -> {new_value}")
                     # UNSET return means delete or revert to default
                     if new_value is UNSET:
+                        if params_out is params:
+                            params_out = params.copy()
                         # if value is in defaults, try to evaluate that instead
                         if name in defaults and defaults[name] is not UNSET:
-                            value = params[name] = defaults[name]
+                            value = params_out[name] = defaults[name]
                             if corresponding_ns:
                                 corresponding_ns[name] = str(defaults[name])
                             retry = True
                         else: 
-                            del params[name]
+                            del params_out[name]
                             if corresponding_ns and name in corresponding_ns:
                                 del corresponding_ns[name]
                     elif new_value is not value and new_value != value:
-                        params[name] = new_value
+                        if params_out is params:
+                            params_out = params.copy()
+                        params_out[name] = new_value
                         if corresponding_ns:
                             corresponding_ns[name] = new_value
-        return params
+        return params_out
+
+
 
 if __name__ == "__main__":
     pass

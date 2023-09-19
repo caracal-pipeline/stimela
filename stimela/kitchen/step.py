@@ -13,7 +13,7 @@ from stimela.backends import StimelaBackendSchema, runner
 from stimela.exceptions import *
 import scabha.exceptions
 from scabha.exceptions import SubstitutionError, SubstitutionErrorList
-from scabha.validate import evaluate_and_substitute, Unresolved, join_quote
+from scabha.validate import evaluate_and_substitute, evaluate_and_substitute_object, Unresolved, join_quote
 from scabha.substitutions import SubstitutionNS, substitutions_from 
 from scabha.basetypes import UNSET, Placeholder, MS, File, Directory, SkippedOutput
 from .cab import Cab, get_cab_schema
@@ -326,8 +326,15 @@ class Step:
             parent_log = self.log
 
         # validate backend settings
-        backend = OmegaConf.to_object(OmegaConf.merge(backend, self.cargo.backend or {}, self.backend or {}))
-        backend_opts, backend_main, backend_wrapper =  runner.validate_backend_settings(backend)
+        try:
+            backend = OmegaConf.merge(backend, self.cargo.backend or {}, self.backend or {})
+            backend_opts = evaluate_and_substitute_object(backend, subst, recursion_level=-1, location=[self.fqname, "backend"])
+            backend_opts = OmegaConf.to_object(OmegaConf.merge(StimelaBackendSchema, backend_opts))
+            backend_opts, backend_main, backend_wrapper =  runner.validate_backend_settings(backend_opts)
+        except Exception as exc:
+            newexc = BackendError("error validating backend settings", exc)
+            raise newexc from None
+            # self.log_exception(newexc)
         remote_backend = backend_main.is_remote()
 
         # if step is being explicitly skipped, omit from profiling, and drop info/warning messages to debug level
@@ -347,10 +354,8 @@ class Step:
             # evaluate the skip attribute (it can be a formula and/or a {}-substititon)
             skip = self._skip
             if self._skip is None and subst is not None:
-                skips = dict(skip=self.skip)
-                skips = evaluate_and_substitute(skips, subst, subst.current, location=[self.fqname], ignore_subst_errors=False)
-                self.log.debug(f"dynamic skip attribute evaluation returns {skips}")
-                skip = skips.get("skip")
+                skip = evaluate_and_substitute_object(skip, subst, location=[self.fqname, "skip"])
+                self.log.debug(f"dynamic skip attribute evaluation returns {skip}")
                 # formulas with unset variables return UNSET instance
                 if isinstance(skip, UNSET):
                     if skip.errors:

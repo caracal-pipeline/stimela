@@ -42,8 +42,18 @@ def dtype_from_str(dtype_str: str):
 def is_file_type(dtype):
     return dtype in (File, Directory, MS)
 
+
 def is_filelist_type(dtype):
     return dtype in (List[File], List[Directory], List[MS])
+
+
+def evaluate_and_substitute_object(obj: Any,  
+                                    subst: SubstitutionNS, 
+                                    recursion_level: int = 1,
+                                    location: List[str] = []):
+    with substitutions_from(subst, raise_errors=True) as context:
+        evaltor = Evaluator(subst, context, location=location, allow_unresolved=False)
+        return evaltor.evaluate_object(obj, raise_substitution_errors=True, recursion_level=recursion_level)
 
 
 def evaluate_and_substitute(inputs: Dict[str, Any], 
