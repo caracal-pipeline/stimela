@@ -196,6 +196,15 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                 automountServiceAccountToken = True
             )
 
+#   initContainers:
+#   - name: volume-permissions
+#     image: busybox
+#     command: ["sh", "-c", "chmod -R 777 /my-data"]
+#     volumeMounts:
+#     - name: my-volume
+#       mountPath: /my-data
+
+
             # apply pod specification
             pod_spec = apply_pod_spec(kube.job_pod, pod_spec, kube.predefined_pod_specs, log, kind='job')
 

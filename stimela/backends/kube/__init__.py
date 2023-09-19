@@ -152,9 +152,15 @@ class KubeBackendOptions(object):
         # allow_reuse: reuse if exists, else create
         # recreate: delete if exists and recreate
         # cant_exist: report an error if it exists, else create
-        ExistPolicy = Enum("ExisttPolicy", "must_exist allow_reuse recreate cant_exist", module=__name__)
+        ExistPolicy = Enum("ExistPolicy", "must_exist allow_reuse recreate cant_exist", module=__name__)
         at_start: ExistPolicy = ExistPolicy.allow_reuse
         at_step: ExistPolicy = ExistPolicy.allow_reuse
+
+        # commands issued in the volume at initialization. E.g. "chmod 777", "mkdir xxx", etc. These run as root.
+        session_init_commands: List[str] = EmptyListDefault()
+        # commands issued in the volume before each step initialization. E.g. "rm -fr *", "mkdir xxx", etc. 
+        # These run as the user.
+        step_init_commands: List[str] = EmptyListDefault()
 
         # lifecycle policy
         # persist: leave the PVC in place for future re-use

@@ -24,8 +24,10 @@ from .kube_utils import resolve_unit
 # This maps stimela claim names to Volume objects
 active_pvcs: Dict[str, KubeBackendOptions.Volume] = {}
 
-# This is  adict of terminating PVS, mapping actual names to stimela claim names
+# This is a dict of terminating PVS, mapping actual names to stimela claim names
 terminating_pvcs: Dict[str, str]
+
+# This is a dict of PVCs requiring initialization
 
 # logger used for global kube messages
 klog: Optional[logging.Logger] = None
