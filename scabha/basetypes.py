@@ -42,7 +42,8 @@ class Placeholder(Unresolved):
 
 class SkippedOutput(Unresolved):
     """Marks invalid outputs of skipped steps"""
-    pass
+    def __str__(self):
+        return f"Skipped({self.value})"
 
 import os.path
 

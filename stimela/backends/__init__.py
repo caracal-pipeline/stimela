@@ -118,12 +118,20 @@ def _call_backends(backend_opts: StimelaBackendOptions, log: logging.Logger, met
                     else:
                         log_exception(exc1, log=log)
 
+initialized = None
 
 def init_backends(backend_opts: StimelaBackendOptions, log: logging.Logger):
-    return _call_backends(backend_opts, log, "init", "initializing")
+    global initialized
+    if initialized is None:
+        initialized = backend_opts
+        return _call_backends(backend_opts, log, "init", "initializing")
 
-def close_backends(backend_opts: StimelaBackendOptions, log: logging.Logger):
-    return _call_backends(backend_opts, log, "close", "closing")
+def close_backends(log: logging.Logger):
+    global initialized
+    if initialized is not None:
+        result = _call_backends(initialized, log, "close", "closing")
+        initialized = None
+        return result
 
 def cleanup_backends(backend_opts: StimelaBackendOptions, log: logging.Logger):
     return _call_backends(backend_opts, log, "cleanup", "cleaning up")

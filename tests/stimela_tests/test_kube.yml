@@ -10,6 +10,8 @@ opts:
 recipe:
   name: "demo recipe"
   info: 'top level recipe definition'
+  assign:
+    name: demo
   steps:
       mask1:
         cab: breizorro

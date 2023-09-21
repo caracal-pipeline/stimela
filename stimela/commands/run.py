@@ -194,14 +194,6 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, last_recip
             log_exception(f"error applying configuration from {what}", exc)
             sys.exit(2)
 
-        # now that config is loaded, initialize all relevant backends
-        try:
-            backend = OmegaConf.to_object(stimela.CONFIG.opts.backend)
-            stimela.backends.init_backends(backend, log)
-        except BackendError as exc:
-            log_exception(exc)
-            return 1
-
         log.info(f"{what} contains the following recipe sections: {join_quote(all_recipe_names)}")
 
         if recipe_name:
@@ -299,7 +291,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, last_recip
     try:
         outputs = outer_step.run(backend=stimela.CONFIG.opts.backend)
     except Exception as exc:
-        stimela.backends.close_backends(backend, log)
+        stimela.backends.close_backends(log)
 
         task_stats.save_profiling_stats(outer_step.log, 
             print_depth=profile if profile is not None else stimela.CONFIG.opts.profile.print_depth,
@@ -323,7 +315,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, last_recip
     else:
         outer_step.log.info(f"run successful after {elapsed()}")
 
-    stimela.backends.close_backends(backend, log)
+    stimela.backends.close_backends(log)
 
     task_stats.save_profiling_stats(outer_step.log, 
             print_depth=profile if profile is not None else stimela.CONFIG.opts.profile.print_depth,

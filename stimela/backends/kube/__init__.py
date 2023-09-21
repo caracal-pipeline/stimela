@@ -9,9 +9,13 @@ import secrets
 import getpass
 import logging
 import time
+import pwd
+import grp
+import os
 
 import stimela
 from scabha.basetypes import EmptyDictDefault, DictDefault, EmptyListDefault, ListDefault
+from stimela.exceptions import BackendError
 
 session_id = secrets.token_hex(8)
 session_user = getpass.getuser()
@@ -43,11 +47,15 @@ def is_remote():
 
 def init(backend: 'stimela.backend.StimelaBackendOptions', log: logging.Logger):
     from . import infrastructure
-    infrastructure.init(backend, log)
+    global AVAILABLE, STATUS
+    if not infrastructure.init(backend, log):
+        AVAILABLE = False
+        STATUS = "initialization error"
 
 def close(backend: 'stimela.backend.StimelaBackendOptions', log: logging.Logger):
     from . import infrastructure
-    infrastructure.close(backend, log)
+    if AVAILABLE:
+        infrastructure.close(backend, log)
 
 def cleanup(backend: 'stimela.backend.StimelaBackendOptions', log: logging.Logger):
     from . import infrastructure
@@ -59,15 +67,19 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     from . import run_kube
     return run_kube.run(cab=cab, params=params, fqname=fqname, backend=backend, log=log, subst=subst)
 
-_kube_client = _kube_config = None
+_kube_client = _kube_config = _kube_context = None
 
-def get_kube_api():
+def get_kube_api(context: Optional[str]=None):
     global _kube_client
     global _kube_config
+    global _kube_context
 
     if _kube_config is None:
         _kube_config = True
-        kubernetes.config.load_kube_config()
+        _kube_context = context
+        kubernetes.config.load_kube_config(context=context)
+    elif context != _kube_context:
+        raise BackendError(f"k8s context has changed (was {_kube_context}, now {context}), this is not permitted")
 
     return core_v1_api.CoreV1Api(), CustomObjectsApi()
 
@@ -120,8 +132,8 @@ class KubeBackendOptions(object):
             report_pvcs: bool = True                  # report any transient PVCs
             cleanup_pvcs: bool = True                 # cleanup any transient PVCs
 
-        on_exit:    ExitOptions = ExitOptions()                     # startup behaviour options
-        on_startup: StartupOptions = StartupOptions()               # cleanup behaviour options
+        on_exit:    ExitOptions = ExitOptions()         # startup behaviour options
+        on_startup: StartupOptions = StartupOptions()   # cleanup behaviour options
 
     @dataclass 
     class Volume(object):
@@ -133,6 +145,23 @@ class KubeBackendOptions(object):
         provision_timeout: int = 1200                             # How long to wait for provisioning before timing out
         mount: Optional[str] = None                               # mount point
 
+        from_snapshot: Optional[str] = None                       # create from snapshot
+
+        # Status of PVC at start of sesssion or at start of step:
+        # must_exist: reuse, error if it doesn't exist
+        # allow_reuse: reuse if exists, else create
+        # recreate: delete if exists and recreate
+        # cant_exist: report an error if it exists, else create
+        ExistPolicy = Enum("ExistPolicy", "must_exist allow_reuse recreate cant_exist", module=__name__)
+        at_start: ExistPolicy = ExistPolicy.allow_reuse
+        at_step: ExistPolicy = ExistPolicy.allow_reuse
+
+        # commands issued in the volume at initialization. E.g. "chmod 777", "mkdir xxx", etc. These run as root.
+        session_init_commands: List[str] = EmptyListDefault()
+        # commands issued in the volume before each step initialization. E.g. "rm -fr *", "mkdir xxx", etc. 
+        # These run as the user.
+        step_init_commands: List[str] = EmptyListDefault()
+
         # lifecycle policy
         # persist: leave the PVC in place for future re-use
         # session: delete at end of stimela run
@@ -140,13 +169,13 @@ class KubeBackendOptions(object):
         Lifecycle = Enum("Lifecycle", "persist session step", module=__name__)
         lifecycle: Lifecycle = Lifecycle.session 
 
-        reuse: bool = True        # if a PVC with that name already exists, reuse it, else error
         append_id: bool = True    # for session- or step-lifecycle PVCs, append ID to name
 
         def __post_init__ (self):
             self.status = "Created"
             self.creation_time = time.time()
             self.metadata = None
+            self.owner = None
 
     # subclasses for options
     @dataclass
@@ -174,12 +203,16 @@ class KubeBackendOptions(object):
 
 
     enable:         bool = True
-    namespace:      Optional[str] = None
-    dask_cluster:   Optional[DaskCluster] = None
+
+    # infrastructure settings are global and can't be changed per cab or per step
+    infrastructure: Infrastructure = Infrastructure()
+
+    context:        Optional[str] = None   # k8s context -- use default if not given -- can't change
+    namespace:      Optional[str] = None   # k8s namespace
+    
+    dask_cluster:   Optional[DaskCluster] = None  # if set, a DaskJob will be created
     service_account: str = "compute-runner"
     kubectl_path:   str = "kubectl"
-
-    infrastructure: Infrastructure = Infrastructure()
 
     volumes:        Dict[str, Volume] = EmptyDictDefault()
 
@@ -193,23 +226,50 @@ class KubeBackendOptions(object):
 
     always_pull_images: bool = False                     # change to True to repull
 
-    debug_mode: bool = False                             # in debug mode, payload is not run
+    @dataclass
+    class DebugOptions(object):
+        pause_on_start: bool = False        # pause instead of running payload
+        pause_on_cleanup: bool = False      # pause before attempting cleanup
+    
+    debug: DebugOptions = DebugOptions()                            
 
     job_pod:        KubePodSpec = KubePodSpec()
 
     # if >0, events will be collected and reported
     verbose_events:        int = 0
     # format string for reporting kubernetes events, this can include rich markup
-    verbose_event_format:  str = "\[k8s event type: {event.type}, reason: {event.reason}] {event.message}"
+    verbose_event_format:  str = "=NOSUBST('\[k8s event type: {event.type}, reason: {event.reason}] {event.message}')"
     verbose_event_colors:  Dict[str, str] = DictDefault(
                             warning="blue", error="yellow", default="grey50")
 
-    # user and group IDs -- if None, use local user
-    uid:            Optional[int] = None
-    gid:            Optional[int] = None
+    @dataclass 
+    class UserInfo(object):
+        # user and group names and IDs -- if None, use local user
+        name:           Optional[str] = None
+        group:          Optional[str] = None
+        uid:            Optional[int] = None
+        gid:            Optional[int] = None
+        gecos:          Optional[str] = None
+        home:           Optional[str] = None     # home dir inside container, default is /home/{user}
+        home_ramdisk:   bool = True              # home dir mounted as RAM disk, else local disk
+        inject_nss:     bool = True              # inject user info for NSS_WRAPPER
+
+    user: UserInfo = UserInfo()
     
     # user-defined set of pod types -- each is a pod spec structure keyed by pod_type
     predefined_pod_specs: Dict[str, Dict[str, Any]] = EmptyDictDefault()
 
 
 KubeBackendSchema = OmegaConf.structured(KubeBackendOptions)
+
+_uid = os.getuid()
+_gid = os.getgid()
+
+session_user_info = KubeBackendOptions.UserInfo(
+    name=session_user,
+    group=grp.getgrgid(_gid).gr_name,
+    uid=_uid,
+    gid=_gid,
+    home=f"/home/{session_user}",
+    gecos=pwd.getpwuid(_uid).pw_gecos
+)

@@ -13,8 +13,8 @@ from stimela.config import EmptyDictDefault, EmptyListDefault
 import stimela
 from stimela import log_exception, stimelogging
 from stimela.exceptions import *
-from stimela.backends import StimelaBackendSchema
-from scabha.validate import evaluate_and_substitute, Unresolved, join_quote
+
+from scabha.validate import evaluate_and_substitute, evaluate_and_substitute_object, Unresolved, join_quote
 from scabha.substitutions import SubstitutionNS
 from scabha.cargo import Parameter, Cargo, ParameterCategory
 from scabha.basetypes import File, Directory, MS, UNSET, Placeholder
@@ -22,6 +22,7 @@ from .cab import Cab
 from .batch import Batch
 from .step import Step
 from stimela import task_stats 
+from stimela import backends
 from stimela.backends import StimelaBackendSchema
 
 
@@ -87,12 +88,6 @@ class Recipe(Cargo):
 
     def __post_init__ (self):
         Cargo.__post_init__(self)
-        # check backend setting
-        if self.backend:
-            try:
-                OmegaConf.merge(StimelaBackendSchema, self.backend)
-            except OmegaConfBaseException as exc:
-                raise RecipeValidationError(f"recipe '{self.name}': invalid backend setting", exc)
         # flatten aliases and assignments
         self.aliases = self.flatten_param_dict(OrderedDict(), self.aliases)
         # check that schemas are valid
@@ -437,6 +432,8 @@ class Recipe(Cargo):
                     for label, step in self.steps.items():
                         if label not in tagged_steps:
                             step.skip = step._skip = True
+                            # remove auto-aliases associated with skipped steps
+
                 # see how many steps are actually going to run
                 scheduled_steps = [label for label, step in self.steps.items() if not step._skip]
                 # report scheduled steps to log if (a) they're a subset or (b) any selection options were passed
@@ -1111,13 +1108,15 @@ class Recipe(Cargo):
                 self.update_assignments(subst, whose=self, params=params)
                 for name, aliases in self._alias_list.items():
                     for alias in aliases:
-                        if alias.from_step:
+                        if alias.from_step and alias.step is step:
                             # if step was skipped, mark output as not required
                             if alias.step._skip:
                                 self.outputs[name].required = False
                             # if step output is validated, add it to our output 
-                            if alias.param in alias.step.validated_params:
-                                outputs[name] = alias.step.validated_params[alias.param]
+                            # if alias.param in alias.step.validated_params:
+                            #     outputs[name] = alias.step.validated_params[alias.param]
+                            if alias.param in step_params:
+                                outputs[name] = step_params[alias.param]
 
         except Exception as exc:
             # raise exception up if asked to
@@ -1173,16 +1172,21 @@ class Recipe(Cargo):
             subst.root = subst.recipe
 
         subst_copy = subst.copy()
+        self.update_assignments(subst, params=params, ignore_subst_errors=True)
+
+        # init backends if not already done
+        if not backends.initialized:
+            try:
+                backend_opts = evaluate_and_substitute_object(backend, subst, recursion_level=-1, location=[self.fqname])
+                backend_opts = OmegaConf.merge(StimelaBackendSchema, backend_opts)
+                backend_opts = OmegaConf.to_object(backend_opts)
+            except Exception as exc:
+                newexc = BackendError("error validating backend settings", exc)
+                raise newexc from None
+            
+            stimela.backends.init_backends(backend_opts, stimela.logger())
 
         try:
-            # # update variable assignments
-            # self.update_assignments(subst, params=params)
-            # # log options may have changed, so adjust
-            # stimelogging.update_file_logger(self.log, self.logopts, nesting=self.nesting, subst=subst, location=[self.fqname])
-
-            # # Harmonise before running
-            # self._link_steps()
-
             self.log.info(f"running recipe '{self.name}'")
 
             # our inputs have been validated, so propagate aliases to steps. Check for missing stuff just in case

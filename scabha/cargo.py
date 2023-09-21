@@ -498,7 +498,9 @@ class Cargo(object):
         raise AssignmentError(f"{self.name}: invalid assignment {key}={value}")
 
     @staticmethod
-    def add_parameter_summary(params: Dict[str, Any], lines: List[str] = []):
+    def add_parameter_summary(params: Dict[str, Any], lines: Optional[List[str]] = None):
+        if lines is None:
+            lines = []
         for name, value in params.items():
             if isinstance(value, (list, tuple)) and len(value) > 10:
                 sep1, sep2 = "()" if isinstance(value, tuple) else "[]" 
