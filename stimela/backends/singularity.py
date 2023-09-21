@@ -8,6 +8,8 @@ from shutil import which
 from dataclasses import dataclass
 from omegaconf import OmegaConf
 from typing import Dict, List, Any, Optional, Tuple
+from contextlib import ExitStack
+from scabha.basetypes import EmptyListDefault
 import datetime
 from stimela.utils.xrun_asyncio import xrun
 
@@ -23,6 +25,13 @@ class SingularityBackendOptions(object):
     rebuild: bool = False
     auto_update: bool = False
     executable: Optional[str] = None
+
+    # @dataclass
+    # class EmptyVolume(object):
+    #     name: str
+    #     mount: str
+
+    # tmp_dirs: List[EmptyVolume] = EmptyListDefault()
 
 SingularityBackendSchema = OmegaConf.structured(SingularityBackendOptions)
 
@@ -88,6 +97,7 @@ def get_image_info(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.Sti
 
 def build_command_line(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBackendOptions',
                         params: Dict[str, Any], 
+                        binds: List[Any],
                         subst: Optional[Dict[str, Any]] = None,
                         binary: Optional[str] = None,
                         simg_path: Optional[str] = None):
@@ -100,6 +110,7 @@ def build_command_line(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend
 
     return [binary or backend.singularity.executable or BINARY, 
             "exec", 
+            "--containall",
             "--bind", f"{cwd}:{cwd}",
             "--pwd", cwd,
             simg_path] + args

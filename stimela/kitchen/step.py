@@ -579,9 +579,16 @@ class Step:
             if invalid:
                 if skip:
                     parent_log_warning(f"invalid outputs: {join_quote(invalid)}")
-                    parent_log_warning("since the step was skipped, this is not fatal")
+                    parent_log_warning("since the step was skipped, this is not treated as an error for now, but may cause errors downstream")
+                    for key in invalid:
+                        params[key] = SkippedOutput(key)
                 else:
-                    raise StepValidationError(f"invalid outputs: {join_quote(invalid)}", log=self.log)
+                    # check if invalid steps are due to subrecipe with skipped steps, ignpre those
+                    truly_invalid = [name for name in invalid if not isinstance(params.get(name), SkippedOutput)]
+                    if truly_invalid:
+                        raise StepValidationError(f"invalid outputs: {join_quote(truly_invalid)}", log=self.log)
+                    parent_log_warning(f"invalid outputs: {join_quote(invalid)}")
+                    parent_log_warning("since some sub-steps were skipped, this is not treated as an error for now, but may cause errors downstream")
 
         return params
 

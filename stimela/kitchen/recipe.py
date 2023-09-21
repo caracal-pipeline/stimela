@@ -432,6 +432,8 @@ class Recipe(Cargo):
                     for label, step in self.steps.items():
                         if label not in tagged_steps:
                             step.skip = step._skip = True
+                            # remove auto-aliases associated with skipped steps
+
                 # see how many steps are actually going to run
                 scheduled_steps = [label for label, step in self.steps.items() if not step._skip]
                 # report scheduled steps to log if (a) they're a subset or (b) any selection options were passed
@@ -1106,13 +1108,15 @@ class Recipe(Cargo):
                 self.update_assignments(subst, whose=self, params=params)
                 for name, aliases in self._alias_list.items():
                     for alias in aliases:
-                        if alias.from_step:
+                        if alias.from_step and alias.step is step:
                             # if step was skipped, mark output as not required
                             if alias.step._skip:
                                 self.outputs[name].required = False
                             # if step output is validated, add it to our output 
-                            if alias.param in alias.step.validated_params:
-                                outputs[name] = alias.step.validated_params[alias.param]
+                            # if alias.param in alias.step.validated_params:
+                            #     outputs[name] = alias.step.validated_params[alias.param]
+                            if alias.param in step_params:
+                                outputs[name] = step_params[alias.param]
 
         except Exception as exc:
             # raise exception up if asked to

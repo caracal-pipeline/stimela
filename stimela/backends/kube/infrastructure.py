@@ -3,10 +3,11 @@ import atexit
 import json
 import time
 import rich
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 
 from stimela.backends import StimelaBackendOptions
 from stimela.stimelogging import log_exception, declare_chapter, update_process_status
+from scabha.basetypes import EmptyListDefault
 
 from stimela.exceptions import BackendError
 from . import session_id, session_user, resource_labels, run_kube, KubeBackendOptions, get_kube_api
@@ -28,6 +29,7 @@ active_pvcs: Dict[str, KubeBackendOptions.Volume] = {}
 terminating_pvcs: Dict[str, str]
 
 # This is a dict of PVCs requiring initialization
+session_init_commands: Dict[str, List[str]] = {}
 
 # logger used for global kube messages
 klog: Optional[logging.Logger] = None
@@ -149,6 +151,7 @@ def refresh_pvc_list(kube: KubeBackendOptions):
                                     lifecycle=Lifecycle.persist)
         active_pvcs[name].status = pvc.status.phase
         active_pvcs[name].metadata = pvc.metadata
+        active_pvcs[name].owner = pvc.metadata.labels and pvc.metadata.labels.get("stimela_user")
     # delete stale entries
     active_pvcs = {name: active_pvcs[name] for name in pvc_names} 
 
@@ -209,6 +212,8 @@ def resolve_volumes(kube: KubeBackendOptions, log: logging.Logger, step_token=No
             if pvc.name in terminating_pvcs:
                 log.info(f"waiting for existing PVC '{pvc.name}' to terminate before re-creating")
                 _await_pvc_termination(kube.namespace, pvc, log=log)
+            # add init commands
+            session_init_commands[name] = pvc.session_init_commands or []
             # create
             newpvc = client.V1PersistentVolumeClaim()
             newpvc.metadata = client.V1ObjectMeta(name=pvc.name, labels=labels)
@@ -229,6 +234,7 @@ def resolve_volumes(kube: KubeBackendOptions, log: logging.Logger, step_token=No
                 resp = kube_api.create_namespaced_persistent_volume_claim(kube.namespace, newpvc)
             except ApiException as exc:
                 raise BackendError(f"k8s API error while creating PVC '{pvc.name}'", json.loads(exc.body)) from None
+            pvc.owner = session_user
             active_pvcs[name] = pvc
     return list(kube.volumes.keys())
 

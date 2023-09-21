@@ -214,7 +214,6 @@ class ParseOutput(_BaseWrangler):
 
     def apply(self, cabstat: CabStatus, output: str, match: re.Match):
         value = match[self.gid]
-        print(value, self.gid)
         try:
             value = self.loader(value)
         except Exception as exc:

@@ -1,5 +1,5 @@
 import logging, time, json, datetime, os.path, pathlib, secrets, traceback
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 from dataclasses import fields
 import subprocess
 import rich
@@ -196,14 +196,40 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                 automountServiceAccountToken = True
             )
 
-#   initContainers:
-#   - name: volume-permissions
-#     image: busybox
-#     command: ["sh", "-c", "chmod -R 777 /my-data"]
-#     volumeMounts:
-#     - name: my-volume
-#       mountPath: /my-data
+            session_init_container = None
+            step_init_container = None            
 
+            def add_volume_init(volume_name: str, mount:str, commands: List[str], root: bool=False):
+                nonlocal session_init_container, step_init_container
+                # create init container if not already created
+                if root:
+                    cont = session_init_container
+                    if cont is None:
+                        cont = session_init_container = dict(
+                            name="volume-session-init",
+                            image="busybox",
+                            command=["/bin/sh", "-c", ""],
+                            volumeMounts=[])
+                        pod_spec.setdefault('initContainers', []).append(cont)
+                else:
+                    cont = step_init_container
+                    if cont is None:
+                        cont = step_init_container = dict(
+                            name="volume-step-init",
+                            image="busybox",
+                            command=["/bin/sh", "-c", ""],
+                            securityContext=dict(
+                                    runAsNonRoot = uinfo.uid!=0,
+                                    runAsUser = uinfo.uid,
+                                    runAsGroup = uinfo.gid),
+                            volumeMounts=[])
+                        pod_spec.setdefault('initContainers', []).append(cont)
+                # add to its commands
+                log.info(f"adding init commands for PVC '{name}': {'; '.join(commands)}")
+                cont['command'][-1] += f"cd {mount}; {'; '.join(commands)}; "
+                cont['volumeMounts'].append(dict(
+                    name=volume_name, mountPath=mount,
+                ))
 
             # apply pod specification
             pod_spec = apply_pod_spec(kube.job_pod, pod_spec, kube.predefined_pod_specs, log, kind='job')
@@ -261,8 +287,24 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                         persistentVolumeClaim = dict(claimName=pvc.name)
                     ))
                     pod_manifest['spec']['containers'][0]['volumeMounts'].append(dict(name=name, mountPath=pvc.mount))
+                    # add init commands, if needed
+                    pvc0 = infrastructure.active_pvcs[name]
+                    # add session init -- this only happens once, if volume is created
+                    session_init = infrastructure.session_init_commands.pop(name, None)
+                    if session_init is not None:
+                        session_init.insert(0, f"chown {kube.user.uid}.{kube.user.gid} .")
+                        add_volume_init(name, pvc.mount, session_init, root=True)
+                    # add step init
+                    if pvc.step_init_commands:
+                        if pvc0.owner != session_user:
+                            log.warning(f"skipping step initialization, since volume is owned by {pvc0.owner} not {session_user}")
+                        else:
+                            add_volume_init(name, pvc.mount, pvc.step_init_commands, root=False)
+
                 # add to status reporter
                 statrep.set_pvcs(kube.volumes)
+                # add init if needed
+                
 
             # start pod and wait for it to come up
             provisioning_deadline = time.time() + (kube.provisioning_timeout or 1e+10)

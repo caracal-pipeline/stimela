@@ -175,6 +175,7 @@ class KubeBackendOptions(object):
             self.status = "Created"
             self.creation_time = time.time()
             self.metadata = None
+            self.owner = None
 
     # subclasses for options
     @dataclass
