@@ -1,6 +1,8 @@
 import logging
 from typing import Dict, Any
 import re
+import rich
+from rich.markup import escape
 
 from omegaconf import OmegaConf
 
@@ -144,6 +146,10 @@ class StatusReporter(object):
                     if self.kube.verbose_events:
                         color = self.kube.verbose_event_colors.get(event.type.lower()) \
                                 or self.kube.verbose_event_colors.get("default")
+                        # escape console markup on string fields
+                        for key, value in event.__dict__.items():                         
+                            if type(value) is str:
+                                setattr(event, key, escape(value))
                         self.log.info(self.kube.verbose_event_format.format(event=event), 
                                       extra=dict(color=color) if color else {})
 

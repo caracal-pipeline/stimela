@@ -157,7 +157,7 @@ class KubeBackendOptions(object):
         at_step: ExistPolicy = ExistPolicy.allow_reuse
 
         # commands issued in the volume at initialization. E.g. "chmod 777", "mkdir xxx", etc. These run as root.
-        session_init_commands: List[str] = EmptyListDefault()
+        init_commands: List[str] = EmptyListDefault()
         # commands issued in the volume before each step initialization. E.g. "rm -fr *", "mkdir xxx", etc. 
         # These run as the user.
         step_init_commands: List[str] = EmptyListDefault()
@@ -176,6 +176,7 @@ class KubeBackendOptions(object):
             self.creation_time = time.time()
             self.metadata = None
             self.owner = None
+            self.initialized = False
 
     # subclasses for options
     @dataclass
@@ -216,9 +217,9 @@ class KubeBackendOptions(object):
 
     volumes:        Dict[str, Volume] = EmptyDictDefault()
 
-    inject_files:   Dict[str, FileInjection] = EmptyDictDefault()
-    pre_commands:   List[str] = EmptyListDefault()
-    local_mounts:   Dict[str, LocalMount] = EmptyDictDefault()
+    # inject_files:   Dict[str, FileInjection] = EmptyDictDefault()
+    # pre_commands:   List[str] = EmptyListDefault()
+    # local_mounts:   Dict[str, LocalMount] = EmptyDictDefault()
     env:            Dict[str, str] = EmptyDictDefault()
     dir:            Optional[str] = None                 # change to specific directory inside container
 
@@ -241,6 +242,8 @@ class KubeBackendOptions(object):
     verbose_event_format:  str = "=NOSUBST('\[k8s event type: {event.type}, reason: {event.reason}] {event.message}')"
     verbose_event_colors:  Dict[str, str] = DictDefault(
                             warning="blue", error="yellow", default="grey50")
+    
+    capture_logs_style: Optional[str] = "blue"
 
     @dataclass 
     class UserInfo(object):

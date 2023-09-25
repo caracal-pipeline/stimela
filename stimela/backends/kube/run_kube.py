@@ -1,7 +1,7 @@
 import logging, time, json, datetime, os.path, pathlib, secrets, traceback
 from typing import Dict, Optional, Any, List
 from dataclasses import fields
-import subprocess
+import threading, subprocess
 import rich
 import traceback
 
@@ -20,10 +20,10 @@ from . import get_kube_api, InjectedFileFormatters, session_id, session_user, re
 from .kube_utils import StatusReporter
 
 from kubernetes.client.rest import ApiException
-from kubernetes.stream import stream
 
 from .kube_utils import apply_pod_spec
-from . import infrastructure
+from . import infrastructure, pod_proxy
+from stimela.backends.utils import resolve_remote_mounts
 
 
 def run(cab: Cab, params: Dict[str, Any], fqname: str,
@@ -77,8 +77,6 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
 
     pod_created = dask_job_created = volumes_provisioned = port_forward_proc = None
 
-    aux_pod_threads = {}
-
     def k8s_event_handler(event):
         objkind = event.involved_object.kind
         objname = event.involved_object.name
@@ -88,9 +86,9 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
         if event.reason == "Failed":
             raise BackendError(f"{objkind} '{objname}' reported a 'Failed' event. Preceding log messages may contain extra information.", 
                                event.to_dict())
-        if event.reason == "ProvisioningFailed":
-            raise BackendError(f"{objkind} '{objname}' reported a 'ProvisioningFailed' event. Preceding log messages may contain extra information.",
-                              event.to_dict())
+        # if event.reason == "ProvisioningFailed":
+        #     raise BackendError(f"{objkind} '{objname}' reported a 'ProvisioningFailed' event. Preceding log messages may contain extra information.",
+        #                       event.to_dict())
         # if event.reason == "FailedScheduling":
         #     raise StimelaCabRuntimeError(f"k8s has reported a 'FailedScheduling' event. Preceding log messages may contain extra information.")
 
@@ -124,7 +122,6 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                     cmdline=["/bin/sh", "-c", "while true;do date;sleep 5; done"],
                     service_account=kube.service_account,
                     mount_file=None,
-                    volume=[f"{name}:{path}" for name, path in kube.volumes.items()]
                 )))
 
                 # apply pod type specifications
@@ -147,137 +144,25 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                 metadata    = dict(name=podname, labels=pod_labels),
             )
 
-            # setup user information -- current user info by default, overridden by backend options
-            uinfo = KubeBackendOptions.UserInfo()
-            for fld in fields(uinfo):
-                value = getattr(kube.user, fld.name)
-                setattr(uinfo, fld.name, value if value is not None else getattr(session_user_info, fld.name))
-
-            command = "while true; do date; sleep 5; done"
-            if uinfo.inject_nss:
-                command = \
-                    "cp /etc/passwd $HOME/.passwd; " + \
-                    "cp /etc/group $HOME/.group; " + \
-                    "echo $USER:x:$USER_UID:$USER_GID:$USER_GECOS:$HOME:/bin/sh >> $HOME/.passwd; " + \
-                    "echo $GROUP:x:$USER_GID: >> $HOME/.group; " + \
-                    command
-
             # form up pod spec
-            pod_spec = dict(
-                containers = [dict(
-                        image   = image_name,
-                        imagePullPolicy = 'Always' if kube.always_pull_images else 'IfNotPresent',
-                        name    = podname,
-                        command = ["/bin/sh"],
-                        args    = ["-c", command],
-                        env     = [
-                            dict(name="USER", value=uinfo.name),
-                            dict(name="GROUP", value=uinfo.group),
-                            dict(name="HOME", value=uinfo.home),
-                            dict(name="USER_UID", value=str(uinfo.uid)),
-                            dict(name="USER_GID", value=str(uinfo.gid)),
-                            dict(name="USER_GECOS", value=str(uinfo.gecos))
-                        ],
-                        securityContext = dict(
-                                runAsNonRoot = uinfo.uid!=0,
-                                runAsUser = uinfo.uid,
-                                runAsGroup = uinfo.gid,
-                        ),
-                        volumeMounts = [dict(
-                            name = "home-directory",
-                            mountPath = uinfo.home
-                        )]
-                )],
-                volumes = [dict(
-                    name = "home-directory",
-                    emptyDir = dict(medium="Memory") if uinfo.home_ramdisk else {} 
-                )],
-                serviceAccountName = kube.service_account,
-                automountServiceAccountToken = True
-            )
+            pod = pod_proxy.PodProxy(kube, podname, image_name, log=log)
 
-            session_init_container = None
-            step_init_container = None            
+            pod_manifest['spec'] = pod.pod_spec
 
-            def add_volume_init(volume_name: str, mount:str, commands: List[str], root: bool=False):
-                nonlocal session_init_container, step_init_container
-                # create init container if not already created
-                if root:
-                    cont = session_init_container
-                    if cont is None:
-                        cont = session_init_container = dict(
-                            name="volume-session-init",
-                            image="busybox",
-                            command=["/bin/sh", "-c", ""],
-                            volumeMounts=[])
-                        pod_spec.setdefault('initContainers', []).append(cont)
-                else:
-                    cont = step_init_container
-                    if cont is None:
-                        cont = step_init_container = dict(
-                            name="volume-step-init",
-                            image="busybox",
-                            command=["/bin/sh", "-c", ""],
-                            securityContext=dict(
-                                    runAsNonRoot = uinfo.uid!=0,
-                                    runAsUser = uinfo.uid,
-                                    runAsGroup = uinfo.gid),
-                            volumeMounts=[])
-                        pod_spec.setdefault('initContainers', []).append(cont)
-                # add to its commands
-                log.info(f"adding init commands for PVC '{name}': {'; '.join(commands)}")
-                cont['command'][-1] += f"cd {mount}; {'; '.join(commands)}; "
-                cont['volumeMounts'].append(dict(
-                    name=volume_name, mountPath=mount,
-                ))
-
-            # apply pod specification
-            pod_spec = apply_pod_spec(kube.job_pod, pod_spec, kube.predefined_pod_specs, log, kind='job')
-
-            pod_manifest['spec'] = pod_spec
-
-            # add runtime env settings
-            for name, value in kube.env.items():
-                value = os.path.expanduser(value)
-                pod_manifest['spec']['containers'][0]['env'].append(dict(name=name, value=value))
+            # add runtime env settings for port forwarding
             if dask_job_spec:
-                pod_manifest['spec']['containers'][0]['env'].append(dict(name="DASK_SCHEDULER_ADDRESS",
-                                                                        value=f"tcp://{dask_job_name}-scheduler.{namespace}.svc.cluster.local:8786"))
-
-            # add local mounts
-            def add_local_mount(name, path, dest, readonly):
-                name = name.replace("_", "-")  # sanitize name
-                pod_manifest['spec']['volumes'].append(dict(
-                    name = name,
-                    hostPath = dict(path=path, type='Directory' if os.path.isdir(path) else 'File')
-                ))
-                pod_manifest['spec']['containers'][0]['volumeMounts'].append(dict(name=name, mountPath=dest, readOnly=readonly))
-
-            # this will accumulate mounted paths from runtime spec
-            prior_mounts = {}
-
-            # add local mounts from runtime spec
-            for name, mount in kube.local_mounts.items():
-                path = os.path.abspath(os.path.expanduser(mount.path))
-                dest = os.path.abspath(os.path.expanduser(mount.dest)) if mount.dest else path
-                if not os.path.exists(path) and mount.mkdir:
-                    pathlib.Path(path).mkdir(parents=True)
-                add_local_mount(name, path, dest, mount.readonly)
-                if path == dest:
-                    prior_mounts[path] = not mount.readonly
-
-            # add local mounts to support parameters
-            req_mounts = {} # resolve_required_mounts(params, cab.inputs, cab.outputs, prior_mounts=prior_mounts)
-            for i, (path, readwrite) in enumerate(req_mounts.items()):
-                log.info(f"adding local mount {path} (readwrite={readwrite})")
-                add_local_mount(f"automount-{i}", path, path, not readwrite)
+                pod_manifest['spec']['containers'][0]['env'].append(
+                        dict(name="DASK_SCHEDULER_ADDRESS",
+                        value=f"tcp://{dask_job_name}-scheduler.{namespace}.svc.cluster.local:8786"))
 
             # add persistent volumes
             # check that mount paths are set before we try to resolve volumes
             for name, pvc in kube.volumes.items():
                 if not pvc.mount:
                     raise BackendError(f"volume {name} does not specify a mount path")
+
             # get the PVCs etc for the volumes
+            volumes_initialized = []
             with declare_subcommand("provisioning storage"):
                 volumes_provisioned = infrastructure.resolve_volumes(kube, log=log, step_token=token_hex)
                 # create volume specs
@@ -286,31 +171,37 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                         name = name,
                         persistentVolumeClaim = dict(claimName=pvc.name)
                     ))
-                    pod_manifest['spec']['containers'][0]['volumeMounts'].append(dict(name=name, mountPath=pvc.mount))
+                    pod.add_volume(name, pvc.mount)
                     # add init commands, if needed
                     pvc0 = infrastructure.active_pvcs[name]
                     # add session init -- this only happens once, if volume is created
-                    session_init = infrastructure.session_init_commands.pop(name, None)
-                    if session_init is not None:
-                        session_init.insert(0, f"chown {kube.user.uid}.{kube.user.gid} .")
-                        add_volume_init(name, pvc.mount, session_init, root=True)
+                    if not pvc0.initialized:
+                        session_init = pvc.init_commands or []
+                        if session_init:
+                            if pvc0.owner != session_user:
+                                log.warning(f"skipping session initialization on PVC '{name}': owned by {pvc0.owner} not {session_user}")
+                            else:
+                                pod.add_volume_init(pvc.mount, session_init, root=True)
+                                volumes_initialized.append(pvc0)
                     # add step init
                     if pvc.step_init_commands:
                         if pvc0.owner != session_user:
-                            log.warning(f"skipping step initialization, since volume is owned by {pvc0.owner} not {session_user}")
+                            log.warning(f"skipping step initialization on PVC '{name}': owned by {pvc0.owner} not {session_user}")
                         else:
-                            add_volume_init(name, pvc.mount, pvc.step_init_commands, root=False)
+                            pod.add_volume_init(pvc.mount, pvc.step_init_commands, root=False)
 
                 # add to status reporter
                 statrep.set_pvcs(kube.volumes)
-                # add init if needed
-                
+
+            # add commands for checking required files
+            pod.add_file_check_commands(params, cab)
 
             # start pod and wait for it to come up
             provisioning_deadline = time.time() + (kube.provisioning_timeout or 1e+10)
             if dask_job_spec is None:
-                with declare_subcommand("starting pod") as subcommand:
+                with declare_subcommand("starting pod"):
                     log.info(f"starting pod {podname} to run {command_name}")
+                    # rich.print(pod_manifest)
                     resp = kube_api.create_namespaced_pod(body=pod_manifest, namespace=namespace)
                     log.debug(f"create_namespaced_pod({podname}): {resp}")
                     pod_created = resp
@@ -321,25 +212,38 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                         log.debug(f"read_namespaced_pod_status({podname}): {resp.status}")
                         phase = resp.status.phase
                         if phase == 'Running':
+                            pod.dispatch_init_container_logs(kube.capture_logs_style)
                             break
+                        elif phase == 'Failed':
+                            pod.dispatch_init_container_logs(kube.capture_logs_style)
+                            raise BackendError("pod startup failed, check logs above")
                         if time.time() >= provisioning_deadline:
                             log.error("timed out waiting for pod to start. The log above may contain more information.")
                             raise BackendError(f"pod failed to start after {kube.provisioning_timeout}s")
                         time.sleep(1)
             # else dask job
             else:
-                with declare_subcommand("starting dask job") as subcommand:
+                with declare_subcommand("starting dask job"):
                     log.info(f"starting dask job {dask_job_name} to run {command_name}")
-                    dask_job_spec[0]["spec"]["job"]["spec"] = pod_spec
+                    # overwrites dask_job job pod spec with one we built up here --
+                    # that's ok since there's nothing useful in there (but look out for args.mounts)
+                    dask_job_spec[0]["spec"]["job"]["spec"] = pod.pod_spec
                     dask_job_spec[0]["spec"]["job"]["metadata"] = dict(name=podname)
+                    # copy job pod volumes to workers
+                    volumes = pod.pod_spec['volumes']
+                    mounts = pod.pod_spec['containers'][0]['volumeMounts']
+                    for name, spec in dask_job_spec[0]["spec"]["cluster"]["spec"].items():
+                        spec['spec'].setdefault('volumes', []).extend(volumes)
+                        for cont in spec['spec']['containers']:
+                            cont.setdefault('volumeMounts', []).extend(mounts)
                     group = 'kubernetes.dask.org'  # the CRD's group name
                     version = 'v1'  # the CRD's version
                     plural = 'daskjobs'  # the plural name of the CRD
+                    rich.print(dask_job_spec[0])
                     resp = custom_obj_api.create_namespaced_custom_object(group, version, namespace, plural, dask_job_spec[0])
                     log.debug(f"create_namespaced_custom_object({dask_job_name}): {resp}")
                     dask_job_created = resp
                     job_status = None
-
                     # wait for dask job to start up
                     while True:
                         resp = custom_obj_api.get_namespaced_custom_object_status(group, version, namespace, plural,
@@ -352,42 +256,23 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                             podname = resp['status']['jobRunnerPodName']
                             statrep.set_pod_name(podname)
                             log.info(f"job running as pod {podname}")
+                            pod.name = podname
+                            pod.dispatch_init_container_logs(kube.capture_logs_style)
                             break
+                        elif job_status == 'Failed':
+                            pod.dispatch_init_container_logs(kube.capture_logs_style)
+                            raise BackendError("job startup failed, check logs above")
                         if time.time() >= provisioning_deadline:
                             log.error("timed out waiting for dask job to start. The log above may contain more information.")
                             raise BackendError(f"job failed to start after {kube.provisioning_timeout}s")
                         time.sleep(1)
 
-                    def print_logs(name):
-                        style = kube.dask_cluster.capture_logs_style
-                        try:
-                            dispatch_to_log(log, f"started logging thread", command_name, "stdout", prefix=f"{name}#", style=style, output_wrangler=None)
-                            # rich.print(f"[yellow]started log thread for {name}[/yellow]")
-                            # Open a stream to the logs
-                            stream = None
-                            while stream is None:
-                                try:
-                                    stream = kube_api.read_namespaced_pod_log(name=name, namespace=namespace, _preload_content=False)
-                                except ApiException as exc:
-                                    # rich.print(f"[yellow]error starting stream for {name}, sleeping[/yellow]")
-                                    time.sleep(2)
-                            for line in stream:
-                                dispatch_to_log(log, line.decode().rstrip(), command_name, "stdout", prefix=f"{name}#", style=style, output_wrangler=None)
-                            stream.close()
-                        finally:
-                            dispatch_to_log(log, f"exiting logging thread", command_name, "stdout", prefix=f"{name}#", style=style, output_wrangler=None)
-                        # rich.print(f"[yellow]stopped log thread for {name}[/yellow]")
-
-                    # get other pods associated with DaskJob
+                    # get other pods associated with DaskJob and watch their logs
                     if kube.dask_cluster.capture_logs:
                         pods = kube_api.list_namespaced_pod(namespace=namespace, label_selector=statrep.label_selector)
-                        for pod in pods.items:
-                            # get new events
-                            name = pod.metadata.name
-                            if name != podname:
-                                import threading
-                                aux_pod_threads[name] = threading.Thread(target=print_logs, kwargs=dict(name=name))
-                                aux_pod_threads[name].start()
+                        for auxpod in pods.items:
+                            if auxpod.metadata.name != podname:
+                                pod.start_logging_thread(auxpod.metadata.name, style=kube.dask_cluster.capture_logs_style)
 
                     # start port forwarding
                     if kube.dask_cluster.forward_dashboard_port:
@@ -397,72 +282,19 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                             f"{kube.dask_cluster.forward_dashboard_port}:http-dashboard"])
 
             log.info(f"  pod started after {elapsed()}")
+
+            # if any volumes had session init commands issued, mark them as initialized
+            for pvc in volumes_initialized:
+                log.info(f"marking PVC {pvc.name} as initialized")
+                pvc.initialized = True
+                patch_body = dict(metadata=dict(labels=dict(stimela_pvc_initialized="True")))
+                kube_api.patch_namespaced_persistent_volume_claim(
+                    name=pvc.name,
+                    namespace=kube.namespace,
+                    body=patch_body)
+
             # resp = kube_api.read_namespaced_pod(name=podname, namespace=namespace)
             # log.info(f"  read_namespaced_pod {resp}")
-
-            def run_pod_command(command, cmdname, input=None, wrangler=None):
-                if type(command) is str:
-                    command = ["/bin/sh", "-c", command]
-                has_input = bool(input)
-
-                resp = stream(kube_api.connect_get_namespaced_pod_exec, podname, namespace,
-                            command=command,
-                            stderr=True, stdin=has_input,
-                            stdout=True, tty=False,
-                            _preload_content=False)
-
-                while resp.is_open():
-                    update_process_status()
-                    resp.update(timeout=1)
-                    if resp.peek_stdout():
-                        for line in resp.read_stdout().rstrip().split("\n"):
-                            dispatch_to_log(log, line, cmdname, "stdout",
-                                            output_wrangler=wrangler)
-                    if resp.peek_stderr():
-                        for line in resp.read_stderr().rstrip().split("\n"):
-                            dispatch_to_log(log, line, cmdname, "stderr",
-                                            output_wrangler=wrangler)
-                    if has_input:
-                        if input:
-                            resp.write_stdin(input)
-                            input = None
-                        else:
-                            break
-
-                retcode = resp.returncode
-                resp.close()
-                return retcode
-
-            # inject files into pod
-            if kube.inject_files:
-                with declare_subcommand("configuring pod (inject)"):
-                    for filename, injection in kube.inject_files.items():
-                        content = injection.content
-                        formatter = InjectedFileFormatters.get(injection.format.name)
-                        if formatter is None:
-                            raise StimelaCabParameterError(f"unsupported format {injection.format.name} for {filename}")
-                        # convert content to something serializable
-                        if isinstance(content, (DictConfig, ListConfig)):
-                            content = OmegaConf.to_container(content)
-                        content = formatter(content)
-                        log.info(f"injecting {filename} into pod {podname}")
-                        retcode = run_pod_command(f"mkdir -p {os.path.dirname(filename)}; cat >{filename}", "inject", input=content)
-                        if retcode:
-                            log.warning(f"injection returns exit code {retcode} after {elapsed()}")
-                        else:
-                            log.info(f"injection successful after {elapsed()}")
-
-
-            if kube.pre_commands:
-                with declare_subcommand("configuring pod (pre-commands)"):
-                    for pre_command in kube.pre_commands:
-                        log.info(f"running pre-command '{pre_command}' in pod {podname}")
-                        # calling exec and waiting for response
-                        retcode = run_pod_command(pre_command, pre_command.split()[0])
-                        if retcode:
-                            log.warning(f"pre-command returns exit code {retcode} after {elapsed()}")
-                        else:
-                            log.info(f"pre-command successful after {elapsed()}")
 
             if kube.debug.pause_on_start:
                 log.warning("kube.debug.pause_on_start is enabled")
@@ -481,7 +313,7 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                 log.info(f"running {command_name} in pod {podname}")
 
             with declare_subcommand(os.path.basename(command_name)):
-                retcode = run_pod_command(args, command_name, wrangler=cabstat.apply_wranglers)
+                retcode = pod.run_pod_command(args, command_name, wrangler=cabstat.apply_wranglers)
             update_process_status()
 
             # check if output marked it as a fail
@@ -534,6 +366,7 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                 log.info("proceeding with cleanup")
             statrep.set_event_handler(None)
             try:
+                pod.initiate_cleanup()
                 # clean up port forwarder
                 if port_forward_proc:
                     retcode = port_forward_proc.poll()
@@ -588,29 +421,7 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                     except Exception as exc:
                         log_exception(StimelaCabRuntimeError(f"error while deleting dask job {dask_job_name}: {exc}"), severity="warning")
                 # wait for aux pod threads
-                cleanup_time = datetime.datetime.now()
-                def cleanup_elapsed():
-                    return (datetime.datetime.now() - cleanup_time).total_seconds()
-                while aux_pod_threads and cleanup_elapsed() < 5:
-                    update_process_status()
-                    for name, thread in list(aux_pod_threads.items()):
-                        if thread.is_alive():
-                            log.info(f"rejoining log thread for {name}")
-                            thread.join(0.01)
-                        if thread.is_alive():
-                            log.info(f"logging thread alive, trying to delete auxuliary pod {name}")
-                            try:
-                                kube_api.delete_namespaced_pod(name=name, namespace=namespace)
-                            except ApiException as exc:
-                                log.warning(f"deleting pod {name} failed: {exc}")
-                                pass
-                        if not thread.is_alive():
-                            del aux_pod_threads[name]
-                    if aux_pod_threads:
-                        log.warning(f"{len(aux_pod_threads)} logging threads for sub-pods still alive, sleeping for a bit")
-                        time.sleep(2)
-                if aux_pod_threads:
-                    log.info(f"{len(aux_pod_threads)} logging threads for sub-pods still alive after {cleanup_elapsed():.1}s, giving up on the cleanup")
+                pod.cleanup()
             except KeyboardInterrupt:
                 log.error(f"kube cleanup interrupted with Ctrl+C after {elapsed()}")
                 raise StimelaCabRuntimeError(f"{command_name} cleanup interrupted with Ctrl+C after {elapsed()}")

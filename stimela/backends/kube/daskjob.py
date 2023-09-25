@@ -284,34 +284,6 @@ def render(args):
                         }
                     )
 
-    if args.volume:
-
-        for i, volume in enumerate(args.volume):
-            bits = volume.split(":")
-            if len(bits) != 2:
-                raise ValueError(
-                    f"--volume argument must be of the form "
-                    f"'name:mount_point'. Got {volume}"
-                )
-
-            pvc_name, mount_point = bits
-
-            for entry in [job_spec, worker_spec, scheduler_spec]:
-                volumes = entry.setdefault("volumes", [])
-
-                for container in entry["containers"]:
-                    volume_name = f"pvc-claim-{i}"
-                    volume_mounts = container.setdefault("volumeMounts", [])
-                    volume_mounts.append(
-                        {"name": volume_name, "mountPath": mount_point}
-                    )
-                    volumes.append(
-                        {
-                            "name": volume_name,
-                            "persistentVolumeClaim": {"claimName": pvc_name},
-                        }
-                    )
-
     return segments
 
 

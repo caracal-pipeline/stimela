@@ -248,7 +248,8 @@ def update_process_status():
     # call extra status reporter
     if ti and ti.status_reporter:
         extra_metrics, extra_stats = ti.status_reporter()
-        s.insert_extra_stats(**extra_stats)
+        if extra_stats:
+            s.insert_extra_stats(**extra_stats)
     else:
         extra_metrics = None
 

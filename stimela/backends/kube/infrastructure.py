@@ -198,6 +198,7 @@ def resolve_volumes(kube: KubeBackendOptions, log: logging.Logger, step_token=No
             pvc.creation_time = time.time()
             labels = resource_labels.copy()
             labels['stimela_pvc_name'] = name
+            labels['stimela_pvc_initialized'] = ''
             # append token for limited-lifecycle PVCs
             if pvc.append_id:
                 if pvc.lifecycle == Lifecycle.session:
@@ -212,8 +213,6 @@ def resolve_volumes(kube: KubeBackendOptions, log: logging.Logger, step_token=No
             if pvc.name in terminating_pvcs:
                 log.info(f"waiting for existing PVC '{pvc.name}' to terminate before re-creating")
                 _await_pvc_termination(kube.namespace, pvc, log=log)
-            # add init commands
-            session_init_commands[name] = pvc.session_init_commands or []
             # create
             newpvc = client.V1PersistentVolumeClaim()
             newpvc.metadata = client.V1ObjectMeta(name=pvc.name, labels=labels)
@@ -236,6 +235,10 @@ def resolve_volumes(kube: KubeBackendOptions, log: logging.Logger, step_token=No
                 raise BackendError(f"k8s API error while creating PVC '{pvc.name}'", json.loads(exc.body)) from None
             pvc.owner = session_user
             active_pvcs[name] = pvc
+        # reusing volume -- but check if it is initialized
+        else:
+            pvc0.initialized = pvc0.metadata.labels and pvc0.metadata.labels.get("stimela_pvc_initialized")
+
     return list(kube.volumes.keys())
 
 
