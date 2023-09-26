@@ -1,4 +1,4 @@
-import logging, time, json, datetime, os.path, pathlib, secrets, traceback
+import logging, time, json, datetime, os.path, pathlib, secrets
 from typing import Dict, Optional, Any, List
 from dataclasses import fields
 import threading, subprocess
@@ -178,16 +178,16 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                     if not pvc0.initialized:
                         session_init = pvc.init_commands or []
                         if session_init:
-                            if pvc0.owner != session_user:
-                                log.warning(f"skipping session initialization on PVC '{name}': owned by {pvc0.owner} not {session_user}")
-                            else:
+                            # if pvc0.owner != session_user:
+                            #     log.warning(f"skipping session initialization on PVC '{name}': owned by {pvc0.owner} not {session_user}")
+                            # else:
                                 pod.add_volume_init(pvc.mount, session_init, root=True)
                                 volumes_initialized.append(pvc0)
                     # add step init
                     if pvc.step_init_commands:
-                        if pvc0.owner != session_user:
-                            log.warning(f"skipping step initialization on PVC '{name}': owned by {pvc0.owner} not {session_user}")
-                        else:
+                        # if pvc0.owner != session_user:
+                        #     log.warning(f"skipping step initialization on PVC '{name}': owned by {pvc0.owner} not {session_user}")
+                        # else:
                             pod.add_volume_init(pvc.mount, pvc.step_init_commands, root=False)
 
                 # add to status reporter
@@ -201,7 +201,7 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
             if dask_job_spec is None:
                 with declare_subcommand("starting pod"):
                     log.info(f"starting pod {podname} to run {command_name}")
-                    # rich.print(pod_manifest)
+                    rich.print(pod_manifest)
                     resp = kube_api.create_namespaced_pod(body=pod_manifest, namespace=namespace)
                     log.debug(f"create_namespaced_pod({podname}): {resp}")
                     pod_created = resp
@@ -337,7 +337,6 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
         except ApiException as exc:
             if exc.body:
                 exc = (exc, json.loads(exc.body))
-            import traceback
             traceback.print_exc()
             log.error(f"k8s API error after {elapsed()}: {exc}")
             raise BackendError("k8s API error", exc) from None
@@ -350,7 +349,6 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
             raise
         except Exception as exc:
             log.error(f"k8s invocation of {command_name} failed after {elapsed()}")
-            import traceback
             traceback.print_exc()
             raise StimelaCabRuntimeError("kube backend error", exc) from None
 
@@ -433,21 +431,3 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
 
 
 
-# kubectl -n rarg get pods -A
-# kubectl -n rarg delete service recipetestqcdaskcluster
-# kubectl -n rarg delete poddisruptionbudget recipetestqcdaskcluster
-# kubectl -n rarg port-forward service/qc-test-cluster 18787:http-dashboard
-# kubectl -n rarg logs pod_id
-"""
-https://kubernetes.dask.org/en/latest/kubecluster.html#dask_kubernetes.KubeCluster
-
-We recommend adding the --death-timeout, '60' arguments and the restartPolicy: Never attribute
-to your worker specification. This ensures that these pods will clean themselves up if your Python process disappears unexpectedly.
-
-OMS: this should be set in the structure returned by make_pod_spec(). Seems to be set by default.
-
-https://kubernetes.dask.org/en/latest/testing.ht
-
-By default we set the --keep-cluster flag in setup.cfg which means the Kubernetes container will persist between pytest runs to
-avoid creation/teardown time. Therefore you may want to manually remove the container when you are done working on dask-kubernetes:
-"""

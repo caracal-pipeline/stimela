@@ -128,7 +128,7 @@ def resolve_remote_mounts(params: Dict[str, Any],
         if must_exist is None:
             must_exist = name in inputs
 
-        if must_exist:
+        if must_exist and name in inputs:
             must_exist_list.update(checked_files)
         if schema.mkdir:
             mkdir_list.update([os.path.dirname(path) for path in checked_files])

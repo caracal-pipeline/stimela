@@ -149,8 +149,9 @@ class PodProxy(object):
             try:
                 loglines = self.kube_api.read_namespaced_pod_log(name=self.name, namespace=self.kube.namespace, container=contname)
                 for line in loglines.split("\n"):
-                    dispatch_to_log(self.log, line, contname, "stdout", prefix=f"{contname}#", 
-                                    style=style, output_wrangler=None)
+                    if line:
+                        dispatch_to_log(self.log, line, contname, "stdout", prefix=f"{contname}#", 
+                                        style=style, output_wrangler=None)
             except ApiException as exc:
                 dispatch_to_log(self.log, "no logs", contname, "stdout", prefix=f"{contname}#", 
                                 style=style, output_wrangler=None)
@@ -182,12 +183,12 @@ class PodProxy(object):
         
         if must_exist_list or mkdir_list or remove_if_exists_list:
             cont = self.step_init_container
-            for path in must_exist_list:
-                error = f"VALIDATION ERROR: {path} doesn\\'t exist"
-                self.add_init_container_command(cont, f"if test -e '{path}'; then echo Checking {path}: exists; else echo {error}; false; fi; ")
             for path in mkdir_list:
                 error = f"VALIDATION ERROR: mkdir {path} failed"
-                self.add_init_container_command(cont, f"if mkdir {path}; then echo Created directory {path}; else echo {error}; false; fi; ")
+                self.add_init_container_command(cont, f"if mkdir -p {path}; then echo Created directory {path}; else echo {error}; exit 1; fi; ")
+            for path in must_exist_list:
+                error = f"VALIDATION ERROR: {path} doesn\\'t exist"
+                self.add_init_container_command(cont, f"if test -e '{path}'; then echo Checking {path}: exists; else echo {error}; exit 1; fi; ")
             for path in remove_if_exists_list:
                 self.add_init_container_command(cont, f"if test -e {path}; then echo Removing {path}; rm -fr {path}; true; fi; ")
             # make sure the relevant mounts are provided inside init container
