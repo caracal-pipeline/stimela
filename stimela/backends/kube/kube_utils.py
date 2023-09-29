@@ -1,8 +1,11 @@
 import logging
 from typing import Dict, Any
 import re
+from datetime import datetime
 import rich
 from rich.markup import escape
+from requests import ConnectionError
+from urllib3.exceptions import HTTPError
 
 from omegaconf import OmegaConf
 
@@ -98,6 +101,10 @@ class StatusReporter(object):
         self.pvcs = []
          # API errors added here when reported -- use this dict to avoid reissuing multiple errors
         self.api_errors_reported = {}
+        self._request_timeout = (5, 5)
+        self._connected = None
+        self._last_connected = None
+        self._last_disconnected = None
 
     def set_event_handler(self, event_handler):
         self.event_handler = event_handler
@@ -117,10 +124,23 @@ class StatusReporter(object):
             self.api_errors_reported[name] = exc
             self.log.warning(f"k8s API error for {name}: {exc}")
 
+    @property
+    def connected(self):
+        return self._connected
+    
+    @connected.setter
+    def connected(self, status: bool):
+        if status:
+            self._last_connected = datetime.now()
+        else:
+            self._last_disconnected = datetime.now()
+        self._connected = status
+
     def log_events(self):
         # get list of associated pods
         try:
-            pods = self.kube_api.list_namespaced_pod(namespace=self.namespace, label_selector=self.label_selector)
+            pods = self.kube_api.list_namespaced_pod(namespace=self.namespace, label_selector=self.label_selector, 
+                                                     _request_timeout=self._request_timeout)
         except ApiException as exc:
             self.report_api_error("list_namespaced_pod", exc)
             return
@@ -129,7 +149,8 @@ class StatusReporter(object):
             # get new events
             try:
                 events = self.kube_api.list_namespaced_event(namespace=self.namespace, 
-                                field_selector=f"involvedObject.kind={kind},involvedObject.name={name}")
+                                field_selector=f"involvedObject.kind={kind},involvedObject.name={name}",
+                                _request_timeout=self._request_timeout)
             except ApiException as exc:
                 self.report_api_error("list_namespaced_event", exc)
                 return
@@ -155,39 +176,53 @@ class StatusReporter(object):
 
     def update(self):
         from . import session_user
-        self.log_events()
-
-        # update k8s stats and metrics
-        pods = metrics = None
-        # get pod statuses
+        metrics = []
         try:
-            pods = self.kube_api.list_namespaced_pod(self.namespace,
-                                            label_selector=f"stimela_user={session_user}")
-        except ApiException as exc:
-            self.report_api_error("list_namespaced_pod", exc)
-        # process statuses if we got them
-        if pods:
-            for pod in pods.items:
-                pname = pod.metadata.name
-                if pod.metadata.deletion_timestamp:
-                    pod_status = "Terminating"
-                else:
-                    pod_status = pod.status.phase
-                # if pod.status.container_statuses:
-                #     print(f"Pod: {pname}, status: {pod_status}, {[st.state for st in pod.status.container_statuses]}")
-                # get container states
-                if pod.status.container_statuses:
-                    for cst in pod.status.container_statuses:
-                        for state in cst.state.waiting, cst.state.terminated: 
-                            if hasattr(state, 'reason'):
-                                pod_status += f":{state.reason}"
-                self.pod_statuses[pname] = pod_status
-        # get metrics
-        if self.enable_metrics:
+            self.log_events()
+            self.connected = True
+
+            # update k8s stats and metrics
+            pods = metrics = None
+            # get pod statuses
             try:
-                metrics = self.custom_api.list_namespaced_custom_object('metrics.k8s.io', 'v1beta1', self.namespace, 'pods')
+                pods = self.kube_api.list_namespaced_pod(self.namespace,
+                                                label_selector=f"stimela_user={session_user}",
+                                                _request_timeout=self._request_timeout)
             except ApiException as exc:
-                self.report_api_error("metrics.k8s.io", exc)
+                self.report_api_error("list_namespaced_pod", exc)
+            # process statuses if we got them
+            if pods:
+                for pod in pods.items:
+                    pname = pod.metadata.name
+                    if pod.metadata.deletion_timestamp:
+                        pod_status = "Terminating"
+                    else:
+                        pod_status = pod.status.phase
+                    # if pod.status.container_statuses:
+                    #     print(f"Pod: {pname}, status: {pod_status}, {[st.state for st in pod.status.container_statuses]}")
+                    # get container states
+                    if pod.status.container_statuses:
+                        for cst in pod.status.container_statuses:
+                            for state in cst.state.waiting, cst.state.terminated: 
+                                if hasattr(state, 'reason'):
+                                    pod_status += f":{state.reason}"
+                    self.pod_statuses[pname] = pod_status
+            # get metrics
+            if self.enable_metrics:
+                try:
+                    metrics = self.custom_api.list_namespaced_custom_object('metrics.k8s.io', 'v1beta1', self.namespace, 'pods',
+                                                _request_timeout=self._request_timeout)
+                except ApiException as exc:
+                    self.report_api_error("metrics.k8s.io", exc)
+        except (ConnectionError, HTTPError) as exc:
+            self.connected = False
+            # self.log.warning(f"disconnected: {exc}")
+        # add connection status
+        if not self.connected:
+            interval = str(datetime.now() - self._last_connected)
+            interval = interval.split(".", 1)[0]
+            return [f"lost connection [red]{interval}[/red] ago"], None
+
         # process metrics if we got them
         if metrics:
             totals = dict(cpu=0, memory=0)
@@ -217,7 +252,13 @@ class StatusReporter(object):
         nterm = sum([stat.startswith("Terminating") for stat in self.pod_statuses.values()])
         if nterm:
             pods += f"[blue]{nterm}[/blue]T"
-        nuk = npods - nrun - npend - nterm
+        nsucc = sum([stat.startswith("Succeeded") for stat in self.pod_statuses.values()])
+        if nsucc:
+            pods += f"[green]{nsucc}[/green]S"
+        nfail = sum([stat.startswith("Failed") for stat in self.pod_statuses.values()])
+        if nfail:
+            pods += f"[red]{nfail}[/red]F"
+        nuk = npods - nrun - npend - nterm - nsucc - nfail
         if nuk:
             pods += f"[red]{nuk}[/red]U"
         if npods:
@@ -233,6 +274,9 @@ class StatusReporter(object):
             stats = dict(k8s_cores=cores, k8s_mem=mem_gb)
         else:
             stats = None
+
+        if self._last_disconnected is not None:
+            report_metrics.append("reconnected")
         
         return report_metrics, stats
 

@@ -26,7 +26,7 @@ class BinaryFlavour(_BaseFlavour):
 
         # prepend virtual env invocation, if asked
         if virtual_env:
-            args = ["/bin/bash", "--rcfile", f"{virtual_env}/bin/activate", "-c", " ".join(shlex.quote(arg) for arg in args)]
+            args = ["/bin/bash", "--rcfile", f"{virtual_env}/bin/activate", "-c", shlex.quote(" ".join(shlex.quote(arg) for arg in args))]
 
         return args
     

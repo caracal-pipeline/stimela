@@ -82,7 +82,11 @@ class Cab(Cargo):
     image: Optional[Any] = None                   
 
     # command to run, inside the container or natively
+    # this is not split into individual arguments, but passed to sh -c as is
     command: str = MISSING
+
+    # optional arguments to be passed to command, before any stimela-formed arguments
+    args: List[str] = EmptyListDefault()
 
     ## moved to backend: native
     # # if set, activates this virtual environment first before running the command (not much sense doing this inside the container)
@@ -178,12 +182,11 @@ class Cab(Cargo):
         try:
             with substitutions_from(subst, raise_errors=True) as context:
                 command = context.evaluate(self.command, location=["command"])
+                args = [context.evaluate(arg, location=[f"args[{i}]"]) for i, arg in enumerate(self.args)]
         except Exception as exc:
             raise CabValidationError(f"error constructing cab command", exc)
 
-        command_line = shlex.split(os.path.expanduser(command))
-        command = command_line[0]
-        args = command_line[1:]
+        command = os.path.expanduser(command)
         # collect command
         if check_executable:
             if "/" not in command:

@@ -225,10 +225,13 @@ class KubeBackendOptions(object):
 
     provisioning_timeout: int = 600                      # timeout in seconds for pods/jobs to provision. 0 to disable
 
+    connection_timeout: int = 60                         # connection timeout when talking to cluster, in seconds
+
     always_pull_images: bool = False                     # change to True to repull
 
     @dataclass
     class DebugOptions(object):
+        print: int = 0                      # debug-print level. Higher numbers mean more verbosity
         pause_on_start: bool = False        # pause instead of running payload
         pause_on_cleanup: bool = False      # pause before attempting cleanup
     

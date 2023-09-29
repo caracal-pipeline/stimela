@@ -18,7 +18,7 @@ from stimela.backends.utils import resolve_remote_mounts
 
 class PodProxy(object):
 
-    def __init__(self, kube: KubeBackendOptions, podname: str, image_name: str, log: logging.Logger):
+    def __init__(self, kube: KubeBackendOptions, podname: str, image_name: str, command: str, log: logging.Logger):
         self.kube_api, _ = get_kube_api()
         self.kube = kube
         self.name = podname
@@ -30,7 +30,6 @@ class PodProxy(object):
             setattr(self.uinfo, fld.name, value if value is not None else getattr(session_user_info, fld.name))
 
         # setup command
-        command = "while true; do date; sleep 5; done"
         if self.uinfo.inject_nss:
             command = \
                 "cp /etc/passwd $HOME/.passwd; " + \
@@ -43,8 +42,8 @@ class PodProxy(object):
             containers = [dict(
                     image   = image_name,
                     imagePullPolicy = 'Always' if kube.always_pull_images else 'IfNotPresent',
-                    name    = podname,
-                    command = ["/bin/sh"],
+                    name    = "job",
+                    command = ["/bin/bash"],
                     args    = ["-c", command],
                     env     = [
                         dict(name="USER", value=self.uinfo.name),
@@ -83,8 +82,19 @@ class PodProxy(object):
         self._session_init_container = None
         self._step_init_container = None          
         self._exit_logging_threads = False
-        self._aux_pod_threads = False
+        self._aux_pod_threads = {}
         self._mounts = {}
+
+    def _status_updater(self):
+        while not self._exit_logging_threads:
+            update_process_status()
+            time.sleep(1)
+
+    def start_status_update_thread(self):
+        if "status" not in self._aux_pod_threads:
+            thread = threading.Thread(target=self._status_updater)
+            self._aux_pod_threads["status"] = thread, None, "status update thread"
+            thread.start()
 
     @property
     def session_init_container(self):
@@ -143,8 +153,11 @@ class PodProxy(object):
         self.add_init_container_command(cont, f"cd {mount}; {'; '.join(commands)}; ")
         self.add_init_container_mount(cont, volume_name, mount)
 
-    def dispatch_init_container_logs(self, style):
-        for cont in self.pod_spec['initContainers']:
+    def dispatch_container_logs(self, style: str, job: bool = True):
+        containers = self.pod_spec['initContainers']
+        if job:
+            containers += self.pod_spec['containers']
+        for cont in containers:
             contname = cont['name']
             try:
                 loglines = self.kube_api.read_namespaced_pod_log(name=self.name, namespace=self.kube.namespace, container=contname)
@@ -157,7 +170,7 @@ class PodProxy(object):
                                 style=style, output_wrangler=None)
 
     def _print_logs(self, name, style, container=None):
-        """Helper function -- prints logs from a pod in aseparate thread"""
+        """Helper function -- prints logs from a pod in a separate thread"""
         prefix = f"{name}#" if container is None else f"{name}.{container}#" 
         dispatch_to_log(self.log, f"started logging thread for {name} {container}", name, "stdout", prefix=prefix, style=style, output_wrangler=None)
         try:
@@ -197,8 +210,10 @@ class PodProxy(object):
 
     def start_logging_thread(self, name, style, container=None):
         """Starts thread to pick up logs"""
-        self._aux_pod_threads[name] = threading.Thread(target=self._print_logs, kwargs=dict(name=name, container=container, style=style))
-        self._aux_pod_threads[name].start()
+        thread = threading.Thread(target=self._print_logs, 
+                        kwargs=dict(name=name, container=container, style=style))
+        self._aux_pod_threads[name] = thread, name, f"auxiliary logging thread for {name}"
+        thread.start()
 
     def initiate_cleanup(self):
         self._exit_logging_threads = True
@@ -209,24 +224,23 @@ class PodProxy(object):
             return (datetime.datetime.now() - cleanup_time).total_seconds()
         while self._aux_pod_threads and cleanup_elapsed() < 5:
             update_process_status()
-            for name, thread in list(self._aux_pod_threads.items()):
+            for name, (thread, aux_pod, desc) in list(self._aux_pod_threads.items()):
                 if thread.is_alive():
-                    self.log.info(f"rejoining log thread for {name}")
                     thread.join(0.01)
-                if thread.is_alive():
-                    self.log.info(f"logging thread alive, trying to delete auxuliary pod {name}")
+                if thread.is_alive() and aux_pod:
+                    self.log.info(f"{desc} alive, trying to delete associated pod")
                     try:
-                        self.kube_api.delete_namespaced_pod(name=name, namespace=self.namespace)
+                        self.kube_api.delete_namespaced_pod(name=aux_pod, namespace=self.kube.namespace)
                     except ApiException as exc:
-                        self.log.warning(f"deleting pod {name} failed: {exc}")
+                        self.log.warning(f"deleting pod {aux_pod} failed: {exc}")
                         pass
                 if not thread.is_alive():
                     del self._aux_pod_threads[name]
             if self._aux_pod_threads:
-                self.log.warning(f"{len(self._aux_pod_threads)} logging threads for sub-pods still alive, sleeping for a bit")
-                time.sleep(2)
+                # self.log.info(f"{len(self._aux_pod_threads)} auxiliary threads still alive, sleeping for a bit")
+                time.sleep(0.5)
         if self._aux_pod_threads:
-            self.log.info(f"{len(self._aux_pod_threads)} logging threads for sub-pods still alive after {cleanup_elapsed():.1}s, giving up on the cleanup")
+            self.log.info(f"{len(self._aux_pod_threads)} auxiliary threads still alive after {cleanup_elapsed():.1}s, giving up on the cleanup")
 
     def run_pod_command(self, command, cmdname, input=None, wrangler=None):
         if type(command) is str:

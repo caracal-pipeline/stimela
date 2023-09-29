@@ -1,6 +1,9 @@
-import logging, time, json, datetime, os.path, pathlib, secrets
+import logging, time, json, datetime, os.path, pathlib, secrets, shlex
 from typing import Dict, Optional, Any, List
 from dataclasses import fields
+from datetime import timedelta
+from requests import ConnectionError
+from urllib3.exceptions import HTTPError
 import threading, subprocess
 import rich
 import traceback
@@ -92,18 +95,35 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
         # if event.reason == "FailedScheduling":
         #     raise StimelaCabRuntimeError(f"k8s has reported a 'FailedScheduling' event. Preceding log messages may contain extra information.")
 
+
+    # define debug-print function
+    if kube.debug.print:
+        def dprint(level, *args):
+            if level <= kube.debug.print:
+                rich.print(*args)
+    else:
+        def dprint(level, *args):
+            pass
+
     statrep = StatusReporter(namespace, podname=podname, log=log, kube=kube, 
                              event_handler=k8s_event_handler)
 
-    with declare_subtask(f"{os.path.basename(command_name)}:kube", status_reporter=statrep.update):
-        try:
+    if kube.debug.pause_on_start:
+        command = "while sleep 600; do echo debug mode still active; done"
+    else:
+        command = args[0] + " " + " ".join(shlex.quote(x) for x in args[1:])
+        if kube.dir:
+            command = f"cd {kube.dir}; {command}"
+
+    try:
+        with declare_subtask(f"{os.path.basename(command_name)}.kube-init", status_reporter=statrep.update):
             log.info(f"using image {image_name}")
 
             # create pod labels
             pod_labels = dict(stimela_job=podname, 
-                              stimela_fqname=fqname, 
-                              stimela_cab=cab.name,
-                              **resource_labels)
+                                stimela_fqname=fqname, 
+                                stimela_cab=cab.name,
+                                **resource_labels)
 
             # depending on whether or not a dask cluster is configured, we do either a DaskJob or a regular pod
             if kube.dask_cluster and kube.dask_cluster.num_workers:
@@ -119,7 +139,7 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                     memory_limit=kube.dask_cluster.worker_pod.memory and kube.dask_cluster.worker_pod.memory.limit,
                     nworkers=kube.dask_cluster.num_workers,
                     threads_per_worker=kube.dask_cluster.threads_per_worker,
-                    cmdline=["/bin/sh", "-c", "while true;do date;sleep 5; done"],
+                    # cmdline=["/bin/sh", "-c", "while true;do date;sleep 5; done"],
                     service_account=kube.service_account,
                     mount_file=None,
                 )))
@@ -128,11 +148,11 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                 if kube.dask_cluster.worker_pod:
                     dask_job_spec[0]["spec"]["cluster"]["spec"]["worker"]["spec"] = \
                         apply_pod_spec(kube.dask_cluster.worker_pod, dask_job_spec[0]["spec"]["cluster"]["spec"]["worker"]["spec"],
-                                                           kube.predefined_pod_specs, log, kind='worker')
+                                                            kube.predefined_pod_specs, log, kind='worker')
                 if kube.dask_cluster.scheduler_pod:
                     dask_job_spec[0]["spec"]["cluster"]["spec"]["scheduler"]["spec"] = \
                         apply_pod_spec(kube.dask_cluster.scheduler_pod, dask_job_spec[0]["spec"]["cluster"]["spec"]["scheduler"]["spec"],
-                                                           kube.predefined_pod_specs, log, kind='scheduler')
+                                                            kube.predefined_pod_specs, log, kind='scheduler')
 
             else:
                 dask_job_spec = dask_job_name = None
@@ -145,7 +165,7 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
             )
 
             # form up pod spec
-            pod = pod_proxy.PodProxy(kube, podname, image_name, log=log)
+            pod = pod_proxy.PodProxy(kube, podname, image_name, command=command, log=log)
 
             pod_manifest['spec'] = pod.pod_spec
 
@@ -195,27 +215,40 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
 
             # add commands for checking required files
             pod.add_file_check_commands(params, cab)
+            # start the threaded status update, since log reading blocks
+            pod.start_status_update_thread()
 
             # start pod and wait for it to come up
             provisioning_deadline = time.time() + (kube.provisioning_timeout or 1e+10)
             if dask_job_spec is None:
                 with declare_subcommand("starting pod"):
                     log.info(f"starting pod {podname} to run {command_name}")
-                    rich.print(pod_manifest)
+                    dprint(1, "Creating pod:", pod_manifest)
                     resp = kube_api.create_namespaced_pod(body=pod_manifest, namespace=namespace)
-                    log.debug(f"create_namespaced_pod({podname}): {resp}")
+                    dprint(2, "Responce: ", resp)
                     pod_created = resp
-
+                    connected = True
                     while True:
-                        update_process_status()
-                        resp = kube_api.read_namespaced_pod_status(name=podname, namespace=namespace)
-                        log.debug(f"read_namespaced_pod_status({podname}): {resp.status}")
+                        try:
+                            resp = kube_api.read_namespaced_pod_status(name=podname, namespace=namespace,
+                                                                    _request_timeout=(1, 1))
+                        except (ConnectionError, HTTPError) as exc:
+                            if connected:
+                                log.warn("lost connection to k8s cluster while waiting for the pod to start")
+                                log.warn("this is not fatal if the connection eventually resumes")
+                                log.warn("use Ctrl+C if you want to give up")
+                                connected = statrep.connected = False
+                            time.sleep(1)
+                            continue
                         phase = resp.status.phase
-                        if phase == 'Running':
-                            pod.dispatch_init_container_logs(kube.capture_logs_style)
+                        if not connected:
+                            log.info("connection resumed", extra=dict(style="green"))
+                            connected = statrep.connected = True
+                        if phase == 'Running' or phase == 'Succeeded':
+                            pod.dispatch_container_logs(kube.capture_logs_style, job=False)
                             break
                         elif phase == 'Failed':
-                            pod.dispatch_init_container_logs(kube.capture_logs_style)
+                            pod.dispatch_container_logs(kube.capture_logs_style)
                             raise BackendError("pod startup failed, check logs above")
                         if time.time() >= provisioning_deadline:
                             log.error("timed out waiting for pod to start. The log above may contain more information.")
@@ -236,31 +269,43 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                         spec['spec'].setdefault('volumes', []).extend(volumes)
                         for cont in spec['spec']['containers']:
                             cont.setdefault('volumeMounts', []).extend(mounts)
-                    group = 'kubernetes.dask.org'  # the CRD's group name
-                    version = 'v1'  # the CRD's version
-                    plural = 'daskjobs'  # the plural name of the CRD
-                    rich.print(dask_job_spec[0])
-                    resp = custom_obj_api.create_namespaced_custom_object(group, version, namespace, plural, dask_job_spec[0])
-                    log.debug(f"create_namespaced_custom_object({dask_job_name}): {resp}")
+                    # start the job
+                    group, version, plural = 'kubernetes.dask.org', 'v1', 'daskjobs'
+                    dprint(1, "Creating daskjob:", dask_job_spec[0])
+                    resp = custom_obj_api.create_namespaced_custom_object(group, version, 
+                                            namespace, plural , dask_job_spec[0])
+                    dprint(2, "Response:", resp)
                     dask_job_created = resp
                     job_status = None
+                    connected = True
                     # wait for dask job to start up
                     while True:
-                        resp = custom_obj_api.get_namespaced_custom_object_status(group, version, namespace, plural,
-                                                                                name=dask_job_name)
+                        try:
+                            resp = custom_obj_api.get_namespaced_custom_object_status(group, version, 
+                                                    namespace, plural, name=dask_job_name, _request_timeout=(1, 1))
+                        except (ConnectionError, HTTPError) as exc:
+                            if connected:
+                                log.warn("lost connection to k8s cluster while waiting for the daskjob to start")
+                                log.warn("this is not fatal if the connection eventually resumes")
+                                log.warn("use Ctrl+C if you want to give up")
+                                connected = statrep.connected = False
+                            time.sleep(1)
+                            continue
+                        if not connected:
+                            log.info("connection resumed", extra=dict(style="green"))
+                            connected = statrep.connected = True
                         job_status = 'status' in resp and resp['status']['jobStatus']
                         statrep.set_main_status(job_status)
-                        update_process_status()
                         # get podname from job once it's running
-                        if job_status == 'Running':
+                        if job_status == 'Running' or job_status.startswith('Success'):
                             podname = resp['status']['jobRunnerPodName']
                             statrep.set_pod_name(podname)
                             log.info(f"job running as pod {podname}")
                             pod.name = podname
-                            pod.dispatch_init_container_logs(kube.capture_logs_style)
+                            pod.dispatch_container_logs(kube.capture_logs_style, job=False)
                             break
                         elif job_status == 'Failed':
-                            pod.dispatch_init_container_logs(kube.capture_logs_style)
+                            pod.dispatch_container_logs(kube.capture_logs_style)
                             raise BackendError("job startup failed, check logs above")
                         if time.time() >= provisioning_deadline:
                             log.error("timed out waiting for dask job to start. The log above may contain more information.")
@@ -304,17 +349,66 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                 if kube.dir:
                     log.warning(f"  $ cd {kube.dir}")
                 log.warning(f"  $ {' '.join(args)}")
-                args = ["bash", "-c", "while sleep 600; do echo debug mode still active; done"]
-                log.warning("press Ctrl+C when done debugging")
+                log.warning("press Ctrl+C here when done debugging to halt the pod")
             else:
                 # do we need to chdir
-                if kube.dir:
-                    args = ["python3", "-c", f"import os,sys; os.chdir('{kube.dir}'); os.execlp('{args[0]}', *sys.argv[1:])"] + list(args)
-                log.info(f"running {command_name} in pod {podname}")
+                log.info(f"running: {command}")
 
-            with declare_subcommand(os.path.basename(command_name)):
-                retcode = pod.run_pod_command(args, command_name, wrangler=cabstat.apply_wranglers)
-            update_process_status()
+        with declare_subtask(f"{os.path.basename(command_name)}.kube-run", status_reporter=statrep.update):
+            retcode = None
+            connected = True
+            last_log_timestamp = None
+            seen_logs = set()
+            while retcode is None:
+                try:
+                    for entry in kube_api.read_namespaced_pod_log(name=podname, namespace=namespace, container="job",
+                                follow=True, timestamps=True,
+    #                            since_time=last_log_timestamp,
+                                _preload_content=False, 
+                                _request_timeout=(kube.connection_timeout, kube.connection_timeout),
+                            ).stream():
+                        if not connected:
+                            log.info("connection resumed", extra=dict(style="green"))
+                            connected = True
+                        # log.info(f"got [blue]{entry.decode()}[/blue]")
+                        for line in entry.decode().rstrip().split("\n"):
+                            timestamp, content = line.split(" ", 1)
+                            key = timestamp, hash(content)
+                            last_log_timestamp = timestamp
+                            if key in seen_logs:
+                                continue
+                            seen_logs.add(key)
+                            dispatch_to_log(log, content, command_name, "stdout", 
+                                            output_wrangler=cabstat.apply_wranglers)
+                
+                    # check for return code
+                    resp = kube_api.read_namespaced_pod_status(name=podname, namespace=namespace)
+                    statrep.connected = connected = True
+                    contstat = resp.status.container_statuses[0].state
+                    waiting = contstat.waiting
+                    running = contstat.running
+                    terminated = contstat.terminated
+                    if waiting:
+                        log.info("container state is 'waiting'")
+                        dprint(2, waiting)
+                    elif running:
+                        log.info(f"container state is 'running'")
+                        dprint(2, running)
+                    elif terminated:
+                        retcode = terminated.exit_code
+                        log.info(f"container state is 'terminated', exit code is {retcode}")
+                        dprint(2, terminated)
+                        break
+                except (ConnectionError, HTTPError) as exc:
+                    # this could be a real connection error, or maybe the process has gone quiet
+                    # so check with the statrep object, since that maintains its own connection status
+                    if not statrep.connected:
+                        if connected:
+                            log.warn("lost connection to k8s cluster: will try to reconnect")
+                            log.warn("this is not fatal if the connection eventually resumes")
+                            log.warn("use Ctrl+C if you want to give up")
+                            connected = False
+                    time.sleep(1)
 
             # check if output marked it as a fail
             if cabstat.success is False:
@@ -330,103 +424,106 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
 
             return cabstat
 
-        # handle various failure modes by logging errors appropriately
-        except KeyboardInterrupt:
-            log.error(f"k8s invocation of {command_name} interrupted with Ctrl+C after {elapsed()}")
-            raise StimelaCabRuntimeError(f"{command_name} interrupted with Ctrl+C after {elapsed()}") from None
-        except ApiException as exc:
-            if exc.body:
-                exc = (exc, json.loads(exc.body))
-            traceback.print_exc()
-            log.error(f"k8s API error after {elapsed()}: {exc}")
-            raise BackendError("k8s API error", exc) from None
-        # this drops out as a normal error response
-        except StimelaCabRuntimeError as exc:
-            log.error(f"cab runtime error after {elapsed()}: {exc}")
-            raise
-        except BackendError as exc:
-            log.error(f"kube backend error after {elapsed()}: {exc}")
-            raise
-        except Exception as exc:
-            log.error(f"k8s invocation of {command_name} failed after {elapsed()}")
-            traceback.print_exc()
-            raise StimelaCabRuntimeError("kube backend error", exc) from None
+    # handle various failure modes by logging errors appropriately
+    except KeyboardInterrupt:
+        log.error(f"k8s invocation of {command_name} interrupted with Ctrl+C after {elapsed()}")
+        raise StimelaCabRuntimeError(f"{command_name} interrupted with Ctrl+C after {elapsed()}") from None
+    except ApiException as exc:
+        if exc.body:
+            exc = (exc, json.loads(exc.body))
+        traceback.print_exc()
+        log.error(f"k8s API error after {elapsed()}: {exc}")
+        raise BackendError("k8s API error", exc) from None
+    except (ConnectionError, HTTPError) as exc:
+        log.error(f"k8s connection error after {elapsed()}: {exc}")
+        raise BackendError("k8s connection error", exc) from None
+    # this drops out as a normal error response
+    except StimelaCabRuntimeError as exc:
+        log.error(f"cab runtime error after {elapsed()}: {exc}")
+        raise
+    except BackendError as exc:
+        log.error(f"kube backend error after {elapsed()}: {exc}")
+        raise
+    except Exception as exc:
+        log.error(f"k8s invocation of {command_name} failed after {elapsed()}")
+        traceback.print_exc()
+        raise StimelaCabRuntimeError("kube backend error", exc) from None
 
-        # cleanup
-        finally:
-            if kube.debug.pause_on_cleanup:
-                log.warning("kube.debug.pause_on_cleanup is enabled -- pausing -- press Ctrl+C to proceed")
-                try:
-                    while True:
-                        time.sleep(1)
-                except KeyboardInterrupt:
-                    pass
-                log.info("proceeding with cleanup")
-            statrep.set_event_handler(None)
+    # cleanup
+    finally:
+        if kube.debug.pause_on_cleanup:
+            log.warning("kube.debug.pause_on_cleanup is enabled -- pausing -- press Ctrl+C to proceed")
             try:
-                pod.initiate_cleanup()
-                # clean up port forwarder
-                if port_forward_proc:
-                    retcode = port_forward_proc.poll()
-                    if retcode is not None:
-                        log.warning(f"kubectl port-forward process has died with code {retcode}")
-                        port_forward_proc.wait()
-                    else:
-                        log.info("terminating kubectl port-forward process")
-                        port_forward_proc.terminate()
+                while True:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                pass
+            log.info("proceeding with cleanup")
+        statrep.set_event_handler(None)
+        try:
+            pod.initiate_cleanup()
+            # clean up port forwarder
+            if port_forward_proc:
+                retcode = port_forward_proc.poll()
+                if retcode is not None:
+                    log.warning(f"kubectl port-forward process has died with code {retcode}")
+                    port_forward_proc.wait()
+                else:
+                    log.info("terminating kubectl port-forward process")
+                    port_forward_proc.terminate()
+                    try:
+                        retcode = port_forward_proc.wait(1)
+                    except subprocess.TimeoutExpired:
+                        log.warning("kubectl port-forward process hasn't terminated -- killing it")
+                        port_forward_proc.kill()
                         try:
                             retcode = port_forward_proc.wait(1)
                         except subprocess.TimeoutExpired:
-                            log.warning("kubectl port-forward process hasn't terminated -- killing it")
-                            port_forward_proc.kill()
-                            try:
-                                retcode = port_forward_proc.wait(1)
-                            except subprocess.TimeoutExpired:
-                                log.warning("kubectl port-forward process refuses to die")
-                        if retcode is not None:
-                            log.info(f"kubectl port-forward process has exited with code {retcode}")
+                            log.warning("kubectl port-forward process refuses to die")
+                    if retcode is not None:
+                        log.info(f"kubectl port-forward process has exited with code {retcode}")
 
-                # cleean up PVCs
-                if volumes_provisioned:
-                    infrastructure.delete_pvcs(kube, volumes_provisioned, log=log, step=True)
+            # cleean up PVCs
+            if volumes_provisioned:
+                infrastructure.delete_pvcs(kube, volumes_provisioned, log=log, step=True)
 
-                if podname and pod_created: # or dask_job_created:
-                    try:
-                        update_process_status()
-                        log.info(f"deleting pod {podname}")
-                        resp = kube_api.delete_namespaced_pod(name=podname, namespace=namespace)
-                        log.debug(f"delete_namespaced_pod({podname}): {resp}")
-                        # while True:
-                        #     resp = kube_api.read_namespaced_pod(name=podname, namespace=namespace)
-                        #     log.debug(f"read_namespaced_pod({podname}): {resp}")
-                        #     log.info(f"  pod phase is {resp.status.phase} after {elapsed()}")
-                        #     time.sleep(.5)
-                        update_process_status()
-                    except ApiException as exc:
-                        body = json.loads(exc.body)
-                        log_exception(StimelaCabRuntimeError(f"k8s API error while deleting pod {podname}", (exc, body)), severity="warning")
-                    except Exception as exc:
-                        traceback.print_exc()
-                        log_exception(StimelaCabRuntimeError(f"error while deleting pod {podname}: {exc}"), severity="warning")
-                if dask_job_created:
-                    try:
-                        update_process_status()
-                        log.info(f"deleting dask job {dask_job_name}")
-                        custom_obj_api.delete_namespaced_custom_object(group, version, namespace, plural, dask_job_name)
-                    except ApiException as exc:
-                        body = json.loads(exc.body)
-                        log_exception(StimelaCabRuntimeError(f"k8s API error while deleting dask job {dask_job_name}", (exc, body)), severity="warning")
-                    except Exception as exc:
-                        log_exception(StimelaCabRuntimeError(f"error while deleting dask job {dask_job_name}: {exc}"), severity="warning")
-                # wait for aux pod threads
-                pod.cleanup()
-            except KeyboardInterrupt:
-                log.error(f"kube cleanup interrupted with Ctrl+C after {elapsed()}")
-                raise StimelaCabRuntimeError(f"{command_name} cleanup interrupted with Ctrl+C after {elapsed()}")
-            except Exception as exc:
-                log.error(f"kube cleanup failed after {elapsed()}")
-                traceback.print_exc()
-                raise StimelaCabRuntimeError("kube backend cleanup error", exc)
+            if podname and pod_created: # or dask_job_created:
+                try:
+                    update_process_status()
+                    log.info(f"deleting pod {podname}")
+                    resp = kube_api.delete_namespaced_pod(name=podname, namespace=namespace)
+                    log.debug(f"delete_namespaced_pod({podname}): {resp}")
+                    # while True:
+                    #     resp = kube_api.read_namespaced_pod(name=podname, namespace=namespace)
+                    #     log.debug(f"read_namespaced_pod({podname}): {resp}")
+                    #     log.info(f"  pod phase is {resp.status.phase} after {elapsed()}")
+                    #     time.sleep(.5)
+                    update_process_status()
+                except ApiException as exc:
+                    body = json.loads(exc.body)
+                    log_exception(StimelaCabRuntimeError(f"k8s API error while deleting pod {podname}", (exc, body)), severity="warning")
+                except Exception as exc:
+                    traceback.print_exc()
+                    log_exception(StimelaCabRuntimeError(f"error while deleting pod {podname}: {exc}"), severity="warning")
+            if dask_job_created:
+                try:
+                    update_process_status()
+                    log.info(f"deleting dask job {dask_job_name}")
+                    custom_obj_api.delete_namespaced_custom_object(group, version, namespace, plural, dask_job_name)
+                except ApiException as exc:
+                    body = json.loads(exc.body)
+                    log_exception(StimelaCabRuntimeError(f"k8s API error while deleting dask job {dask_job_name}", (exc, body)), severity="warning")
+                except Exception as exc:
+                    log_exception(StimelaCabRuntimeError(f"error while deleting dask job {dask_job_name}: {exc}"), severity="warning")
+            # wait for aux pod threads
+            pod.cleanup()
+        except KeyboardInterrupt:
+            log.error(f"kube cleanup interrupted with Ctrl+C after {elapsed()}")
+            raise StimelaCabRuntimeError(f"{command_name} cleanup interrupted with Ctrl+C after {elapsed()}")
+        except Exception as exc:
+            log.error(f"kube cleanup failed after {elapsed()}")
+            traceback.print_exc()
+            raise StimelaCabRuntimeError("kube backend cleanup error", exc)
 
 
 

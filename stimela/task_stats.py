@@ -276,8 +276,7 @@ def update_process_status():
 
         if ti is not None:
             updates['description'] = ti.description
-            if ti.command is not None:
-                updates['command'] = ti.command
+            updates['command'] = ti.command or ''
 
         progress_bar.update(progress_task, **updates)
 
