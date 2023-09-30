@@ -122,7 +122,7 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
             # create pod labels
             pod_labels = dict(stimela_job=podname, 
                                 stimela_fqname=fqname, 
-                                stimela_cab=cab.name,
+                                stimela_cab=os.path.basename(cab.name),
                                 **resource_labels)
 
             # depending on whether or not a dask cluster is configured, we do either a DaskJob or a regular pod

@@ -186,22 +186,21 @@ class Cab(Cargo):
         except Exception as exc:
             raise CabValidationError(f"error constructing cab command", exc)
 
-        command = os.path.expanduser(command)
-        # collect command
-        if check_executable:
-            if "/" not in command:
-                from scabha.proc_utils import which
-                command0 = command
-                command = which(command, extra_paths=virtual_env and [f"{virtual_env}/bin"])
-                if command is None:
-                    raise CabValidationError(f"{command0}: not found", log=self.log)
-            else:
-                if not os.path.isfile(command) or not os.stat(command).st_mode & stat.S_IXUSR:
-                    raise CabValidationError(f"{command} doesn't exist or is not executable")
+        # # collect command
+        # if check_executable:
+        #     if "/" not in command:
+        #         from scabha.proc_utils import which
+        #         command0 = command
+        #         command = which(command, extra_paths=virtual_env and [f"{virtual_env}/bin"])
+        #         if command is None:
+        #             raise CabValidationError(f"{command0}: not found", log=self.log)
+        #     else:
+        #         if not os.path.isfile(command) or not os.stat(command).st_mode & stat.S_IXUSR:
+        #             raise CabValidationError(f"{command} doesn't exist or is not executable")
 
         self.log.debug(f"command is {command}")
 
-        return [command] + args + self.build_argument_list(params)
+        return shlex.split(command) + args + self.build_argument_list(params)
 
     def update_environment(self, subst):
         try:
