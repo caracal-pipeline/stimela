@@ -154,7 +154,7 @@ class PodProxy(object):
         self.add_init_container_mount(cont, volume_name, mount)
 
     def dispatch_container_logs(self, style: str, job: bool = True):
-        containers = self.pod_spec['initContainers']
+        containers = self.pod_spec.get('initContainers', [])
         if job:
             containers += self.pod_spec['containers']
         for cont in containers:
