@@ -295,18 +295,20 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                             log.info("connection resumed", extra=dict(style="green"))
                             connected = statrep.connected = True
                         job_status = 'status' in resp and resp['status']['jobStatus']
-                        statrep.set_main_status(job_status)
                         # get podname from job once it's running
-                        if job_status == 'Running' or job_status.startswith('Success'):
-                            podname = resp['status']['jobRunnerPodName']
-                            statrep.set_pod_name(podname)
-                            log.info(f"job running as pod {podname}")
-                            pod.name = podname
-                            pod.dispatch_container_logs(kube.capture_logs_style, job=False)
-                            break
-                        elif job_status == 'Failed':
-                            pod.dispatch_container_logs(kube.capture_logs_style)
-                            raise BackendError("job startup failed, check logs above")
+                        if job_status:
+                            statrep.set_main_status(job_status)
+                            if job_status == 'Running' or job_status.startswith('Success'):
+                                podname = resp['status']['jobRunnerPodName']
+                                statrep.set_pod_name(podname)
+                                log.info(f"job running as pod {podname}")
+                                pod.name = podname
+                                pod.dispatch_container_logs(kube.capture_logs_style, job=False)
+                                break
+                            elif job_status == 'Failed':
+                                pod.dispatch_container_logs(kube.capture_logs_style)
+                                raise BackendError("job startup failed, check logs above")
+
                         if time.time() >= provisioning_deadline:
                             log.error("timed out waiting for dask job to start. The log above may contain more information.")
                             raise BackendError(f"job failed to start after {kube.provisioning_timeout}s")
