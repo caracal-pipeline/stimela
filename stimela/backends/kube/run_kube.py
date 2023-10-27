@@ -374,7 +374,10 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                             connected = True
                         # log.info(f"got [blue]{entry.decode()}[/blue]")
                         for line in entry.decode().rstrip().split("\n"):
-                            timestamp, content = line.split(" ", 1)
+                            if " " in line:
+                                timestamp, content = line.split(" ", 1)
+                            else:
+                                timestamp, content = line, ""
                             key = timestamp, hash(content)
                             last_log_timestamp = timestamp
                             if key in seen_logs:
