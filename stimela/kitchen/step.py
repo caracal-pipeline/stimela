@@ -354,7 +354,7 @@ class Step:
             # evaluate the skip attribute (it can be a formula and/or a {}-substititon)
             skip = self._skip
             if self._skip is None and subst is not None:
-                skip = evaluate_and_substitute_object(skip, subst, location=[self.fqname, "skip"])
+                skip = evaluate_and_substitute_object(self.skip, subst, location=[self.fqname, "skip"])
                 self.log.debug(f"dynamic skip attribute evaluation returns {skip}")
                 # formulas with unset variables return UNSET instance
                 if isinstance(skip, UNSET):
