@@ -84,10 +84,15 @@ class PodProxy(object):
         self._exit_logging_threads = False
         self._aux_pod_threads = {}
         self._mounts = {}
+        # accumulate list of exceptions that are raised in the updater thread
+        self._exceptions = []
 
     def _status_updater(self):
         while not self._exit_logging_threads:
-            update_process_status()
+            try:
+                update_process_status()
+            except BackendError as exc:
+                self._exceptions.append(exc)
             time.sleep(1)
 
     def start_status_update_thread(self):
@@ -95,6 +100,18 @@ class PodProxy(object):
             thread = threading.Thread(target=self._status_updater)
             self._aux_pod_threads["status"] = thread, None, "status update thread"
             thread.start()
+
+    def check_status(self):
+        """
+        Checks if status thread has caught any exceptions, and re-reises them if so.
+        Returns True of no exceptions.
+        """
+        if self._exceptions:
+            if len(self._exceptions) == 1:
+                raise self._exceptions[0]
+            else:
+                raise BackendError("k8s backend errors", *self._exceptions)
+        return True
 
     @property
     def session_init_container(self):

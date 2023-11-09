@@ -79,6 +79,7 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
     pathlib.Path(numba_cache_dir).mkdir(parents=True, exist_ok=True)
 
     pod_created = dask_job_created = volumes_provisioned = port_forward_proc = None
+    bailout_with_exceptions = []
 
     def k8s_event_handler(event):
         objkind = event.involved_object.kind
@@ -228,7 +229,7 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                     dprint(2, "Responce: ", resp)
                     pod_created = resp
                     connected = True
-                    while True:
+                    while pod.check_status():
                         try:
                             resp = kube_api.read_namespaced_pod_status(name=podname, namespace=namespace,
                                                                     _request_timeout=(1, 1))
@@ -279,7 +280,7 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                     job_status = None
                     connected = True
                     # wait for dask job to start up
-                    while True:
+                    while pod.check_status():
                         try:
                             resp = custom_obj_api.get_namespaced_custom_object_status(group, version, 
                                                     namespace, plural, name=dask_job_name, _request_timeout=(1, 1))
@@ -361,7 +362,7 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
             connected = True
             last_log_timestamp = None
             seen_logs = set()
-            while retcode is None:
+            while retcode is None and pod.check_status():
                 try:
                     for entry in kube_api.read_namespaced_pod_log(name=podname, namespace=namespace, container="job",
                                 follow=True, timestamps=True,
