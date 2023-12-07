@@ -7,7 +7,7 @@ from collections import OrderedDict
 from collections.abc import Mapping
 import rich.table
 
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from stimela.config import EmptyDictDefault, EmptyListDefault
 import stimela
@@ -1214,12 +1214,11 @@ class Recipe(Cargo):
                 with ProcessPoolExecutor(num_workers) as pool:
                     # submit each iterant to pool
                     futures = [pool.submit(self._iterate_loop_worker, *args, raise_exc=False) for args in loop_worker_args]
-                    stats = [f.result() for f in futures]
                     # update task stats, since they're recorded independently within each step, as well
                     # as get any exceptions from the nesting
                     errors = []
                     nfail = 0
-                    for f in futures:
+                    for f in as_completed(futures):
                         stats, outputs, exc, tb = f.result()
                         task_stats.add_missing_stats(stats)
                         if exc is not None:
