@@ -7,7 +7,7 @@ stimela 2.0
 |Pypi Version|
 |Python Versions|  
 
-A workflow management framework for radio interometry data processing pipelines.
+A workflow management framework for radio interferometry data processing pipelines.
 
 `Documentation Page <https://stimela.readthedocs.io/>`_  
 =========================================================================================
