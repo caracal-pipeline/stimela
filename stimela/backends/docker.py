@@ -48,6 +48,9 @@ def get_status():
     # is_available()
     # return STATUS
 
+def is_remote():
+    return False
+
 
 # @dataclass
 # class ImageBuildInfo:

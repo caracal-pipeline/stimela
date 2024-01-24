@@ -24,7 +24,8 @@ class _BaseFlavour(object):
     def get_arguments(self, cab: "stimela.kitchen.cab.Cab", 
                             params: Dict[str, Any], 
                             subst: Dict[str, Any],
-                            virtual_env: Optional[str]=None):
+                            virtual_env: Optional[str]=None,
+                            check_executable: bool = True):
         """Returns command line arguments for running this flavour of task, given
         a cab and a set of parameters. 
 
@@ -33,6 +34,7 @@ class _BaseFlavour(object):
             params (Dict[str, Any]): parameter dict
             subst (Dict[str, Any]):  substitution namespace 
             virtual_env (Optional[str]): virtual environment to run in
+            check_executable:        if True, cab may check for the executable to exist (but doesn't have to)
         """
         pass
 

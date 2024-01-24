@@ -14,6 +14,8 @@ def is_available():
 def get_status():
     return "not yet implemented"
 
+def is_remote():
+    return False
 
 class DockerError(Exception):
     pass

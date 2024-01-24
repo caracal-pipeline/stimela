@@ -8,7 +8,7 @@ from omegaconf.errors import OmegaConfBaseException
 import rich.markup
 
 from scabha.cargo import Parameter, Cargo, ListOrString, ParameterPolicies, ParameterCategory
-from stimela.exceptions import CabValidationError, StimelaCabRuntimeError
+from stimela.exceptions import CabValidationError, StimelaCabRuntimeError, StimelaBaseImageError
 from scabha.exceptions import SchemaError
 from scabha.basetypes import EmptyDictDefault, EmptyListDefault
 from stimela.backends import flavours, StimelaBackendSchema
@@ -27,9 +27,16 @@ class CabManagement(object):        # defines common cab management behaviours
 
 @dataclass
 class ImageInfo(object):
-    name: str                           # image name
+    name: Optional[str] = None          # image name
     registry: Optional[str] = None      # registry/org or org (for Dockerhub)
     version: str = "latest"
+    path: Optional[str] = None          # prebuilt image path (for some backends only)
+
+    def __post_init__(self):
+        if not self.name:
+            if not self.path:
+                raise StimelaBaseImageError("image name or path must be specified")
+            self.name = os.path.basename(self.path)
 
     @staticmethod
     def from_string(spec: str):
@@ -46,9 +53,8 @@ class ImageInfo(object):
             registry, name = None, spec
         return ImageInfo(name, registry, version)
     
-    def to_string(self, default_registry=None):
-        registry = self.registry or default_registry
-        if registry:
+    def to_string(self):
+        if self.registry:
             return f"{self.registry}/{self.name}:{self.version}"
         else:        
             return f"{self.name}:{self.version}"
@@ -76,7 +82,11 @@ class Cab(Cargo):
     image: Optional[Any] = None                   
 
     # command to run, inside the container or natively
+    # this is not split into individual arguments, but passed to sh -c as is
     command: str = MISSING
+
+    # optional arguments to be passed to command, before any stimela-formed arguments
+    args: List[str] = EmptyListDefault()
 
     ## moved to backend: native
     # # if set, activates this virtual environment first before running the command (not much sense doing this inside the container)
@@ -98,19 +108,7 @@ class Cab(Cargo):
     # default parameter conversion policies
     policies: ParameterPolicies = ParameterPolicies()
 
-    # For callable-type cabs, determines how the return value is treated.
-    # None to ignore, "{}" to treat it as a dict of outputs, else an output name to 
-    # treat it as a single output
-    return_outputs: Optional[str] = "{}" 
-
-    # runtime settings
-    runtime: Dict[str, Any] = EmptyDictDefault()
-
-    _path: Optional[str] = None   # path to image definition yaml file, if any
-
     def __post_init__ (self):
-        if self.name is None:
-            self.name = self.command.split()[0] or self.image
         Cargo.__post_init__(self)
         for param in self.inputs.keys():
             if param in self.outputs:
@@ -122,12 +120,16 @@ class Cab(Cargo):
                 self.image = ImageInfo.from_string(self.image)
             elif isinstance(self.image, DictConfig):
                 try:
-                    self.image = OmegaConf.to_container(OmegaConf.merge(ImageInfoSchema, self.image))
+                    self.image = ImageInfo(**OmegaConf.merge(ImageInfoSchema, self.image))
                 except OmegaConfBaseException as exc:
                     raise CabValidationError(f"cab {self.name}: invalid image setting", exc)
             else:
                 raise CabValidationError(f"cab {self.name}: invalid image setting")
-            
+
+        # set name from command or image
+        if self.name is None:
+            self.name = self.command.split()[0] or self.image
+
         # check backend setting
         if self.backend:
             try:
@@ -174,31 +176,31 @@ class Cab(Cargo):
 
     def build_command_line(self, params: Dict[str, Any], 
                            subst: Optional[Dict[str, Any]] = None, 
-                           virtual_env: Optional[str] = None):
+                           virtual_env: Optional[str] = None,
+                           check_executable: bool = True):
         
         try:
             with substitutions_from(subst, raise_errors=True) as context:
                 command = context.evaluate(self.command, location=["command"])
+                args = [context.evaluate(arg, location=[f"args[{i}]"]) for i, arg in enumerate(self.args)]
         except Exception as exc:
             raise CabValidationError(f"error constructing cab command", exc)
 
-        command_line = shlex.split(os.path.expanduser(command))
-        command = command_line[0]
-        args = command_line[1:]
-        # collect command
-        if "/" not in command:
-            from scabha.proc_utils import which
-            command0 = command
-            command = which(command, extra_paths=virtual_env and [f"{virtual_env}/bin"])
-            if command is None:
-                raise CabValidationError(f"{command0}: not found", log=self.log)
-        else:
-            if not os.path.isfile(command) or not os.stat(command).st_mode & stat.S_IXUSR:
-                raise CabValidationError(f"{command} doesn't exist or is not executable")
+        # # collect command
+        # if check_executable:
+        #     if "/" not in command:
+        #         from scabha.proc_utils import which
+        #         command0 = command
+        #         command = which(command, extra_paths=virtual_env and [f"{virtual_env}/bin"])
+        #         if command is None:
+        #             raise CabValidationError(f"{command0}: not found", log=self.log)
+        #     else:
+        #         if not os.path.isfile(command) or not os.stat(command).st_mode & stat.S_IXUSR:
+        #             raise CabValidationError(f"{command} doesn't exist or is not executable")
 
         self.log.debug(f"command is {command}")
 
-        return [command] + args + self.build_argument_list(params)
+        return shlex.split(command) + args + self.build_argument_list(params)
 
     def update_environment(self, subst):
         try:

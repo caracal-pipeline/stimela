@@ -18,17 +18,20 @@ class BinaryFlavour(_BaseFlavour):
     """
     kind: str = "binary"
 
-    def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any], virtual_env: Optional[str]=None):
+    def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any], 
+                      virtual_env: Optional[str]=None, check_executable: bool = True):
 
         # build command line from parameters
-        args = cab.build_command_line(params, subst, virtual_env=virtual_env)
+        args = cab.build_command_line(params, subst, virtual_env=virtual_env, check_executable=check_executable)
 
         # prepend virtual env invocation, if asked
         if virtual_env:
-            args = ["/bin/bash", "--rcfile", f"{virtual_env}/bin/activate", "-c", " ".join(shlex.quote(arg) for arg in args)]
+            args = ["/bin/bash", "--rcfile", f"{virtual_env}/bin/activate", "-c", shlex.quote(" ".join(shlex.quote(arg) for arg in args))]
 
         return args
     
     def get_image_name(self, cab: Cab, backend: 'stimela.backend.StimelaBackendOptions'):
-        return cab.image.to_string(backend.default_registry)        
+        from stimela.backends import resolve_image_name
+        from stimela import CONFIG
+        return resolve_image_name(backend, cab.image or CONFIG.images['default-python'])
 

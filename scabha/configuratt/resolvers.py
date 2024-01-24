@@ -171,11 +171,6 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
         # since _use and _include statements can be nested, keep on processing until all are resolved        
         updated = True
         recurse = 0
-        flatten = pop_conf(conf, "_flatten", 0)
-        flatten_sep = pop_conf(conf, "_flatten_sep", "__")
-        scrub = pop_conf(conf, "_scrub", None)
-        if isinstance(scrub, str):
-            scrub = [scrub]
         
         while updated:
             updated = False
@@ -183,32 +178,42 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
             recurse += 1
             if recurse > 20:
                 raise ConfigurattError(f"{errloc}: recursion limit exceeded, check your _use and _include statements")
-
-            # handle _include entries
+            # handle _include/_include_post entries
             if includes:
-                include_directive = pop_conf(conf, "_include", None)
-                if include_directive:
-                    updated = True
+                # helper function: process includes recursively
+                def process_include_directive(include_files: List[str], keyword: str, directive: Any, subpath=None):
+                    if isinstance(directive, str):
+                        include_files.append(directive if subpath is None else f"{subpath}/{directive}")
+                    elif isinstance(directive, (tuple, list, ListConfig)):
+                        for dir1 in directive:
+                            process_include_directive(include_files, keyword, dir1, subpath)
+                    elif isinstance(directive, DictConfig):
+                        for key, value in directive.items_ex():
+                            process_include_directive(include_files, keyword, value, subpath=key if subpath is None else f"{subpath}/{key}")
+                    else:
+                        raise ConfigurattError(f"{errloc}: {keyword} contains invalid entry of type {type(directive)}")
+                    
+                # helper function: load list of _include or _include_post files, returns accumulated DictConfig
+                def load_include_files(keyword):
+                    # get corresponding _scrub or _scrub_post keyword
+                    scrub = pop_conf(conf, keyword.replace("include", "scrub"), None)
+                    if isinstance(scrub, str):
+                        scrub = [scrub]
+
+                    include_directive = pop_conf(conf, keyword, None)
+
+                    if include_directive is None:
+                        return None
+
                     include_files = []
-                    # process includes recursively
-                    def process_include_directive(directive: str, subpath=None):
-                        if isinstance(directive, str):
-                            include_files.append(directive if subpath is None else f"{subpath}/{directive}")
-                        elif isinstance(directive, (tuple, list, ListConfig)):
-                            for dir1 in directive:
-                                process_include_directive(dir1, subpath)
-                        elif isinstance(directive, DictConfig):
-                            for key, value in directive.items_ex():
-                                process_include_directive(value, subpath=key if subpath is None else f"{subpath}/{key}")
-                        else:
-                            raise ConfigurattError(f"{errloc}: _include contains invalid entry of type {type(directive)}")
-                    process_include_directive(include_directive)
+                    process_include_directive(include_files, keyword, include_directive)
+
+                    accum_incl_conf = OmegaConf.create()
 
                     # load includes
-                    accum_incl_conf = OmegaConf.create()
                     for incl in include_files:
                         if not incl:
-                            raise ConfigurattError(f"{errloc}: empty _include specifier")
+                            raise ConfigurattError(f"{errloc}: empty {keyword} specifier")
                         # check for [flags] at end of specifier
                         match = re.match("^(.*)\[(.*)\]$", incl)
                         if match:
@@ -229,7 +234,7 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                                     if 'warn' in flags:
                                         print(f"Warning: unable to import module for optional include {incl}")
                                     continue
-                                raise ConfigurattError(f"{errloc}: _include {incl}: can't import {modulename} ({exc})")
+                                raise ConfigurattError(f"{errloc}: {keyword} {incl}: can't import {modulename} ({exc})")
 
                             filename = os.path.join(os.path.dirname(mod.__file__), filename)
                             if not os.path.exists(filename):
@@ -238,7 +243,7 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                                     if 'warn' in flags:
                                         print(f"Warning: unable to find optional include {incl}")
                                     continue
-                                raise ConfigurattError(f"{errloc}: _include {incl}: {filename} does not exist")
+                                raise ConfigurattError(f"{errloc}: {keyword} {incl}: {filename} does not exist")
 
                         # absolute path -- one candidate
                         elif os.path.isabs(incl):
@@ -248,11 +253,11 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                                     if 'warn' in flags:
                                         print(f"Warning: unable to find optional include {incl}")
                                     continue
-                                raise ConfigurattError(f"{errloc}: _include {incl} does not exist")
+                                raise ConfigurattError(f"{errloc}: {keyword} {incl} does not exist")
                             filename = incl
                         # relative path -- scan PATH for candidates
                         else:
-                            paths = [os.path.dirname(pathname)] + PATH
+                            paths = ['.', os.path.dirname(pathname)] + PATH
                             candidates = [os.path.join(p, incl) for p in paths] 
                             for filename in candidates:
                                 if os.path.exists(filename):
@@ -263,7 +268,7 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                                     if 'warn' in flags:
                                         print(f"Warning: unable to find optional include {incl}")
                                     continue
-                                raise ConfigurattError(f"{errloc}: _include {incl} not found in {':'.join(paths)}")
+                                raise ConfigurattError(f"{errloc}: {keyword} {incl} not found in {':'.join(paths)}")
 
                         # load included file
                         incl_conf, deps = load(filename, location=location, 
@@ -276,10 +281,6 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                         if include_path is not None:
                             incl_conf[include_path] = filename
 
-                        # flatten structure
-                        if flatten:
-                            _flatten_subsections(incl_conf, flatten, flatten_sep)
-
                         # accumulate included config so that later includes override earlier ones
                         accum_incl_conf = OmegaConf.unsafe_merge(accum_incl_conf, incl_conf)
 
@@ -288,21 +289,30 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                             _scrub_subsections(accum_incl_conf, scrub)
                         except ConfigurattError as exc:
                             raise ConfigurattError(f"{errloc}: error scrubbing {', '.join(scrub)}", exc)
+                    
+                    return accum_incl_conf
 
-                    # merge: our section overrides anything that has been included
-                    conf = OmegaConf.unsafe_merge(accum_incl_conf, conf)
-                    if selfrefs:
-                        use_sources[0] = conf
+                accum_pre = load_include_files("_include")
+                accum_post = load_include_files("_include_post")
+
+                # merge: our section overrides anything that has been included
+                conf = OmegaConf.unsafe_merge(accum_pre or {}, conf, accum_post or {})
+                if accum_pre or accum_post:
+                    updated = True
+                if selfrefs:
+                    use_sources[0] = conf
 
             # handle _use entries
             if use_sources is not None:
-                merge_sections = pop_conf(conf, "_use", None)
-                if merge_sections:
-                    updated = True
+                def load_use_sections(keyword):
+                    merge_sections = pop_conf(conf, keyword, None)
+                    if merge_sections is None:
+                        return None
+                    scrub = pop_conf(conf, keyword.replace("use", "scrub"), None)
                     if type(merge_sections) is str:
                         merge_sections = [merge_sections]
                     elif not isinstance(merge_sections, Sequence):
-                        raise TypeError(f"invalid {name}._use field of type {type(merge_sections)}")
+                        raise TypeError(f"invalid {name}.{keyword} directive of type {type(merge_sections)}")
                     if len(merge_sections):
                         # convert to actual sections
                         merge_sections = [_lookup_name(name, *use_sources) for name in merge_sections]
@@ -311,23 +321,29 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                         base.merge_with(*merge_sections[1:])
                         # resolve references before flattening
                         base, deps = resolve_config_refs(base, pathname=pathname, name=name, 
-                                                location=f"{location}._use" if location else "_use", 
+                                                location=f"{location}.{keyword}" if location else keyword, 
                                                 includes=includes, 
                                                 use_sources=use_sources, use_cache=use_cache,
                                                 include_path=include_path)
                         dependencies.update(deps)
-                        if flatten:
-                            _flatten_subsections(base, flatten, flatten_sep)
                         if scrub:
                             try:
                                 _scrub_subsections(base, scrub)
                             except ConfigurattError as exc:
                                 raise ConfigurattError(f"{errloc}: error scrubbing {', '.join(scrub)}", exc)
-
-                        base.merge_with(conf)
-                        conf = base
-                        if selfrefs:
-                            use_sources[0] = conf
+                        return base
+                    return None
+                
+                base = load_use_sections("_use")
+                if base is not None:
+                    base.merge_with(conf)
+                    conf = base
+                post = load_use_sections("_use_post")
+                if post is not None:
+                    conf.merge_with(post)
+                
+                if selfrefs:
+                    use_sources[0] = conf
 
         # recurse into content
         for key, value in conf.items_ex(resolve=False):

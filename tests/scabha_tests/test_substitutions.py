@@ -134,7 +134,10 @@ def test_formulas():
         q = '=LIST(current.a, current.b, current.c + 1, 0)',
         r = '=not IFSET(current.a)',
         s = '=current.c + current.c + current.c',
-        t = '=previous*.z'
+        t = '=previous*.z',
+        u = [3, 1, 2],
+        u1 = '=SORT(current.u)',
+        u2 = '=RSORT(current.u)',
     )
     ns._add_("current", current)
     

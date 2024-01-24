@@ -54,6 +54,7 @@ Here's what we can learn from the above:
 
 Shorthand schemas
 -----------------
+.. _shorthand_schemas:
 
 If you only need to specify type, default and info string, you can use a shorthand schema syntax, instead
 of specifying a whole section longhand. Here is a shorthand version of the inputs above::

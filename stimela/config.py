@@ -18,7 +18,6 @@ from scabha import configuratt
 from scabha.cargo import ListOrString, EmptyDictDefault, EmptyListDefault
 from stimela.backends import StimelaBackendOptions
 
-
 @dataclass 
 class StimelaLogConfig(object):
     enable: bool = True                          
@@ -146,7 +145,7 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
     extra_cache_keys = list(extra_dotlist) + configuratt.PATH
 
     STIMELA_DIR = os.path.dirname(stimela.__file__)
-    from stimela.kitchen.cab import Cab
+    from stimela.kitchen.cab import Cab, ImageInfo
 
     global StimelaConfigSchema, StimelaLibrary, StimelaConfig
     @dataclass
@@ -159,22 +158,13 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
 
     @dataclass 
     class StimelaConfig:
-        images: Dict[str, str] = EmptyDictDefault()
+        images: Dict[str, ImageInfo] = EmptyDictDefault()
         lib: StimelaLibrary = StimelaLibrary()
         cabs: Dict[str, Cab] = EmptyDictDefault()
         opts: StimelaOptions = StimelaOptions()
         vars: Dict[str, Any] = EmptyDictDefault()
         run:  Dict[str, Any] = EmptyDictDefault()
 
-    ## replaced by cult-cargo
-    #
-    # base_configs_glob = f"{STIMELA_DIR}/cargo/base/*/*.yaml"
-    # lib_configs_glob = f"{STIMELA_DIR}/cargo/lib/params/*.yaml"
-    # cab_configs_glob = f"{STIMELA_DIR}/cargo/cab/*.yaml"
-
-    # base_configs = glob.glob(base_configs_glob)
-    # lib_configs = glob.glob(lib_configs_glob)
-    # cab_configs = glob.glob(cab_configs_glob)
     base_configs = lib_configs = cab_configs = []
 
     if use_sys_config:

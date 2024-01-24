@@ -89,9 +89,11 @@ class PythonCallableFlavour(_CallableFlavour):
 
     def get_image_name(self, cab: Cab, backend: 'stimela.backend.StimelaBackendOptions'):
         from stimela import CONFIG
-        return cab.image.to_string(backend.default_registry) if cab.image else CONFIG.images['default-python']
+        from stimela.backends import resolve_image_name
+        return resolve_image_name(backend, cab.image or CONFIG.images['default-python'])
 
-    def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any], virtual_env: Optional[str]=None):
+    def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any], 
+                      virtual_env: Optional[str]=None, check_executable: bool = True):
         # substitute command and split into module/function
         with substitutions_from(subst, raise_errors=True) as context:
             try:
@@ -166,9 +168,11 @@ class PythonCodeFlavour(_BaseFlavour):
 
     def get_image_name(self, cab: Cab, backend: 'stimela.backend.StimelaBackendOptions'):
         from stimela import CONFIG
-        return cab.image.to_string(backend.default_registry) if cab.image else CONFIG.images['default-python']
+        from stimela.backends import resolve_image_name
+        return resolve_image_name(backend, cab.image or CONFIG.images['default-python'])
 
-    def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any], virtual_env: Optional[str]=None):
+    def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any], 
+                      virtual_env: Optional[str]=None, check_executable: bool = True):
         # do substitutions on command, if necessary
         if self.subst:
             with substitutions_from(subst, raise_errors=True) as context:

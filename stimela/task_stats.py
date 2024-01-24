@@ -5,24 +5,45 @@ import os.path
 from datetime import datetime, timedelta
 import contextlib
 import asyncio
-from typing import OrderedDict
+from typing import OrderedDict, Any, List, Callable, Optional
+from scabha.basetypes import EmptyListDefault
 from omegaconf import OmegaConf
 import psutil
+
 import rich.progress
 import rich.logging
 from rich.table import Table
 from rich.text import Text
 
-progress_bar = progress_task = None
+from stimela import stimelogging
 
-_progress_task_names = []
-_progress_task_names_orig = []
+progress_bar = progress_task = None
 
 _start_time = datetime.now()
 _prev_disk_io = None, None
 
+@dataclass
+class TaskInformation(object):
+    names: List[str]
+    task_attrs: List[str] = EmptyListDefault()
+    command: Optional[str] = None
+    status_reporter: Optional[Callable] = None
+    hide_local_metrics: bool = False
 
-def init_progress_bar():
+    def __post_init__(self):
+        self.names_orig = list(self.names)
+
+    @property
+    def description(self):
+        name = '.'.join(self.names)
+        if self.task_attrs:
+            name += f"\[{', '.join(self.task_attrs)}]"
+        return name
+
+# stack of task information -- most recent subtask is at the end
+_task_stack = []
+
+def init_progress_bar(boring=False):
     global progress_console, progress_bar, progress_task
     progress_console = rich.console.Console(file=sys.stdout, highlight=False)
     progress_bar = rich.progress.Progress(
@@ -35,7 +56,8 @@ def init_progress_bar():
         "{task.fields[cpu_info]}",
         refresh_per_second=2,
         console=progress_console,
-        transient=True)
+        transient=True,
+        disable=boring)
 
     progress_task = progress_bar.add_task("stimela", command="starting", cpu_info=" ", elapsed_time="", start=True)
     progress_bar.__enter__()
@@ -49,43 +71,46 @@ def destroy_progress_bar():
         progress_bar = None
 
 @contextlib.contextmanager
-def declare_subtask(subtask_name):
-    _progress_task_names.append(subtask_name)
-    _progress_task_names_orig.append(subtask_name)
-    update_process_status(description='.'.join(_progress_task_names))
+def declare_subtask(subtask_name, status_reporter=None, hide_local_metrics=False):
+    task_names = (_task_stack[-1].names if _task_stack else []) + [subtask_name]
+    _task_stack.append(
+        TaskInformation(task_names, status_reporter=status_reporter, hide_local_metrics=hide_local_metrics)
+    )
+    update_process_status()
     try:
         yield subtask_name
     finally:
-        _progress_task_names.pop(-1)
-        _progress_task_names_orig.pop(-1)
-        update_process_status(progress_task,
-                              description='.'.join(_progress_task_names))
+        _task_stack.pop(-1)
+        update_process_status()
 
 
 def declare_subtask_attributes(*args, **kw):
-    attrs = [str(x) for x in args] + \
-        [f"{key} {value}" for key, value in kw.items()]
-    attrs = ', '.join(attrs)
-    _progress_task_names[-1] = f"{_progress_task_names_orig[-1]}\[{attrs}]"
-    update_process_status(description='.'.join(_progress_task_names))
+    _task_stack[-1].task_attrs = [str(x) for x in args] + \
+                                 [f"{key} {value}" for key, value in kw.items()]
+    update_process_status()
 
 
 class _CommandContext(object):
     def __init__(self, command):
         self.command = command
-        update_process_status(command=command)
+        _task_stack[-1].command = command
+        update_process_status()
     def ctrl_c(self):
-        update_process_status(command=f"{self.command}(^C)")
+        _task_stack[-1].command = f"{self.command}(^C)"
+        update_process_status()
+    def update_status(self, status):
+        _task_stack[-1].command = f"{self.command} ({status})"
+        update_process_status()
 
 
 @contextlib.contextmanager
 def declare_subcommand(command):
-    update_process_status(command=command)
     progress_bar and progress_bar.reset(progress_task)
     try:
         yield _CommandContext(command)
     finally:
-        update_process_status(command="")
+        _task_stack[-1].command = None
+        update_process_status()
 
 
 @dataclass
@@ -104,18 +129,33 @@ class TaskStatsDatum(object):
     write_ms: float     = 0
     num_samples: int    = 0
 
+    def __post_init__(self):
+        self.extras = []
+
+    def insert_extra_stats(self, **kw):
+        for name, value in kw.items():
+            self.extras.append(name)
+            setattr(self, name, value)
+
     def add(self, other: "TaskStatsDatum"):
-        for f in _taskstats_sample_names:
-            setattr(self, f, getattr(self, f) + getattr(other, f))
+        for f in _taskstats_sample_names + other.extras:
+            if not hasattr(self, f):
+                self.extras.append(f)
+            setattr(self, f, getattr(self, f, 0) + getattr(other, f))
 
     def peak(self, other: "TaskStatsDatum"):
-        for f in _taskstats_sample_names:
-            setattr(self, f, max(getattr(self, f), getattr(other, f)))
+        for f in _taskstats_sample_names + other.extras:
+            if hasattr(self, f):
+                self.extras.append(f)
+                setattr(self, f, max(getattr(self, f, -1e-9999), getattr(other, f)))
+            else:
+                setattr(self, f, getattr(other, f))
 
     def averaged(self):
         avg = TaskStatsDatum(num_samples=1)
         for f in _taskstats_sample_names:
             setattr(avg, f, getattr(self, f) / self.num_samples)
+        avg.insert_extra_stats(**{name: getattr(self, name) / self.num_samples for name in self.extras})
         return avg
 
 
@@ -127,6 +167,14 @@ _task_start_time = OrderedDict()
 
 def collect_stats():
     """Returns dictionary of per-task stats (elapsed time, sums, peaks)"""
+    # cumulative add -- substeps contribute to parent steps
+    for key in list(_taskstats.keys())[::-1]:
+        _, sum, peak = _taskstats[key]
+        key1 = tuple(key[:-1])
+        if key1 in _taskstats:
+            _, sum1, peak1 = _taskstats[key1]
+            sum1.add(sum)
+            peak1.peak(peak)
     return _taskstats
 
 
@@ -142,23 +190,26 @@ def stats_field_names():
 
 
 def update_stats(now: datetime, sample: TaskStatsDatum):
-    key1, key2 = tuple(_progress_task_names_orig), tuple(_progress_task_names)
+    if _task_stack:
+        ti = _task_stack[-1]
+        keys = [tuple(ti.names)]
+        if ti.task_attrs:
+            keys.append(tuple(ti.names + ti.task_attrs))
+    else:
+        keys = [()]
 
-    _, sum, peak = _taskstats.setdefault(key1, [0, TaskStatsDatum(), TaskStatsDatum()])
-    sum.add(sample)
-    peak.peak(sample)
-    start = _task_start_time.setdefault(key1, now)
-    _taskstats[key1][0] = (now - start).total_seconds()
-
-    if key2 != key1:
-        _, sum, peak = _taskstats.setdefault(key2, [0, TaskStatsDatum(), TaskStatsDatum()])
+    for key in keys:
+        _, sum, peak = _taskstats.setdefault(key, [0, TaskStatsDatum(), TaskStatsDatum()])
         sum.add(sample)
         peak.peak(sample)
-        start = _task_start_time.setdefault(key2, now)
-        _taskstats[key2][0] = (now - start).total_seconds()
+        start = _task_start_time.setdefault(key, now)
+        _taskstats[key][0] = (now - start).total_seconds()
 
 
-def update_process_status(command=None, description=None):
+def update_process_status():
+    # current subtask info
+    ti = _task_stack[-1] if _task_stack else None
+
     # elapsed time since start
     now = datetime.now()
     elapsed = str(now - _start_time).split('.', 1)[0]
@@ -194,20 +245,39 @@ def update_process_status(command=None, description=None):
         io = None
     _prev_disk_io = disk_io, now
 
+    # call extra status reporter
+    if ti and ti.status_reporter:
+        extra_metrics, extra_stats = ti.status_reporter()
+        if extra_stats:
+            s.insert_extra_stats(**extra_stats)
+    else:
+        extra_metrics = None
+
     # if a progress bar exists, update it
     if progress_bar is not None:
-        if io is not None:
-            ioinfo = f"|R [green]{s.read_count:-4}[/green] [green]{s.read_gbps:2.2f}[/green]G [green]{s.read_ms:4}[/green]ms" + \
-                    f"|W [green]{s.write_count:-4}[/green] [green]{s.write_gbps:2.2f}[/green]G [green]{s.write_ms:4}[/green]ms "
-        else:
-            ioinfo = ""
+        cpu_info = []
+        # add local metering, if not diabled by a task in the stack
+        if not any(t.hide_local_metrics for t in _task_stack):
+            cpu_info = [
+                f"CPU [green]{s.cpu:2.1f}%[/green]",
+                f"RAM [green]{round(s.mem_used):3}[/green]/[green]{round(s.mem_total)}[/green]G",
+                f"Load [green]{s.load:2.1f}[/green]" 
+            ]
 
-        updates = dict(elapsed_time=elapsed,
-                    cpu_info=f"CPU [green]{s.cpu:2.1f}%[/green]|RAM [green]{round(s.mem_used):3}[/green]/[green]{round(s.mem_total)}[/green]G|Load [green]{s.load:2.1f}[/green]{ioinfo}")
-        if command is not None:
-            updates['command'] = command
-        if description is not None:
-            updates['description'] = description
+            if io is not None:
+                cpu_info += [
+                    f"R [green]{s.read_count:-4}[/green] [green]{s.read_gbps:2.2f}[/green]G [green]{s.read_ms:4}[/green]ms",
+                    f"|W [green]{s.write_count:-4}[/green] [green]{s.write_gbps:2.2f}[/green]G [green]{s.write_ms:4}[/green]ms "
+                ]
+        # add extra metering
+        cpu_info += extra_metrics or []
+
+        updates = dict(elapsed_time=elapsed, cpu_info="|".join(cpu_info))
+
+        if ti is not None:
+            updates['description'] = ti.description
+            updates['command'] = ti.command or ''
+
         progress_bar.update(progress_task, **updates)
 
     # update stats
@@ -222,16 +292,19 @@ async def run_process_status_update():
                 await asyncio.sleep(1)
 
 _printed_stats = dict(
+    k8s_cores="k8s cores",
+    k8s_mem="k8s mem GB",
     cpu="CPU %",
     mem_used="Mem GB",
     load="Load",
     read_gbps="R GB/s",
-    write_gbps="W GB/s")
+    write_gbps="W GB/s",
+    )
 
 # these stats are written as sums
 _sum_stats = ("read_count", "read_gb", "read_ms", "write_count", "write_gb", "write_ms")
 
-def render_profiling_summary(stats, max_depth, unroll_loops=False):
+def render_profiling_summary(stats: TaskStatsDatum, max_depth, unroll_loops=False):
 
     table_avg = Table(title=Text("\naverages & total I/O", style="bold"))
     table_avg.add_column("")
@@ -241,9 +314,16 @@ def render_profiling_summary(stats, max_depth, unroll_loops=False):
     table_peak.add_column("")
     table_peak.add_column("time hms", justify="right")
     
+    # accumulate set of all stats available
+    available_stats = set(_taskstats_sample_names)
+    for name, (elapsed, sum, peak) in stats.items():
+        available_stats.update(sum.extras)
+        available_stats.update(peak.extras)
+
     for f, label in _printed_stats.items():
-        table_avg.add_column(label, justify="right")
-        table_peak.add_column(label, justify="right")
+        if f in available_stats:
+            table_avg.add_column(label, justify="right")
+            table_peak.add_column(label, justify="right")
 
     table_avg.add_column("R GB", justify="right")
     table_avg.add_column("W GB", justify="right")
@@ -259,14 +339,15 @@ def render_profiling_summary(stats, max_depth, unroll_loops=False):
             avg_row = [".".join(name), tstr]
             peak_row = avg_row.copy()
             for f, label in _printed_stats.items():
-                if f != "num_samples":
-                    avg_row.append(f"{getattr(avg, f):.2f}")
-                    peak_row.append(f"{getattr(peak, f):.2f}")
+                if f in available_stats:
+                    avg_row.append(f"{getattr(avg, f):.2f}" if hasattr(avg, f) else "")
+                    peak_row.append(f"{getattr(peak, f):.2f}" if hasattr(peak, f) else "")
+
             avg_row += [f"{sum.read_gb:.2f}", f"{sum.write_gb:.2f}"]
             table_avg.add_row(*avg_row)
             table_peak.add_row(*peak_row)
 
-    progress_console.rule("profiling results")
+    stimelogging.declare_chapter("profiling results")
     destroy_progress_bar()
     from rich.columns import Columns
     # progress_console.print(table_avg, justify="center") 

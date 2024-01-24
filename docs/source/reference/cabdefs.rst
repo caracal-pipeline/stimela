@@ -7,6 +7,9 @@ Cab definitions
 A *cab* represents an atomic task that can be executed by Stimela. Cabs come in a number of flavours: executables, Python functions, 
 direct Python code snippets, and CASA tasks. Cabs have *inputs* and *outputs* defined by their :ref:`schema<params>`.
 
+Basics of cab definitions
+*************************
+
 A cab is defined by an entry in the ``cabs`` section of the :ref:`global namespace<options>`. Alternatively, a cab definition may be given 
 directly inside's a step's ``cab`` section. For example, the following two are equivalent::
 
@@ -71,31 +74,145 @@ This illustrates a number of imporant points:
 
 * the ``inputs`` and ``outputs`` sections specify the IOs of the cab. These use the standard :ref:`schema language<params>`.
 
-Cab flavours
-============
+Other cab properties that you may come across are:
 
-A cab can correspond to a Python function or a CASA task. This is specified via the ``flavour`` field::
+* ``parameter_passing`` property determines how inputs are passed to the cab. The default is ``args``, i.e. they are mapped to command-line arguments using specified policies. (The rather exotic alternative is ``yaml``, which passes inputs as a YaML string via the first command-line parameter. This is not used anywhere at time of writing, but is retained for historical reasons.)
 
-    cabs:
-    casa.flagman:
-        info: Uses CASA flagmanager to save/restore/list flagversions 
-        command: flagmanager
+* a ``backend`` section allows you to specify a non-default backend for the cab, or to tweak backed options. See :ref:`containers` for details.
+
+* a ``management`` section explained below.
+
+Advanced cab features
+*********************
+
+The ``management`` section can specify some interesting cab behaviours. Here is a real-life example (from ``cult-cargo``)::
+
+    casa.flagsummary:
+        info: Uses CASA flagdata to obtain a flag summary
+        command: flagdata
         flavour: casa-task
         image: ${vars.cult-cargo.registry}/casa:cc${vars.cult-cargo.version}
         inputs:
-        ms: 
-            dtype: MS
-            required: true
-            nom_de_guerre: vis
-        versionname:
-            info: "flag version name"
-        mode: 
-            choices: [save, restore, list]
-            required: true
+            ms: 
+                dtype: MS
+                required: true
+                nom_de_guerre: vis
+            spw:
+                dtype: str
+                default: ""
+            mode:
+                implicit: 'summary'
+        outputs:
+            percentage:
+                dtype: float
+        management:
+            wranglers:
+                'Total Flagged: .* Total Counts: .* \((?P<percentage>[\d.]+)%\)':
+                  - PARSE_OUTPUT:percentage:float
+                  - HIGHLIGHT:bold green
 
+This demonstrates the use of **output wranglers**. Wranglers tell Stimela to trigger certain actions 
+based on seeing certain patterns of text in the cab's console (i.e. stdout/stderr) output. This can be a 
+very powerful way to wrangle (pun intended) information out of third-party packages, or even just to prettify 
+their console output. 
 
+Output wranglers
+----------------
 
+The (entirely optional) ``management.wranglers`` section consists of a mapping. The *keys* of the mapping are regular expressions (often containing *named groups* -- via the ``(?P<name>)`` construct -- see Python ``re`` module for documentation) which are matched to every line of the cab's console output. The *values* of the mapping are lists of **wrangler actions**, which are then applied to the matching line one by one. The following actions are currently implemented:
 
+* ``PARSE_OUTPUT[:name]:groupname:type`` converts the text matched by the named group to the given type, and returns it as the named output of the cab. In the example above, we use this to extract the flag percentage out of the CASA task's output. 
 
+* ``HIGHLIGHT:style`` applies a Rich text style when dispaying the matching line (e.g. to draw the user's attention). The above example highlights the output line that is reporting the flag percentage.
+ 
+* ``REPLACE:text`` replaces the entire text matching the regex by the specified replacement text (which can reference named groups from the regex -- see Python ``re.sub()`` for details).
 
+* ``SEVERIY:level`` issues the output line to the logger at a given severity level (i.e. ``warning``, ``error``), as opposed to the default level (which is normally ``info``).
+
+* ``SUPPRESS`` suppressed the matching line from the output entirely.
+ 
+* ``WARNING:message`` notes a warning message, which will be displayed by Stimela when the cab is finished running.
+
+* ``ERROR[:message]`` declares an error condition. The cab's run will be marked as a failure, even if its exit code indicates success. An optional error message can be supplied. 
+
+* ``DECLARE_SUCCESS`` declares the cab's run a success, even if a non-zero exit code is returned.
+
+Two other actions can be used to parse out output values in a specific way (Stimela uses these internally to pass information out of some specific cab flavours -- see below -- but they're also available to all user-defined cabs):
+
+* ``PARSE_JSON_OUTPUTS`` parses the text matching each named group in the regex as JSON, and associates the resulting value with an output of the same name.
+
+* ``PARSE_JSON_OUTPUT_DICT`` parses the text matching the first ()-group in the regex as JSON. The result is expected to be a dict, whose keys are assigned to outputs of matching names.
+
+Other management features
+-------------------------
+
+The optional ``management.environment`` section can be used to tell Stimela to set up some specific environment variables before invoking a cab.
+
+The ``management.cleanup`` section
+
+Cab flavours
+************
+
+A cab can correspond to a Python function or a CASA task. This is specified via the ``flavour`` field -- we saw an example of this just above with the ``casa.flagsummary`` cab. Its definition tells Stimela that the cab is implemented by invoking a CASA task underneath. Other flavours are ``python`` (for Python functions) and ``python-code`` (for inline Python code). The default flavour, corresponding to a binary command, is called ``binary``.
+
+Specifying flavour options
+--------------------------
+
+An alternative way to specify flavours is to make ``flavour`` a sub-section, and use the ``kind`` key to specify the flavour. This then allows for some flavour-related options to be specified::
+
+    cabs:
+        casa.flagman:
+            info: "Uses CASA flagmanager to save/restore/list flagversions"
+            command: flagmanager
+            flavour: 
+                kind: casa-task
+                casa: '/usr/local/bin/casa'
+                casa_opts: '--nologger'
+                log_full_command: true
+
+The above tells Stimela to usr a non-default CASA intepreter, and to pas it an extra option on the command line. The ``log_full_command: true`` setting will cause the complete command line, including the encoded inputs (as opposed to just the command name) to be logged when the cab is invoked, which can be useful for debugging.
+
+Callable flavours
+-----------------
+
+The ``casa-task`` and ``python`` flavours are very similar, in that they both invoke an external interpreter, and call a function within.  The ``command`` field of the cab then names a CASA task, or a Python callable (using the normal ``package.module.function`` Python naming). In the latter case, ``package.module`` will be imported using the normal Python mechanisms: this can refer to a standard Python module, or your own code (in which case it must be installed appropriately so the import statement can find it.)
+
+Arguments to the function or task are described using the normal can inputs/outputs schema; Stimela will convert these appropriately and invoke the function or task. The return value of the function can be treated as a cab output and propagated out to Stimela. Here is a notional example::
+
+    cabs:
+        get-load-avg:
+            info: "returns the system load averages using Python's os.getloadavg() function"
+            flavour:
+                kind: python
+                output: load
+            command: os.getloadavg
+            outputs:
+                load: Tuple[float, float, float]
+
+The ``flavour.output`` option here _names_ an output ("load"), and the outputs schema decribes what data type to expect.
+
+What if you would like to provide some Python code returning several outputs? This can be done by having your function return a ``dict``, setting the ``flavour.output_dict`` option to true, and providing an outputs schema. In this case, the returned dict is expected to contain an key for every output named in the schema. 
+
+Inline Python code
+------------------
+
+The ``python-code`` flavour allows for snippets of Python code to be specified directly in the cab::
+
+    cabs:
+        simple-addition:
+            info: "returns c=a+b"
+            flavour: python-code
+            command: |
+                c = a + b
+            inputs:
+                a: float *
+                b: float *
+            outputs:
+                c: float
+
+Note how we use :ref:`abbreviated schemas<shorthand_schemas>` here for succinctness, and the ``": |"`` feature of YaML, which starts a multiple-line string, and uses indentaton to detect where the string ends.
+
+The operation of the ``python-code`` flavour is quite intuitive. All inputs are converted into Python variables of corresponding name, the Python code specified by ``command`` is invoked, and any outputs are collected from Python variables of corresponding name. 
+
+A few flavour options can be used to tweak this behaviour. If you would prefer to pass the inputs in as a dict (keyed by input name), set ``input_dict: true``. If you define cab outputs but **don't** want them to be picked up from Python variables for some reason (perhaps because you're using output :ref:`wranglers` instead?), you can set ``output_vars: false``. Finally, unlike the other flavours, the ``command`` field is by default **not** subject to {}-substitution (as this usually adds nothing but hassle to inline code), but this can be changed by setting ``subst: true``.
 

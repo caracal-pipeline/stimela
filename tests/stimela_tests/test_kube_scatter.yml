@@ -1,0 +1,34 @@
+_include:
+  - (cultcargo)breizorro.yml
+  - test_kube_config.yml
+
+opts:
+  backend:
+    select: kube
+            
+recipe:
+  name: "demo recipe"
+  info: 'top level recipe definition'
+  for_loop:
+    var: threshold
+    over: [6.5, 7, 8, 10, 12, 15, 16, 20]
+    scatter: -1
+  steps:
+      mask1:
+        cab: breizorro
+        params:
+          restored-image: im3-MFS-image.fits
+          threshold: =recipe.threshold
+          mask: =STRIPEXT(current.restored-image) + ".t{recipe.threshold}.mask.fits"
+      mask2:
+        recipe:
+        cab: breizorro
+        params:
+          mask-image: =previous.mask
+          dilate: 2
+          mask: =STRIPEXT(previous.restored-image) + "t.{recipe.threshold}.mask2.fits"
+        # just to show that you can tweak the backend settings per step
+        backend:
+          kube:
+            job_pod:
+              type: thin

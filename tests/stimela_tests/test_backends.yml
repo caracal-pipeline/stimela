@@ -1,0 +1,42 @@
+## recipes may define or redefine or augment cabs
+cabs:
+  sleep:
+    command: sleep # just a dummy for now 
+    image: wsclean
+    inputs:
+      seconds:
+        dtype: int
+        default: 1
+        policies:
+          positional: true
+  echo:
+    command: echo # just a dummy for now 
+    image: wsclean
+    inputs:
+      arg:
+        dtype: str
+        required: true
+        policies:
+          positional: true
+
+opts:
+  log:
+    dir: test-logs/logs-{config.run.datetime} 
+    nest: 3
+    symlink: logs
+  backend:
+    select: singularity
+
+test_recipe:
+  steps:
+    a: 
+      cab: echo
+      params:
+        arg: x
+    b:
+      cab: sleep
+      backend:
+        singularity:
+          rebuild: true
+      params:
+        seconds: 5

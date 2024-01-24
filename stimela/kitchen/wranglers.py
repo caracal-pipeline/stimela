@@ -105,7 +105,8 @@ class Replace(_BaseWrangler):
     """
     This wrangler will replace the matching pattern with the given string. Specified as REPLACE:replacement.
     Uses re.sub() internally, so look that up for more complex usage.
-    """
+    """ 
+
     specifier = "REPLACE:(?P<replace>.*)"
     
     def apply(self, cabstat: CabStatus, output: str, match: re.Match):
@@ -213,7 +214,6 @@ class ParseOutput(_BaseWrangler):
 
     def apply(self, cabstat: CabStatus, output: str, match: re.Match):
         value = match[self.gid]
-        print(value, self.gid)
         try:
             value = self.loader(value)
         except Exception as exc:

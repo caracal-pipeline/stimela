@@ -13,7 +13,7 @@ from stimela.backends import StimelaBackendSchema, runner
 from stimela.exceptions import *
 import scabha.exceptions
 from scabha.exceptions import SubstitutionError, SubstitutionErrorList
-from scabha.validate import evaluate_and_substitute, Unresolved, join_quote
+from scabha.validate import evaluate_and_substitute, evaluate_and_substitute_object, Unresolved, join_quote
 from scabha.substitutions import SubstitutionNS, substitutions_from 
 from scabha.basetypes import UNSET, Placeholder, MS, File, Directory, SkippedOutput
 from .cab import Cab, get_cab_schema
@@ -67,9 +67,6 @@ class Step:
 
     # optional backend settings
     backend: Optional[Dict[str, Any]] = None
-
-    # _skip: Conditional = None                       # skip this step if conditional evaluates to true
-    # _break_on: Conditional = None                   # break out (of parent recipe) if conditional evaluates to true
 
     def __post_init__(self):
         self.fqname = self.fqname or self.name
@@ -259,7 +256,12 @@ class Step:
                     self.params[name] = value
 
             # check for valid backend
-            runner.validate_backend_settings(OmegaConf.merge(backend or {}, self.cargo.backend or {}, self.backend or {}))
+            backend_opts = OmegaConf.to_object(OmegaConf.merge(
+                StimelaBackendSchema,
+                backend or {}, 
+                self.cargo.backend or {}, 
+                self.backend or {}))
+            runner.validate_backend_settings(backend_opts)
 
 
     def prevalidate(self, subst: Optional[SubstitutionNS]=None, root=False):
@@ -284,8 +286,8 @@ class Step:
             for line in self.summary(recursive=False, inputs=inputs, outputs=outputs, ignore_missing=ignore_missing):
                 self.log.log(level, line, extra=extra)
 
-    def log_exception(self, exc, severity="error"):
-        log_exception(exc, severity=severity, log=self.log)
+    def log_exception(self, exc, severity="error", log=None):
+        log_exception(exc, severity=severity, log=log or self.log)
 
     def assign_value(self, key: str, value: Any, override: bool = False):
         """assigns parameter value or nested variable value to this step
@@ -314,6 +316,7 @@ class Step:
             except ScabhaBaseException as exc:
                 raise AssignmentError(f"{self.name}: invalid assignment {key}={value}", exc)
 
+
     def run(self, backend={}, subst=None, parent_log=None):
         """Runs the step"""
         from .recipe import Recipe
@@ -322,27 +325,37 @@ class Step:
         if parent_log is None:
             parent_log = self.log
 
+        # validate backend settings
+        try:
+            backend = OmegaConf.merge(backend, self.cargo.backend or {}, self.backend or {})
+            backend_opts = evaluate_and_substitute_object(backend, subst, recursion_level=-1, location=[self.fqname, "backend"])
+            backend_opts = OmegaConf.to_object(OmegaConf.merge(StimelaBackendSchema, backend_opts))
+            backend_opts, backend_main, backend_wrapper =  runner.validate_backend_settings(backend_opts)
+        except Exception as exc:
+            newexc = BackendError("error validating backend settings", exc)
+            raise newexc from None
+            # self.log_exception(newexc)
+        remote_backend = backend_main.is_remote()
+
         # if step is being explicitly skipped, omit from profiling, and drop info/warning messages to debug level
         explicit_skip = self.skip is True 
         if explicit_skip:
             context = nullcontext()
-            parent_log_info, parent_log_warning = parent_log.debug, parent_log.debug
+            parent_log_info = parent_log_warning = parent_log.debug
         else:
-            context = stimelogging.declare_subtask(self.name)
+            context = stimelogging.declare_subtask(self.name, hide_local_metrics=remote_backend)
             stimelogging.declare_chapter(f"{self.fqname}")
             parent_log_info, parent_log_warning = parent_log.info, parent_log.warning
 
         if self.validated_params is None:
             self.prevalidate(self.params)
 
-        with context as subtask:
+        with context:
             # evaluate the skip attribute (it can be a formula and/or a {}-substititon)
             skip = self._skip
             if self._skip is None and subst is not None:
-                skips = dict(skip=self.skip)
-                skips = evaluate_and_substitute(skips, subst, subst.current, location=[self.fqname], ignore_subst_errors=False)
-                self.log.debug(f"dynamic skip attribute evaluation returns {skips}")
-                skip = skips.get("skip")
+                skip = evaluate_and_substitute_object(self.skip, subst, location=[self.fqname, "skip"])
+                self.log.debug(f"dynamic skip attribute evaluation returns {skip}")
                 # formulas with unset variables return UNSET instance
                 if isinstance(skip, UNSET):
                     if skip.errors:
@@ -360,21 +373,24 @@ class Step:
             self.log.debug(f"validating inputs {subst and list(subst.keys())}")
             validated = None
             try:
-                params = self.cargo.validate_inputs(params, loosely=skip, subst=subst)
+                params = self.cargo.validate_inputs(params, loosely=skip, remote_fs=remote_backend, subst=subst)
                 validated = True
 
             except ScabhaBaseException as exc:
                 severity = "warning" if skip else "error"
                 level = logging.WARNING if skip else logging.ERROR
-                if not exc.logged:
+                if not exc.logged and not explicit_skip:
                     if type(exc) is SubstitutionErrorList:
-                        self.log_exception(StepValidationError(f"unresolved {{}}-substitution(s) in inputs:", exc.nested), severity=severity)
+                        self.log_exception(StepValidationError(f"unresolved {{}}-substitution(s) in inputs:", exc.nested), 
+                                           severity=severity)
                         # for err in exc.errors:
                         #     self.log.log(level, f"  {err}")
                     else:
-                        self.log_exception(StepValidationError(f"error validating inputs:", exc), severity=severity)
+                        self.log_exception(StepValidationError(f"error validating inputs:", exc), 
+                                           severity=severity)
                     exc.logged = True
-                self.log_summary(level, "summary of inputs follows", color="WARNING", inputs=True)
+                if not explicit_skip:
+                    self.log_summary(level, "summary of inputs follows", color="WARNING", inputs=True)
                 # raise up, unless step is being skipped
                 if skip:
                     parent_log_warning("since the step is being skipped, this is not fatal")
@@ -407,63 +423,112 @@ class Step:
                 else:
                     raise StepValidationError(f"step '{self.name}': invalid inputs: {join_quote(invalid)}", log=self.log)
 
-            ## check if we need to skip based on existing file outputs
-            if not skip and self.skip_if_outputs:
+            ## check if we need to skip based on existing/fresh file outputs
+            ## if skip on fresh outputs is in effect, find mtime of most recent input 
+            if not remote_backend and not skip and self.skip_if_outputs:
+                # max_mtime will remain 0 if we're not echecking for freshness, or if there are no file-type inputs
                 max_mtime, max_mtime_path = 0, None
                 if self.skip_if_outputs == OUTPUTS_FRESH:
                     parent_log_info("checking if file-type outputs of step are fresh")
                     for name, value in params.items():
                         schema = self.inputs_outputs[name]
-                        if schema.is_input and schema.is_file_type and type(value) is str and os.path.exists(value):
-                            mtime = os.path.getmtime(value)
-                            if mtime > max_mtime:
-                                max_mtime = mtime
-                                max_mtime_path = value
+                        if schema.is_input and not schema.skip_freshness_checks:
+                            if schema.is_file_type:
+                                values = [value]
+                            elif schema.is_file_list_type:
+                                values = value
+                            else:
+                                continue
+                            for filename in values:
+                                if type(filename) is str and os.path.exists(filename):
+                                    mtime = os.path.getmtime(filename)
+                                    if mtime > max_mtime:
+                                        max_mtime = mtime
+                                        max_mtime_path = filename
                     if max_mtime:
                         parent_log_info(f"  most recently modified input is {max_mtime_path} ({time.ctime(max_mtime)})")
                 else:
                     parent_log_info("checking if file-type outputs of step exist")
 
+                ## now go through outputs -- all_exist flag will be cleared if we find one that doesn't exist,
+                ## or is older than an input
                 all_exist = True
-                for name, value in params.items():
-                    schema = self.inputs_outputs[name]
-                    if schema.is_output and schema.is_file_type:
-                        if type(value) is str and os.path.exists(value):
-                            if max_mtime:
-                                mtime = os.path.getmtime(value)
-                                if mtime < max_mtime:
-                                    parent_log_info(f"  {name} = {value} is not fresh")
+                for name, schema in self.outputs.items():
+                    # ignore outputs not in params (implicit outputs will be already in there thanks to validation above)
+                    if name in params:
+                        # check for files or lists of files, and skip otherwise
+                        if schema.is_file_type:
+                            filenames = [params[name]]
+                        elif schema.is_file_list_type:
+                            filenames = params[name]
+                            # empty list of files treated as non-existing output
+                            if not filenames:
+                                if schema.must_exist:
                                     all_exist = False
-                                    break
+                                    parent_log_info(f"  {name}: no existing file(s)")
+                                    break  # abort the check
                                 else:
-                                    parent_log_info(f"  {name} = {value} is fresh")
-                            else:
-                                parent_log_info(f"  {name} = {value} already exists")
+                                    parent_log_info(f"  {name}: no existing file(s), but they are not required")
+                                    continue
                         else:
-                            all_exist = False
-                            parent_log_info(f"  {name} = {value} doesn't exist")
+                            continue # go on to next parameter
+                        # collect messages rather than logging them directly, to avoid log diarrhea for long file lists
+                        messages = []
+                        # ok, we have a list of files to check
+                        for num, value in enumerate(filenames):
+                            if type(value) is not str:  # skip funny values that aren't strings
+                                continue
+                            # form up label for messages
+                            label = f"{name}[{num}]" if schema.is_file_list_type else name
+                            if os.path.exists(value):
+                                # max_mtime==0 means we're only checking for existence, not freshness
+                                if max_mtime:
+                                    if schema.skip_freshness_checks:
+                                        messages.append(f"{label} = {value} marked as skipped from freshness checks")
+                                    else:
+                                        mtime = os.path.getmtime(value)
+                                        if mtime < max_mtime:
+                                            parent_log_info(f"{label} = {value} is not fresh")
+                                            all_exist = False
+                                            break
+                                        else:
+                                            messages.append(f"{label} = {value} is fresh")
+                                else:
+                                    messages.append(f"{label} = {value} exists")
+                            elif schema.must_exist is not False:
+                                all_exist = False
+                                parent_log_info(f"  {label} = {value} doesn't exist")
+                                break
+                            else:
+                                messages.append(f"{label} = {value} doesn't exist, but is not required to")
+                        # abort the checks if we encountered a fail
+                        if not all_exist:
                             break
+                        # else log the collected messages
+                        if len(messages) > 2:
+                            messages = [messages[0], "  ...", messages[-1]]
+                        for msg in messages:
+                            parent_log_info(f"  {msg}")
                 if all_exist:
                     parent_log_info("all required outputs are OK, skipping this step")
                     skip = True
 
             if not skip:
                 # check for outputs that need removal
-                for name, schema in self.outputs.items():
-                    if name in params and schema.remove_if_exists and schema.is_file_type:
-                        path = params[name]
-                        if type(path) is str and os.path.exists(path):
-                            if os.path.isdir(path) and not os.path.islink(path):
-                                shutil.rmtree(path)
-                            else:
-                                os.unlink(path)
+                if not remote_backend:
+                    for name, schema in self.outputs.items():
+                        if name in params and schema.remove_if_exists and schema.is_file_type:
+                            path = params[name]
+                            if type(path) is str and os.path.exists(path):
+                                if os.path.isdir(path) and not os.path.islink(path):
+                                    shutil.rmtree(path)
+                                else:
+                                    os.unlink(path)
 
                 if type(self.cargo) is Recipe:
-                    backend = OmegaConf.merge(backend, self.cargo.backend or {}, self.backend or {})
                     self.cargo._run(params, subst, backend=backend)
                 elif type(self.cargo) is Cab:
-                    backend = OmegaConf.merge(backend, self.cargo.backend or {}, self.backend or {})
-                    cabstat = runner.run_cab(self, params, backend=backend, subst=subst)
+                    cabstat = backend_main.run(self.cargo, params=params, log=self.log, subst=subst, backend=backend_opts, fqname=self.fqname)
                     # check for runstate
                     if cabstat.success is False:
                         raise StimelaCabRuntimeError(f"error running cab '{self.cargo.name}'", cabstat.errors)
@@ -482,7 +547,7 @@ class Step:
             validated = False
 
             try:
-                params = self.cargo.validate_outputs(params, loosely=skip, subst=subst)
+                params = self.cargo.validate_outputs(params, loosely=skip,remote_fs=remote_backend, subst=subst)
                 validated = True
             except ScabhaBaseException as exc:
                 severity = "warning" if skip else "error"
@@ -514,9 +579,16 @@ class Step:
             if invalid:
                 if skip:
                     parent_log_warning(f"invalid outputs: {join_quote(invalid)}")
-                    parent_log_warning("since the step was skipped, this is not fatal")
+                    parent_log_warning("since the step was skipped, this is not treated as an error for now, but may cause errors downstream")
+                    for key in invalid:
+                        params[key] = SkippedOutput(key)
                 else:
-                    raise StepValidationError(f"invalid outputs: {join_quote(invalid)}", log=self.log)
+                    # check if invalid steps are due to subrecipe with skipped steps, ignpre those
+                    truly_invalid = [name for name in invalid if not isinstance(params.get(name), SkippedOutput)]
+                    if truly_invalid:
+                        raise StepValidationError(f"invalid outputs: {join_quote(truly_invalid)}", log=self.log)
+                    parent_log_warning(f"invalid outputs: {join_quote(invalid)}")
+                    parent_log_warning("since some sub-steps were skipped, this is not treated as an error for now, but may cause errors downstream")
 
         return params
 

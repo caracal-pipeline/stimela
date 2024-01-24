@@ -1,0 +1,60 @@
+opts:
+  backend:
+    # we have this set up on AWS as a pull-through cache for the quay.io registry
+    override_registries:
+      quay.io/stimela2: 800133935729.dkr.ecr.af-south-1.amazonaws.com/quay/stimela2
+
+    kube:
+      namespace: rarg-test-compute
+      verbose_events: 1   # to get events printed
+      dir: /mnt/data/stimela-test
+      volumes:
+        rarg-test-compute-efs-pvc: 
+          mount: /mnt/data
+
+      ## override user/group ID
+      uid: 1669
+      gid: 1669
+
+      ## you can specify a global memory default for pods here,
+      ## but also do this on a per-cab or per-step basis of course
+      # memory: 64Gi
+
+      ## some predefined pod specs
+      predefined_pod_specs:
+        admin:
+          nodeSelector:
+            rarg/node-class: admin
+        thin:
+          nodeSelector:
+            rarg/node-class: compute
+            rarg/instance-type: m5.large
+        fat:
+          nodeSelector:
+            rarg/node-class: compute
+            rarg/instance-type: m6i.4xlarge
+
+      ## default pod type to use -- keys into predefined_pod_types
+      job_pod:
+        type: admin 
+
+
+## some cab-specific backend tweaks
+cabs:
+  breizorro:     
+    backend:
+      kube:
+        job_pod:
+          type: thin
+          memory: 
+            limit: 3Gi
+        dask_cluster:
+          num_workers: 4
+          name: qc-test-cluster
+          threads_per_worker: 4
+          worker_pod:
+            type: thin
+          scheduler_pod:
+            type: admin
+
+  
