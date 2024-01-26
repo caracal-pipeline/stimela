@@ -1,5 +1,5 @@
 import logging, time, json, datetime, os.path, pathlib, secrets, shlex
-from typing import Dict, Optional, Any, List
+from typing import Dict, Optional, Any, List, Callable
 from dataclasses import fields
 from datetime import timedelta
 from requests import ConnectionError
@@ -31,7 +31,8 @@ from stimela.backends.utils import resolve_remote_mounts
 
 def run(cab: Cab, params: Dict[str, Any], fqname: str,
         backend: StimelaBackendOptions,
-        log: logging.Logger, subst: Optional[Dict[str, Any]] = None):
+        log: logging.Logger, subst: Optional[Dict[str, Any]] = None,
+        command_wrapper: Optional[Callable] = None):
     """Runs cab contents
 
     Args:
@@ -43,14 +44,18 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
         Any: return value (e.g. exit code) of content
     """
 
+    # normally runner.py won't allow this, but check just in case
+    if command_wrapper:
+        raise BackendError(f"kube backend cannot be used with a command wrapper")
+
     if not cab.image:
-        raise StimelaCabRuntimeError(f"kube runner requires cab.image to be set")
+        raise BackendError(f"kube backend requires cab.image to be set")
 
     kube = backend.kube
 
     namespace = kube.namespace
     if not namespace:
-        raise StimelaCabRuntimeError(f"runtime.kube.namespace must be set")
+        raise BackendError(f"runtime.kube.namespace must be set")
 
     args = cab.flavour.get_arguments(cab, params, subst, check_executable=False)
     log.debug(f"command line is {args}")

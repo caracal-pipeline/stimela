@@ -3,7 +3,7 @@ from typing import Optional
 import logging
 import stimela
 
-def is_available():
+def is_available(opts = None):
     return True
 
 def get_status():

@@ -8,7 +8,7 @@ import time
 import datetime
 import tempfile
 
-def is_available():
+def is_available(opts = None):
     return False
 
 def get_status():

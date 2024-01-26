@@ -7,7 +7,7 @@ import stimela
 from shutil import which
 from dataclasses import dataclass
 from omegaconf import OmegaConf
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional, Callable
 from contextlib import ExitStack
 from scabha.basetypes import EmptyListDefault
 import datetime
@@ -25,6 +25,7 @@ class SingularityBackendOptions(object):
     rebuild: bool = False
     auto_update: bool = False
     executable: Optional[str] = None
+    remote_only: False      # if True, won't look for singularity on local system -- useful in combination with slurm wrapper
 
     # @dataclass
     # class EmptyVolume(object):
@@ -39,20 +40,23 @@ STATUS = VERSION = BINARY = None
 
 _auto_updated_images = set()
 
-def is_available():
+def is_available(opts: Optional[SingularityBackendOptions] = None):
     global STATUS, VERSION, BINARY
     if STATUS is None:
-        BINARY = which("singularity")
-        if BINARY:
-            __version_string = subprocess.check_output([BINARY, "--version"]).decode("utf8")
-            STATUS = VERSION = __version_string.strip().split()[-1]
-            # if VERSION < "3.0.0":
-            #     suffix = ".img"
-            # else:
-            #     suffix = ".sif"
+        if opts and opts.remote_only:
+            STATUS = VERSION = "remote"
         else:
-            STATUS = "not installed"
-            VERSION = None    
+            BINARY = (opts and opts.executable) or which("singularity")
+            if BINARY:
+                __version_string = subprocess.check_output([BINARY, "--version"]).decode("utf8")
+                STATUS = VERSION = __version_string.strip().split()[-1]
+                # if VERSION < "3.0.0":
+                #     suffix = ".img"
+                # else:
+                #     suffix = ".sif"
+            else:
+                STATUS = "not installed"
+                VERSION = None    
     return VERSION is not None
 
 def get_status():
@@ -119,7 +123,9 @@ def build_command_line(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend
 
 def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
         backend: 'stimela.backend.StimelaBackendOptions',
-        log: logging.Logger, subst: Optional[Dict[str, Any]] = None):
+        log: logging.Logger, subst: Optional[Dict[str, Any]] = None,
+        command_wrapper: Optional[Callable] = None):
+
     """Runs cab contents
 
     Args:

@@ -1,6 +1,6 @@
 import logging, datetime, resource, os.path
 
-from typing import Dict, Optional, Any, List
+from typing import Dict, Optional, Any, List, Callable
 
 import stimela
 import stimela.kitchen
@@ -37,14 +37,18 @@ def build_command_line(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], s
 
 def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
         backend: 'stimela.backend.StimelaBackendOptions',
-        log: logging.Logger, subst: Optional[Dict[str, Any]] = None):
-    """Runs cab contents
+        log: logging.Logger, subst: Optional[Dict[str, Any]] = None,
+        command_wrapper: Optional[Callable] = None):
+    """
+    Runs cab contents
 
     Args:
-        cab (Cab): cab object
+        cab: cab object
+        params: cab parameters
+        backend: backed settings object
         log (logger): logger to use
         subst (Optional[Dict[str, Any]]): Substitution dict for commands etc., if any.
-
+        command_wrapper (Callable): takes a list of args and returns modified list of args
     Returns:
         Any: return value (e.g. exit code) of content
     """
@@ -79,6 +83,9 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
         return str(datetime.datetime.now() - (since or start_time)).split('.', 1)[0]
 
     # log.info(f"argument lengths are {[len(a) for a in args]}")
+    
+    if command_wrapper:
+        args = command_wrapper(args)
 
     retcode = xrun(args[0], args[1:], shell=False, log=log,
                 output_wrangler=cabstat.apply_wranglers,

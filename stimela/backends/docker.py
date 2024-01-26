@@ -25,7 +25,7 @@ from stimela import log_exception
 
 STATUS = VERSION = BINARY = None
 
-def is_available():
+def is_available(opts = None):
     global STATUS, VERSION, BINARY
     if STATUS is None:
         BINARY = which("docker")
