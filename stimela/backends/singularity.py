@@ -240,6 +240,9 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
     # log.info(f"argument lengths are {[len(a) for a in args]}")
 
+    if command_wrapper:
+        args = command_wrapper(args)
+
     retcode = xrun(args[0], args[1:], shell=False, log=log,
                 output_wrangler=cabstat.apply_wranglers,
                 return_errcode=True, command_name=command_name, 

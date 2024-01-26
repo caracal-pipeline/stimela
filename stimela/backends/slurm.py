@@ -16,7 +16,6 @@ from stimela.utils.xrun_asyncio import xrun
 from stimela.exceptions import BackendError
 
 
-
 # path to default srun binary
 _default_srun_path = None
 
