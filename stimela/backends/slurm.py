@@ -19,13 +19,12 @@ from stimela.exceptions import BackendError
 # path to default srun binary
 _default_srun_path = None
 
-
 @dataclass
 class SlurmOptions(object):
-    enable: bool = True
-    srun_path: Optional[str] = None              # path to executable
-    srun_opts: Dict[str, str] = EmptyDictDefault()
-    build_local = True
+    enable: bool = False                            # enables passing off jobs to slurm via srun
+    srun_path: Optional[str] = None                 # path to srun executable
+    srun_opts: Dict[str, str] = EmptyDictDefault()  # extra options passed to srun. "--" prepended, and "_" replaced by "-"
+    build_local = True                              # if True, images will be built locally (i.e. on the head node) even when slurm is enabled
 
     def get_executable(self):
         global _default_srun_path
@@ -59,7 +58,6 @@ class SlurmOptions(object):
         if self.build_local:
             return args
         return self.run_command_wrapper(args, fqname=fqname)
-
 
 
 SlurmOptionsSchema = OmegaConf.structured(SlurmOptions)

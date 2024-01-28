@@ -31,8 +31,7 @@ from stimela.backends.utils import resolve_remote_mounts
 
 def run(cab: Cab, params: Dict[str, Any], fqname: str,
         backend: StimelaBackendOptions,
-        log: logging.Logger, subst: Optional[Dict[str, Any]] = None,
-        command_wrapper: Optional[Callable] = None):
+        log: logging.Logger, subst: Optional[Dict[str, Any]] = None):
     """Runs cab contents
 
     Args:
@@ -43,10 +42,6 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
     Returns:
         Any: return value (e.g. exit code) of content
     """
-
-    # normally runner.py won't allow this, but check just in case
-    if command_wrapper:
-        raise BackendError(f"kube backend cannot be used with a command wrapper")
 
     if not cab.image:
         raise BackendError(f"kube backend requires cab.image to be set")
