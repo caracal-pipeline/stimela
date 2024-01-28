@@ -1,4 +1,4 @@
-import os, os.path, re, fnmatch, copy, traceback
+import os, os.path, re, fnmatch, copy, traceback, logging
 from typing import Any, Tuple, List, Dict, Optional, Union
 from dataclasses import dataclass
 from omegaconf import MISSING, OmegaConf, DictConfig, ListConfig
@@ -1127,6 +1127,16 @@ class Recipe(Cargo):
             tb = FormattedTraceback(sys.exc_info()[2])
 
         return task_stats.collect_stats(), outputs, exception, tb
+
+    def build(self, backend={}, rebuild=False, log: Optional[logging.Logger] = None):
+        # set up backend
+        backend = OmegaConf.merge(backend, self.backend or {})
+        # build recursively
+        log = log or self.log
+        log.info(f"building image(s) for recipe '{self.fqname}'")
+        for step in self.steps.values():
+            step.build(backend, rebuild=rebuild, log=log)
+
 
     def _run(self, params, subst=None, backend={}) -> Dict[str, Any]:
         """Internal recipe run method. Meant to be called from a wrapper Step object (which validates the parameters, etc.)

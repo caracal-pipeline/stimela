@@ -86,7 +86,8 @@ def load_recipe_file(filename: str):
 @click.argument("parameters", nargs=-1, metavar="[recipe name] [PARAM=VALUE] [X.Y.Z=FOO] ...", required=False) 
 def run(what: str, parameters: List[str] = [], dry_run: bool = False, last_recipe: bool = False, profile: Optional[int] = None,
     assign: List[Tuple[str, str]] = [],
-    step_ranges: List[str] = [], tags: List[str] = [], skip_tags: List[str] = [], enable_steps: List[str] = []):
+    step_ranges: List[str] = [], tags: List[str] = [], skip_tags: List[str] = [], enable_steps: List[str] = [],
+    build=False, rebuild=False):
 
     log = logger()
     params = OrderedDict()
@@ -288,38 +289,59 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, last_recip
     def elapsed():
         return str(datetime.now() - start_time).split('.', 1)[0]
 
-    try:
-        outputs = outer_step.run(backend=stimela.CONFIG.opts.backend)
-    except Exception as exc:
-        stimela.backends.close_backends(log)
+    # build the images
+    if build:
+        try:
+            outer_step.build(backend=stimela.CONFIG.opts.backend, rebuild=rebuild, log=log)
+        except Exception as exc:
+            stimela.backends.close_backends(log)
 
-        task_stats.save_profiling_stats(outer_step.log, 
-            print_depth=profile if profile is not None else stimela.CONFIG.opts.profile.print_depth,
-            unroll_loops=stimela.CONFIG.opts.profile.unroll_loops)
-        if not isinstance(exc, ScabhaBaseException) or not exc.logged:
-            log_exception(StimelaRuntimeError(f"run failed after {elapsed()}", exc, 
-                tb=not isinstance(exc, ScabhaBaseException)))
-        else:
-            log.error("run failed, exiting with error code 1")
-        for line in traceback.format_exc().split("\n"):
-            log.debug(line)
-        last_log_dir = stimelogging.get_logfile_dir(outer_step.log) or '.'
-        outer_step.log.info(f"last log directory was {stimelogging.apply_style(last_log_dir, 'bold green')}")
-        sys.exit(1)
+            if not isinstance(exc, ScabhaBaseException) or not exc.logged:
+                log_exception(StimelaRuntimeError(f"build failed after {elapsed()}", exc, 
+                    tb=not isinstance(exc, ScabhaBaseException)))
+            else:
+                log.error("build failed, exiting with error code 1")
+            for line in traceback.format_exc().split("\n"):
+                log.debug(line)
+            last_log_dir = stimelogging.get_logfile_dir(outer_step.log) or '.'
+            outer_step.log.info(f"last log directory was {stimelogging.apply_style(last_log_dir, 'bold green')}")
+            sys.exit(1)
 
-    if outputs and outer_step.log.isEnabledFor(logging.DEBUG):
-        outer_step.log.debug(f"run successful after {elapsed()}, outputs follow:")
-        for name, value in outputs.items():
-            if name in recipe.outputs:
-                outer_step.log.debug(f"  {name}: {value}")
+    # else run the recipe
     else:
-        outer_step.log.info(f"run successful after {elapsed()}")
+        try:
+            outputs = outer_step.run(backend=stimela.CONFIG.opts.backend)
+        except Exception as exc:
+            stimela.backends.close_backends(log)
+
+            task_stats.save_profiling_stats(outer_step.log, 
+                print_depth=profile if profile is not None else stimela.CONFIG.opts.profile.print_depth,
+                unroll_loops=stimela.CONFIG.opts.profile.unroll_loops)
+            if not isinstance(exc, ScabhaBaseException) or not exc.logged:
+                log_exception(StimelaRuntimeError(f"run failed after {elapsed()}", exc, 
+                    tb=not isinstance(exc, ScabhaBaseException)))
+            else:
+                log.error("run failed, exiting with error code 1")
+            for line in traceback.format_exc().split("\n"):
+                log.debug(line)
+            last_log_dir = stimelogging.get_logfile_dir(outer_step.log) or '.'
+            outer_step.log.info(f"last log directory was {stimelogging.apply_style(last_log_dir, 'bold green')}")
+            sys.exit(1)
+
+        if outputs and outer_step.log.isEnabledFor(logging.DEBUG):
+            outer_step.log.debug(f"run successful after {elapsed()}, outputs follow:")
+            for name, value in outputs.items():
+                if name in recipe.outputs:
+                    outer_step.log.debug(f"  {name}: {value}")
+        else:
+            outer_step.log.info(f"run successful after {elapsed()}")
 
     stimela.backends.close_backends(log)
 
-    task_stats.save_profiling_stats(outer_step.log, 
-            print_depth=profile if profile is not None else stimela.CONFIG.opts.profile.print_depth,
-            unroll_loops=stimela.CONFIG.opts.profile.unroll_loops)
+    if not build:
+        task_stats.save_profiling_stats(outer_step.log, 
+                print_depth=profile if profile is not None else stimela.CONFIG.opts.profile.print_depth,
+                unroll_loops=stimela.CONFIG.opts.profile.unroll_loops)
     
     last_log_dir = stimelogging.get_logfile_dir(outer_step.log) or '.'
     outer_step.log.info(f"last log directory was {stimelogging.apply_style(last_log_dir, 'bold green')}")

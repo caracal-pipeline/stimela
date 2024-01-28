@@ -76,8 +76,8 @@ class StimelaBackendOptions(object):
             self.native = NativeBackendOptions()
         if self.kube is None and get_backend("kube"):
             self.kube = KubeBackendOptions()
-        if self.kube is None and get_backend("slurm"):
-            self.kube = SlurmBackendOptions()
+        if self.slurm is None:
+            self.slurm = SlurmOptions()
 
 StimelaBackendSchema = OmegaConf.structured(StimelaBackendOptions)
 

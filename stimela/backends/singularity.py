@@ -23,9 +23,9 @@ class SingularityBackendOptions(object):
     image_dir: str = os.path.expanduser("~/.singularity")
     auto_build: bool = True
     rebuild: bool = False
-    auto_update: bool = False
+    auto_update: bool = False      # currently unused
     executable: Optional[str] = None
-    remote_only: False      # if True, won't look for singularity on local system -- useful in combination with slurm wrapper
+    remote_only: bool = False      # if True, won't look for singularity on local system -- useful in combination with slurm wrapper
 
     # @dataclass
     # class EmptyVolume(object):
@@ -38,7 +38,8 @@ SingularityBackendSchema = OmegaConf.structured(SingularityBackendOptions)
 
 STATUS = VERSION = BINARY = None
 
-_auto_updated_images = set()
+# images rebuilt in this run
+_rebuilt_images = set()
 
 def is_available(opts: Optional[SingularityBackendOptions] = None):
     global STATUS, VERSION, BINARY
@@ -119,6 +120,123 @@ def build_command_line(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend
             "--pwd", cwd,
             simg_path] + args
 
+def build(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBackendOptions', log: logging.Logger,
+          command_wrapper: Optional[Callable]=None,
+          build=True, rebuild=False):
+    """Builds image for cab, if necessary.
+
+    build: if True, build missing images regardless of backend settings
+    rebuild: if True, rebuild all images regardless of backend settings
+
+    Returns:
+        str: path to corresponding singularity image
+    """
+
+    image_name, simg_path, auto_update_allowed = get_image_info(cab, backend)
+
+    # this is True if we're allowed to build missing images
+    build = build or rebuild or backend.singularity.auto_build or backend.singularity.auto_update    
+    # this is True if we're asked to force-rebuild images
+    rebuild = rebuild or backend.singularity.rebuild
+    
+    cached_image_exists = os.path.exists(simg_path)
+
+    # no image? Better have builds enabled then
+    if not cached_image_exists:
+        log.info(f"singularity image {simg_path} does not exist")
+        if not build:
+            raise BackendError(f"no image, and singularity build options not enabled")
+    # else we have an image
+    # if rebuild is enabled, delete it
+    elif rebuild:
+        if simg_path in _rebuilt_images:
+            log.info(f"singularity image {simg_path} was rebuilt earlier")
+        else:
+            log.info(f"singularity image {simg_path} exists but a rebuild was specified")
+            os.unlink(simg_path)        
+            cached_image_exists = False
+    else:
+        log.info(f"singularity image {simg_path} exists")
+
+    ## OMS: taking this out for now, need some better auto-update logic, let's come back to it later
+        
+    # # else check if it need to be auto-updated
+    # elif auto_update_allowed and backend.singularity.auto_update:
+    #     if image_name in _auto_updated_images:
+    #         log.info("image was used earlier in this run, not checking for auto-updates again")
+    #     else:
+    #         _auto_updated_images.add(image_name)
+    #         # force check of docker binary
+    #         docker.is_available()
+    #         if docker.BINARY is None:
+    #             log.warn("a docker runtime is required for auto-update of singularity images: forcing unconditional rebuild")
+    #             build = True
+    #         else:
+    #             log.info("singularity auto-update: pulling and inspecting docker image")
+    #             # pull image from hub
+    #             retcode = xrun(docker.BINARY, ["pull", image_name], 
+    #                         shell=False, log=log,
+    #                             return_errcode=True, command_name="(docker pull)", 
+    #                             log_command=True, 
+    #                             log_result=True)
+    #             if retcode != 0:
+    #                 raise BackendError(f"docker pull failed with return code {retcode}") 
+    #             if os.path.exists(simg_path):
+    #                 # check timestamp
+    #                 result = subprocess.run(
+    #                         [docker.BINARY, "inspect", "-f", "{{ .Created }}", image_name],
+    #                         capture_output=True)
+    #                 if result.returncode != 0:
+    #                     for line in result.stdout.split("\n"):
+    #                         log.warn(f"docker inpect stdout: {line}")
+    #                     for line in result.stderr.split("\n"):
+    #                         log.error(f"docker inpect stderr: {line}")
+    #                     raise BackendError(f"docker inspect failed with return code {result.returncode}")
+    #                 timestamp = result.stdout.decode().strip()
+    #                 log.info(f"docker inspect returns timestamp {timestamp}")
+    #                 # parse timestamps like '2023-04-07T13:39:19.187572398Z'
+    #                 # Pre-3.11 pythons don't do it natively so we mess around...
+    #                 match = re.fullmatch("(.*)T([^.]*)(\.\d+)?Z?", timestamp)
+    #                 if not match:
+    #                     raise BackendError(f"docker inspect returned invalid timestamp '{timestamp}'")
+    #                 try:
+    #                     dt = datetime.datetime.fromisoformat(f'{match.group(1)} {match.group(2)} +00:00')
+    #                 except ValueError as exc:
+    #                     raise BackendError(f"docker inspect returned invalid timestamp '{timestamp}', exc")
+
+    #                 if dt.timestamp() > os.path.getmtime(simg_path):
+    #                     log.warn("docker image is newer than cached singularity image, rebuilding")
+    #                     os.unlink(simg_path)        
+    #                     cached_image_exists = False
+    #                 else:
+    #                     log.info("cached singularity image appears to be up-to-date")
+
+    # if image doesn't exist, build it. We will have already checked for build settings
+    # being enabled above
+    if not cached_image_exists:
+        log.info(f"(re)building image {simg_path}")
+
+        args = [BINARY, "build", simg_path, f"docker://{image_name}"]
+
+        if command_wrapper:
+            args = command_wrapper(args)
+
+        retcode = xrun(args[0], args[1:], shell=False, log=log,
+                    return_errcode=True, command_name="(singularity build)", 
+                    gentle_ctrl_c=True,
+                    log_command=True, 
+                    log_result=True)
+
+        if retcode:
+            raise BackendError(f"singularity build returns {retcode}")
+
+        if not os.path.exists(simg_path):
+            raise BackendError(f"singularity build did not return an error code, but the image did not appear")
+        
+        _rebuilt_images.add(simg_path)
+        
+    return simg_path
+
 
 
 def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
@@ -138,94 +256,18 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     """
     native.update_rlimits(backend.rlimits, log)
 
-    image_name, simg_path, auto_update = get_image_info(cab, backend)
+    # get path to image, rebuilding if backend options allow this
+    simg_path = build(cab, backend=backend, log=log, build=False)
 
-    rebuild = backend.singularity.rebuild  
-    cached_image_exists = os.path.exists(simg_path)
-
-    # no image? Better have builds enabled then
-    if not cached_image_exists:
-        log.info(f"singularity image {simg_path} does not exist")
-        rebuild = rebuild or backend.singularity.auto_build or backend.singularity.auto_update
-        if not rebuild:
-            raise BackendError(f"no image, and singularity build options not enabled")
-
-    # check if existing image needs to be rebuilt
-    if auto_update and backend.singularity.auto_update and not rebuild:
-        if image_name in _auto_updated_images:
-            log.info("image was used earlier in this run, not checking for auto-updates again")
-        else:
-            _auto_updated_images.add(image_name)
-            # force check of docker binary
-            docker.is_available()
-            if docker.BINARY is None:
-                log.warn("a docker runtime is required for auto-update of singularity images: forcing unconditional rebuild")
-                rebuild = True
-            else:
-                log.info("singularity auto-update: pulling and inspecting docker image")
-                # pull image from hub
-                retcode = xrun(docker.BINARY, ["pull", image_name], 
-                            shell=False, log=log,
-                                return_errcode=True, command_name="(docker pull)", 
-                                log_command=True, 
-                                log_result=True)
-                if retcode != 0:
-                    raise BackendError(f"docker pull failed with return code {retcode}") 
-                if os.path.exists(simg_path):
-                    # check timestamp
-                    result = subprocess.run(
-                            [docker.BINARY, "inspect", "-f", "{{ .Created }}", image_name],
-                            capture_output=True)
-                    if result.returncode != 0:
-                        for line in result.stdout.split("\n"):
-                            log.warn(f"docker inpect stdout: {line}")
-                        for line in result.stderr.split("\n"):
-                            log.error(f"docker inpect stderr: {line}")
-                        raise BackendError(f"docker inspect failed with return code {result.returncode}")
-                    timestamp = result.stdout.decode().strip()
-                    log.info(f"docker inspect returns timestamp {timestamp}")
-                    # parse timestamps like '2023-04-07T13:39:19.187572398Z'
-                    # Pre-3.11 pythons don't do it natively so we mess around...
-                    match = re.fullmatch("(.*)T([^.]*)(\.\d+)?Z?", timestamp)
-                    if not match:
-                        raise BackendError(f"docker inspect returned invalid timestamp '{timestamp}'")
-                    try:
-                        dt = datetime.datetime.fromisoformat(f'{match.group(1)} {match.group(2)} +00:00')
-                    except ValueError as exc:
-                        raise BackendError(f"docker inspect returned invalid timestamp '{timestamp}', exc")
-
-                    if dt.timestamp() > os.path.getmtime(simg_path):
-                        log.warn("docker image is newer than cached singularity image, rebuilding")
-                        rebuild = True
-                    else:
-                        log.info("cached singularity image appears to be up-to-date")
-
-    # delete image if rebuild is being forced
-    if cached_image_exists and rebuild:
-        os.unlink(simg_path)        
-        cached_image_exists = False
-
-    # if image doesn't exist, build it. We will have already checked for build settings
-    # being enabled above
-    if not cached_image_exists:
-        log.info(f"(re)building image {simg_path}")
-
-        args = [BINARY, "build", simg_path, f"docker://{image_name}"]
-
-        retcode = xrun(args[0], args[1:], shell=False, log=log,
-                    return_errcode=True, command_name="(singularity build)", 
-                    gentle_ctrl_c=True,
-                    log_command=True, 
-                    log_result=True)
-
-        if retcode:
-            raise BackendError(f"singularity build returns {retcode}")
-
-        if not os.path.exists(simg_path):
-            raise BackendError(f"singularity build did not return an error code, but the image did not appear")
-    
-    args = build_command_line(cab, backend, params, subst, simg_path=simg_path)
-
+    # build up command line    
+    cwd = os.getcwd()
+    args = [backend.singularity.executable or BINARY, 
+            "exec", 
+            "--containall",
+            "--bind", f"{cwd}:{cwd}",
+            "--pwd", cwd,
+            simg_path] 
+    args += cab.flavour.get_arguments(cab, params, subst, check_executable=False)
     log.debug(f"command line is {args}")
 
     cabstat = cab.reset_status()
@@ -241,7 +283,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     # log.info(f"argument lengths are {[len(a) for a in args]}")
 
     if command_wrapper:
-        args = command_wrapper(args)
+        args = command_wrapper(args, fqname=fqname)
 
     retcode = xrun(args[0], args[1:], shell=False, log=log,
                 output_wrangler=cabstat.apply_wranglers,

@@ -317,6 +317,30 @@ class Step:
                 raise AssignmentError(f"{self.name}: invalid assignment {key}={value}", exc)
 
 
+    def build(self, backend={}, rebuild=False, log: Optional[logging.Logger] = None):
+        # skipping step? ignore the build
+        if self.skip is True:
+            return
+        log = log or self.log
+        # recurse into sub-recipe 
+        from .recipe import Recipe
+        if type(self.cargo) is Recipe:
+            return self.cargo.build(backend, rebuild=rebuild, log=log)
+        # else build 
+        else:
+            # validate backend settings and call the build function
+            try:
+                backend = OmegaConf.merge(backend, self.cargo.backend or {}, self.backend or {})
+                backend = OmegaConf.to_object(OmegaConf.merge(StimelaBackendSchema, backend))
+                backend_wrapper = runner.validate_backend_settings(backend)
+            except Exception as exc:
+                newexc = BackendError("error validating backend settings", exc)
+                raise newexc from None
+            log.info(f"building image for step '{self.fqname}'")
+            with stimelogging.declare_subtask(self.name):
+                return backend_wrapper.build(self.cargo, log=log, rebuild=rebuild)
+
+
     def run(self, backend={}, subst=None, parent_log=None):
         """Runs the step"""
         from .recipe import Recipe
