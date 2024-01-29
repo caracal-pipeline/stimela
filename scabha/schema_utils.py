@@ -109,7 +109,7 @@ def nested_schema_to_dataclass(nested: Dict[str, Dict], class_name: str, bases=(
         dcls = schema_to_dataclass(content, f"{class_name}_{section}",
                                     bases=section_bases, post_init=post_init_map.get(section))
 
-        fields.append((section, dcls, field(default=dcls())))
+        fields.append((section, dcls, field(default_factory=dcls)))
 
     # return the outer dataclass
     return make_dataclass(class_name, fields, bases=bases)

@@ -2,7 +2,7 @@ import dataclasses
 import re, importlib, sys
 from collections import OrderedDict
 from enum import Enum, IntEnum
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from omegaconf import MISSING, ListConfig, DictConfig, OmegaConf
 
 import rich.box
@@ -141,7 +141,7 @@ class Parameter(object):
     nom_de_guerre: Optional[str] = None
 
     # policies object, specifying a non-default way to handle this parameter
-    policies: ParameterPolicies = ParameterPolicies()
+    policies: ParameterPolicies = field(default_factory=ParameterPolicies)
 
     # Parameter category, purely cosmetic, used for generating help and debug messages.
     # Assigned automatically if None, but a schema may explicitly mark parameters as e.g.
