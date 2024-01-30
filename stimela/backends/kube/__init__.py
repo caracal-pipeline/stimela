@@ -186,6 +186,7 @@ class KubeBackendOptions(object):
         name: Optional[str] = None
         num_workers: int = 0
         threads_per_worker: int = 1
+        memory_limit: Optional[str] = None
         worker_pod: KubePodSpec = KubePodSpec()
         scheduler_pod: KubePodSpec = KubePodSpec()
         forward_dashboard_port: int = 8787          # set to non-0 to forward the http dashboard to this local port

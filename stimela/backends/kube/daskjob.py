@@ -28,6 +28,11 @@ def create_parser():
         help="The kubernetes service account which will run the job",
     )
     p.add_argument(
+        "--pull-policy",
+        default="Always",
+        help="imagePullPolicy setting for pods",
+    )
+    p.add_argument(
         "-f",
         "--mount-file",
         nargs="*",
@@ -131,7 +136,7 @@ def daskjob_template(args):
                                         }
                                     ],
                                     "image": args.image,
-                                    "imagePullPolicy": "IfNotPresent",
+                                    "imagePullPolicy": args.pull_policy,
                                     "livenessProbe": {
                                         "httpGet": {
                                             "path": "/health",
@@ -184,7 +189,7 @@ def daskjob_template(args):
                                         {"name": "WORKER_ENV", "value": "hello-world"}
                                     ],
                                     "image": args.image,
-                                    "imagePullPolicy": "IfNotPresent",
+                                    "imagePullPolicy": args.pull_policy,
                                     "name": "worker",
                                 }
                             ],
@@ -198,7 +203,7 @@ def daskjob_template(args):
                     "containers": [
                         {
                             "image": args.image,
-                            "imagePullPolicy": "IfNotPresent",
+                            "imagePullPolicy": args.pull_policy,
                             "name": "job",
                         }
                     ],
