@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Callable
 from enum import Enum
 from omegaconf import OmegaConf
 from dataclasses import dataclass
@@ -36,52 +36,6 @@ except ImportError:
     def run(*args, **kw):
         raise RuntimeError(f"kubernetes backend {STATUS}")
     
-def is_available():
-    return AVAILABLE
-
-def get_status():
-    return STATUS
-
-def is_remote():
-    return True
-
-def init(backend: 'stimela.backend.StimelaBackendOptions', log: logging.Logger):
-    from . import infrastructure
-    global AVAILABLE, STATUS
-    if not infrastructure.init(backend, log):
-        AVAILABLE = False
-        STATUS = "initialization error"
-
-def close(backend: 'stimela.backend.StimelaBackendOptions', log: logging.Logger):
-    from . import infrastructure
-    if AVAILABLE:
-        infrastructure.close(backend, log)
-
-def cleanup(backend: 'stimela.backend.StimelaBackendOptions', log: logging.Logger):
-    from . import infrastructure
-    infrastructure.cleanup(backend, log)
-
-def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
-        backend: 'stimela.backend.StimelaBackendOptions',
-        log: logging.Logger, subst: Optional[Dict[str, Any]] = None):
-    from . import run_kube
-    return run_kube.run(cab=cab, params=params, fqname=fqname, backend=backend, log=log, subst=subst)
-
-_kube_client = _kube_config = _kube_context = None
-
-def get_kube_api(context: Optional[str]=None):
-    global _kube_client
-    global _kube_config
-    global _kube_context
-
-    if _kube_config is None:
-        _kube_config = True
-        _kube_context = context
-        kubernetes.config.load_kube_config(context=context)
-    elif context != _kube_context:
-        raise BackendError(f"k8s context has changed (was {_kube_context}, now {context}), this is not permitted")
-
-    return core_v1_api.CoreV1Api(), CustomObjectsApi()
 
 
 # dict of methods for converting an object to text format
@@ -109,8 +63,6 @@ class KubePodSpec(object):
     cpu:            Optional[PodLimits] = None
     # arbitrary additional structure copied into the pod spec
     custom_pod_spec:  Dict[str, Any] = EmptyDictDefault()
-
-
 
 @dataclass
 class KubeBackendOptions(object):
@@ -268,6 +220,57 @@ class KubeBackendOptions(object):
 
 
 KubeBackendSchema = OmegaConf.structured(KubeBackendOptions)
+    
+def is_available(opts: Optional[KubeBackendOptions]= None):
+    return AVAILABLE
+
+def get_status():
+    return STATUS
+
+def is_remote():
+    return True
+
+def init(backend: 'stimela.backend.StimelaBackendOptions', log: logging.Logger):
+    from . import infrastructure
+    global AVAILABLE, STATUS
+    if not infrastructure.init(backend, log):
+        AVAILABLE = False
+        STATUS = "initialization error"
+
+def close(backend: 'stimela.backend.StimelaBackendOptions', log: logging.Logger):
+    from . import infrastructure
+    if AVAILABLE:
+        infrastructure.close(backend, log)
+
+def cleanup(backend: 'stimela.backend.StimelaBackendOptions', log: logging.Logger):
+    from . import infrastructure
+    infrastructure.cleanup(backend, log)
+
+def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
+        backend: 'stimela.backend.StimelaBackendOptions',
+        log: logging.Logger, subst: Optional[Dict[str, Any]] = None,
+        command_wrapper: Optional[Callable] = None):
+    # normally runner.py won't allow this, but check just in case
+    if command_wrapper:
+        raise BackendError(f"kube backend cannot be used with a command wrapper")
+    from . import run_kube
+    return run_kube.run(cab=cab, params=params, fqname=fqname, backend=backend, log=log, subst=subst)
+
+_kube_client = _kube_config = _kube_context = None
+
+def get_kube_api(context: Optional[str]=None):
+    global _kube_client
+    global _kube_config
+    global _kube_context
+
+    if _kube_config is None:
+        _kube_config = True
+        _kube_context = context
+        kubernetes.config.load_kube_config(context=context)
+    elif context != _kube_context:
+        raise BackendError(f"k8s context has changed (was {_kube_context}, now {context}), this is not permitted")
+
+    return core_v1_api.CoreV1Api(), CustomObjectsApi()
 
 _uid = os.getuid()
 _gid = os.getgid()

@@ -1,12 +1,38 @@
-from typing import Dict, Optional, Any
+import logging
+from typing import Dict, Optional, Any, Callable
+from dataclasses import dataclass
 from omegaconf import OmegaConf
 from omegaconf.errors import OmegaConfBaseException 
+import stimela
 from stimela.backends import StimelaBackendOptions, StimelaBackendSchema
 from stimela.exceptions import BackendError
 
-from . import get_backend, get_backend_status
+from . import get_backend, get_backend_status, slurm
 
-def validate_backend_settings(backend_opts: Dict[str, Any]):
+
+@dataclass
+class BackendWrapper(object):
+    opts: StimelaBackendOptions
+    is_remote: bool
+    is_remote_fs: bool
+    backend: Any
+    backend_name: str
+    run_command_wrapper: Optional[Callable]
+    build_command_wrapper: Optional[Callable]
+
+    def run(self, cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
+            log: logging.Logger, subst: Optional[Dict[str, Any]] = None):
+        return self.backend.run(cab, params, fqname=fqname, backend=self.opts, log=log, subst=subst, 
+                              command_wrapper=self.run_command_wrapper)
+        
+    def build(self, cab: 'stimela.kitchen.cab.Cab', log: logging.Logger, rebuild=False):
+       if not hasattr(self.backend, 'build'):
+           raise BackendError(f"{self.backend_name} backend does not support the build command")
+       return self.backend.build(cab, backend=self.opts, log=log, rebuild=rebuild,
+                                command_wrapper=self.build_command_wrapper)
+
+
+def validate_backend_settings(backend_opts: Dict[str, Any]) -> BackendWrapper:
     """Checks that backend settings refer to a valid backend
     
     Returs tuple of options, main, wrapper, where 'main' the the main backend, and 'wrapper' is an optional wrapper backend 
@@ -15,26 +41,35 @@ def validate_backend_settings(backend_opts: Dict[str, Any]):
     if not isinstance(backend_opts, StimelaBackendOptions):
         backend_opts = OmegaConf.to_object(backend_opts)
 
-    main = main_backend = None
+    backend_name = backend = None
     selected = backend_opts.select or ['native']
     # select containerization engine, if any
-    for engine in selected: 
+    for name in selected: 
         # check that backend has not been disabled
-        opts = getattr(backend_opts, engine, None)
+        opts = getattr(backend_opts, name, None)
         if not opts or opts.enable:
-            main_backend = get_backend(engine)
-            if main_backend is not None:
-                main = engine
+            backend = get_backend(name, opts)
+            if backend is not None:
+                backend_name = name
                 break
     else:
         raise BackendError(f"selected backends ({', '.join(selected)}) not available")
-    
-    # check if slurm wrapper is to be applied
-    wrapper = None
-    if False:   # placeholder -- should be: if backend.slurm and backed.slurm.enable
-        wrapper = get_backend('slurm') 
-        if wrapper is None:
-            raise BackendError(f"backend 'slurm' not available ({get_backend_status('slurm')})")
 
-    return backend_opts, main_backend, wrapper
+    is_remote = is_remote_fs = backend.is_remote()
+
+    # check if slurm wrapper is to be applied
+    if backend_opts.slurm.enable:
+        if is_remote:
+            raise BackendError(f"can't combine slurm with {backend_name} backend")
+        is_remote = True
+        is_remote_fs = False
+        run_command_wrapper = backend_opts.slurm.run_command_wrapper
+        build_command_wrapper = backend_opts.slurm.build_command_wrapper
+    else:
+        run_command_wrapper = build_command_wrapper = None
+
+    return BackendWrapper(opts=backend_opts, is_remote=is_remote, is_remote_fs=is_remote_fs, 
+                          backend=backend, backend_name=backend_name, 
+                          run_command_wrapper=run_command_wrapper,
+                          build_command_wrapper=build_command_wrapper)
 

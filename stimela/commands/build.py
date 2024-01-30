@@ -1,63 +1,42 @@
 import click
 from typing import List
 from stimela.main import cli
-import stimela
 
+import click
+from typing import List, Optional, Tuple
+from .run import run
 
-@cli.command(
-    help="""(Re)build stimela base images. Specify a list of image names and versions (if a version is omitted, builds all known versions of image),
-            or else use --all to build all required base images. 
-         """,
-    short_help="build stimela base images",
+from stimela.main import cli
+
+@cli.command("build",
+    help="""
+    Builds singularity images required by the recipe. Only available if the singularity backend is selected.
+    """,
     no_args_is_help=True)
-@click.argument("images", nargs=-1, metavar="NAME[:VERSION]", required=False) 
-#                help="image/version to build (builds all versions of image by default)")
-@click.option("-a", "--all", is_flag=True, 
-                help="build all unavailable images (all images, in combination with --rebuild)")
-@click.option("-r", "--rebuild", is_flag=True, 
-                help="force rebuild of image(s)")
-def build(images: List[str], all=False, rebuild=False):
-    from stimela.main import BACKEND
-    from stimela import CONFIG
-    log = stimela.logger()
-
-    available_images = BACKEND.available_images()
-    if all:
-        build_images = CONFIG.base.keys()
-    else:
-        build_images = images
-
-    if not build_images:
-        log.info("No images specified. Run 'stimela build -h' for help.")
-        return 0
-
-    for imagename in build_images:
-        if ':' in imagename:
-            imagename, version = imagename.split(":", 1)
-        else:
-            version = None
-
-        if imagename not in CONFIG.base:
-            log.error(f"base image '{imagename}' is not known to Stimela")
-            return 2
-
-        image = CONFIG.base[imagename]
-
-        if version is None:
-            build_versions = image.images.keys()
-        elif version in image.images:
-            build_versions = [version]
-        else:
-            log.error(f"version '{version}' is not defined for base image '{imagename}'")
-            return 2
-
-        # now loop over build versions
-        for version in build_versions:
-            
-            # check if already exists
-            if imagename in available_images and version in available_images[imagename]:
-                if not rebuild:
-                    log.info(f"image '{imagename}:{version}' already exists, skipping")
-                    continue
-
-            BACKEND.build(image, version)
+@click.option("-r", "--rebuild", is_flag=True,
+                help="""rebuilds all images from scratch.""")
+@click.option("-s", "--step", "step_ranges", metavar="STEP(s)", multiple=True,
+                help="""only look at specific step(s) from the recipe. Use commas, or give multiple times to cherry-pick steps.
+                Use [BEGIN]:[END] to specify a range of steps. Note that cherry-picking an individual step via this option
+                also impies --enable-step.""")
+@click.option("-t", "--tags", "tags", metavar="TAG(s)", multiple=True,
+                help="""only look at steps wth the given tags (and also steps tagged as "always"). 
+                Use commas, or give multiple times for multiple tags.""")
+@click.option("--skip-tags", "skip_tags", metavar="TAG(s)", multiple=True,
+                help="""explicitly skips steps wth the given tags. 
+                Use commas, or give multiple times for multiple tags.""")
+@click.option("-e", "--enable-step", "enable_steps", metavar="STEP(s)", multiple=True,
+                help="""Force-enable steps even if the recipe marks them as skipped. Use commas, or give multiple times 
+                for multiple steps.""")
+@click.option("-a", "--assign", metavar="PARAM VALUE", nargs=2, multiple=True,
+                help="""assigns values to parameters: equivalent to PARAM=VALUE, but plays nicer with the shell's 
+                tab completion.""")
+@click.option("-l", "--last-recipe", is_flag=True,
+                help="""if multiple recipes are defined, selects the last one for building.""")
+@click.argument("what", metavar="filename.yml|cab name") 
+def build(what: str, last_recipe: bool = False, rebuild: bool = False, 
+            assign: List[Tuple[str, str]] = [],
+            step_ranges: List[str] = [], tags: List[str] = [], skip_tags: List[str] = [], enable_steps: List[str] = []):
+    return run.callback(what, last_recipe=last_recipe, assign=assign, step_ranges=step_ranges, 
+        tags=tags, skip_tags=skip_tags, enable_steps=enable_steps,
+        build=True, rebuild=rebuild)

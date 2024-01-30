@@ -89,9 +89,9 @@ def cli(config_files=[], config_dotlist=[], include=[], backend=None,
     if config.CONFIG_LOADED:
         log.info(f"loaded config from {config.CONFIG_LOADED}") 
 
-    # select backend
+    # select backend, passing it any config options that have been set up
     if backend:
-        if backends.get_backend(backend) is None:
+        if backends.get_backend(backend, getattr(stimela.CONFIG.opts.backend, backend, None)) is None:
             log.error(f"backend '{backend}' not available: {backends.get_backend_status(backend)}")
             sys.exit(1)
 
@@ -118,7 +118,7 @@ def cli(config_files=[], config_dotlist=[], include=[], backend=None,
 
 
 # import commands
-from stimela.commands import doc, run, save_config, cleanup
+from stimela.commands import doc, run, build, save_config, cleanup
 
 ## These one needs to be reimplemented, current backed auto-pulls and auto-builds:
 # images, pull, build, clean

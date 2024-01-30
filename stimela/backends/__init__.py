@@ -10,6 +10,7 @@ from scabha.basetypes import EmptyDictDefault
 from .singularity import SingularityBackendOptions
 from .kube import KubeBackendOptions
 from .native import NativeBackendOptions
+from .slurm import SlurmOptions
 
 import stimela
 
@@ -20,11 +21,15 @@ Backend = Enum("Backend", "singularity kube native", module=__name__)
 SUPPORTED_BACKENDS = set(Backend.__members__)
 
 
-def get_backend(name: str):
+def get_backend(name: str, backend_opts: Optional[Dict] = None):
+    """
+    Gets backend, given a name and an optional set of options for that backend.
+    Returns backend module, or None if it is not available.
+    """
     if name not in SUPPORTED_BACKENDS:
         return None
     backend = __import__(f"stimela.backends.{name}", fromlist=[name])
-    if backend.is_available():
+    if backend.is_available(backend_opts):
         return backend
     return None
 
@@ -48,7 +53,7 @@ class StimelaBackendOptions(object):
     kube: Optional[KubeBackendOptions] = None
     native: Optional[NativeBackendOptions] = None 
     docker: Optional[Dict] = None  # placeholder for future impl
-    slurm: Optional[Dict] = None   # placeholder for future impl
+    slurm: Optional[SlurmOptions] = None   
 
     ## Resource limits applied during run -- see resource module
     rlimits: Dict[str, Any] = EmptyDictDefault()
@@ -71,6 +76,8 @@ class StimelaBackendOptions(object):
             self.native = NativeBackendOptions()
         if self.kube is None and get_backend("kube"):
             self.kube = KubeBackendOptions()
+        if self.slurm is None:
+            self.slurm = SlurmOptions()
 
 StimelaBackendSchema = OmegaConf.structured(StimelaBackendOptions)
 
@@ -106,7 +113,7 @@ def _call_backends(backend_opts: StimelaBackendOptions, log: logging.Logger, met
         # check that backend has not been disabled
         opts = getattr(backend_opts, engine, None)
         if not opts or opts.enable:
-            backend = get_backend(engine)
+            backend = get_backend(engine, opts)
             func = backend and getattr(backend, method, None)
             if func:
                 try:

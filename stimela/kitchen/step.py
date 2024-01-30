@@ -317,6 +317,30 @@ class Step:
                 raise AssignmentError(f"{self.name}: invalid assignment {key}={value}", exc)
 
 
+    def build(self, backend={}, rebuild=False, log: Optional[logging.Logger] = None):
+        # skipping step? ignore the build
+        if self.skip is True:
+            return
+        log = log or self.log
+        # recurse into sub-recipe 
+        from .recipe import Recipe
+        if type(self.cargo) is Recipe:
+            return self.cargo.build(backend, rebuild=rebuild, log=log)
+        # else build 
+        else:
+            # validate backend settings and call the build function
+            try:
+                backend = OmegaConf.merge(backend, self.cargo.backend or {}, self.backend or {})
+                backend = OmegaConf.to_object(OmegaConf.merge(StimelaBackendSchema, backend))
+                backend_wrapper = runner.validate_backend_settings(backend)
+            except Exception as exc:
+                newexc = BackendError("error validating backend settings", exc)
+                raise newexc from None
+            log.info(f"building image for step '{self.fqname}'")
+            with stimelogging.declare_subtask(self.name):
+                return backend_wrapper.build(self.cargo, log=log, rebuild=rebuild)
+
+
     def run(self, backend={}, subst=None, parent_log=None):
         """Runs the step"""
         from .recipe import Recipe
@@ -330,12 +354,10 @@ class Step:
             backend = OmegaConf.merge(backend, self.cargo.backend or {}, self.backend or {})
             backend_opts = evaluate_and_substitute_object(backend, subst, recursion_level=-1, location=[self.fqname, "backend"])
             backend_opts = OmegaConf.to_object(OmegaConf.merge(StimelaBackendSchema, backend_opts))
-            backend_opts, backend_main, backend_wrapper =  runner.validate_backend_settings(backend_opts)
+            backend_wrapper = runner.validate_backend_settings(backend_opts)
         except Exception as exc:
             newexc = BackendError("error validating backend settings", exc)
             raise newexc from None
-            # self.log_exception(newexc)
-        remote_backend = backend_main.is_remote()
 
         # if step is being explicitly skipped, omit from profiling, and drop info/warning messages to debug level
         explicit_skip = self.skip is True 
@@ -343,7 +365,7 @@ class Step:
             context = nullcontext()
             parent_log_info = parent_log_warning = parent_log.debug
         else:
-            context = stimelogging.declare_subtask(self.name, hide_local_metrics=remote_backend)
+            context = stimelogging.declare_subtask(self.name, hide_local_metrics=backend_wrapper.is_remote)
             stimelogging.declare_chapter(f"{self.fqname}")
             parent_log_info, parent_log_warning = parent_log.info, parent_log.warning
 
@@ -373,7 +395,7 @@ class Step:
             self.log.debug(f"validating inputs {subst and list(subst.keys())}")
             validated = None
             try:
-                params = self.cargo.validate_inputs(params, loosely=skip, remote_fs=remote_backend, subst=subst)
+                params = self.cargo.validate_inputs(params, loosely=skip, remote_fs=backend_wrapper.is_remote_fs, subst=subst)
                 validated = True
 
             except ScabhaBaseException as exc:
@@ -425,7 +447,7 @@ class Step:
 
             ## check if we need to skip based on existing/fresh file outputs
             ## if skip on fresh outputs is in effect, find mtime of most recent input 
-            if not remote_backend and not skip and self.skip_if_outputs:
+            if not backend_wrapper.is_remote_fs and not skip and self.skip_if_outputs:
                 # max_mtime will remain 0 if we're not echecking for freshness, or if there are no file-type inputs
                 max_mtime, max_mtime_path = 0, None
                 if self.skip_if_outputs == OUTPUTS_FRESH:
@@ -515,7 +537,7 @@ class Step:
 
             if not skip:
                 # check for outputs that need removal
-                if not remote_backend:
+                if not backend_wrapper.is_remote_fs:
                     for name, schema in self.outputs.items():
                         if name in params and schema.remove_if_exists and schema.is_file_type:
                             path = params[name]
@@ -528,7 +550,7 @@ class Step:
                 if type(self.cargo) is Recipe:
                     self.cargo._run(params, subst, backend=backend)
                 elif type(self.cargo) is Cab:
-                    cabstat = backend_main.run(self.cargo, params=params, log=self.log, subst=subst, backend=backend_opts, fqname=self.fqname)
+                    cabstat = backend_wrapper.run(self.cargo, params=params, log=self.log, subst=subst, fqname=self.fqname)
                     # check for runstate
                     if cabstat.success is False:
                         raise StimelaCabRuntimeError(f"error running cab '{self.cargo.name}'", cabstat.errors)
@@ -547,7 +569,7 @@ class Step:
             validated = False
 
             try:
-                params = self.cargo.validate_outputs(params, loosely=skip,remote_fs=remote_backend, subst=subst)
+                params = self.cargo.validate_outputs(params, loosely=skip,remote_fs=backend_wrapper.is_remote_fs, subst=subst)
                 validated = True
             except ScabhaBaseException as exc:
                 severity = "warning" if skip else "error"

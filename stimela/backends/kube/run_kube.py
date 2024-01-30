@@ -1,5 +1,5 @@
 import logging, time, json, datetime, os.path, pathlib, secrets, shlex
-from typing import Dict, Optional, Any, List
+from typing import Dict, Optional, Any, List, Callable
 from dataclasses import fields
 from datetime import timedelta
 from requests import ConnectionError
@@ -44,13 +44,13 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
     """
 
     if not cab.image:
-        raise StimelaCabRuntimeError(f"kube runner requires cab.image to be set")
+        raise BackendError(f"kube backend requires cab.image to be set")
 
     kube = backend.kube
 
     namespace = kube.namespace
     if not namespace:
-        raise StimelaCabRuntimeError(f"runtime.kube.namespace must be set")
+        raise BackendError(f"runtime.kube.namespace must be set")
 
     args = cab.flavour.get_arguments(cab, params, subst, check_executable=False)
     log.debug(f"command line is {args}")
