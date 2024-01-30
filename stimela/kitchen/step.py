@@ -317,15 +317,15 @@ class Step:
                 raise AssignmentError(f"{self.name}: invalid assignment {key}={value}", exc)
 
 
-    def build(self, backend={}, rebuild=False, log: Optional[logging.Logger] = None):
+    def build(self, backend={}, rebuild=False, build_skips=False, log: Optional[logging.Logger] = None):
         # skipping step? ignore the build
-        if self.skip is True:
+        if self.skip is True and not build_skips:
             return
         log = log or self.log
         # recurse into sub-recipe 
         from .recipe import Recipe
         if type(self.cargo) is Recipe:
-            return self.cargo.build(backend, rebuild=rebuild, log=log)
+            return self.cargo.build(backend, rebuild=rebuild, build_skips=build_skips, log=log)
         # else build 
         else:
             # validate backend settings and call the build function

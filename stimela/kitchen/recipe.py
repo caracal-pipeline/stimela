@@ -1128,14 +1128,14 @@ class Recipe(Cargo):
 
         return task_stats.collect_stats(), outputs, exception, tb
 
-    def build(self, backend={}, rebuild=False, log: Optional[logging.Logger] = None):
+    def build(self, backend={}, rebuild=False, build_skips=False, log: Optional[logging.Logger] = None):
         # set up backend
         backend = OmegaConf.merge(backend, self.backend or {})
         # build recursively
         log = log or self.log
         log.info(f"building image(s) for recipe '{self.fqname}'")
         for step in self.steps.values():
-            step.build(backend, rebuild=rebuild, log=log)
+            step.build(backend, rebuild=rebuild, build_skips=build_skips, log=log)
 
 
     def _run(self, params, subst=None, backend={}) -> Dict[str, Any]:
