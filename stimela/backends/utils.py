@@ -61,9 +61,16 @@ def resolve_required_mounts(params: Dict[str, Any],
             must_exist = name in inputs            
         readwrite = schema.writable or name in outputs
 
-        # for symlink targets, we need to mount the parent directory
         for path in files:
-            add_target(path, must_exist=must_exist, readwrite=readwrite)
+            path = path.rstrip("/")
+            # check parent access
+            if schema.access_parent_dir or schema.write_parent_dir:
+                add_target(os.path.dirname(path), must_exist=True, readwrite=schema.write_parent_dir)
+            # for symlink targets, we need to mount the parent directory
+            if os.path.islink(path):
+                add_target(os.path.dirname(path), must_exist=True, readwrite=readwrite)
+            else:
+                add_target(path, must_exist=must_exist, readwrite=readwrite)
 
     
     # now eliminate unnecessary targets (those that have a parent mount with the same read/write property)

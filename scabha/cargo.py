@@ -127,6 +127,11 @@ class Parameter(object):
     # if true, treat parameter as a path, and ensure that the parent directories it refers to exist
     mkdir: bool = False
 
+    # if True, and parameter is a path, access to its parent directory is required
+    access_parent_dir: bool = False
+    # if True, and parameter is a path, access to its parent directory is required in writable mode
+    write_parent_dir: bool = False
+
     # for file and dir-type parameters: if True, the file(s)/dir(s) must exist. If False, they can be missing.
     # if None, then the default logic applies: inputs must exist, and outputs don't
     must_exist: Optional[bool] = None

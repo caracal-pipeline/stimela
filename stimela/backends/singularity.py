@@ -106,19 +106,24 @@ def build_command_line(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend
                         subst: Optional[Dict[str, Any]] = None,
                         binary: Optional[str] = None,
                         simg_path: Optional[str] = None):
+    from .utils import resolve_required_mounts
+
     args = cab.flavour.get_arguments(cab, params, subst, check_executable=False)
 
     if simg_path is None:
         _, simg_path = get_image_info(cab, backend)
 
     cwd = os.getcwd()
+    bind_opts = ["--bind", f"{cwd}:{cwd}"]
+    # get extra required filesystem bindings
+    extra_bindings = resolve_required_mounts(params, cab.inputs, cab.outputs, prior_mounts={cwd: True})
+    for path in extra_bindings.keys():
+        bind_opts += ["--bind", f"{path}:{path}"]
 
-    return [binary or backend.singularity.executable or BINARY, 
-            "exec", 
-            "--containall",
-            "--bind", f"{cwd}:{cwd}",
-            "--pwd", cwd,
-            simg_path] + args
+    return  [binary or backend.singularity.executable or BINARY, 
+                "exec", 
+                "--containall", "--pwd", cwd ] + bind_opts + \
+            [simg_path] + args
 
 def build(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBackendOptions', log: logging.Logger,
           command_wrapper: Optional[Callable]=None,
@@ -254,6 +259,8 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     Returns:
         Any: return value (e.g. exit code) of content
     """
+    from .utils import resolve_required_mounts
+
     native.update_rlimits(backend.rlimits, log)
 
     # get path to image, rebuilding if backend options allow this
@@ -264,9 +271,15 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     args = [backend.singularity.executable or BINARY, 
             "exec", 
             "--containall",
-            "--bind", f"{cwd}:{cwd}",
             "--pwd", cwd,
-            simg_path] 
+            "--bind", f"{cwd}:{cwd}:rw"]
+    
+    # get extra required filesystem bindings
+    extra_bindings = resolve_required_mounts(params, cab.inputs, cab.outputs, prior_mounts={cwd: True})
+    for path, rw in extra_bindings.items():
+        args += ["--bind", f"{path}:{path}:{'rw' if rw else 'ro'}"]
+
+    args += [simg_path]
     args += cab.flavour.get_arguments(cab, params, subst, check_executable=False)
     log.debug(f"command line is {args}")
 
