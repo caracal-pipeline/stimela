@@ -56,21 +56,33 @@ def resolve_required_mounts(params: Dict[str, Any],
         else:
             continue
 
-        must_exist = schema.must_exist
-        if must_exist is None:
-            must_exist = name in inputs            
+        must_exist = schema.must_exist and name in inputs 
         readwrite = schema.writable or name in outputs
 
         for path in files:
             path = path.rstrip("/")
-            # check parent access
+            realpath = os.path.realpath(path)
+            exists = os.path.lexists(path)
+            # check if parent directory access is required
             if schema.access_parent_dir or schema.write_parent_dir:
                 add_target(os.path.dirname(path), must_exist=True, readwrite=schema.write_parent_dir)
-            # for symlink targets, we need to mount the parent directory
+                add_target(os.path.dirname(realpath), must_exist=True, readwrite=schema.write_parent_dir)
+            # for symlink targets, we need to mount the parent directory of the link too
             if os.path.islink(path):
-                add_target(os.path.dirname(path), must_exist=True, readwrite=readwrite)
+                # parent of link must be mounted
+                add_target(os.path.dirname(path), must_exist=True, readwrite=False)
+                # if target is a directory, mount it
+                if os.path.isdir(realpath):
+                    add_target(realpath, must_exist=True, readwrite=readwrite)
+                # otherwise mount its parent to allow creation
+                else:
+                    add_target(os.path.dirname(realpath), must_exist=True, readwrite=readwrite)
+            # for file targets, mount the parent, for dirs, mount the dir
             else:
-                add_target(path, must_exist=must_exist, readwrite=readwrite)
+                if os.path.isdir(path):
+                    add_target(path, must_exist=must_exist, readwrite=readwrite)
+                else:
+                    add_target(os.path.dirname(path), must_exist=True, readwrite=readwrite)
 
     
     # now eliminate unnecessary targets (those that have a parent mount with the same read/write property)
