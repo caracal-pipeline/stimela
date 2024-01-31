@@ -87,7 +87,7 @@ def load_recipe_file(filename: str):
 def run(what: str, parameters: List[str] = [], dry_run: bool = False, last_recipe: bool = False, profile: Optional[int] = None,
     assign: List[Tuple[str, str]] = [],
     step_ranges: List[str] = [], tags: List[str] = [], skip_tags: List[str] = [], enable_steps: List[str] = [],
-    build=False, rebuild=False):
+    build=False, rebuild=False, build_skips=False):
 
     log = logger()
     params = OrderedDict()
@@ -256,16 +256,17 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, last_recip
             sys.exit(1)        
 
         # select recipe substeps based on command line, and exit if nothing to run
-        selection_options = []
-        for opts in (tags, skip_tags, step_ranges, enable_steps):
-            selection_options.append(set(itertools.chain(*(opt.split(",") for opt in opts))))
-        
-        try:
-            if not recipe.restrict_steps(*selection_options):
-                sys.exit(0)
-        except StepSelectionError as exc:
-            log_exception(exc)
-            sys.exit(2)
+        if not build_skips: 
+            selection_options = []
+            for opts in (tags, skip_tags, step_ranges, enable_steps):
+                selection_options.append(set(itertools.chain(*(opt.split(",") for opt in opts))))
+            
+            try:
+                if not recipe.restrict_steps(*selection_options):
+                    sys.exit(0)
+            except StepSelectionError as exc:
+                log_exception(exc)
+                sys.exit(2)
 
         logdir = stimelogging.get_logfile_dir(recipe.log) or '.'
         log.info(f"recipe logs will be saved under {logdir}")
@@ -292,7 +293,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, last_recip
     # build the images
     if build:
         try:
-            outer_step.build(backend=stimela.CONFIG.opts.backend, rebuild=rebuild, log=log)
+            outer_step.build(backend=stimela.CONFIG.opts.backend, rebuild=rebuild, build_skips=build_skips, log=log)
         except Exception as exc:
             stimela.backends.close_backends(log)
 
