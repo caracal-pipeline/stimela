@@ -100,31 +100,6 @@ def get_image_info(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.Sti
     return image_name, simg_path, True
 
 
-def build_command_line(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBackendOptions',
-                        params: Dict[str, Any], 
-                        binds: List[Any],
-                        subst: Optional[Dict[str, Any]] = None,
-                        binary: Optional[str] = None,
-                        simg_path: Optional[str] = None):
-    from .utils import resolve_required_mounts
-
-    args = cab.flavour.get_arguments(cab, params, subst, check_executable=False)
-
-    if simg_path is None:
-        _, simg_path = get_image_info(cab, backend)
-
-    cwd = os.getcwd()
-    bind_opts = ["--bind", f"{cwd}:{cwd}"]
-    # get extra required filesystem bindings
-    extra_bindings = resolve_required_mounts(params, cab.inputs, cab.outputs, prior_mounts={cwd: True})
-    for path in extra_bindings.keys():
-        bind_opts += ["--bind", f"{path}:{path}"]
-
-    return  [binary or backend.singularity.executable or BINARY, 
-                "exec", 
-                "--containall", "--pwd", cwd ] + bind_opts + \
-            [simg_path] + args
-
 def build(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBackendOptions', log: logging.Logger,
           command_wrapper: Optional[Callable]=None,
           build=True, rebuild=False):
@@ -271,12 +246,13 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     args = [backend.singularity.executable or BINARY, 
             "exec", 
             "--containall",
-            "--pwd", cwd,
-            "--bind", f"{cwd}:{cwd}:rw"]
+            "--pwd", cwd]
     
+    # initial set of mounts has cwd as read-write
+    mounts = {cwd: True}
     # get extra required filesystem bindings
-    extra_bindings = resolve_required_mounts(params, cab.inputs, cab.outputs, prior_mounts={cwd: True})
-    for path, rw in extra_bindings.items():
+    resolve_required_mounts(mounts, params, cab.inputs, cab.outputs)
+    for path, rw in mounts.items():
         args += ["--bind", f"{path}:{path}:{'rw' if rw else 'ro'}"]
 
     args += [simg_path]

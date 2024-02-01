@@ -8,39 +8,20 @@ from scabha.basetypes import File, Directory, MS
 
 ## commenting out for now -- will need to fix when we reactive the kube backend (and have tests for it)
 
-def resolve_required_mounts(params: Dict[str, Any], 
+def resolve_required_mounts(mounts: Dict[str, bool],
+                            params: Dict[str, Any], 
                             inputs: Dict[str, Parameter], 
                             outputs: Dict[str, Parameter],
-                            prior_mounts: Dict[str, bool]):
+                            ):
 
     mkdirs = {}
-    targets = {}
 
     # helper function to accumulate list of target paths to be mounted
-    def add_target(path, must_exist, readwrite):
+    def add_target(param_name, path, must_exist, readwrite):
         if must_exist and not os.path.exists(path):
-            raise SchemaError(f"{path} does not exist.")
-
+            raise SchemaError(f"parameter '{param_name}': path '{path}' does not exist")
         path = os.path.abspath(path)
-
-        # if path doesn't exist, mount parent dir as read/write (file will be created in there)
-        if not os.path.lexists(path):
-            add_target(os.path.dirname(path), must_exist=True, readwrite=True)
-        # else path is real
-        else:
-            # already mounted? Make sure readwrite is updated
-            if path in targets:
-                targets[path] = targets[path] or readwrite
-            else:
-                # not mounted, but is a link
-                if os.path.islink(path):
-                    # add destination as target
-                    add_target(os.path.realpath(path), must_exist=must_exist, readwrite=readwrite)
-                    # add parent dir as readonly target (to resolve the symlink)
-                    add_target(os.path.dirname(path), must_exist=True, readwrite=False)
-                # add to mounts
-                else:
-                    targets[path] = readwrite
+        mounts[path] = mounts.get(path) or readwrite
 
     # go through parameters and accumulate target paths
     for name, value in params.items():
@@ -60,48 +41,45 @@ def resolve_required_mounts(params: Dict[str, Any],
         readwrite = schema.writable or name in outputs
 
         for path in files:
-            path = path.rstrip("/")
-            realpath = os.path.realpath(path)
-            exists = os.path.lexists(path)
+            # check for s3:// MS references and skip them
+            if path.startswith("s3://") or path.startswith("S3://"):
+                continue
+            path = os.path.abspath(path).rstrip("/")
+            realpath = os.path.abspath(os.path.realpath(path))
             # check if parent directory access is required
             if schema.access_parent_dir or schema.write_parent_dir:
-                add_target(os.path.dirname(path), must_exist=True, readwrite=schema.write_parent_dir)
-                add_target(os.path.dirname(realpath), must_exist=True, readwrite=schema.write_parent_dir)
+                add_target(name, os.path.dirname(path), must_exist=True, readwrite=schema.write_parent_dir)
+                add_target(name, os.path.dirname(realpath), must_exist=True, readwrite=schema.write_parent_dir)
             # for symlink targets, we need to mount the parent directory of the link too
             if os.path.islink(path):
-                # parent of link must be mounted
-                add_target(os.path.dirname(path), must_exist=True, readwrite=False)
-                # if target is a directory, mount it
+                # if target is a real directory, mount it directly
                 if os.path.isdir(realpath):
-                    add_target(realpath, must_exist=True, readwrite=readwrite)
-                # otherwise mount its parent to allow creation
+                    add_target(name, realpath, must_exist=True, readwrite=readwrite)
+                # otherwise mount its parent to allow creation of symlink target
                 else:
-                    add_target(os.path.dirname(realpath), must_exist=True, readwrite=readwrite)
-            # for file targets, mount the parent, for dirs, mount the dir
+                    add_target(name, os.path.dirname(realpath), must_exist=True, readwrite=readwrite)
+            # for actual targets, mount the parent, for dirs, mount the dir
             else:
                 if os.path.isdir(path):
-                    add_target(path, must_exist=must_exist, readwrite=readwrite)
+                    add_target(name, path, must_exist=must_exist, readwrite=readwrite)
                 else:
-                    add_target(os.path.dirname(path), must_exist=True, readwrite=readwrite)
+                    add_target(name, os.path.dirname(path), must_exist=True, readwrite=readwrite)
 
     
-    # now eliminate unnecessary targets (those that have a parent mount with the same read/write property)
+    # now eliminate unnecessary mounts (those that have a parent mount with no lower read/write privileges)
     skip_targets = set()
 
-    for path, readwrite in targets.items():
+    for path, readwrite in mounts.items():
         parent = os.path.dirname(path)
         while parent != "/":  
             # if parent already mounted, and is as writeable as us, skip us
-            if (parent in targets and targets[parent] >= readwrite) or \
-                (parent in prior_mounts and prior_mounts[parent] >= readwrite):
+            if parent in mounts and mounts[parent] >= readwrite:
                 skip_targets.add(path)
                 break
             parent = os.path.dirname(parent)
 
     for path in skip_targets:
-        targets.pop(path)
-
-    return targets
+        mounts.pop(path)
 
 
 def resolve_remote_mounts(params: Dict[str, Any], 
