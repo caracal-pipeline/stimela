@@ -17,6 +17,16 @@ from rich.text import Text
 
 from stimela import stimelogging
 
+# this is "" for the main process, ".0", ".1", for subprocesses, ".0.0" for nested subprocesses
+_subprocess_identifier = ""
+
+def get_subprocess_id():
+    return _subprocess_identifier
+
+def add_subprocess_id(num: int):
+    global _subprocess_identifier
+    _subprocess_identifier += f".{num}"
+
 progress_bar = progress_task = None
 
 _start_time = datetime.now()
@@ -25,6 +35,7 @@ _prev_disk_io = None, None
 @dataclass
 class TaskInformation(object):
     names: List[str]
+    status: str = ""
     task_attrs: List[str] = EmptyListDefault()
     command: Optional[str] = None
     status_reporter: Optional[Callable] = None
@@ -36,8 +47,11 @@ class TaskInformation(object):
     @property
     def description(self):
         name = '.'.join(self.names)
-        if self.task_attrs:
-            name += f"\[{', '.join(self.task_attrs)}]"
+        # if self.status:
+        #     name += f": [dim]{self.status}[/dim]"
+        ## OMS: omit attributes from task status for now
+        # if self.task_attrs:
+        #     name += f"\[{', '.join(self.task_attrs)}]"
         return name
 
 # stack of task information -- most recent subtask is at the end
@@ -51,6 +65,7 @@ def init_progress_bar(boring=False):
         "[yellow]{task.fields[elapsed_time]}[/yellow]",
         "[bold]{task.description}[/bold]",
         rich.progress.SpinnerColumn(),
+        "[dim]{task.fields[status]}[/dim]",
         "{task.fields[command]}",
         rich.progress.TimeElapsedColumn(),
         "{task.fields[cpu_info]}",
@@ -59,7 +74,7 @@ def init_progress_bar(boring=False):
         transient=True,
         disable=boring)
 
-    progress_task = progress_bar.add_task("stimela", command="starting", cpu_info=" ", elapsed_time="", start=True)
+    progress_task = progress_bar.add_task("stimela", status="", command="starting", cpu_info=" ", elapsed_time="", start=True)
     progress_bar.__enter__()
     atexit.register(destroy_progress_bar)
     return progress_bar, progress_console
@@ -72,7 +87,11 @@ def destroy_progress_bar():
 
 @contextlib.contextmanager
 def declare_subtask(subtask_name, status_reporter=None, hide_local_metrics=False):
-    task_names = (_task_stack[-1].names if _task_stack else []) + [subtask_name]
+    task_names = []
+    if _task_stack:
+        task_names = _task_stack[-1].names + \
+                    (_task_stack[-1].task_attrs or [])
+    task_names.append(subtask_name)
     _task_stack.append(
         TaskInformation(task_names, status_reporter=status_reporter, hide_local_metrics=hide_local_metrics)
     )
@@ -82,6 +101,11 @@ def declare_subtask(subtask_name, status_reporter=None, hide_local_metrics=False
     finally:
         _task_stack.pop(-1)
         update_process_status()
+
+
+def declare_subtask_status(status):
+    _task_stack[-1].status = status
+    update_process_status()
 
 
 def declare_subtask_attributes(*args, **kw):
@@ -179,7 +203,7 @@ def collect_stats():
 
 
 def add_missing_stats(stats):
-    """Adds stats that wren't recorded into dictionary"""
+    """Adds stats that weren't recorded into dictionary"""
     for key, value in stats.items():
         if key not in _taskstats:
             _taskstats[key] = value
@@ -267,7 +291,7 @@ def update_process_status():
             if io is not None:
                 cpu_info += [
                     f"R [green]{s.read_count:-4}[/green] [green]{s.read_gbps:2.2f}[/green]G [green]{s.read_ms:4}[/green]ms",
-                    f"|W [green]{s.write_count:-4}[/green] [green]{s.write_gbps:2.2f}[/green]G [green]{s.write_ms:4}[/green]ms "
+                    f"W [green]{s.write_count:-4}[/green] [green]{s.write_gbps:2.2f}[/green]G [green]{s.write_ms:4}[/green]ms "
                 ]
         # add extra metering
         cpu_info += extra_metrics or []
@@ -276,6 +300,7 @@ def update_process_status():
 
         if ti is not None:
             updates['description'] = ti.description
+            updates['status'] = ti.status or ''
             updates['command'] = ti.command or ''
 
         progress_bar.update(progress_task, **updates)
