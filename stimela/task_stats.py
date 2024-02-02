@@ -89,6 +89,8 @@ def restate_progress():
     """Renders a snapshot of the progress bar onto the console"""
     if progress_bar is not None:
         progress_console.print(progress_bar.get_renderable())
+        progress_console.rule()
+
 
 @contextlib.contextmanager
 def declare_subtask(subtask_name, status_reporter=None, hide_local_metrics=False):
