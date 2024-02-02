@@ -8,7 +8,7 @@ from contextlib import nullcontext
 
 from stimela.config import EmptyDictDefault, EmptyListDefault
 import stimela
-from stimela import log_exception, stimelogging
+from stimela import log_exception, stimelogging, task_stats
 from stimela.backends import StimelaBackendSchema, runner
 from stimela.exceptions import *
 import scabha.exceptions
@@ -337,7 +337,7 @@ class Step:
                 newexc = BackendError("error validating backend settings", exc)
                 raise newexc from None
             log.info(f"building image for step '{self.fqname}'")
-            with stimelogging.declare_subtask(self.name):
+            with task_stats.declare_subtask(self.name):
                 return backend_wrapper.build(self.cargo, log=log, rebuild=rebuild)
 
 
@@ -365,7 +365,7 @@ class Step:
             context = nullcontext()
             parent_log_info = parent_log_warning = parent_log.debug
         else:
-            context = stimelogging.declare_subtask(self.name, hide_local_metrics=backend_wrapper.is_remote)
+            context = task_stats.declare_subtask(self.name, hide_local_metrics=backend_wrapper.is_remote)
             stimelogging.declare_chapter(f"{self.fqname}")
             parent_log_info, parent_log_warning = parent_log.info, parent_log.warning
 
