@@ -32,7 +32,7 @@ class BackendWrapper(object):
                                 command_wrapper=self.build_command_wrapper)
 
 
-def validate_backend_settings(backend_opts: Dict[str, Any]) -> BackendWrapper:
+def validate_backend_settings(backend_opts: Dict[str, Any], log: logging.Logger) -> BackendWrapper:
     """Checks that backend settings refer to a valid backend
     
     Returs tuple of options, main, wrapper, where 'main' the the main backend, and 'wrapper' is an optional wrapper backend 
@@ -63,6 +63,7 @@ def validate_backend_settings(backend_opts: Dict[str, Any]) -> BackendWrapper:
             raise BackendError(f"can't combine slurm with {backend_name} backend")
         is_remote = True
         is_remote_fs = False
+        backend_opts.slurm.validate(log)
         run_command_wrapper = backend_opts.slurm.run_command_wrapper
         build_command_wrapper = backend_opts.slurm.build_command_wrapper
     else:
