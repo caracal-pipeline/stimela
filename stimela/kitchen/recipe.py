@@ -621,7 +621,7 @@ class Recipe(Cargo):
             self.logopts = config.opts.log.copy()
 
             # update file logger
-            logsubst = SubstitutionNS(config=config, info=dict(fqname=fqname))
+            logsubst = SubstitutionNS(config=config, info=dict(fqname=fqname, taskname=fqname))
             stimelogging.update_file_logger(log, self.logopts, nesting=nesting, subst=logsubst, location=[self.fqname])
 
             # call Cargo's finalize method
@@ -744,7 +744,7 @@ class Recipe(Cargo):
         subst_outer = subst  # outer dictionary is used to prevalidate our parameters
 
         subst = SubstitutionNS()
-        info = SubstitutionNS(fqname=self.fqname, label='', label_parts=[], suffix='')
+        info = SubstitutionNS(fqname=self.fqname, taskname=self.fqname, label='', label_parts=[], suffix='')
         # mutable=False means these sub-namespaces are not subject to {}-substitutions
         subst._add_('info', info.copy(), nosubst=True)
         subst._add_('config', self.config, nosubst=True) 
@@ -1037,7 +1037,7 @@ class Recipe(Cargo):
                 alias.step.update_parameter(alias.param, value)
 
 
-    def _iterate_loop_worker(self, params, info, subst, backend, count, iter_var, subprocess=False, raise_exc=True):
+    def _iterate_loop_worker(self, params, subst, backend, count, iter_var, subprocess=False, raise_exc=True):
         """"
         Needed for concurrency
         """
@@ -1046,6 +1046,7 @@ class Recipe(Cargo):
             task_stats.add_subprocess_id(count)
             task_stats.destroy_progress_bar()
         subst.info.subprocess = task_stats.get_subprocess_id()
+        taskname = subst.info.taskname
         outputs = {}
         exception = tb = None
         task_attrs, task_kwattrs = (), {}
@@ -1075,6 +1076,8 @@ class Recipe(Cargo):
                 if status is None:
                     status = "{index1}/{total}".format(**status_dict)
                 task_stats.declare_subtask_status(status)
+                taskname = f"{taskname}.{count}"
+                subst.info.taskname = taskname 
                 # task_stats.declare_subtask_attributes(count)
                 # task_attrs = (count,)
                 context = task_stats.declare_subtask(f"({count})")
@@ -1085,6 +1088,7 @@ class Recipe(Cargo):
                 for label, step in self.steps.items():
                     # update step info
                     self._prep_step(label, step, subst)
+                    subst.info.taskname = f"{taskname}.{label}"
                     # reevaluate recipe level assignments (info.fqname etc. have changed)
                     self.update_assignments(subst, params=params)
                     # evaluate step-level assignments
@@ -1092,9 +1096,12 @@ class Recipe(Cargo):
                     # step logger may have changed
                     stimelogging.update_file_logger(step.log, step.logopts, nesting=step.nesting, subst=subst, location=[step.fqname])
                     # set our info back temporarily to update log assignments
-                    info_step = subst.info
-                    subst.info = info.copy()
-                    subst.info = info_step
+
+                    ## OMS: note to self, I had this here but not sure why. Seems like a no-op. Something with logname fiddling.
+                    ## Leave as a puzzle to future self for a bit. Remove info from args.
+                    # info_step = subst.info
+                    # subst.info = info.copy()
+                    # subst.info = info_step
 
                     if step.skip is True:
                         self.log.debug(f"step '{label}' will be explicitly skipped")
@@ -1137,7 +1144,7 @@ class Recipe(Cargo):
             # else will be returned
             exception = exc
             tb = FormattedTraceback(sys.exc_info()[2])
-        
+
         return task_attrs, task_kwattrs, task_stats.collect_stats(), outputs, exception, tb
 
     def build(self, backend={}, rebuild=False, build_skips=False, log: Optional[logging.Logger] = None):
@@ -1172,8 +1179,11 @@ class Recipe(Cargo):
         subst_outer = subst
         if subst is None:
             subst = SubstitutionNS()
+            taskname = self.name
+        else:
+            taskname = subst.info.taskname
 
-        info = SubstitutionNS(fqname=self.fqname, label='', label_parts=[], suffix='')
+        info = SubstitutionNS(fqname=self.fqname, label='', label_parts=[], suffix='', taskname=taskname)
         # nosubst=True means these sub-namespaces are not subject to {}-substitutions
         subst._add_('info', info.copy(), nosubst=True)
         subst._add_('config', self.config, nosubst=True)
@@ -1224,7 +1234,7 @@ class Recipe(Cargo):
             # form list of arguments for each invocation of the loop worker
             loop_worker_args = []
             for count, iter_var in enumerate(self._for_loop_values):
-                loop_worker_args.append((params, info, subst, backend, count, iter_var))
+                loop_worker_args.append((params, subst, backend, count, iter_var))
 
             # if scatter is enabled, use a process pool
             if self._for_loop_scatter:
@@ -1264,6 +1274,8 @@ class Recipe(Cargo):
                     if errors:
                         pool.shutdown()
                         raise StimelaRuntimeError(f"{nfail}/{nloop} jobs have failed", errors)
+                # drop a rendering of the progress bar onto the console, to overwrite previous garbage if it's there
+                task_stats.restate_progress()
             # else just iterate directly
             else:
                 for args in loop_worker_args:

@@ -85,6 +85,11 @@ def destroy_progress_bar():
         progress_bar.__exit__(None, None, None)
         progress_bar = None
 
+def restate_progress():
+    """Renders a snapshot of the progress bar onto the console"""
+    if progress_bar is not None:
+        progress_console.print(progress_bar.get_renderable())
+
 @contextlib.contextmanager
 def declare_subtask(subtask_name, status_reporter=None, hide_local_metrics=False):
     task_names = []
