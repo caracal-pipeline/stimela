@@ -199,7 +199,7 @@ def build(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBacke
         args = [BINARY, "build", simg_path, f"docker://{image_name}"]
 
         if command_wrapper:
-            args = command_wrapper(args)
+            args = command_wrapper(args, log=log)
 
         retcode = xrun(args[0], args[1:], shell=False, log=log,
                     return_errcode=True, command_name="(singularity build)", 
@@ -272,7 +272,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     # log.info(f"argument lengths are {[len(a) for a in args]}")
 
     if command_wrapper:
-        args = command_wrapper(args, fqname=fqname)
+        args = command_wrapper(args, fqname=fqname, log=log)
 
     retcode = xrun(args[0], args[1:], shell=False, log=log,
                 output_wrangler=cabstat.apply_wranglers,

@@ -17,9 +17,7 @@ from rich.markup import escape
 from rich.padding import Padding
 
 from . import task_stats
-from .task_stats import declare_subtask, declare_subtask_attributes, \
-                        declare_subcommand, update_process_status, \
-                        run_process_status_update
+from .task_stats import declare_subcommand, declare_subtask, declare_subtask_attributes, run_process_status_update
 
 class FunkyMessage(object):
     """Class representing a message with two versions: funky (with markup), and boring (no markup)"""
