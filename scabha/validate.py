@@ -289,10 +289,18 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
     # check for mkdir directives
     if create_dirs:
         for name, value in validated.items():
-            if schemas[name].mkdir and isinstance(value, str):
-                dirname = os.path.dirname(value)
-                if dirname and not os.path.exists(dirname):
-                    os.makedirs(dirname, exist_ok=True)
+            schema = schemas[name]
+            if schema.is_output and schema.mkdir:
+                if schema.is_file_type:
+                    files = [value]
+                elif schema.is_filelist_type:
+                    files = value
+                else:
+                    continue
+                for path in files:
+                    dirname = os.path.dirname(path)
+                    if dirname and not os.path.exists(dirname):
+                        os.makedirs(dirname, exist_ok=True)
 
     # add in unresolved values
     validated.update(**unresolved)
