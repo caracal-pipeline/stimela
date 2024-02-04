@@ -293,7 +293,7 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
             if schema.is_output and schema.mkdir:
                 if schema.is_file_type:
                     files = [value]
-                elif schema.is_filelist_type:
+                elif schema.is_file_list_type:
                     files = value
                 else:
                     continue
