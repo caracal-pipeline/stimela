@@ -193,7 +193,7 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
     # convert this to a pydantic dataclass which does validation
     pcls = pydantic.dataclasses.dataclass(dcls)
 
-    # check Files etc. and expand globs
+    # check Files etc. 
     for name, value in list(inputs.items()):
         # get schema from those that need validation, skip if not in schemas
         schema = schemas.get(name)
@@ -227,6 +227,8 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
                 files = value
             else:
                 raise ParameterValidationError(f"'{mkname(name)}={value}': invalid type '{type(value)}'")
+            # expand ~
+            files = [os.path.expanduser(f) for f in files]
           
             # check for existence of all files in list, if needed
             if must_exist: 
