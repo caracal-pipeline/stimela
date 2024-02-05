@@ -124,8 +124,8 @@ class Parameter(object):
     # list of aliases for this parameter (i.e. references to other parameters whose schemas/values this parameter shares)
     aliases: Optional[List[str]] = ()
 
-    # if true, treat parameter as a path, and ensure that the parent directories it refers to exist
-    mkdir: bool = False
+    # if true, create parent directories of file-type outputs if needed
+    mkdir: bool = True
 
     # if True, and parameter is a path, access to its parent directory is required
     access_parent_dir: bool = False

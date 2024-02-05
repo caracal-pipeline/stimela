@@ -103,7 +103,7 @@ def cli(config_files=[], config_dotlist=[], include=[], backend=None,
             stimela.CONFIG.opts.log.level = "DEBUG"
         # setup file logging
         subst = OmegaConf.create(dict(
-                    info=OmegaConf.create(dict(fqname='stimela')), 
+                    info=OmegaConf.create(dict(fqname='stimela', taskname='stimela')), 
                     config=stimela.CONFIG))
         stimelogging.update_file_logger(log, stimela.CONFIG.opts.log, nesting=-1, subst=subst)
 

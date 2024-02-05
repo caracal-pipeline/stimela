@@ -46,8 +46,9 @@ class SlurmOptions(object):
     def run_command_wrapper(self, args: List[str], fqname: Optional[str]=None, log: Optional[logging.Logger]=None) -> List[str]:
         output_args = [self.get_executable()]
 
+        # reverse fqname to make job name (more informative that way)
         if fqname is not None:
-            output_args += ["-J", fqname]
+            output_args += ["-J", '.'.join(fqname.split('.')[::-1])]
 
         # add all base options that have been specified
         for name, value in self.srun_opts.items():

@@ -144,6 +144,9 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]]):
     decorator_chain = None
     for io in schemas.inputs, schemas.outputs:
         for name, schema in io.items():
+            # skip outputs, unless they're named outputs
+            if io is schemas.outputs and not (schema.is_file_type and not schema.implicit):
+                continue
 
             name = name.replace("_", "-")
             optname = f"--{name}"
