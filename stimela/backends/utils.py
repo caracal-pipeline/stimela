@@ -59,14 +59,21 @@ def resolve_required_mounts(mounts: Dict[str, bool],
                 add_target(name, os.path.dirname(path), must_exist=True, readwrite=readwrite)
             else:
                 add_target(name, path, must_exist=must_exist, readwrite=readwrite)
-
     
+    # now, for any mount that has a symlink in the path, add the symlink target to mounts
+    for path, readwrite in list(mounts.items()):
+        while path != "/":
+            if os.path.islink(path):
+                realpath = os.path.realpath(path)
+                mounts[realpath] = mounts.get(realpath) or readwrite
+            path = os.path.dirname(path)
+
     # now eliminate unnecessary mounts (those that have a parent mount with no lower read/write privileges)
     skip_targets = set()
 
     for path, readwrite in mounts.items():
         parent = os.path.dirname(path)
-        while parent != "/":  
+        while parent != "/":
             # if parent already mounted, and is as writeable as us, skip us
             if parent in mounts and mounts[parent] >= readwrite:
                 skip_targets.add(path)
