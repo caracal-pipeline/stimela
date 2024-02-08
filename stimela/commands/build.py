@@ -28,11 +28,8 @@ from stimela.main import cli
                 help="""explicitly skips steps wth the given tags. 
                 Use commas, or give multiple times for multiple tags.""")
 @click.option("-e", "--enable-step", "enable_steps", metavar="STEP(s)", multiple=True,
-                help="""Force-enable steps even if the recipe marks them as skipped. Use commas, or give multiple times 
+                help="""Builds a step even if the recipe marks it as skipped. Use commas, or give multiple times 
                 for multiple steps.""")
-@click.option("-a", "--assign", metavar="PARAM VALUE", nargs=2, multiple=True,
-                help="""assigns values to parameters: equivalent to PARAM=VALUE, but plays nicer with the shell's 
-                tab completion.""")
 @click.option("-l", "--last-recipe", is_flag=True,
                 help="""if multiple recipes are defined, selects the last one for building.""")
 @click.argument("what", metavar="filename.yml|cab name") 
