@@ -4,6 +4,7 @@ import hashlib
 import datetime
 import fnmatch
 import subprocess
+from shutil import which
 from dataclasses import dataclass
 
 from omegaconf.omegaconf import OmegaConf, DictConfig, ListConfig
@@ -32,6 +33,7 @@ class ConfigDependencies(object):
     def __init__(self):
         self.deps = OmegaConf.create()
         self.fails = OmegaConf.create()
+        self._git = which("git")
         # self.provides = OmegaConf.create()
         # self.requires = OmegaConf.create()
     
@@ -107,6 +109,8 @@ class ConfigDependencies(object):
         # check cache first
         if dirname in self._git_cache:
             return self._git_cache[dirname]
+        if not self._git:
+            return None
         try:
             branches = subprocess.check_output("git -c color.ui=never branch -a -v -v".split(), 
                                                 cwd=dirname, 
