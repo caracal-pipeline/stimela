@@ -621,7 +621,7 @@ class Recipe(Cargo):
             self.logopts = config.opts.log.copy()
 
             # update file logger
-            logsubst = SubstitutionNS(config=config, info=dict(fqname=fqname))
+            logsubst = SubstitutionNS(config=config, info=dict(fqname=fqname, taskname=fqname))
             stimelogging.update_file_logger(log, self.logopts, nesting=nesting, subst=logsubst, location=[self.fqname])
 
             # call Cargo's finalize method
@@ -744,7 +744,7 @@ class Recipe(Cargo):
         subst_outer = subst  # outer dictionary is used to prevalidate our parameters
 
         subst = SubstitutionNS()
-        info = SubstitutionNS(fqname=self.fqname, label='', label_parts=[], suffix='')
+        info = SubstitutionNS(fqname=self.fqname, taskname=self.fqname, label='', label_parts=[], suffix='')
         # mutable=False means these sub-namespaces are not subject to {}-substitutions
         subst._add_('info', info.copy(), nosubst=True)
         subst._add_('config', self.config, nosubst=True) 
@@ -1037,12 +1037,19 @@ class Recipe(Cargo):
                 alias.step.update_parameter(alias.param, value)
 
 
-    def _iterate_loop_worker(self, params, info, subst, backend, count, iter_var, raise_exc=True):
+    def _iterate_loop_worker(self, params, subst, backend, count, iter_var, subprocess=False, raise_exc=True):
         """"
         Needed for concurrency
         """
+        # close progress bar in subprocesses
+        if subprocess:
+            task_stats.add_subprocess_id(count)
+            task_stats.destroy_progress_bar()
+        subst.info.subprocess = task_stats.get_subprocess_id()
+        taskname = subst.info.taskname
         outputs = {}
         exception = tb = None
+        task_attrs, task_kwattrs = (), {}
         try:
             # if for-loop, assign new value
             if self.for_loop:
@@ -1068,55 +1075,67 @@ class Recipe(Cargo):
                         self.log.warning(f"error formatting for-loop status: {exc}, falling back on default status display")
                 if status is None:
                     status = "{index1}/{total}".format(**status_dict)
-                stimelogging.declare_subtask_attributes(status)
+                task_stats.declare_subtask_status(status)
+                taskname = f"{taskname}.{count}"
+                subst.info.taskname = taskname 
+                # task_stats.declare_subtask_attributes(count)
+                # task_attrs = (count,)
+                context = task_stats.declare_subtask(f"({count})")
+            else:
+                from contextlib import nullcontext
+                context = nullcontext()
+            with context: 
+                for label, step in self.steps.items():
+                    # update step info
+                    self._prep_step(label, step, subst)
+                    subst.info.taskname = f"{taskname}.{label}"
+                    # reevaluate recipe level assignments (info.fqname etc. have changed)
+                    self.update_assignments(subst, params=params)
+                    # evaluate step-level assignments
+                    self.update_assignments(subst, whose=step, params=params)
+                    # step logger may have changed
+                    stimelogging.update_file_logger(step.log, step.logopts, nesting=step.nesting, subst=subst, location=[step.fqname])
+                    # set our info back temporarily to update log assignments
 
-            for label, step in self.steps.items():
-                # update step info
-                self._prep_step(label, step, subst)
-                # reevaluate recipe level assignments (info.fqname etc. have changed)
-                self.update_assignments(subst, params=params)
-                # evaluate step-level assignments
-                self.update_assignments(subst, whose=step, params=params)
-                # step logger may have changed
-                stimelogging.update_file_logger(step.log, step.logopts, nesting=step.nesting, subst=subst, location=[step.fqname])
-                # set our info back temporarily to update log assignments
-                info_step = subst.info
-                subst.info = info.copy()
-                subst.info = info_step
+                    ## OMS: note to self, I had this here but not sure why. Seems like a no-op. Something with logname fiddling.
+                    ## Leave as a puzzle to future self for a bit. Remove info from args.
+                    # info_step = subst.info
+                    # subst.info = info.copy()
+                    # subst.info = info_step
 
-                if step.skip is True:
-                    self.log.debug(f"step '{label}' will be explicitly skipped")
-                else:
-                    self.log.info(f"processing step '{label}'")
-                    if step.info:
-                        self.log.info(f"  ({step.info})", extra=dict(color="GREEN", boldface=True))
-                try:
-                    #step_params = step.run(subst=subst.copy(), batch=batch)  # make a copy of the subst dict since recipe might modify
-                    step_params = step.run(backend=backend, subst=subst.copy(), parent_log=self.log)  # make a copy of the subst dict since recipe might modify
-                except ScabhaBaseException as exc:
-                    newexc = StimelaStepExecutionError(f"step '{step.fqname}' has failed, aborting the recipe", exc)
-                    if not exc.logged:
-                        log_exception(newexc, log=step.log)
-                    raise newexc
+                    if step.skip is True:
+                        self.log.debug(f"step '{label}' will be explicitly skipped")
+                    else:
+                        self.log.info(f"processing step '{label}'")
+                        if step.info:
+                            self.log.info(f"  ({step.info})", extra=dict(color="GREEN", boldface=True))
+                    try:
+                        #step_params = step.run(subst=subst.copy(), batch=batch)  # make a copy of the subst dict since recipe might modify
+                        step_params = step.run(backend=backend, subst=subst.copy(), parent_log=self.log)  # make a copy of the subst dict since recipe might modify
+                    except ScabhaBaseException as exc:
+                        newexc = StimelaStepExecutionError(f"step '{step.fqname}' has failed, aborting the recipe", exc)
+                        if not exc.logged:
+                            log_exception(newexc, log=step.log)
+                        raise newexc
 
-                # put step parameters into previous and steps[label] again, as they may have changed based on outputs)
-                subst.previous = step_params
-                subst.steps[label] = subst.previous
-                # revert to recipe level assignments
+                    # put step parameters into previous and steps[label] again, as they may have changed based on outputs)
+                    subst.previous = step_params
+                    subst.steps[label] = subst.previous
+                    # revert to recipe level assignments
 
-                # now check for output aliases that need to be propagated down from steps
-                self.update_assignments(subst, whose=self, params=params)
-                for name, aliases in self._alias_list.items():
-                    for alias in aliases:
-                        if alias.from_step and alias.step is step:
-                            # if step was skipped, mark output as not required
-                            if alias.step._skip:
-                                self.outputs[name].required = False
-                            # if step output is validated, add it to our output 
-                            # if alias.param in alias.step.validated_params:
-                            #     outputs[name] = alias.step.validated_params[alias.param]
-                            if alias.param in step_params:
-                                outputs[name] = step_params[alias.param]
+                    # now check for output aliases that need to be propagated down from steps
+                    self.update_assignments(subst, whose=self, params=params)
+                    for name, aliases in self._alias_list.items():
+                        for alias in aliases:
+                            if alias.from_step and alias.step is step:
+                                # if step was skipped, mark output as not required
+                                if alias.step._skip:
+                                    self.outputs[name].required = False
+                                # if step output is validated, add it to our output 
+                                # if alias.param in alias.step.validated_params:
+                                #     outputs[name] = alias.step.validated_params[alias.param]
+                                if alias.param in step_params:
+                                    outputs[name] = step_params[alias.param]
 
         except Exception as exc:
             # raise exception up if asked to
@@ -1126,7 +1145,7 @@ class Recipe(Cargo):
             exception = exc
             tb = FormattedTraceback(sys.exc_info()[2])
 
-        return task_stats.collect_stats(), outputs, exception, tb
+        return task_attrs, task_kwattrs, task_stats.collect_stats(), outputs, exception, tb
 
     def build(self, backend={}, rebuild=False, build_skips=False, log: Optional[logging.Logger] = None):
         # set up backend
@@ -1160,8 +1179,11 @@ class Recipe(Cargo):
         subst_outer = subst
         if subst is None:
             subst = SubstitutionNS()
+            taskname = self.name
+        else:
+            taskname = subst.info.taskname
 
-        info = SubstitutionNS(fqname=self.fqname, label='', label_parts=[], suffix='')
+        info = SubstitutionNS(fqname=self.fqname, label='', label_parts=[], suffix='', taskname=taskname)
         # nosubst=True means these sub-namespaces are not subject to {}-substitutions
         subst._add_('info', info.copy(), nosubst=True)
         subst._add_('config', self.config, nosubst=True)
@@ -1212,7 +1234,7 @@ class Recipe(Cargo):
             # form list of arguments for each invocation of the loop worker
             loop_worker_args = []
             for count, iter_var in enumerate(self._for_loop_values):
-                loop_worker_args.append((params, info, subst, backend, count, iter_var))
+                loop_worker_args.append((params, subst, backend, count, iter_var))
 
             # if scatter is enabled, use a process pool
             if self._for_loop_scatter:
@@ -1221,28 +1243,43 @@ class Recipe(Cargo):
                     num_workers = nloop
                 else:
                     num_workers = min(self._for_loop_scatter, nloop) 
+                inital_task_status = f"0/{nloop} complete, {num_workers} workers"
+                task_stats.declare_subtask_status(inital_task_status)
                 with ProcessPoolExecutor(num_workers) as pool:
                     # submit each iterant to pool
-                    futures = [pool.submit(self._iterate_loop_worker, *args, raise_exc=False) for args in loop_worker_args]
+                    futures = [pool.submit(self._iterate_loop_worker, *args, subprocess=True, raise_exc=False) for args in loop_worker_args]
                     # update task stats, since they're recorded independently within each step, as well
                     # as get any exceptions from the nesting
                     errors = []
-                    nfail = 0
+                    nfail = ncomplete = 0
                     for f in as_completed(futures):
-                        stats, outputs, exc, tb = f.result()
+                        attrs, kwattrs, stats, outputs, exc, tb = f.result()
+                        task_stats.declare_subtask_attributes(*attrs, **kwattrs)
                         task_stats.add_missing_stats(stats)
                         if exc is not None:
                             errors.append(exc)
                             if not isinstance(exc, ScabhaBaseException):
                                 errors.append(tb)
                             nfail += 1
+                        else:
+                            ncomplete += 1
+                        if ncomplete:
+                            status = f"[green]{ncomplete}[/green]/{nloop} complete"
+                        else:
+                            status = f"0/{nloop} complete"
+                        if nfail:
+                            status = f"{status}, [red]{nfail}[/red] failed"
+                        status = f"{status}, {num_workers} workers"
+                        task_stats.declare_subtask_status(status)
                     if errors:
                         pool.shutdown()
-                        raise StimelaRuntimeError(f"{nfail}/{len(loop_worker_args)} loop iterations failed", errors)
+                        raise StimelaRuntimeError(f"{nfail}/{nloop} jobs have failed", errors)
+                # drop a rendering of the progress bar onto the console, to overwrite previous garbage if it's there
+                task_stats.restate_progress()
             # else just iterate directly
             else:
                 for args in loop_worker_args:
-                    _, outputs, _, _ = self._iterate_loop_worker(*args, raise_exc=True) 
+                    _, _, _, outputs, _, _ = self._iterate_loop_worker(*args, raise_exc=True) 
             
             # either way, outputs contains output aliases from the last iteration
             params.update(**outputs)

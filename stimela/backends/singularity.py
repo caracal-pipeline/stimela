@@ -100,26 +100,6 @@ def get_image_info(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.Sti
     return image_name, simg_path, True
 
 
-def build_command_line(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBackendOptions',
-                        params: Dict[str, Any], 
-                        binds: List[Any],
-                        subst: Optional[Dict[str, Any]] = None,
-                        binary: Optional[str] = None,
-                        simg_path: Optional[str] = None):
-    args = cab.flavour.get_arguments(cab, params, subst, check_executable=False)
-
-    if simg_path is None:
-        _, simg_path = get_image_info(cab, backend)
-
-    cwd = os.getcwd()
-
-    return [binary or backend.singularity.executable or BINARY, 
-            "exec", 
-            "--containall",
-            "--bind", f"{cwd}:{cwd}",
-            "--pwd", cwd,
-            simg_path] + args
-
 def build(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBackendOptions', log: logging.Logger,
           command_wrapper: Optional[Callable]=None,
           build=True, rebuild=False):
@@ -219,7 +199,7 @@ def build(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBacke
         args = [BINARY, "build", simg_path, f"docker://{image_name}"]
 
         if command_wrapper:
-            args = command_wrapper(args)
+            args = command_wrapper(args, log=log)
 
         retcode = xrun(args[0], args[1:], shell=False, log=log,
                     return_errcode=True, command_name="(singularity build)", 
@@ -254,6 +234,8 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     Returns:
         Any: return value (e.g. exit code) of content
     """
+    from .utils import resolve_required_mounts
+
     native.update_rlimits(backend.rlimits, log)
 
     # get path to image, rebuilding if backend options allow this
@@ -264,9 +246,16 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     args = [backend.singularity.executable or BINARY, 
             "exec", 
             "--containall",
-            "--bind", f"{cwd}:{cwd}",
-            "--pwd", cwd,
-            simg_path] 
+            "--pwd", cwd]
+    
+    # initial set of mounts has cwd as read-write
+    mounts = {cwd: True}
+    # get extra required filesystem bindings
+    resolve_required_mounts(mounts, params, cab.inputs, cab.outputs)
+    for path, rw in mounts.items():
+        args += ["--bind", f"{path}:{path}:{'rw' if rw else 'ro'}"]
+
+    args += [simg_path]
     args += cab.flavour.get_arguments(cab, params, subst, check_executable=False)
     log.debug(f"command line is {args}")
 
@@ -283,7 +272,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     # log.info(f"argument lengths are {[len(a) for a in args]}")
 
     if command_wrapper:
-        args = command_wrapper(args, fqname=fqname)
+        args = command_wrapper(args, fqname=fqname, log=log)
 
     retcode = xrun(args[0], args[1:], shell=False, log=log,
                 output_wrangler=cabstat.apply_wranglers,

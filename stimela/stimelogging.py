@@ -17,9 +17,6 @@ from rich.markup import escape
 from rich.padding import Padding
 
 from . import task_stats
-from .task_stats import declare_subtask, declare_subtask_attributes, \
-                        declare_subcommand, update_process_status, \
-                        run_process_status_update
 
 class FunkyMessage(object):
     """Class representing a message with two versions: funky (with markup), and boring (no markup)"""
@@ -184,6 +181,9 @@ def logger(name="STIMELA", propagate=False, boring=False, loglevel="INFO"):
 _logger_file_handlers = {}
 _logger_console_handlers = {}
 
+# keep track of all log files opened
+_previous_logfiles = set()
+
 
 def has_file_logger(log: logging.Logger):
     return log.name in _logger_file_handlers
@@ -247,9 +247,14 @@ def setup_file_logger(log: logging.Logger, logfile: str, level: Optional[Union[i
         if fh is not None:
             fh.close()
             log.removeHandler(fh)
-
+        # if file was previously open, append, else overwrite
+        if logfile in _previous_logfiles:
+            mode = 'a'
+        else:
+            mode = 'w'
+            _previous_logfiles.add(logfile)
         # create new FH
-        fh = DelayedFileHandler(logfile, symlink, 'w')
+        fh = DelayedFileHandler(logfile, symlink, mode)
         fh.setFormatter(log_boring_formatter)
         log.addHandler(fh)
 

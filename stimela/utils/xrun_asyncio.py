@@ -6,7 +6,7 @@ import asyncio
 import logging
 from rich.markup import escape
 
-from stimela import stimelogging
+from stimela import stimelogging, task_stats
 
 from stimela.exceptions import StimelaCabRuntimeError, StimelaProcessRuntimeError
 
@@ -33,7 +33,7 @@ def dispatch_to_log(log, line, command_name, stream_name, output_wrangler, style
     if prefix is not None:
         extra['prefix'] = prefix
     extra.setdefault('style', 'dim' if stream_name == 'stdout' else 'white')
-    extra.setdefault('prefix', "#")
+    extra.setdefault('prefix', task_stats.get_subprocess_id() + "#")
     # feed through wrangler to adjust severity and content
     if output_wrangler is not None:
         line, severity = output_wrangler(escape(line), severity)
@@ -80,7 +80,7 @@ def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, o
             log.info(f"running {log_command}", extra=dict(prefix="###", style="dim"))
             log.debug(f"full command line is {command_line}", extra=dict(prefix="###", style="dim"))
 
-    with stimelogging.declare_subcommand(os.path.basename(command_name)) as command_context:
+    with task_stats.declare_subcommand(os.path.basename(command_name)) as command_context:
 
         start_time = datetime.datetime.now()
         def elapsed():
@@ -107,7 +107,7 @@ def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, o
             for task in cancellables:
                 task.cancel()
 
-        reporter = asyncio.Task(stimelogging.run_process_status_update())
+        reporter = asyncio.Task(task_stats.run_process_status_update())
         ctrl_c_caught = job_interrupted = False
         try:
             job = asyncio.gather(

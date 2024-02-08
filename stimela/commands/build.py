@@ -28,14 +28,13 @@ from stimela.main import cli
                 help="""explicitly skips steps wth the given tags. 
                 Use commas, or give multiple times for multiple tags.""")
 @click.option("-e", "--enable-step", "enable_steps", metavar="STEP(s)", multiple=True,
-                help="""Builds a step even if the recipe marks it as skipped. Use commas, or give multiple times 
+                help="""Build image for step(s) even if the recipe marks them as skipped. Use commas, or give multiple times 
                 for multiple steps.""")
 @click.option("-l", "--last-recipe", is_flag=True,
                 help="""if multiple recipes are defined, selects the last one for building.""")
 @click.argument("what", metavar="filename.yml|cab name") 
 def build(what: str, last_recipe: bool = False, rebuild: bool = False, all_steps: bool=False,
-            assign: List[Tuple[str, str]] = [],
             step_ranges: List[str] = [], tags: List[str] = [], skip_tags: List[str] = [], enable_steps: List[str] = []):
-    return run.callback(what, last_recipe=last_recipe, assign=assign, step_ranges=step_ranges, 
+    return run.callback(what, last_recipe=last_recipe, step_ranges=step_ranges, 
         tags=tags, skip_tags=skip_tags, enable_steps=enable_steps,
         build=True, rebuild=rebuild, build_skips=all_steps)
