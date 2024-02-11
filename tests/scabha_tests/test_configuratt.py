@@ -18,6 +18,7 @@ def test_includes():
     path = "testconf.yaml"
     conf, deps = configuratt.load(path, use_sources=[], verbose=True, use_cache=False)
     assert conf.x.y2.z1 == 1
+    assert conf.relative.x.y == 'a'
 
     missing = configuratt.check_requirements(conf, [], strict=False)
     assert len(missing) == 2                   # 2 failed reqs
@@ -28,6 +29,12 @@ def test_includes():
     try:
         conf, deps = configuratt.load(path, use_sources=[], verbose=True, use_cache=False)
         missing = configuratt.check_requirements(conf, [], strict=True)
+        raise RuntimeError("Error was expected here!")
+    except configuratt.ConfigurattError as exc:
+        print(f"Exception as expected: {exc}")
+
+    try:
+        conf, deps = configuratt.load("test_recursive_include.yml", use_sources=[], verbose=True, use_cache=False)
         raise RuntimeError("Error was expected here!")
     except configuratt.ConfigurattError as exc:
         print(f"Exception as expected: {exc}")
@@ -46,4 +53,4 @@ def test_includes():
 
 
 if __name__ == "__main__":
-    test_includes(sys.argv[1] if len(sys.argv) > 1 else None)
+    test_includes()

@@ -13,6 +13,9 @@ hierarchical:
   bar:
     _use: bar
 
+relative:
+  _include: (.)test_include2.yaml
+
 flat:
   _use: hierarchical
   _flatten: true
