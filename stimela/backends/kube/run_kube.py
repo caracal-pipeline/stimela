@@ -13,7 +13,7 @@ from omegaconf import OmegaConf, DictConfig, ListConfig
 from stimela.utils.xrun_asyncio import dispatch_to_log
 from stimela.exceptions import StimelaCabParameterError, StimelaCabRuntimeError, BackendError
 from stimela.stimelogging import log_exception
-from stimela.stimelogging import declare_subcommand, declare_subtask, update_process_status
+from stimela.task_stats import declare_subcommand, declare_subtask, update_process_status
 from stimela.backends import StimelaBackendOptions
 from stimela.kitchen.cab import Cab
 

@@ -6,7 +6,8 @@ import rich
 from typing import Optional, Dict, List
 
 from stimela.backends import StimelaBackendOptions
-from stimela.stimelogging import log_exception, declare_chapter, update_process_status
+from stimela.stimelogging import log_exception, declare_chapter
+from stimela.task_stats import update_process_status
 from scabha.basetypes import EmptyListDefault
 
 from stimela.exceptions import BackendError
@@ -54,6 +55,11 @@ def init(backend: StimelaBackendOptions, log: logging.Logger, cleanup: bool = Fa
     global klog
     klog = log.getChild("kube")
     kube = backend.kube
+
+    if not kube.namespace:
+        klog.error("kube.namespace not configured, kube backend will not be available")
+        return False
+
 
     if cleanup:
         klog.info("cleaning up backend")
