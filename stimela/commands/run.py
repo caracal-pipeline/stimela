@@ -58,6 +58,7 @@ def load_recipe_files(filenames: List[str]):
     # split content into config sections, and recipes:
     # config secions are merged into the config namespace, while recipes go under
     # lib.recipes
+    recipe_names = []
     update_conf = OmegaConf.create()
     for name, value in full_conf.items():
         if name in stimela.CONFIG:
@@ -68,6 +69,7 @@ def load_recipe_files(filenames: List[str]):
             except Exception as exc:
                 log_exception(f"error in definition of recipe '{name}'", exc)
                 sys.exit(2)
+            recipe_names.append(name)
     
     try:
         stimela.CONFIG.merge_with(update_conf)
@@ -75,6 +77,7 @@ def load_recipe_files(filenames: List[str]):
         log_exception(f"error applying configuration from {' ,'.join(filenames)}", exc)
         sys.exit(2)
 
+    return recipe_names
 
 @cli.command("run",
     help="""
@@ -169,7 +172,9 @@ def run(parameters: List[str] = [], dry_run: bool = False, last_recipe: bool = F
 
     # load config and recipes from all given files
     if files_to_load:
-        load_recipe_files(files_to_load)
+        available_recipes = load_recipe_files(files_to_load)
+    else:
+        available_recipes = []
 
     # load config settigs from --config arguments
     try:
@@ -197,18 +202,21 @@ def run(parameters: List[str] = [], dry_run: bool = False, last_recipe: bool = F
         if not stimela.CONFIG.lib.recipes:
             log_exception(f"no recipes were specified")
             sys.exit(2)
-        available_recipes = list(stimela.CONFIG.lib.recipes.keys())
 
         if recipe_name:
             if recipe_name not in stimela.CONFIG.lib.recipes:
                 log_exception(f"recipe '{recipe_name}' not found")
                 sys.exit(2)
-        elif last_recipe or len(stimela.CONFIG.lib.recipes) == 1:
-            recipe_name = available_recipes[-1]
-        else:
-            logger().info(f"found multiple recipes: {', '.join(available_recipes)}")
-            log_exception(f"please specify a recipe on the command line, or use -l/--last-recipe")
-            sys.exit(2)
+        else: 
+            if len(available_recipes) == 0:
+                log_exception(f"no top-level recipes were found")
+                sys.exit(2)
+            elif last_recipe or len(available_recipes) == 1:
+                recipe_name = available_recipes[-1]
+            else:
+                logger().info(f"found multiple top-level recipes: {', '.join(available_recipes)}")
+                log_exception(f"please specify a recipe on the command line, or use -l/--last-recipe")
+                sys.exit(2)
         
         log.info(f"selected recipe is '{recipe_name}'")
 
