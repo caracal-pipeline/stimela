@@ -211,6 +211,9 @@ class Recipe(Cargo):
             # it will be in subst.recipe if it was assigned, or is an input
             if basevar in subst.recipe:
                 value = str(subst.recipe[basevar])
+            # else it may be a for-loop index that hasn't been assigned yet -- ignore
+            elif self.for_loop is not None and basevar == self.for_loop.var:
+                continue
             # else it might be an input with a default, check for that
             elif basevar in self.inputs_outputs and self.inputs_outputs[basevar].default is not UNSET:
                 value = str(self.inputs_outputs[basevar].default)
