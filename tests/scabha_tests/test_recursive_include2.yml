@@ -1,0 +1,2 @@
+b:
+  _include: (.)test_recursive_include.yml

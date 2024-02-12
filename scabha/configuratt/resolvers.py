@@ -124,7 +124,8 @@ def _scrub_subsections(conf: DictConfig, scrubs: Union[str, List[str]]):
 def resolve_config_refs(conf, pathname: str, location: str, name: str, includes: bool, 
                         use_sources: Optional[List[DictConfig]],
                         use_cache = True, 
-                        include_path: Optional[str]=None):
+                        include_path: Optional[str]=None,
+                        include_stack=[]):
     """Resolves cross-references ("_use" and "_include" statements) in config object
 
     Parameters
@@ -143,6 +144,8 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
         one or more config object(s) in which to look up "_use" references. None to disable _use statements
     include_path (str, optional):
         if set, path to each config file will be included in the section as element 'include_path'
+    include_stack (list, optional):
+        stack of files from which this one was included. Used to catch recursion.
 
     Returns
     -------
@@ -222,29 +225,38 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                         else:
                             flags = {}
 
-                        # check for (module)filename.yaml or (module)/filename.yaml style
-                        match = re.match("^\\((.+)\\)/?(.+)$", incl)
+                        # check for (location)filename.yaml or (location)/filename.yaml style
+                        match= re.match("^\\((.+)\\)/?(.+)$", incl)
                         if match:
                             modulename, filename = match.groups()
-                            try:
-                                mod = importlib.import_module(modulename)
-                            except ImportError as exc:
-                                if 'optional' in flags:
-                                    dependencies.add_fail(FailRecord(incl, pathname, modulename=modulename, fname=filename))
-                                    if 'warn' in flags:
-                                        print(f"Warning: unable to import module for optional include {incl}")
-                                    continue
-                                raise ConfigurattError(f"{errloc}: {keyword} {incl}: can't import {modulename} ({exc})")
+                            if modulename.startswith("."):
+                                filename = os.path.join(os.path.dirname(pathname), modulename, filename)
+                                if not os.path.exists(filename):
+                                    if 'optional' in flags:
+                                        dependencies.add_fail(FailRecord(filename, pathname))
+                                        if 'warn' in flags:
+                                            print(f"Warning: unable to find optional include {incl} ({filename})")
+                                        continue
+                                    raise ConfigurattError(f"{errloc}: {keyword} {incl} does not exist")
+                            else:
+                                try:
+                                    mod = importlib.import_module(modulename)
+                                except ImportError as exc:
+                                    if 'optional' in flags:
+                                        dependencies.add_fail(FailRecord(incl, pathname, modulename=modulename, fname=filename))
+                                        if 'warn' in flags:
+                                            print(f"Warning: unable to import module for optional include {incl}")
+                                        continue
+                                    raise ConfigurattError(f"{errloc}: {keyword} {incl}: can't import {modulename} ({exc})")
 
-                            filename = os.path.join(os.path.dirname(mod.__file__), filename)
-                            if not os.path.exists(filename):
-                                if 'optional' in flags:
-                                    dependencies.add_fail(FailRecord(incl, pathname, modulename=modulename, fname=filename))
-                                    if 'warn' in flags:
-                                        print(f"Warning: unable to find optional include {incl}")
-                                    continue
-                                raise ConfigurattError(f"{errloc}: {keyword} {incl}: {filename} does not exist")
-
+                                filename = os.path.join(os.path.dirname(mod.__file__), filename)
+                                if not os.path.exists(filename):
+                                    if 'optional' in flags:
+                                        dependencies.add_fail(FailRecord(incl, pathname, modulename=modulename, fname=filename))
+                                        if 'warn' in flags:
+                                            print(f"Warning: unable to find optional include {incl}")
+                                        continue
+                                    raise ConfigurattError(f"{errloc}: {keyword} {incl}: {filename} does not exist")
                         # absolute path -- one candidate
                         elif os.path.isabs(incl):
                             if not os.path.exists(incl):
@@ -270,10 +282,15 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                                     continue
                                 raise ConfigurattError(f"{errloc}: {keyword} {incl} not found in {':'.join(paths)}")
 
+                        # check for recursion
+                        for path in include_stack:
+                            if os.path.samefile(path, filename):
+                                raise ConfigurattError(f"{errloc}: {filename} is included recursively")
                         # load included file
                         incl_conf, deps = load(filename, location=location, 
                                             name=f"{filename}, included from {name}",
                                             includes=True, 
+                                            include_stack=include_stack,
                                             use_cache=use_cache,
                                             use_sources=None)   # do not expand _use statements in included files, this is done below
 
@@ -351,6 +368,7 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                 value1, deps = resolve_config_refs(value, pathname=pathname, name=name, 
                                                 location=f"{location}.{key}" if location else key, 
                                                 includes=includes, 
+                                                include_stack=include_stack,
                                                 use_sources=use_sources, use_cache=use_cache,
                                                 include_path=include_path)
                 dependencies.update(deps)
@@ -366,6 +384,7 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                 value1, deps = resolve_config_refs(value, pathname=pathname, name=name, 
                                                 location=f"{location or ''}[{i}]", 
                                                 includes=includes, 
+                                                include_stack=include_stack,
                                                 use_sources=use_sources, use_cache=use_cache,
                                                 include_path=include_path)
                 dependencies.update(deps)
