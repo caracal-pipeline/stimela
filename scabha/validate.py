@@ -287,6 +287,11 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
         schema = schemas[name]
         if schema.choices and value not in schema.choices:
             raise ParameterValidationError(f"{mkname(name)}: invalid value '{value}'")
+        if schema.element_choices:
+            listval = value if isinstance(value, (list, tuple, ListConfig)) else [value]
+            for elem in listval:
+                if elem not in schema.element_choices:
+                    raise ParameterValidationError(f"{mkname(name)}: invalid list element '{elem}'")
 
     # check for mkdir directives
     if create_dirs:

@@ -63,8 +63,20 @@ def test_test_recipe():
     retcode = os.system("stimela -v exec test_recipe.yml selfcal.image_name=bar")
     assert retcode != 0 
 
+    print("===== expecting an error due to elem-xyz choices wrong =====")
+    retcode = os.system("stimela -v exec test_recipe.yml selfcal.image_name=bar msname=foo elem-xyz=t elemlist-xyz=[x,y]")
+    assert retcode != 0
+
+    print("===== expecting an error due to elem-xyz choices wrong =====")
+    retcode = os.system("stimela -v exec test_recipe.yml selfcal.image_name=bar msname=foo elem-xyz=x elemlist-xyz=[x,t]")
+    assert retcode != 0
+
     print("===== expecting no errors now =====")
-    retcode = os.system("stimela -v exec test_recipe.yml selfcal.image_name=bar msname=foo")
+    retcode = os.system("stimela -v exec test_recipe.yml selfcal.image_name=bar msname=foo elem-xyz=x elemlist-xyz=[x,y]")
+    assert retcode == 0
+
+    print("===== expecting no errors now =====")
+    retcode = os.system("stimela -v exec test_recipe.yml selfcal.image_name=bar msname=foo elem-xyz=x elemlist-xyz=x")
     assert retcode == 0
 
 def test_test_loop_recipe():

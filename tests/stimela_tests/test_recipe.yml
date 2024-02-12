@@ -96,6 +96,13 @@ recipe:
     band:
       choices: [L, UHF, K]
       default: L
+    elem-xyz:
+      default: x
+      choices: [x,y,z]
+    elemlist-xyz:
+      dtype: Union[str, List[str]]
+      element_choices: [x,y,z]
+
 
   assign:
     foo: bar
