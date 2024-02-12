@@ -6,7 +6,7 @@ import time, datetime
 import threading
 from stimela.exceptions import BackendError
 from stimela.utils.xrun_asyncio import dispatch_to_log
-from stimela.stimelogging import update_process_status
+from stimela.task_stats import update_process_status
 from stimela.kitchen.cab import Cab, Parameter
 
 from kubernetes.client import ApiException
