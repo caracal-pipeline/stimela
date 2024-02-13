@@ -73,6 +73,15 @@ cubical_image_loop:
     log:
       name: log-{recipe.loop-name}-{info.fqname}
 
+  assign_based_on:
+    loop:
+      '1':
+        z: 1
+      '2':
+        z: 2
+      DEFAULT:
+        z: 3
+
   for_loop:
     var: loop
     over: [1,2,3]
