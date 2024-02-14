@@ -302,7 +302,7 @@ def run(parameters: List[str] = [], dry_run: bool = False, last_recipe: bool = F
     # build the images
     if build:
         try:
-            outer_step.build(backend=stimela.CONFIG.opts.backend, rebuild=rebuild, build_skips=build_skips, log=log)
+            outer_step.build(rebuild=rebuild, build_skips=build_skips, log=log)
         except Exception as exc:
             stimela.backends.close_backends(log)
 
@@ -320,7 +320,7 @@ def run(parameters: List[str] = [], dry_run: bool = False, last_recipe: bool = F
     # else run the recipe
     else:
         try:
-            outputs = outer_step.run(backend=stimela.CONFIG.opts.backend)
+            outputs = outer_step.run(is_outer_step=True)
         except Exception as exc:
             stimela.backends.close_backends(log)
 

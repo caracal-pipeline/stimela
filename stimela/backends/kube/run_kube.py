@@ -1,18 +1,17 @@
 import logging, time, json, datetime, os.path, pathlib, secrets, shlex
 from typing import Dict, Optional, Any, List, Callable
 from dataclasses import fields
-from datetime import timedelta
 from requests import ConnectionError
 from urllib3.exceptions import HTTPError
-import threading, subprocess
-import rich
+import subprocess
+import yaml
 import traceback
 
 from omegaconf import OmegaConf, DictConfig, ListConfig
 
 from stimela.utils.xrun_asyncio import dispatch_to_log
 from stimela.exceptions import StimelaCabParameterError, StimelaCabRuntimeError, BackendError
-from stimela.stimelogging import log_exception
+from stimela.stimelogging import log_exception, log_rich_payload
 from stimela.task_stats import declare_subcommand, declare_subtask, update_process_status
 from stimela.backends import StimelaBackendOptions
 from stimela.kitchen.cab import Cab
@@ -48,10 +47,6 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
 
     kube = backend.kube
 
-    namespace = kube.namespace
-    if not namespace:
-        raise BackendError(f"runtime.kube.namespace must be set")
-
     args = cab.flavour.get_arguments(cab, params, subst, check_executable=False)
     log.debug(f"command line is {args}")
 
@@ -64,7 +59,7 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
     token_hex = secrets.token_hex(4)
     podname = tmp_name[0:50] + "--" + token_hex
 
-    kube_api, custom_obj_api = get_kube_api()
+    namespace, kube_api, custom_obj_api = get_kube_api()
 
     image_name = cab.flavour.get_image_name(cab, backend)
     if not image_name:
@@ -98,15 +93,15 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
 
 
     # define debug-print function
-    if kube.debug.print:
-        def dprint(level, *args):
-            if level <= kube.debug.print:
-                rich.print(*args)
+    if kube.debug.verbose:
+        def dprint(level, message, payload, console_payload: Optional[Any] = None, syntax: Optional[str] = None):
+            if level <= kube.debug.verbose:
+                log_rich_payload(log, message, payload, console_payload=console_payload, syntax=syntax)
     else:
-        def dprint(level, *args):
+        def dprint(level, *args, **kw):
             pass
 
-    statrep = StatusReporter(namespace, podname=podname, log=log, kube=kube, 
+    statrep = StatusReporter(podname=podname, log=log, kube=kube, 
                              event_handler=k8s_event_handler)
 
     if kube.debug.pause_on_start:
@@ -127,7 +122,7 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                                 **resource_labels)
 
             # depending on whether or not a dask cluster is configured, we do either a DaskJob or a regular pod
-            if kube.dask_cluster and kube.dask_cluster.num_workers:
+            if kube.dask_cluster and kube.dask_cluster.enable:
                 log.info(f"defining dask job with a cluster of {kube.dask_cluster.num_workers} workers")
 
                 from . import daskjob
@@ -221,14 +216,21 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
             # start the threaded status update, since log reading blocks
             pod.start_status_update_thread()
 
+            if kube.debug.save_spec:
+                save_spec = kube.debug.save_spec.format(**subst)
+            else:
+                save_spec = None
             # start pod and wait for it to come up
             provisioning_deadline = time.time() + (kube.provisioning_timeout or 1e+10)
             if dask_job_spec is None:
                 with declare_subcommand("starting pod"):
                     log.info(f"starting pod {podname} to run {command_name}")
-                    dprint(1, "Creating pod:", pod_manifest)
+                    dprint(1, "pod manifest", pod_manifest)
+                    if save_spec:
+                        log.info(f"saving pod manifest to {save_spec}")
+                        open(save_spec, "wt").write(yaml.dump(pod_manifest))
                     resp = kube_api.create_namespaced_pod(body=pod_manifest, namespace=namespace)
-                    dprint(2, "Responce: ", resp)
+                    dprint(2, "response", resp)
                     pod_created = resp
                     connected = True
                     while pod.check_status():
@@ -274,10 +276,13 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                             cont.setdefault('volumeMounts', []).extend(mounts)
                     # start the job
                     group, version, plural = 'kubernetes.dask.org', 'v1', 'daskjobs'
-                    dprint(1, "Creating daskjob:", dask_job_spec[0])
+                    dprint(1, "daskjob spec", dask_job_spec[0])
+                    if save_spec:
+                        log.info(f"saving dask job spec to {save_spec}")
+                        open(save_spec, "wt").write(yaml.dump(dask_job_spec[0]))
                     resp = custom_obj_api.create_namespaced_custom_object(group, version, 
                                             namespace, plural , dask_job_spec[0])
-                    dprint(2, "Response:", resp)
+                    dprint(2, "response", resp)
                     dask_job_created = resp
                     job_status = None
                     connected = True
@@ -340,7 +345,7 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                 patch_body = dict(metadata=dict(labels=dict(stimela_pvc_initialized="True")))
                 kube_api.patch_namespaced_persistent_volume_claim(
                     name=pvc.name,
-                    namespace=kube.namespace,
+                    namespace=namespace,
                     body=patch_body)
 
             # resp = kube_api.read_namespaced_pod(name=podname, namespace=namespace)
@@ -398,14 +403,14 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                     terminated = contstat.terminated
                     if waiting:
                         log.info("container state is 'waiting'")
-                        dprint(2, waiting)
+                        dprint(2, "waiting", waiting)
                     elif running:
                         log.info(f"container state is 'running'")
-                        dprint(2, running)
+                        dprint(2, "running", running)
                     elif terminated:
                         retcode = terminated.exit_code
                         log.info(f"container state is 'terminated', exit code is {retcode}")
-                        dprint(2, terminated)
+                        dprint(2, "terminated", terminated)
                         break
                 except (ConnectionError, HTTPError) as exc:
                     # this could be a real connection error, or maybe the process has gone quiet
@@ -426,7 +431,7 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
             if retcode and cabstat.success is not True:
                 cabstat.declare_failure(f"{command_name} returns error code {retcode} after {elapsed()}")
                 if retcode == 137:
-                    log.error(f"the pod was killed with an out-of-memory condition (backend.kube.memory setting is {kube.memory})")
+                    log.error(f"the pod was killed with an out-of-memory condition. Check your kube.job_pod.memory settings")
             else:
                 log.info(f"{command_name} returns exit code {retcode} after {elapsed()}")
 

@@ -1,20 +1,67 @@
 opts:
   backend:
+    verbose: 1
     # we have this set up on AWS as a pull-through cache for the quay.io registry
-    override_registries:
+    override_registries:      
       quay.io/stimela2: 800133935729.dkr.ecr.af-south-1.amazonaws.com/quay/stimela2
 
     kube:
-      namespace: rarg-test-compute
-      verbose_events: 1   # to get events printed
+      context: osmirnov-rarg-test-eks-cluster
+      
+      debug:
+        verbose: 0       
+        log_events: 1    # to get events printed
+        save_spec: "kube.{info.fqname}.spec.yml"
+      
       dir: /mnt/data/stimela-test
+
+      # I've got stimela starting up PVCs like so:
+
+      # One is a persistent EFS volume, the other is dynamically allocated EBS, the third
+      # is EBS initialized from a snapshot
+      # * create all three with thin node: works
+      # * create all three with fat node: won't scale up
+      # * remove everything, create just EFS from fat node: scales up
+      # * create all three with fat node: scales up
+
+      # infrastructure:
+      #   on_startup:
+      #     cleanup_pods: false
+      #     cleanup_pvcs: false
+      #   on_exit:
+      #     cleanup_pods: false
+      
       volumes:
         rarg-test-compute-efs-pvc: 
           mount: /mnt/data
+          at_start: must_exist
 
+        # fsx-dev-scratch:
+        #   capacity: 1000Gi
+        #   mount: /scratch
+
+        # ebs-temp1-{recipe.name}:
+        #   storage_class_name: rarg-test-compute-ebs-sc-immediate-gp3-1000
+        #   capacity: 10Gi
+        #   lifecycle: session
+        #   mount: /temp1
+        #   at_start: cant_exist
+        #   init_commands:
+        #     - (ls -A1 | xargs rm -rf)
+
+        # ebs-temp2:
+        #   storage_class_name: rarg-test-compute-ebs-sc-immediate
+        #   capacity: 10Gi
+        #   lifecycle: session
+        #   mount: /temp2
+
+      provisioning_timeout: 0
+      connection_timeout: 5
+      
       ## override user/group ID
-      uid: 1669
-      gid: 1669
+      user:
+        uid: 1000
+        gid: 1000
 
       ## you can specify a global memory default for pods here,
       ## but also do this on a per-cab or per-step basis of course
@@ -29,6 +76,10 @@ opts:
           nodeSelector:
             rarg/node-class: compute
             rarg/instance-type: m5.large
+        medium:
+          nodeSelector:
+            rarg/node-class: compute
+            rarg/instance-type: m5.4xlarge
         fat:
           nodeSelector:
             rarg/node-class: compute
@@ -38,23 +89,43 @@ opts:
       job_pod:
         type: admin 
 
+      dask_cluster:
+        enable: false
+        num_workers: 4
+        name: qc-test-cluster
+        threads_per_worker: 4
+        worker_pod:
+          type: thin
+        scheduler_pod:
+          type: admin
+
+
 
 ## some cab-specific backend tweaks
 cabs:
-  breizorro:     
+  breizorro:    
+    #command: /bin/bash -c
+    #args: 
+    #  - for i in {{1..100000}}; do date; sleep 1; done
+   
+    #policies:
+    #  skip: true
+     
+    # image: 
+    #   version: latest-cc0.0.2
+      
     backend:
       kube:
         job_pod:
           type: thin
-          memory: 
+          memory:
             limit: 3Gi
-        dask_cluster:
-          num_workers: 4
-          name: qc-test-cluster
-          threads_per_worker: 4
-          worker_pod:
-            type: thin
-          scheduler_pod:
-            type: admin
+      # volumes:
+        #   ebs-temp3:
+        #     storage_class_name: rarg-test-compute-ebs-sc-wait
+        #     capacity: 10Gi
+        #     lifecycle: step 
+        #     mount: /temp3
+        #     append_id: false
 
   

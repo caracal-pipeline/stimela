@@ -307,7 +307,7 @@ class Cab(Cargo):
                     val = "[" + ",".join(value) + "]"
                     return [option] + [val] if option else val
                 elif repeat_policy == "repeat":
-                    return list(itertools.chain([option, x] for x in value)) if option else list(value)
+                    return list(itertools.chain.from_iterable([option, x] for x in value)) if option else list(value)
                 elif type(repeat_policy) is str:
                     return [option, repeat_policy.join(value)] if option else repeat_policy.join(value)
                 elif repeat_policy is None:
