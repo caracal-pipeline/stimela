@@ -26,9 +26,10 @@ class BackendWrapper(object):
                               command_wrapper=self.run_command_wrapper)
         
     def build(self, cab: 'stimela.kitchen.cab.Cab', log: logging.Logger, rebuild=False):
-       if not hasattr(self.backend, 'build'):
-           raise BackendError(f"{self.backend_name} backend does not support the build command")
-       return self.backend.build(cab, backend=self.opts, log=log, rebuild=rebuild,
+        if not hasattr(self.backend, 'build'):
+           log.warning(f"the {self.backend_name} backend does support or require image builds")
+        else:
+            return self.backend.build(cab, backend=self.opts, log=log, rebuild=rebuild,
                                 command_wrapper=self.build_command_wrapper)
 
 

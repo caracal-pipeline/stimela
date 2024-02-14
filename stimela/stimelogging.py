@@ -1,11 +1,10 @@
-import sys
 import  os.path
 import  re
 import logging
 import traceback
 import copy
 from types import TracebackType
-from typing import Optional, OrderedDict, Union
+from typing import Optional, OrderedDict, Union, Any
 from omegaconf import DictConfig
 from scabha.exceptions import ScabhaBaseException, FormattedTraceback
 from scabha.substitutions import SubstitutionNS, forgiving_substitutions_from
@@ -15,6 +14,8 @@ from rich.tree import Tree
 from rich import print as rich_print
 from rich.markup import escape
 from rich.padding import Padding
+from rich.syntax import Syntax
+from rich.pretty import Pretty
 
 from . import task_stats
 
@@ -35,41 +36,18 @@ class FunkyMessage(object):
 def defunkify(arg: Union[str, FunkyMessage]):
     return arg.boring if isinstance(arg, FunkyMessage) else arg
 
-class MultiplexingHandler(logging.Handler):
-    """handler to send INFO and below to stdout, everything above to stderr"""
-    def __init__(self, info_stream=sys.stdout, err_stream=sys.stderr):
-        super(MultiplexingHandler, self).__init__()
-        self.info_handler = logging.StreamHandler(info_stream)
-        self.err_handler = logging.StreamHandler(err_stream)
-        self.multiplex = True
+class StimelaConsoleHander(rich.logging.RichHandler):
+    def __init__(self, console):
+        rich.logging.RichHandler.__init__(self, console=console,
+                    highlighter=rich.highlighter.NullHighlighter(), 
+                    markup=True,
+                    show_level=False, show_path=False, show_time=False, keywords=[])
+        self._console = console
 
     def emit(self, record):
-        # does record come with its own handler? Rather use that
-        if hasattr(record, 'custom_console_handler'):
-            handler = record.custom_console_handler
-        else:
-            handler = self.err_handler if record.levelno > logging.INFO and self.multiplex else self.info_handler
-        handler.emit(record)
-        # ignore broken pipes, this often happens when cleaning up and exiting
-        try:
-            handler.flush()
-        except BrokenPipeError:
-            pass
-
-    def flush(self):
-        try:
-            self.err_handler.flush()
-            self.info_handler.flush()
-        except BrokenPipeError:
-            pass
-
-    def close(self):
-        self.err_handler.close()
-        self.info_handler.close()
-
-    def setFormatter(self, fmt):
-        self.err_handler.setFormatter(fmt)
-        self.info_handler.setFormatter(fmt)
+        rich.logging.RichHandler.emit(self, record)
+        if hasattr(record, 'console_payload'):
+            self._console.print(record.console_payload, highlight=getattr(record, 'console_highlight', None))
 
 class StimelaLogFormatter(logging.Formatter):
     DEBUG_STYLE   = "dim", ""
@@ -79,7 +57,7 @@ class StimelaLogFormatter(logging.Formatter):
 
     _ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
 
-    def __init__(self, boring=False):
+    def __init__(self, boring=False, override_message_attr=None):
         datefmt = "%Y-%m-%d %H:%M:%S"
         if not boring:
             super().__init__("{asctime} {name} [{style}]{levelname}: {message}[/{style}]", datefmt, style="{")
@@ -88,10 +66,14 @@ class StimelaLogFormatter(logging.Formatter):
             super().__init__("{asctime} {name} {levelname}: {message}", datefmt, style="{")
             self._prefix_fmt = logging.Formatter("{prefix} {message}", style="{")
         self.boring = boring
+        self._override_attr = override_message_attr
 
     def format(self, record):
-        # apply styling
         record = copy.copy(record)
+        # override message, if a specific override attribute is present
+        if self._override_attr is not None and hasattr(record, self._override_attr):
+            record.msg = getattr(record, self._override_attr)
+        # apply styling
         if not hasattr(record, 'style'):
             if record.levelno <= logging.DEBUG:
                 font, color = self.DEBUG_STYLE
@@ -121,7 +103,7 @@ class StimelaLogFormatter(logging.Formatter):
             return super().format(record)
 
 _logger = None
-log_console_handler = log_formatter = log_file_formatter = log_boring_formatter = log_colourful_formatter = None
+_log_console_handler = _log_formatter = _log_file_formatter = _log_boring_formatter = _log_colourful_formatter = None
 
 _boring = False
 
@@ -153,25 +135,24 @@ def logger(name="STIMELA", propagate=False, boring=False, loglevel="INFO"):
         _logger.setLevel(loglevel)
         _logger.propagate = propagate
 
-        global log_console_handler, log_formatter, log_file_formatter, log_boring_formatter, log_colourful_formatter
+        global _log_console_handler, _log_formatter, _log_file_formatter, _log_boring_formatter, _log_colourful_formatter
         global progress_console, progress_bar
 
-        log_boring_formatter = StimelaLogFormatter(boring=True)
-        log_colourful_formatter = StimelaLogFormatter(boring=False)
+        _log_file_formatter = StimelaLogFormatter(boring=True, override_message_attr='logfile_message')
+        _log_boring_formatter = StimelaLogFormatter(boring=True)
+        _log_colourful_formatter = StimelaLogFormatter(boring=False)
 
-        log_formatter = log_boring_formatter if boring else log_colourful_formatter
+        _log_formatter = _log_boring_formatter if boring else _log_colourful_formatter
 
         progress_bar, progress_console = task_stats.init_progress_bar(boring=boring)
 
-        log_console_handler = rich.logging.RichHandler(console=progress_console,
-                            highlighter=rich.highlighter.NullHighlighter(), markup=True,
-                            show_level=False, show_path=False, show_time=False, keywords=[])
+        _log_console_handler = StimelaConsoleHander(console=progress_console)
 
-        log_console_handler.setFormatter(log_formatter)
-        log_console_handler.setLevel(loglevel)
+        _log_console_handler.setFormatter(_log_formatter)
+        _log_console_handler.setLevel(loglevel)
 
-        _logger.addHandler(log_console_handler)
-        _logger_console_handlers[_logger.name] = log_console_handler
+        _logger.addHandler(_log_console_handler)
+        _logger_console_handlers[_logger.name] = _log_console_handler
 
         import scabha
         scabha.set_logger(_logger)
@@ -255,18 +236,18 @@ def setup_file_logger(log: logging.Logger, logfile: str, level: Optional[Union[i
             _previous_logfiles.add(logfile)
         # create new FH
         fh = DelayedFileHandler(logfile, symlink, mode)
-        fh.setFormatter(log_boring_formatter)
+        fh.setFormatter(_log_file_formatter)
         log.addHandler(fh)
 
         _logger_file_handlers[log.name] = logfile, fh
 
         # if logging to console, disable propagation from this sub-logger, and add a console handler
         # This ensures that parent loggers that log to files to not get repeated messages
-        if log_console_handler:
+        if _log_console_handler:
             log.propagate = False
             if log.name not in _logger_console_handlers:
-                _logger_console_handlers[log.name] = log_console_handler
-                log.addHandler(log_console_handler)
+                _logger_console_handlers[log.name] = _log_console_handler
+                log.addHandler(_log_console_handler)
 
 
     # resolve level
@@ -405,4 +386,24 @@ def log_exception(*errors, severity="error", log=None):
         for tree in trees:
             printfunc(Padding(tree, pad=(0,0,0,8)))
 
+def log_rich_payload(log: logging.Logger, message: str, payload: Any, 
+                     console_payload: Optional[Any] = None, syntax: Optional[str] = None, 
+                     level: int = logging.INFO):
+    """Logs a message with a rich payload. File logger will get plain text version ("message: \npayload"), 
+    console logger will get a rich renderable console_payload object instead, or a Syntax object. 
 
+    Args:
+        log (logging.Logger): logger to use
+        message (str): message
+        payload (Any): payload string
+        console_payload (Any): rich renderable object corresponding to the payload. If not set, uses Pretty(payload)
+        syntax (str, optional): if set, uses Syntax(payload, syntax) as the console_payload
+        level: (int, optional): logging level, defaults to INFO
+    """
+    if syntax is not None:
+        console_payload = Syntax(payload, syntax, padding=(0, 0, 0, 8))
+    elif console_payload is None:
+        console_payload = Pretty(payload, indent_size=8)
+    log.log(level, f"{message}:", 
+            extra=dict(logfile_message=f"{message}: \n{str(payload)}",
+                        console_payload=console_payload))

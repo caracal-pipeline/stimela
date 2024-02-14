@@ -32,7 +32,7 @@ from stimela.main import cli
                 for multiple steps.""")
 @click.option("-l", "--last-recipe", is_flag=True,
                 help="""if multiple recipes are defined, selects the last one for building.""")
-@click.argument("what", metavar="filename.yml|cab name") 
+@click.argument("what", metavar="filename.yml|cab name", nargs=-1, required=True) 
 def build(what: str, last_recipe: bool = False, rebuild: bool = False, all_steps: bool=False,
             step_ranges: List[str] = [], tags: List[str] = [], skip_tags: List[str] = [], enable_steps: List[str] = []):
     return run.callback(what, last_recipe=last_recipe, step_ranges=step_ranges, 
