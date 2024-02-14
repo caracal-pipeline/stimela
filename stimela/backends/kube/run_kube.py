@@ -216,19 +216,15 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
             # start the threaded status update, since log reading blocks
             pod.start_status_update_thread()
 
-            if kube.debug.save_spec:
-                save_spec = kube.debug.save_spec.format(**subst)
-            else:
-                save_spec = None
             # start pod and wait for it to come up
             provisioning_deadline = time.time() + (kube.provisioning_timeout or 1e+10)
             if dask_job_spec is None:
                 with declare_subcommand("starting pod"):
                     log.info(f"starting pod {podname} to run {command_name}")
                     dprint(1, "pod manifest", pod_manifest)
-                    if save_spec:
-                        log.info(f"saving pod manifest to {save_spec}")
-                        open(save_spec, "wt").write(yaml.dump(pod_manifest))
+                    if kube.debug.save_spec:
+                        log.info(f"saving pod manifest to {kube.debug.save_spec}")
+                        open(kube.debug.save_spec, "wt").write(yaml.dump(pod_manifest))
                     resp = kube_api.create_namespaced_pod(body=pod_manifest, namespace=namespace)
                     dprint(2, "response", resp)
                     pod_created = resp
@@ -277,9 +273,9 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                     # start the job
                     group, version, plural = 'kubernetes.dask.org', 'v1', 'daskjobs'
                     dprint(1, "daskjob spec", dask_job_spec[0])
-                    if save_spec:
-                        log.info(f"saving dask job spec to {save_spec}")
-                        open(save_spec, "wt").write(yaml.dump(dask_job_spec[0]))
+                    if kube.debug.save_spec:
+                        log.info(f"saving dask job spec to {kube.debug.save_spec}")
+                        open(kube.debug.save_spec, "wt").write(yaml.dump(dask_job_spec[0]))
                     resp = custom_obj_api.create_namespaced_custom_object(group, version, 
                                             namespace, plural , dask_job_spec[0])
                     dprint(2, "response", resp)
