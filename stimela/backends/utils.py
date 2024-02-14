@@ -40,9 +40,10 @@ def resolve_required_mounts(mounts: Dict[str, bool],
         readwrite = schema.writable or name in outputs
 
         for path in files:
-            if path.remote:
+            uri = URI(path)
+            if uri.remote:
                 continue
-            path = path.path
+            path = uri.path
             path = os.path.abspath(path).rstrip("/")
             realpath = os.path.abspath(os.path.realpath(path))
             # check if parent directory access is required
