@@ -15,7 +15,7 @@ from omegaconf import OmegaConf, ListConfig, DictConfig
 from scabha.basetypes import Unresolved
 from .exceptions import Error, ParameterValidationError, SchemaError, SubstitutionErrorList
 from .substitutions import SubstitutionNS, substitutions_from
-from .basetypes import File, Directory, MS, UNSET
+from .basetypes import URI, File, Directory, MS, UNSET
 from .evaluator import Evaluator
 
 def join_quote(values):
@@ -38,14 +38,17 @@ def validate_schema(schema: Dict[str, Any]):
 def dtype_from_str(dtype_str: str):
     """Converts a string e.g. 'int' into a typing object"""
 
+_file_types = {File, Directory, MS, URI}
+_file_list_types = {List[t] for t in _file_types}
 
 def is_file_type(dtype):
-    return dtype in (File, Directory, MS)
-
+    return dtype in _file_types
 
 def is_filelist_type(dtype):
-    return dtype in (List[File], List[Directory], List[MS])
+    return dtype in _file_list_types
 
+def is_uri_type(dtype):
+    return dtype in (URI, List[URI])
 
 def evaluate_and_substitute_object(obj: Any,  
                                     subst: SubstitutionNS, 
@@ -204,16 +207,13 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
             continue
         dtype = schema._dtype
 
-        is_file = is_file_type(dtype)
-        is_file_list = is_filelist_type(dtype)
-
         # must this file exist? Schema may force this check, otherwise follow the default check_exist policy
         if schema.is_input:
             must_exist = check_inputs_exist and schema.must_exist is not False
         elif schema.is_output:
             must_exist = check_outputs_exist and schema.must_exist
 
-        if is_file or is_file_list:
+        if schema.is_file_type or schema.is_file_list_type:
             # match to existing file(s)
             if type(value) is str:
                 # try to interpret string as a formatted list (a list substituted in would come out like that)
@@ -227,19 +227,20 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
                 files = value
             else:
                 raise ParameterValidationError(f"'{mkname(name)}={value}': invalid type '{type(value)}'")
-            # expand ~
-            files = [os.path.expanduser(f) for f in files]
+            # convert to appropriate type 
+            files = [URI(f) for f in files]
           
             # check for existence of all files in list, if needed
             if must_exist: 
                 if not files:
                     raise ParameterValidationError(f"'{mkname(name)}': file(s) don't exist")
-                not_exists = [f for f in files if not os.path.exists(f)]
+                not_exists = [uri.path for uri in files 
+                              if not uri.remote and not os.path.exists(uri.path)]
                 if not_exists:
                     raise ParameterValidationError(f"'{mkname(name)}': {','.join(not_exists)} doesn't exist")
 
             # check for single file/dir
-            if dtype in (File, Directory, MS):
+            if schema.is_file_type:
                 if len(files) > 1:
                     raise ParameterValidationError(f"'{mkname(name)}': multiple files given ({value})")
                 # no files? must_exist was checked above, so return empty filename
@@ -248,24 +249,27 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
                 # else one file/dir as expected, check it                   
                 else:
                     # check that files are files and dirs are dirs
-                    if os.path.exists(files[0]):
-                        if dtype is File:
-                            if not os.path.isfile(files[0]):
-                                raise ParameterValidationError(f"'{mkname(name)}': {value} is not a regular file")
-                        else:
-                            if not os.path.isdir(files[0]):
-                                raise ParameterValidationError(f"'{mkname(name)}': {value} is not a directory")
-                    inputs[name] = files[0]
+                    uri = files[0]
+                    if not uri.remote and os.path.exists(uri.path):
+                        if dtype == File:
+                            if not os.path.isfile(uri.path):
+                                raise ParameterValidationError(f"'{mkname(name)}': {uri} is not a regular file")
+                        elif dtype == Directory or dtype == MS:
+                            if not os.path.isdir(uri.path):
+                                raise ParameterValidationError(f"'{mkname(name)}': {uri} is not a directory")
+                    inputs[name] = str(uri)
             # else make list
             else:
                 # check that files are files and dirs are dirs
-                if dtype is List[File]:
-                    if not all(os.path.isfile(f) for f in files if os.path.exists(f)):
-                        raise ParameterValidationError(f"{mkname(name)}: {value} matches non-files")
-                else:
-                    if not all(os.path.isdir(f) for f in files if os.path.exists(f)):
-                        raise ParameterValidationError(f"{mkname(name)}: {value} matches non-directories")
-                inputs[name] = files
+                if dtype == List[File]:
+                    if not all(os.path.isfile(uri.path) for uri in files 
+                               if not uri.remote and os.path.exists(uri.path)):
+                        raise ParameterValidationError(f"{mkname(name)}: {value} contains non-files")
+                elif dtype == List[Directory] or dtype == List[MS]:
+                    if not all(os.path.isdir(uri.path) for uri in files 
+                               if not uri.remote and os.path.exists(uri.path)):
+                        raise ParameterValidationError(f"{mkname(name)}: {value} contains non-directories")
+                inputs[name] = list(map(str, files))
 
     # validate
     try:   
@@ -299,15 +303,19 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
             schema = schemas[name]
             if schema.is_output and schema.mkdir:
                 if schema.is_file_type:
-                    files = [value]
+                    files = [URI(value)]
                 elif schema.is_file_list_type:
-                    files = value
+                    files = map(URI, value)
                 else:
                     continue
-                for path in files:
-                    dirname = os.path.dirname(path)
-                    if dirname and not os.path.exists(dirname):
-                        os.makedirs(dirname, exist_ok=True)
+                for uri in files:
+                    if not uri.remote:
+                        if schema._dtype == Directory or schema._dtype == MS:
+                            dirname = uri.path
+                        else:
+                            dirname = os.path.dirname(uri.path)
+                        if dirname and not os.path.exists(dirname):
+                            os.makedirs(dirname, exist_ok=True)
 
     # add in unresolved values
     validated.update(**unresolved)
