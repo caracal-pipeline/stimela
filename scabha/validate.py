@@ -3,7 +3,7 @@ import os
 import os.path
 import yaml
 import re
-import typing
+import keyword
 from typing import *
 from collections import OrderedDict
 
@@ -176,9 +176,13 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
         value = inputs.get(name, UNSET)
         if value is not UNSET:
             # sanitize name: dataclass won't take hyphens or periods
-            fldname = re.sub("\W", "_", name)
-            while fldname in field2name:
-                fldname += "_"
+            fldname = re.sub("\\W", "_", name)
+            # avoid Python keywords and clashes with other field names by adding _x as needed
+            num = 0
+            while keyword.iskeyword(fldname) or keyword.issoftkeyword(fldname) or fldname in field2name:
+                fldname += f"_{num}"
+                num += 1
+            # add to mapping
             field2name[fldname] = name
             name2field[name] = fldname
 
