@@ -176,11 +176,13 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
         value = inputs.get(name, UNSET)
         if value is not UNSET:
             # sanitize name: dataclass won't take hyphens or periods
-            fldname = re.sub("\\W", "_", name)
+            fldname = orig_fldname = re.sub("\\W", "_", name)
             # avoid Python keywords and clashes with other field names by adding _x as needed
             num = 0
-            while keyword.iskeyword(fldname) or keyword.issoftkeyword(fldname) or fldname in field2name:
-                fldname += f"_{num}"
+            while keyword.iskeyword(fldname) or \
+                    (hasattr(keyword, 'issoftkeyword') and keyword.issoftkeyword(fldname)) or \
+                    fldname in field2name:
+                fldname += f"{orig_fldname}_{num}"
                 num += 1
             # add to mapping
             field2name[fldname] = name
