@@ -234,8 +234,8 @@ class Step:
             self.cargo.name = self.cargo.name or self.name
 
             # flatten parameters
-            self.cargo.apply_dynamic_schemas(self.params)
             self.params = self.cargo.flatten_param_dict(OrderedDict(), self.params)
+            self.cargo.apply_dynamic_schemas(self.params)
 
             # if logger is not provided, then init one
             if log is None:
@@ -266,6 +266,7 @@ class Step:
 
     def prevalidate(self, subst: Optional[SubstitutionNS]=None, root=False):
         self.finalize()
+        self.cargo.apply_dynamic_schemas(self.params, subst)
         # validate cab or recipe
         params = self.validated_params = self.cargo.prevalidate(self.params, subst, root=root)
         # add missing outputs
