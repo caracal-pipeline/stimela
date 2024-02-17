@@ -18,9 +18,12 @@ def resolve_required_mounts(mounts: Dict[str, bool],
 
     # helper function to accumulate list of target paths to be mounted
     def add_target(param_name, path, must_exist, readwrite):
-        if must_exist and not os.path.exists(path):
-            raise SchemaError(f"parameter '{param_name}': path '{path}' does not exist")
-        path = os.path.abspath(path)
+        if not os.path.isdir(path):
+            path = os.path.dirname(path)
+        if not os.path.exists(path):
+            if must_exist:
+                raise SchemaError(f"parameter '{param_name}': path '{path}' does not exist")
+            return
         mounts[path] = mounts.get(path) or readwrite
 
     # go through parameters and accumulate target paths
@@ -46,32 +49,31 @@ def resolve_required_mounts(mounts: Dict[str, bool],
             path = uri.path
             path = os.path.abspath(path).rstrip("/")
             realpath = os.path.abspath(os.path.realpath(path))
+            add_target(name, realpath, must_exist=must_exist, readwrite=readwrite)
             # check if parent directory access is required
             if schema.access_parent_dir or schema.write_parent_dir:
                 add_target(name, os.path.dirname(path), must_exist=True, readwrite=schema.write_parent_dir)
                 add_target(name, os.path.dirname(realpath), must_exist=True, readwrite=schema.write_parent_dir)
             # for symlink targets, we need to mount the parent directory of the link too
             if os.path.islink(path):
-                # if target is a real directory, mount it directly
-                if os.path.isdir(realpath):
-                    add_target(name, realpath, must_exist=True, readwrite=readwrite)
-                # otherwise mount its parent to allow creation of symlink target
-                else:
-                    add_target(name, os.path.dirname(realpath), must_exist=True, readwrite=readwrite)
-            # for actual targets, mount the parent, for dirs, mount the dir
+                add_target(name, os.path.dirname(path), must_exist=True, readwrite=readwrite)
             else:
-                if os.path.isdir(path):
-                    add_target(name, path, must_exist=must_exist, readwrite=readwrite)
-                else:
-                    add_target(name, os.path.dirname(path), must_exist=True, readwrite=readwrite)
-
+                add_target(name, path, must_exist=must_exist, readwrite=readwrite)
     
+    # now, for any mount that has a symlink in the path, add the symlink target to mounts
+    for path, readwrite in list(mounts.items()):
+        while path != "/":
+            if os.path.islink(path):
+                realpath = os.path.realpath(path)
+                mounts[realpath] = mounts.get(realpath) or readwrite
+            path = os.path.dirname(path)
+
     # now eliminate unnecessary mounts (those that have a parent mount with no lower read/write privileges)
     skip_targets = set()
 
     for path, readwrite in mounts.items():
         parent = os.path.dirname(path)
-        while parent != "/":  
+        while parent != "/":
             # if parent already mounted, and is as writeable as us, skip us
             if parent in mounts and mounts[parent] >= readwrite:
                 skip_targets.add(path)
