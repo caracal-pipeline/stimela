@@ -1,39 +1,46 @@
 import logging
-from typing import Dict, Optional, Any, Callable
+from typing import Dict, Optional, Any, Callable, List
 from dataclasses import dataclass
 from omegaconf import OmegaConf
 from omegaconf.errors import OmegaConfBaseException 
 import stimela
 from stimela.backends import StimelaBackendOptions, StimelaBackendSchema
 from stimela.exceptions import BackendError
+from abc import abstractmethod
 
-from . import get_backend, get_backend_status, slurm
+from . import get_backend, get_backend_status
 
+
+class EmptyBackendWrapper(object):
+    def wrap_run_command(self, args: List[str], fqname: Optional[str]=None, log: Optional[logging.Logger]=None) -> List[str]:
+        return args
+
+    def wrap_build_command(self, args: List[str], fqname: Optional[str]=None, log: Optional[logging.Logger]=None) -> List[str]:
+        return args
 
 @dataclass
-class BackendWrapper(object):
+class BackendRunner(object):
     opts: StimelaBackendOptions
     is_remote: bool
     is_remote_fs: bool
     backend: Any
     backend_name: str
-    run_command_wrapper: Optional[Callable]
-    build_command_wrapper: Optional[Callable]
+    wrapper: Any
 
     def run(self, cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
             log: logging.Logger, subst: Optional[Dict[str, Any]] = None):
         return self.backend.run(cab, params, fqname=fqname, backend=self.opts, log=log, subst=subst, 
-                              command_wrapper=self.run_command_wrapper)
+                                wrapper=self.wrapper)
         
     def build(self, cab: 'stimela.kitchen.cab.Cab', log: logging.Logger, rebuild=False):
         if not hasattr(self.backend, 'build'):
            log.warning(f"the {self.backend_name} backend does support or require image builds")
         else:
             return self.backend.build(cab, backend=self.opts, log=log, rebuild=rebuild,
-                                command_wrapper=self.build_command_wrapper)
+                                wrapper=self.wrapper)
 
 
-def validate_backend_settings(backend_opts: Dict[str, Any], log: logging.Logger) -> BackendWrapper:
+def validate_backend_settings(backend_opts: Dict[str, Any], log: logging.Logger) -> BackendRunner:
     """Checks that backend settings refer to a valid backend
     
     Returs tuple of options, main, wrapper, where 'main' the the main backend, and 'wrapper' is an optional wrapper backend 
@@ -65,13 +72,12 @@ def validate_backend_settings(backend_opts: Dict[str, Any], log: logging.Logger)
         is_remote = True
         is_remote_fs = False
         backend_opts.slurm.validate(log)
-        run_command_wrapper = backend_opts.slurm.run_command_wrapper
-        build_command_wrapper = backend_opts.slurm.build_command_wrapper
+        wrapper = backend_opts.slurm
+    # otherwise use empty wrapper
     else:
-        run_command_wrapper = build_command_wrapper = None
+        wrapper = EmptyBackendWrapper()
 
-    return BackendWrapper(opts=backend_opts, is_remote=is_remote, is_remote_fs=is_remote_fs, 
-                          backend=backend, backend_name=backend_name, 
-                          run_command_wrapper=run_command_wrapper,
-                          build_command_wrapper=build_command_wrapper)
+    return BackendRunner(opts=backend_opts, is_remote=is_remote, is_remote_fs=is_remote_fs, 
+                          backend=backend, backend_name=backend_name,
+                          wrapper=wrapper)
 

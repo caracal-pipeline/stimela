@@ -339,13 +339,13 @@ class Step:
                     opts_yaml = OmegaConf.to_yaml(backend_opts)
                     log_rich_payload(self.log, "effective backend settings are", opts_yaml, syntax="yaml") 
                 backend_opts = OmegaConf.to_object(OmegaConf.merge(stimela.CONFIG.opts.backend, backend_opts))
-                backend_wrapper = runner.validate_backend_settings(backend_opts, log=log)
+                backend_runner = runner.validate_backend_settings(backend_opts, log=log)
             except Exception as exc:
                 newexc = BackendError("error validating backend settings", exc)
                 raise newexc from None
-            log.info(f"building image for step '{self.fqname}' using the {backend_wrapper.backend_name} backend")
+            log.info(f"building image for step '{self.fqname}' using the {backend_runner.backend_name} backend")
             with task_stats.declare_subtask(self.name):
-                return backend_wrapper.build(self.cargo, log=log, rebuild=rebuild)
+                return backend_runner.build(self.cargo, log=log, rebuild=rebuild)
 
 
     def run(self, backend: Optional[Dict] = {}, subst: Optional[Dict[str, Any]] = None, 
@@ -387,7 +387,7 @@ class Step:
                 log_rich_payload(self.log, "current backend settings are", opts_yaml, syntax="yaml") 
             backend_opts = OmegaConf.merge(StimelaBackendSchema, backend_opts)
             backend_opts = OmegaConf.to_object(backend_opts)
-            backend_wrapper = runner.validate_backend_settings(backend_opts, log=self.log)
+            backend_runner = runner.validate_backend_settings(backend_opts, log=self.log)
         except Exception as exc:
             newexc = BackendError("error validating backend settings", exc)
             raise newexc from None
@@ -398,7 +398,7 @@ class Step:
             context = nullcontext()
             parent_log_info = parent_log_warning = parent_log.debug
         else:
-            context = task_stats.declare_subtask(self.name, hide_local_metrics=backend_wrapper.is_remote)
+            context = task_stats.declare_subtask(self.name, hide_local_metrics=backend_runner.is_remote)
             stimelogging.declare_chapter(f"{self.fqname}")
             parent_log_info, parent_log_warning = parent_log.info, parent_log.warning
 
@@ -428,7 +428,7 @@ class Step:
             self.log.debug(f"validating inputs {subst and list(subst.keys())}")
             validated = None
             try:
-                params = self.cargo.validate_inputs(params, loosely=skip, remote_fs=backend_wrapper.is_remote_fs, subst=subst)
+                params = self.cargo.validate_inputs(params, loosely=skip, remote_fs=backend_runner.is_remote_fs, subst=subst)
                 validated = True
 
             except ScabhaBaseException as exc:
@@ -480,7 +480,7 @@ class Step:
 
             ## check if we need to skip based on existing/fresh file outputs
             ## if skip on fresh outputs is in effect, find mtime of most recent input 
-            if not backend_wrapper.is_remote_fs and not skip and self.skip_if_outputs:
+            if not backend_runner.is_remote_fs and not skip and self.skip_if_outputs:
                 # max_mtime will remain 0 if we're not echecking for freshness, or if there are no file-type inputs
                 max_mtime, max_mtime_path = 0, None
                 if self.skip_if_outputs == OUTPUTS_FRESH:
@@ -570,7 +570,7 @@ class Step:
 
             if not skip:
                 # check for outputs that need removal
-                if not backend_wrapper.is_remote_fs:
+                if not backend_runner.is_remote_fs:
                     for name, schema in self.outputs.items():
                         if name in params and schema.remove_if_exists and schema.is_file_type:
                             path = params[name]
@@ -583,7 +583,7 @@ class Step:
                 if type(self.cargo) is Recipe:
                     self.cargo._run(params, subst, backend=backend)
                 elif type(self.cargo) is Cab:
-                    cabstat = backend_wrapper.run(self.cargo, params=params, log=self.log, subst=subst, fqname=self.fqname)
+                    cabstat = backend_runner.run(self.cargo, params=params, log=self.log, subst=subst, fqname=self.fqname)
                     # check for runstate
                     if cabstat.success is False:
                         raise StimelaCabRuntimeError(f"error running cab '{self.cargo.name}'", cabstat.errors)
@@ -602,7 +602,7 @@ class Step:
             validated = False
 
             try:
-                params = self.cargo.validate_outputs(params, loosely=skip,remote_fs=backend_wrapper.is_remote_fs, subst=subst)
+                params = self.cargo.validate_outputs(params, loosely=skip,remote_fs=backend_runner.is_remote_fs, subst=subst)
                 validated = True
             except ScabhaBaseException as exc:
                 severity = "warning" if skip else "error"
