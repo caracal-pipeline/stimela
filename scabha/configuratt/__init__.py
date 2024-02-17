@@ -18,6 +18,7 @@ def load(path: str, use_sources: Optional[List[DictConfig]] = [], name: Optional
         includes: bool=True, selfrefs: bool=True, include_path: str=None, 
         use_cache: bool = True,
         no_toplevel_cache = False,
+        include_stack = [],
         verbose: bool = False):
     """Loads config file, using a previously loaded config to resolve _use references.
 
@@ -30,6 +31,7 @@ def load(path: str, use_sources: Optional[List[DictConfig]] = [], name: Optional
         includes (bool, optional): If True (default), "_include" references will be processed
         selfrefs (bool, optional): If False, "_use" references will only be looked up in existing config.
             If True (default), they'll also be looked up within the loaded config.
+        include_stack: list of paths which have been included. Used to catch recursive includes.
         include_path (str, optional):
             if set, path to each config file will be included in the section as element 'include_path'
 
@@ -50,7 +52,8 @@ def load(path: str, use_sources: Optional[List[DictConfig]] = [], name: Optional
         if use_sources is not None and selfrefs:
             use_sources = [subconf] + list(use_sources)
         conf, deps = resolve_config_refs(subconf, pathname=path, location=location, name=name, 
-                            includes=includes, use_cache=use_cache, use_sources=use_sources, include_path=include_path)
+                            includes=includes, use_cache=use_cache, use_sources=use_sources, include_path=include_path,
+                            include_stack=include_stack + [path])
         # update overall dependencies
         dependencies.update(deps)
 

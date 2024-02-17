@@ -19,38 +19,65 @@ from stimela import stimelogging
 import stimela.config
 from stimela.config import ConfigExceptionTypes
 from stimela import logger, log_exception
-from stimela.exceptions import RecipeValidationError, StimelaRuntimeError, StepSelectionError, BackendError
+from stimela.exceptions import RecipeValidationError, StimelaRuntimeError, StepSelectionError
 from stimela.main import cli
 from stimela.kitchen.recipe import Recipe, Step, RecipeSchema, join_quote
 from stimela import task_stats
 import stimela.backends
 
-def load_recipe_file(filename: str):
-    dependencies = stimela.config.get_initial_deps()
+def load_recipe_files(filenames: List[str]):
 
-    # if file contains a recipe entry, treat it as a full config (that can include cabs etc.)
-    try:
-        conf, deps = configuratt.load(filename, use_sources=[stimela.CONFIG], no_toplevel_cache=True)
-    except ConfigExceptionTypes as exc:
-        log_exception(f"error loading {filename}", exc)
-        sys.exit(2)
+    full_conf = OmegaConf.create()
+    full_deps = configuratt.ConfigDependencies()
+    for filename in filenames:
+        try:
+            conf, deps = configuratt.load(filename, use_sources=[stimela.CONFIG, full_conf], no_toplevel_cache=True)
+        except ConfigExceptionTypes as exc:
+            log_exception(f"error loading {filename}", exc)
+            sys.exit(2)
+        # accumulate loaded config
+        full_conf.merge_with(conf)
+        full_deps.update(deps)
 
     # warn user if any includes failed
-    if deps.fails:
-        logger().warning(f"{len(deps.fails)} optional includes were not found, some cabs may not be available")
-        for path, dep in deps.fails.items():
+    if full_deps.fails:
+        logger().warning(f"{len(full_deps.fails)} optional includes were not found, some cabs may not be available")
+        for path, dep in full_deps.fails.items():
             logger().warning(f"    {path} (from {dep.origin})")
 
-    dependencies.update(deps)
+    # merge into full config dependencies
+    dependencies = stimela.config.get_initial_deps()
+    dependencies.update(full_deps)
+    stimela.config.CONFIG_DEPS.update(dependencies)
 
     # check for missing requirements
-    missing = configuratt.check_requirements(conf, [stimela.CONFIG], strict=True)
+    missing = configuratt.check_requirements(full_conf, [stimela.CONFIG], strict=True)
     for (loc, name, _) in missing:
         logger().warning(f"optional config section '{loc}' omitted due to missing requirement '{name}'")
 
+    # split content into config sections, and recipes:
+    # config secions are merged into the config namespace, while recipes go under
+    # lib.recipes
+    recipe_names = []
+    update_conf = OmegaConf.create()
+    for name, value in full_conf.items():
+        if name in stimela.CONFIG:
+            update_conf[name] = value
+        else:
+            try:
+                stimela.CONFIG.lib.recipes[name] = OmegaConf.merge(RecipeSchema, value)
+            except Exception as exc:
+                log_exception(f"error in definition of recipe '{name}'", exc)
+                sys.exit(2)
+            recipe_names.append(name)
+    
+    try:
+        stimela.CONFIG.merge_with(update_conf)
+    except Exception as exc:
+        log_exception(f"error applying configuration from {' ,'.join(filenames)}", exc)
+        sys.exit(2)
 
-    return conf, dependencies
-
+    return recipe_names
 
 @cli.command("run",
     help="""
@@ -76,24 +103,26 @@ def load_recipe_file(filename: str):
 @click.option("-a", "--assign", metavar="PARAM VALUE", nargs=2, multiple=True,
                 help="""assigns values to parameters: equivalent to PARAM=VALUE, but plays nicer with the shell's 
                 tab completion.""")
+@click.option("-C", "--config", "config_assign", metavar="X.Y.Z VALUE", nargs=2, multiple=True,
+                help="""tweak configuration sections.""")
 @click.option("-l", "--last-recipe", is_flag=True,
                 help="""if multiple recipes are defined, selects the last one for execution.""")
 @click.option("-d", "--dry-run", is_flag=True,
                 help="""Doesn't actually run anything, only prints the selected steps.""")
 @click.option("-p", "--profile", metavar="DEPTH", type=int,
                 help="""Print per-step profiling stats to this depth. 0 disables.""")
-@click.argument("what", metavar="filename.yml|cab name") 
-@click.argument("parameters", nargs=-1, metavar="[recipe name] [PARAM=VALUE] [X.Y.Z=FOO] ...", required=False) 
-def run(what: str, parameters: List[str] = [], dry_run: bool = False, last_recipe: bool = False, profile: Optional[int] = None,
+@click.argument("parameters", nargs=-1, metavar="(cab name | filename.yml [filename.yml...] [recipe name]) [PARAM=VALUE] [X.Y.Z=VALUE] ...", required=True) 
+def run(parameters: List[str] = [], dry_run: bool = False, last_recipe: bool = False, profile: Optional[int] = None,
     assign: List[Tuple[str, str]] = [],
+    config_assign: List[Tuple[str, str]] = [],
     step_ranges: List[str] = [], tags: List[str] = [], skip_tags: List[str] = [], enable_steps: List[str] = [],
     build=False, rebuild=False, build_skips=False):
 
     log = logger()
     params = OrderedDict()
-    dotlist = OrderedDict()
     errcode = 0
-    recipe_name = None
+    recipe_name = cab_name = None
+    files_to_load = []
 
     def convert_value(value):
         if value == "=UNSET":
@@ -112,12 +141,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, last_recip
 
     # parse arguments as recipe name, parameter assignments, or dotlist for OmegaConf    
     for pp in parameters:
-        if "=" not in pp:
-            if recipe_name is not None:
-                log_exception(f"multiple recipe names given")
-                errcode = 2
-            recipe_name = pp
-        else:
+        if "=" in pp:
             key, value = pp.split("=", 1)
             # parse string as yaml value
             try:
@@ -125,32 +149,47 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, last_recip
             except Exception as exc:
                 log_exception(f"error parsing {pp}", exc)
                 errcode = 2
+        elif os.path.isfile(pp) and os.path.splitext(pp)[1].lower() in (".yml", ".yaml"):
+            files_to_load.append(pp)
+            log.info(f"will load recipe/config file '{pp}'")
+        elif pp in stimela.CONFIG.cabs:
+            if recipe_name is not None or cab_name is not None:
+                log_exception(f"multiple recipe and/or cab names given")
+                errcode = 2
+            else:
+                log.info(f"treating '{pp}' as a cab name")
+                cab_name = pp
+        else:
+            if recipe_name is not None or cab_name is not None:
+                log_exception(f"multiple recipe and/or cab names given")
+                errcode = 2
+            else:
+                recipe_name = pp
+                log.info(f"treating '{pp}' as a recipe name")
 
     if errcode:
         sys.exit(errcode)
 
-    # load extra config settigs from dotkey arguments, to be merged in below
-    # (when loading a recipe file, we want to merge these in AFTER the recipe is loaded, because the arguments
-    # might apply to the recipe)
+    # load config and recipes from all given files
+    if files_to_load:
+        available_recipes = load_recipe_files(files_to_load)
+    else:
+        available_recipes = []
+
+    # load config settigs from --config arguments
     try:
-        extra_config = OmegaConf.from_dotlist(list(dotlist.values())) if dotlist else OmegaConf.create()
+        dotlist = [f"{key}={value}" for key, value in config_assign]
+        stimela.CONFIG.merge_with(OmegaConf.from_dotlist(dotlist))
     except OmegaConfBaseException as exc:
-        log_exception(f"error loading command-line dotlist", exc)
+        log_exception(f"error loading --config assignments", exc)
         sys.exit(2)
 
-    if what in stimela.CONFIG.cabs:
-        cabname = what
-
-        try:
-            stimela.CONFIG = OmegaConf.unsafe_merge(stimela.CONFIG, extra_config)
-        except OmegaConfBaseException as exc:
-            log_exception(f"error applying command-line dotlist", exc)
-            sys.exit(2)
-
-        log.info(f"setting up cab {cabname}")
+    # run a cab
+    if cab_name is not None:
+        log.info(f"setting up cab {cab_name}")
 
         # create step config by merging in settings (var=value pairs from the command line) 
-        outer_step = Step(cab=cabname, params=params)
+        outer_step = Step(cab=cab_name, params=params)
 
         # prevalidate() is done by run() automatically if not already done, but it does set up the recipe's logger, so do it anyway
         try:
@@ -158,55 +197,26 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, last_recip
         except ScabhaBaseException as exc:
             log_exception(exc)
             sys.exit(1)
-
+    # run a recipe
     else:
-        if not os.path.isfile(what):
-            log_exception(f"'{what}' is neither a recipe file nor a known stimela cab")
+        if not stimela.CONFIG.lib.recipes:
+            log_exception(f"no recipes were specified")
             sys.exit(2)
-
-        log.info(f"loading recipe/config {what}")
-
-        conf, recipe_deps = load_recipe_file(what)
-        conf.merge_with(extra_config)
-
-        # anything that is not a standard config section will be treated as a recipe
-        all_recipe_names = [name for name in conf if name not in stimela.CONFIG]
-        if not all_recipe_names:
-            log_exception(f"{what} does not contain any recipes")
-            sys.exit(2)
-
-        # split content into config sections, and recipes:
-        # config secions are merged into the config namespace, while recipes go under
-        # lib.recipes
-        update_conf = OmegaConf.create()
-        for name, value in conf.items():
-            if name in stimela.CONFIG:
-                update_conf[name] = value
-            else:
-                try:
-                    stimela.CONFIG.lib.recipes[name] = OmegaConf.merge(RecipeSchema, value)
-                except Exception as exc:
-                    log_exception(f"error in definition of recipe '{name}'", exc)
-                    sys.exit(2)
-        
-        try:
-            stimela.CONFIG = OmegaConf.unsafe_merge(stimela.CONFIG, update_conf)
-        except Exception as exc:
-            log_exception(f"error applying configuration from {what}", exc)
-            sys.exit(2)
-
-        log.info(f"{what} contains the following recipe sections: {join_quote(all_recipe_names)}")
 
         if recipe_name:
-            if recipe_name not in conf:
-                log_exception(f"{what} does not contain recipe '{recipe_name}'")
+            if recipe_name not in stimela.CONFIG.lib.recipes:
+                log_exception(f"recipe '{recipe_name}' not found")
                 sys.exit(2)
-        elif last_recipe or len(all_recipe_names) == 1:
-            recipe_name = all_recipe_names[-1]
-        else:
-            print(f"This file contains the following recipes: {', '.join(all_recipe_names)}")
-            log_exception(f"multiple recipes found, please specify one on the command line, or use -l/--last-recipe")
-            sys.exit(2)
+        else: 
+            if len(available_recipes) == 0:
+                log_exception(f"no top-level recipes were found")
+                sys.exit(2)
+            elif last_recipe or len(available_recipes) == 1:
+                recipe_name = available_recipes[-1]
+            else:
+                logger().info(f"found multiple top-level recipes: {', '.join(available_recipes)}")
+                log_exception(f"please specify a recipe on the command line, or use -l/--last-recipe")
+                sys.exit(2)
         
         log.info(f"selected recipe is '{recipe_name}'")
 
@@ -246,7 +256,7 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, last_recip
 
         stimelogging.declare_chapter("prevalidation")
         log.info("pre-validating the recipe")
-        outer_step = Step(recipe=recipe, name=f"{recipe_name}", info=what, params=params)
+        outer_step = Step(recipe=recipe, name=f"{recipe_name}", info=recipe_name, params=params)
         try:
             params = outer_step.prevalidate(root=True)
         except Exception as exc:
@@ -272,7 +282,6 @@ def run(what: str, parameters: List[str] = [], dry_run: bool = False, last_recip
         log.info(f"recipe logs will be saved under {logdir}")
 
         filename = os.path.join(logdir, "stimela.recipe.deps")
-        stimela.config.CONFIG_DEPS.update(recipe_deps)
         stimela.config.CONFIG_DEPS.save(filename)
         log.info(f"saved recipe dependencies to {filename}")
 
