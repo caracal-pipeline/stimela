@@ -30,11 +30,19 @@ from stimela.main import cli
 @click.option("-e", "--enable-step", "enable_steps", metavar="STEP(s)", multiple=True,
                 help="""Build image for step(s) even if the recipe marks them as skipped. Use commas, or give multiple times 
                 for multiple steps.""")
+@click.option("-c", "--config", "config_equals", metavar="X.Y.Z=VALUE", nargs=1, multiple=True,
+                help="""tweak configuration options.""")
+@click.option("-C", "--config-assign", metavar="X.Y.Z VALUE", nargs=2, multiple=True,
+                help="""tweak configuration options: same function -c/--config, but plays nicer with the shell's 
+                tab completion feature.""")
 @click.option("-l", "--last-recipe", is_flag=True,
                 help="""if multiple recipes are defined, selects the last one for building.""")
 @click.argument("what", metavar="filename.yml|cab name", nargs=-1, required=True) 
 def build(what: str, last_recipe: bool = False, rebuild: bool = False, all_steps: bool=False,
+            config_equals: List[str] = [],
+            config_assign: List[Tuple[str, str]] = [],
             step_ranges: List[str] = [], tags: List[str] = [], skip_tags: List[str] = [], enable_steps: List[str] = []):
     return run.callback(what, last_recipe=last_recipe, step_ranges=step_ranges, 
         tags=tags, skip_tags=skip_tags, enable_steps=enable_steps,
+        config_equals=config_equals, config_assign=config_assign,
         build=True, rebuild=rebuild, build_skips=all_steps)

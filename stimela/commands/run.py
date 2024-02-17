@@ -100,11 +100,14 @@ def load_recipe_files(filenames: List[str]):
 @click.option("-e", "--enable-step", "enable_steps", metavar="STEP(s)", multiple=True,
                 help="""Force-enable steps even if the recipe marks them as skipped. Use commas, or give multiple times 
                 for multiple steps.""")
+@click.option("-c", "--config", "config_equals", metavar="X.Y.Z=VALUE", nargs=1, multiple=True,
+                help="""tweak configuration options.""")
 @click.option("-a", "--assign", metavar="PARAM VALUE", nargs=2, multiple=True,
                 help="""assigns values to parameters: equivalent to PARAM=VALUE, but plays nicer with the shell's 
-                tab completion.""")
-@click.option("-C", "--config", "config_assign", metavar="X.Y.Z VALUE", nargs=2, multiple=True,
-                help="""tweak configuration sections.""")
+                tab completion feature.""")
+@click.option("-C", "--config-assign", metavar="X.Y.Z VALUE", nargs=2, multiple=True,
+                help="""tweak configuration options: same function -c/--config, but plays nicer with the shell's 
+                tab completion feature.""")
 @click.option("-l", "--last-recipe", is_flag=True,
                 help="""if multiple recipes are defined, selects the last one for execution.""")
 @click.option("-d", "--dry-run", is_flag=True,
@@ -114,6 +117,7 @@ def load_recipe_files(filenames: List[str]):
 @click.argument("parameters", nargs=-1, metavar="(cab name | filename.yml [filename.yml...] [recipe name]) [PARAM=VALUE] [X.Y.Z=VALUE] ...", required=True) 
 def run(parameters: List[str] = [], dry_run: bool = False, last_recipe: bool = False, profile: Optional[int] = None,
     assign: List[Tuple[str, str]] = [],
+    config_equals: List[str] = [],
     config_assign: List[Tuple[str, str]] = [],
     step_ranges: List[str] = [], tags: List[str] = [], skip_tags: List[str] = [], enable_steps: List[str] = [],
     build=False, rebuild=False, build_skips=False):
@@ -178,10 +182,15 @@ def run(parameters: List[str] = [], dry_run: bool = False, last_recipe: bool = F
 
     # load config settigs from --config arguments
     try:
+        stimela.CONFIG.merge_with(OmegaConf.from_dotlist(config_equals))
+    except OmegaConfBaseException as exc:
+        log_exception(f"error loading -c/--config assignments", exc)
+        sys.exit(2)
+    try:
         dotlist = [f"{key}={value}" for key, value in config_assign]
         stimela.CONFIG.merge_with(OmegaConf.from_dotlist(dotlist))
     except OmegaConfBaseException as exc:
-        log_exception(f"error loading --config assignments", exc)
+        log_exception(f"error loading -C/--config-assign assignments", exc)
         sys.exit(2)
 
     # run a cab
