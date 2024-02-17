@@ -23,7 +23,6 @@ class SingularityBackendOptions(object):
     image_dir: str = os.path.expanduser("~/.singularity")
     auto_build: bool = True
     rebuild: bool = False
-    auto_update: bool = False      # currently unused
     executable: Optional[str] = None
     remote_only: bool = False      # if True, won't look for singularity on local system -- useful in combination with slurm wrapper
 
@@ -97,7 +96,7 @@ def get_image_info(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.Sti
     simg_name = image_name.replace("/", "-") + ".simg"
     simg_path = os.path.join(backend.singularity.image_dir, simg_name) 
 
-    return image_name, simg_path, True
+    return image_name, simg_path
 
 
 def build(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBackendOptions', log: logging.Logger,
@@ -112,10 +111,10 @@ def build(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBacke
         str: path to corresponding singularity image
     """
 
-    image_name, simg_path, auto_update_allowed = get_image_info(cab, backend)
+    image_name, simg_path = get_image_info(cab, backend)
 
     # this is True if we're allowed to build missing images
-    build = build or rebuild or backend.singularity.auto_build or backend.singularity.auto_update    
+    build = build or rebuild or backend.singularity.auto_build   
     # this is True if we're asked to force-rebuild images
     rebuild = rebuild or backend.singularity.rebuild
     
@@ -139,6 +138,7 @@ def build(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBacke
         log.info(f"singularity image {simg_path} exists")
 
     ## OMS: taking this out for now, need some better auto-update logic, let's come back to it later
+    ## Please retain the code for now
         
     # # else check if it need to be auto-updated
     # elif auto_update_allowed and backend.singularity.auto_update:

@@ -102,6 +102,12 @@ recipe:
     elemlist-xyz:
       dtype: Union[str, List[str]]
       element_choices: [x,y,z]
+    elemlist_xyz:
+      default: "deliberate use of _ vs - to check validate() avoiding this situation"
+    continue:
+      default: "deliberate use of Python keyword to make sure validate() doesn't barf"
+    with:
+      default: "deliberate use of Python keyword to make sure validate() doesn't barf"
     recipe-file:
       dtype: File
       default: test_recipe.yml
@@ -130,7 +136,6 @@ recipe:
       dtype: URI
       mkdir: true
       default: tmp/tmp
-
 
   assign:
     foo: bar
