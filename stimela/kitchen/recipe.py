@@ -827,7 +827,7 @@ class Recipe(Cargo):
 
                 try:
                     step_params = step.prevalidate(subst)
-                    subst.current._merge_(step_params)   # these may have changed in prevalidation
+                    subst.current._merge_(step_params)
                 except ScabhaBaseException as exc:
                     errors.append(RecipeValidationError(f"step '{label}' failed prevalidation", exc))
                 except Exception as exc:
