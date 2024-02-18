@@ -22,34 +22,6 @@ def join_quote(values):
     return "'" + "', '".join(values) + "'" if values else ""
 
 
-def validate_schema(schema: Dict[str, Any]):
-    """Checks a set of parameter schemas for internal consistency.
-
-    Args:
-        schema (Dict[str, Any]):   dict of parameter schemas
-
-    Raises:
-        SchemaError: [description]
-    """
-
-    pass
-
-
-def dtype_from_str(dtype_str: str):
-    """Converts a string e.g. 'int' into a typing object"""
-
-_file_types = {File, Directory, MS, URI}
-_file_list_types = {List[t] for t in _file_types}
-
-def is_file_type(dtype):
-    return dtype in _file_types
-
-def is_filelist_type(dtype):
-    return dtype in _file_list_types
-
-def is_uri_type(dtype):
-    return dtype in (URI, List[URI])
-
 def evaluate_and_substitute_object(obj: Any,  
                                     subst: SubstitutionNS, 
                                     recursion_level: int = 1,
