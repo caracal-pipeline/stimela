@@ -11,7 +11,7 @@ from stimela.task_stats import update_process_status
 from scabha.basetypes import EmptyListDefault
 
 from stimela.exceptions import BackendError
-from . import session_id, session_user, resource_labels, run_kube, KubeBackendOptions, get_kube_api
+from . import session_id, session_user, resource_labels, run_kube, KubeBackendOptions, get_kube_api, get_context_namespace
 
 Lifecycle = KubeBackendOptions.Volume.Lifecycle
 
@@ -56,11 +56,6 @@ def init(backend: StimelaBackendOptions, log: logging.Logger, cleanup: bool = Fa
     klog = log.getChild("kube")
     kube = backend.kube
 
-    if not kube.namespace:
-        klog.error("kube.namespace not configured, kube backend will not be available")
-        return False
-
-
     if cleanup:
         klog.info("cleaning up backend")
     else:
@@ -68,17 +63,20 @@ def init(backend: StimelaBackendOptions, log: logging.Logger, cleanup: bool = Fa
         klog.info("initializing kube backend")
 
     try:
-        kube_api, _ = run_kube.get_kube_api(kube.context) 
+        namespace, kube_api, _ = get_kube_api(kube.context)
     except ConfigException as exc:
         log_exception(exc, log=klog)
         log_exception(BackendError("error initializing kube backend", exc), log=klog)
         return False
+    
+    context, namespace = get_context_namespace()
+    klog.info(f"k8s context is {context}, namespace is {namespace}")
 
     if cleanup or kube.infrastructure.on_startup.report_pods or kube.infrastructure.on_startup.cleanup_pods:
         klog.info("checking for k8s pods from other sessions")
 
         try:
-            pods = kube_api.list_namespaced_pod(namespace=kube.namespace, 
+            pods = kube_api.list_namespaced_pod(namespace=namespace, 
                                                 label_selector=f"stimela_user={session_user}")
         except ApiException as exc:
             raise BackendError(f"k8s API error while listing pods", json.loads(exc.body))
@@ -94,7 +92,7 @@ def init(backend: StimelaBackendOptions, log: logging.Logger, cleanup: bool = Fa
                 if not cleanup:
                     klog.warning(f"since kube.infrastructure.on_starup.cleanup_pods is set, these will be terminated")
                 for podname in running_pods:
-                    _delete_pod(kube_api, podname, kube.namespace, klog)
+                    _delete_pod(kube_api, podname, namespace, klog)
 
             elif kube.infrastructure.on_startup.report_pods:
                 klog.warning(f"you have {len(running_pods)} pod(s) running from another stimela session")
@@ -130,11 +128,11 @@ def init(backend: StimelaBackendOptions, log: logging.Logger, cleanup: bool = Fa
 
 
 def refresh_pvc_list(kube: KubeBackendOptions):
-    kube_api, _ = get_kube_api()
+    namespace, kube_api, _ = get_kube_api()
     global active_pvcs, terminating_pvcs
     # get existing pvcs
     try:
-        list_pvcs = kube_api.list_namespaced_persistent_volume_claim(kube.namespace)
+        list_pvcs = kube_api.list_namespaced_persistent_volume_claim(namespace)
     except ApiException as exc:
         raise BackendError(f"k8s API error while listing PVCs", json.loads(exc.body)) from None
     pvc_names = []
@@ -163,7 +161,7 @@ def refresh_pvc_list(kube: KubeBackendOptions):
 
 
 def resolve_volumes(kube: KubeBackendOptions, log: logging.Logger, step_token=None, refresh=True):
-    kube_api, _ = get_kube_api()
+    namespace, kube_api, _ = get_kube_api()
     ExistsPolicy = KubeBackendOptions.Volume.ExistPolicy
 
     if refresh:
@@ -218,7 +216,7 @@ def resolve_volumes(kube: KubeBackendOptions, log: logging.Logger, step_token=No
             # if existing PVC with that is still terminating, wait
             if pvc.name in terminating_pvcs:
                 log.info(f"waiting for existing PVC '{pvc.name}' to terminate before re-creating")
-                _await_pvc_termination(kube.namespace, pvc, log=log)
+                _await_pvc_termination(namespace, pvc, log=log)
             # create
             newpvc = client.V1PersistentVolumeClaim()
             newpvc.metadata = client.V1ObjectMeta(name=pvc.name, labels=labels)
@@ -236,7 +234,7 @@ def resolve_volumes(kube: KubeBackendOptions, log: logging.Logger, step_token=No
                 data_source=data_source,
                 resources=client.V1ResourceRequirements(requests={"storage": pvc.capacity}))
             try:
-                resp = kube_api.create_namespaced_persistent_volume_claim(kube.namespace, newpvc)
+                resp = kube_api.create_namespaced_persistent_volume_claim(namespace, newpvc)
             except ApiException as exc:
                 raise BackendError(f"k8s API error while creating PVC '{pvc.name}'", json.loads(exc.body)) from None
             pvc.owner = session_user
@@ -249,7 +247,7 @@ def resolve_volumes(kube: KubeBackendOptions, log: logging.Logger, step_token=No
 
 
 def await_pvcs(namespace, pvc_names, log: logging.Logger):
-    kube_api, _ = get_kube_api()
+    namespace, kube_api, _ = get_kube_api()
 
     waiting_pvcs = set(pvc_names)
     waiting_reported = set()
@@ -285,7 +283,7 @@ def await_pvcs(namespace, pvc_names, log: logging.Logger):
         time.sleep(1)
 
 def _await_pvc_termination(namespace, pvc: KubeBackendOptions.Volume, log: logging.Logger):
-    kube_api, _ = get_kube_api()
+    namespace, kube_api, _ = get_kube_api()
     time0 = time.time()
     while True:
         update_process_status()
@@ -308,7 +306,7 @@ def _await_pvc_termination(namespace, pvc: KubeBackendOptions.Volume, log: loggi
 
 
 def delete_pvcs(kube: KubeBackendOptions, pvc_names, log: logging.Logger, force=False, step=True, session=False, refresh=True):
-    kube_api, _ = get_kube_api()
+    namespace, kube_api, _ = get_kube_api()
     global terminating_pvcs
 
     if refresh:
@@ -328,7 +326,7 @@ def delete_pvcs(kube: KubeBackendOptions, pvc_names, log: logging.Logger, force=
             (session and pvc.lifecycle == Lifecycle.session):
             log.info(f"deleting PVC '{pvc.name}'")
             try:
-                resp = kube_api.delete_namespaced_persistent_volume_claim(name=pvc.name, namespace=kube.namespace)
+                resp = kube_api.delete_namespaced_persistent_volume_claim(name=pvc.name, namespace=namespace)
             except ApiException as exc:
                 body = json.loads(exc.body)
                 log_exception(BackendError(f"k8s API error while deleting PVC '{pvc.name}'", (exc, body)), 
@@ -341,6 +339,10 @@ def delete_pvcs(kube: KubeBackendOptions, pvc_names, log: logging.Logger, force=
 
 def close(backend: StimelaBackendOptions, log: logging.Logger):
     kube = backend.kube
+    context, namespace = get_context_namespace()
+    if context is None:
+        return 
+    
     klog.info("closing kube backend")
 
     # release PVCs
@@ -348,10 +350,10 @@ def close(backend: StimelaBackendOptions, log: logging.Logger):
 
     # cleanup pods, if any
     if kube.infrastructure.on_exit.cleanup_pods:
-        kube_api, _ = run_kube.get_kube_api() 
+        namespace, kube_api, _ = run_kube.get_kube_api() 
 
         try:
-            pods = kube_api.list_namespaced_pod(namespace=kube.namespace, 
+            pods = kube_api.list_namespaced_pod(namespace=namespace, 
                                                 label_selector=f"stimela_session_id={session_id}")
         except ApiException as exc:
             body = json.loads(exc.body)
@@ -367,7 +369,7 @@ def close(backend: StimelaBackendOptions, log: logging.Logger):
             klog.warning(f"you have {len(running_pods)} pod(s) still pending or running from this session")
             klog.warning(f"since kube.infrastructure.on_exit.cleanup_pods is set, these will be terminated")
             for podname in running_pods:
-                _delete_pod(kube_api, podname, kube.namespace, klog)
+                _delete_pod(kube_api, podname, namespace, klog)
 
     atexit.unregister(close)
 

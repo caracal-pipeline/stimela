@@ -12,6 +12,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from stimela.config import EmptyDictDefault, EmptyListDefault
 import stimela
 from stimela import log_exception, stimelogging
+from stimela.stimelogging import log_rich_payload
 from stimela.exceptions import *
 
 from scabha.validate import evaluate_and_substitute, evaluate_and_substitute_object, Unresolved, join_quote
@@ -218,15 +219,14 @@ class Recipe(Cargo):
             elif basevar in self.inputs_outputs and self.inputs_outputs[basevar].default is not UNSET:
                 value = str(self.inputs_outputs[basevar].default)
             # else see if it is a config setting
-            else:
-                comps = basevar.split('.')
-                if len(comps) > 1 and comps[0] in self.config:
-                    try:
-                        value = self.config
-                        for comp in comps:
-                            value = value.get(comp)
-                    except Exception as exc:
-                        value = None
+            elif basevar.startswith("config."):
+                comps = basevar.split('.')[1:]
+                try:
+                    value = self.config
+                    for comp in comps:
+                        value = value.get(comp)
+                except Exception as exc:
+                    value = None
             # nothing found? error then
             if value is None:
                 if basevar in self.inputs_outputs:
@@ -272,6 +272,16 @@ class Recipe(Cargo):
         else:
             nesting, subkey = None, key
 
+        # helper function to do nested assignment of config and subst and backend
+        def assign_nested(container, nested_key, value):
+            comps = nested_key.split('.')
+            while len(comps) > 1:
+                if comps[0] not in container:
+                    raise AssignmentError(f"{self.fqname}: invalid assignment {key}={value}")
+                container = container[comps[0]]
+                comps.pop(0)
+            container[comps[0]] = value
+
         # assigning to input or output? Provide default            
         if key in self.inputs_outputs:
             self.log.debug(f"default params assignment: {key}={value}")
@@ -286,18 +296,11 @@ class Recipe(Cargo):
             return self.steps[nesting].assign_value(subkey, value, override=override)
         # assigning to config?
         elif nesting == "config":
-            # helper function to do nested assignment of config and subst
-            def assign_nested(container, nested_key, value):
-                comps = nested_key.split('.')
-                while len(comps) > 1:
-                    if comps[0] not in container:
-                        raise AssignmentError(f"{self.fqname}: invalid assignment {key}={value}")
-                    container = container[comps[0]]
-                    comps.pop(0)
-                container[comps[0]] = value
             assign_nested(self.config, subkey, value)
             if subst is not None and 'config' in subst:
                 assign_nested(subst.config, subkey, value)
+        # elif nesting == "backend":
+        #     assign_nested(self.backend, subkey, value)
         elif nesting == "log":
             whose = whose or self
             if type(value) is Unresolved:
@@ -824,7 +827,7 @@ class Recipe(Cargo):
 
                 try:
                     step_params = step.prevalidate(subst)
-                    subst.current._merge_(step_params)   # these may have changed in prevalidation
+                    subst.current._merge_(step_params)
                 except ScabhaBaseException as exc:
                     errors.append(RecipeValidationError(f"step '{label}' failed prevalidation", exc))
                 except Exception as exc:
@@ -1040,7 +1043,7 @@ class Recipe(Cargo):
                 alias.step.update_parameter(alias.param, value)
 
 
-    def _iterate_loop_worker(self, params, subst, backend, count, iter_var, subprocess=False, raise_exc=True):
+    def _iterate_loop_worker(self, params, subst, backend_settings, count, iter_var, subprocess=False, raise_exc=True):
         """"
         Needed for concurrency
         """
@@ -1114,7 +1117,7 @@ class Recipe(Cargo):
                             self.log.info(f"  ({step.info})", extra=dict(color="GREEN", boldface=True))
                     try:
                         #step_params = step.run(subst=subst.copy(), batch=batch)  # make a copy of the subst dict since recipe might modify
-                        step_params = step.run(backend=backend, subst=subst.copy(), parent_log=self.log)  # make a copy of the subst dict since recipe might modify
+                        step_params = step.run(backend=backend_settings, subst=subst.copy(), parent_log=self.log)  # make a copy of the subst dict since recipe might modify
                     except ScabhaBaseException as exc:
                         newexc = StimelaStepExecutionError(f"step '{step.fqname}' has failed, aborting the recipe", exc)
                         if not exc.logged:
@@ -1160,20 +1163,16 @@ class Recipe(Cargo):
             step.build(backend, rebuild=rebuild, build_skips=build_skips, log=log)
 
 
-    def _run(self, params, subst=None, backend={}) -> Dict[str, Any]:
-        """Internal recipe run method. Meant to be called from a wrapper Step object (which validates the parameters, etc.)
+    def _run(self, params: Dict[str, Any], subst: Optional[Dict[str, Any]] = None, backend: Dict = {}) -> Dict[str, Any]:
+        """Internal method for running a recipe. Meant to be called from the containing step.
 
-        Parameters
-        ----------
+        Args:
+            params (Dict[str, Any]): input parameters
+            subst (Dict[str, Any], optional): Substitution namespace. Defaults to None.
+            backend (Dict, optional): Extra backend settings from parent. Defaults to {}.
 
-        Returns
-        -------
-        Dict[str, Any]
-            Dictionary of formal outputs
-
-        Raises
-        ------
-        RecipeValidationError
+        Returns:
+            Dict[str, Any]: Dictionary of outputs
         """
         # set up backend
         backend = OmegaConf.merge(backend, self.backend or {})
@@ -1212,9 +1211,12 @@ class Recipe(Cargo):
         # init backends if not already done
         if not backends.initialized:
             try:
-                backend_opts = evaluate_and_substitute_object(backend, subst, recursion_level=-1, location=[self.fqname])
-                backend_opts = OmegaConf.merge(StimelaBackendSchema, backend_opts)
-                backend_opts = OmegaConf.to_object(backend_opts)
+                backend_opts = OmegaConf.merge(stimela.CONFIG.opts.backend, backend)
+                backend_opts = evaluate_and_substitute_object(backend_opts, subst, recursion_level=-1, location=[self.fqname, "backend"])
+                if getattr(backend_opts, 'verbose', 0):
+                    opts_yaml = OmegaConf.to_yaml(backend_opts)
+                    log_rich_payload(self.log, "initial backend settings are", opts_yaml, syntax="yaml") 
+                backend_opts = OmegaConf.to_object(OmegaConf.merge(StimelaBackendSchema, backend_opts))
             except Exception as exc:
                 newexc = BackendError("error validating backend settings", exc)
                 raise newexc from None
@@ -1297,34 +1299,6 @@ class Recipe(Cargo):
             subst.update(subst_copy)
             subst.current.steps = steps
 
-
-    # def run(self, **params) -> Dict[str, Any]:
-    #     """Public interface for running a step. Keywords are passed in as step parameters
-
-    #     Returns
-    #     -------
-    #     Dict[str, Any]
-    #         Dictionary of formal outputs
-    #     """
-    #     return Step(recipe=self, params=params, info=f"wrapper step for recipe '{self.name}'").run()
-
 StepSchema = OmegaConf.structured(Step)
 RecipeSchema = OmegaConf.structured(Recipe)
-
-class PyRecipe(Recipe):
-    """ 
-        Interface to Recipe class for python recipes (not YAML recipes)
-    """
-    def __init__(self, name, dirs, backend=None, info=None, log=None):
-
-        self.backend = backend
-        self.name = name
-
-        self.inputs: Dict[str, Any] = {}
-
-        for dir_item in dirs:
-            self.inputs[dir_item] = { 
-                "dtype": Directory,
-                "default": dirs[dir_item]
-            }
 
