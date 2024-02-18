@@ -268,6 +268,7 @@ class Step:
 
     def prevalidate(self, subst: Optional[SubstitutionNS]=None, root=False):
         self.finalize()
+        self.cargo.apply_dynamic_schemas(self.params, subst)
         # validate cab or recipe
         params = self.validated_params = self.cargo.prevalidate(self.params, subst, root=root)
         # add missing outputs
