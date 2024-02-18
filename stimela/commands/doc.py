@@ -34,11 +34,11 @@ from .run import load_recipe_files
                 help="""Increases level of detail to include all inputs/outputs.""")
 @click.option("-R", "--required", is_flag=True,
                 help="""Decreases level of detail to include required inputs/outputs only.""")
-@click.argument("items", nargs=-1, metavar="filename.yml|cab name|recipe name|...") 
-def doc(items: List[str] = [], do_list=False, implicit=False, obscure=False, all=False, required=False):
+@click.argument("what", nargs=-1, metavar="filename.yml ... [recipe name] [cab name]", required=True) 
+def doc(what: List[str] = [], do_list=False, implicit=False, obscure=False, all=False, required=False):
 
     log = logger()
-    top_tree = Tree(f"stimela doc {' '.join(items)}", guide_style="dim")
+    top_tree = Tree(f"stimela doc {' '.join(what)}", guide_style="dim")
     found_something = False
     default_recipe = None
 
@@ -69,7 +69,7 @@ def doc(items: List[str] = [], do_list=False, implicit=False, obscure=False, all
     # load all recipe/config files
     files_to_load = []
     names_to_document = []
-    for item in items:
+    for item in what:
         if os.path.isfile(item) and os.path.splitext(item)[1].lower() in (".yml", ".yaml"):
             files_to_load.append(item)
             log.info(f"will load recipe/config file '{item}'")

@@ -114,7 +114,7 @@ def load_recipe_files(filenames: List[str]):
                 help="""Doesn't actually run anything, only prints the selected steps.""")
 @click.option("-p", "--profile", metavar="DEPTH", type=int,
                 help="""Print per-step profiling stats to this depth. 0 disables.""")
-@click.argument("parameters", nargs=-1, metavar="(cab name | filename.yml [filename.yml...] [recipe name]) [PARAM=VALUE] [X.Y.Z=VALUE] ...", required=True) 
+@click.argument("parameters", nargs=-1, metavar="filename.yml ... [recipe name] [PARAM=VALUE] ...", required=True) 
 def run(parameters: List[str] = [], dry_run: bool = False, last_recipe: bool = False, profile: Optional[int] = None,
     assign: List[Tuple[str, str]] = [],
     config_equals: List[str] = [],
@@ -156,16 +156,9 @@ def run(parameters: List[str] = [], dry_run: bool = False, last_recipe: bool = F
         elif os.path.isfile(pp) and os.path.splitext(pp)[1].lower() in (".yml", ".yaml"):
             files_to_load.append(pp)
             log.info(f"will load recipe/config file '{pp}'")
-        elif pp in stimela.CONFIG.cabs:
-            if recipe_name is not None or cab_name is not None:
-                log_exception(f"multiple recipe and/or cab names given")
-                errcode = 2
-            else:
-                log.info(f"treating '{pp}' as a cab name")
-                cab_name = pp
         else:
-            if recipe_name is not None or cab_name is not None:
-                log_exception(f"multiple recipe and/or cab names given")
+            if recipe_name is not None:
+                log_exception(f"multiple recipe names given")
                 errcode = 2
             else:
                 recipe_name = pp
@@ -194,6 +187,8 @@ def run(parameters: List[str] = [], dry_run: bool = False, last_recipe: bool = F
         sys.exit(2)
 
     # run a cab
+    # this is currenty always None (see https://github.com/caracal-pipeline/stimela/issues/234), so effectively
+    # disabled. Leaving the code in place to re-enable another time. 
     if cab_name is not None:
         log.info(f"setting up cab {cab_name}")
 

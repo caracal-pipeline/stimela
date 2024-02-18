@@ -37,7 +37,7 @@ from stimela.main import cli
                 tab completion feature.""")
 @click.option("-l", "--last-recipe", is_flag=True,
                 help="""if multiple recipes are defined, selects the last one for building.""")
-@click.argument("what", metavar="filename.yml|cab name", nargs=-1, required=True) 
+@click.argument("what", metavar="filename.yml ... [recipe name] [PARAM=VALUE] ...", nargs=-1, required=True) 
 def build(what: str, last_recipe: bool = False, rebuild: bool = False, all_steps: bool=False,
             config_equals: List[str] = [],
             config_assign: List[Tuple[str, str]] = [],
