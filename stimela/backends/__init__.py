@@ -58,6 +58,8 @@ class StimelaBackendOptions(object):
     ## Resource limits applied during run -- see resource module
     rlimits: Dict[str, Any] = EmptyDictDefault()
 
+    verbose: int = 0  # be verbose about backend selections. Higher levels mean more verbosity
+
     def __post_init__(self):
         # resolve "select" field
         if type(self.select) is str:

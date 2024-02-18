@@ -80,15 +80,14 @@ def apply_pod_spec(kps, pod_spec: Dict[str, Any], predefined_pod_specs: Dict[str
     return pod_spec
 
 class StatusReporter(object):
-    def __init__(self, namespace: str, log: logging.Logger, 
+    def __init__(self, log: logging.Logger, 
                  podname: str,
                  kube: KubeBackendOptions,
                  event_handler: None,
                  update_interval: float = 1,
                  enable_metrics: bool = True):
         self.kube = kube
-        self.kube_api, self.custom_api = get_kube_api() 
-        self.namespace = namespace
+        self.namespace, self.kube_api, self.custom_api = get_kube_api() 
         self.log = log
         self.podname = podname
         self.label_selector = f"stimela_job={podname}"
@@ -161,17 +160,17 @@ class StatusReporter(object):
                         try:
                             self.event_handler(event)
                         except Exception as exc:
-                            self.log.error(self.kube.verbose_event_format.format(event=event))
+                            self.log.error(self.kube.debug.event_format.format(event=event))
                             raise
                     # no error from handler, report event if configured to
-                    if self.kube.verbose_events:
-                        color = self.kube.verbose_event_colors.get(event.type.lower()) \
-                                or self.kube.verbose_event_colors.get("default")
+                    if self.kube.debug.log_events:
+                        color = self.kube.debug.event_colors.get(event.type.lower()) \
+                                or self.kube.debug.event_colors.get("default")
                         # escape console markup on string fields
                         for key, value in event.__dict__.items():                         
                             if type(value) is str:
                                 setattr(event, key, escape(value))
-                        self.log.info(self.kube.verbose_event_format.format(event=event), 
+                        self.log.info(self.kube.debug.event_format.format(event=event), 
                                       extra=dict(color=color) if color else {})
 
     def update(self):
