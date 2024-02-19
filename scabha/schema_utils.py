@@ -2,7 +2,7 @@ import re
 import click
 from scabha.exceptions import SchemaError
 from .cargo import Parameter, UNSET, _UNSET_DEFAULT
-from .basetypes import EmptyDictDefault
+from .basetypes import EmptyDictDefault, is_file_type
 from typing import *
 from dataclasses import dataclass, make_dataclass, field
 from omegaconf import OmegaConf, MISSING
@@ -30,6 +30,10 @@ def schema_to_dataclass(io: Dict[str, Parameter], class_name: str, bases=(), pos
     for name, schema in io.items():
         if type(schema) is not Parameter:
             schema = Parameter(**schema)
+
+        if is_file_type(schema._dtype):
+            schema._dtype = str
+            schema.dtype = "str"
 
         # sanitize name: dataclass won't take hyphens or periods
         # so replace with "_" and ensure uniqueness
@@ -138,7 +142,7 @@ class Schema(object):
 def clickify_parameters(schemas: Union[str, Dict[str, Any]]):
 
     if type(schemas) is str:
-        schemas = OmegaConf.merge(OmegaConf.structured(Schema), 
+        schemas = OmegaConf.merge(OmegaConf.structured(Schema),
                                OmegaConf.load(schemas))
 
     decorator_chain = None
