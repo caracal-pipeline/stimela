@@ -162,7 +162,7 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]]):
                 dtype = _atomic_types[dtype]
                 if dtype is bool:
                     optname = f"{optname}/--no-{name}"
-            # file type?
+            # file type? NB: URI not included deliberately -- this becomes a str in the else: clause below
             elif dtype in ("MS", "File", "Directory"):
                 dtype = click.Path(exists=(io is schemas.inputs))
             else:
