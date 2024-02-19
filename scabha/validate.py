@@ -266,6 +266,8 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
 
     # check choice-type parameters
     for name, value in validated.items():
+        if value is None:
+            continue
         schema = schemas[name]
         if schema.choices and value not in schema.choices:
             raise ParameterValidationError(f"{mkname(name)}: invalid value '{value}'")
