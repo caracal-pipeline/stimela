@@ -114,6 +114,3 @@ def is_file_type(dtype):
 def is_file_list_type(dtype):
     return any(dtype == List[t] for t in FILE_TYPES)
 
-
-
-

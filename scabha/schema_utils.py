@@ -146,11 +146,7 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]]):
 
     if type(schemas) is str:
         schemas = OmegaConf.merge(OmegaConf.structured(Schema),
-<<<<<<< HEAD
                                 OmegaConf.load(schemas))
-=======
-                               OmegaConf.load(schemas))
->>>>>>> 7837c22be57b4b0bf02335a37a7796822a59439f
 
     decorator_chain = None
     for io in schemas.inputs, schemas.outputs:
@@ -252,3 +248,4 @@ def paramfile_loader(paramfiles: List[File], sources: List[File] = [], schema_sp
                                             use_sources=srcs, use_cache=use_cache)
     
     return OmegaConf.create(struct_args)
+
