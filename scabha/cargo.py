@@ -13,7 +13,7 @@ from rich.markdown import Markdown
 from .exceptions import ParameterValidationError, DefinitionError, SchemaError, AssignmentError
 from .validate import validate_parameters, Unresolved
 from .substitutions import SubstitutionNS
-from .basetypes import EmptyDictDefault, EmptyListDefault, UNSET
+from .basetypes import EmptyDictDefault, EmptyListDefault, UNSET, is_file_list_type, is_file_type
 
 # need * imports from both to make eval(self.dtype, globals()) work
 from typing import *
@@ -162,7 +162,6 @@ class Parameter(object):
     # arbitrary metadata associated with parameter
     metadata: Dict[str, Any] = EmptyDictDefault()
 
-    _file_types = (File, MS, Directory)
 
     def __post_init__(self):
         def natify(value):
@@ -181,10 +180,13 @@ class Parameter(object):
         # yes I know eval() is naughty but this is the best we can do for now
         # see e.g. https://stackoverflow.com/questions/67500755/python-convert-type-hint-string-representation-from-docstring-to-actual-type-t
         # The alternative is a non-standard API call i.e. typing._eval_type()
-        self._dtype = eval(self.dtype, globals())
+        try:
+            self._dtype = eval(self.dtype, globals())
+        except Exception as exc:
+            raise SchemaError(f"'{self.dtype}' is not a valid dtype", exc)
 
-        self._is_file_type = any(self._dtype == t for t in self._file_types)
-        self._is_file_list_type = any(self._dtype == List[t] for t in self._file_types)
+        self._is_file_type = is_file_type(self._dtype)
+        self._is_file_list_type = is_file_list_type(self._dtype)
 
         self._is_input = True
 
@@ -286,13 +288,13 @@ class Cargo(object):
                             value = OmegaConf.unsafe_merge(ParameterSchema.copy(), value)
                             io_dest[name] = Parameter(**value)
                         except Exception as exc0:
-                            raise SchemaError(f"{label}.{name} is not a valid parameter definition", exc0)
+                            raise SchemaError(f"{label}.{name} is not a valid parameter definition", exc0) from None
                     # else assume subsection and recurse in
                     else:
                         try:
                             Cargo.flatten_schemas(io_dest, value, label=label, prefix=f"{name}.")
                         except SchemaError as exc:
-                            raise SchemaError(f"{label}.{name} is interpreted as nested section, but contains errors", exc)
+                            raise SchemaError(f"{label}.{name} was interpreted as nested section, but contains errors", exc) from None
         return io_dest
 
     def flatten_param_dict(self, output_params, input_params, prefix=""):

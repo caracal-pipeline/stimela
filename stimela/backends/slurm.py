@@ -24,7 +24,7 @@ class SlurmOptions(object):
     enable: bool = False                            # enables passing off jobs to slurm via srun
     srun_path: Optional[str] = None                 # path to srun executable
     srun_opts: Dict[str, str] = EmptyDictDefault()  # extra options passed to srun. "--" prepended, and "_" replaced by "-"
-    build_local = True                              # if True, images will be built locally (i.e. on the head node) even when slurm is enabled
+    build_local: bool = True                        # if True, images will be built locally (i.e. on the head node) even when slurm is enabled
     # these will be checked for
     required_mem_opts: Optional[List[str]] = ListDefault("mem", "mem-per-cpu", "mem-per-gpu")
 

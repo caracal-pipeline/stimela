@@ -4,7 +4,7 @@ from typing import Dict, List, Any, Dict
 from stimela.kitchen.cab import Cab, Parameter
 from scabha.exceptions import SchemaError
 from stimela.exceptions import BackendError
-from scabha.basetypes import File, Directory, MS
+from scabha.basetypes import File, Directory, MS, URI
 
 ## commenting out for now -- will need to fix when we reactive the kube backend (and have tests for it)
 
@@ -32,10 +32,9 @@ def resolve_required_mounts(mounts: Dict[str, bool],
         if schema is None:
             raise SchemaError(f"parameter {name} not in defined inputs or outputs for this cab. This should have been caught by validation earlier!")
 
-        dtype = schema._dtype 
-        if dtype in (File, Directory, MS):
+        if schema.is_file_type:
             files = [value]
-        elif dtype in (List[File], List[Directory], List[MS]):
+        elif schema.is_file_list_type:
             files = value
         else:
             continue
@@ -44,9 +43,10 @@ def resolve_required_mounts(mounts: Dict[str, bool],
         readwrite = schema.writable or name in outputs
 
         for path in files:
-            # check for s3:// MS references and skip them
-            if path.startswith("s3://") or path.startswith("S3://"):
+            uri = URI(path)
+            if uri.remote:
                 continue
+            path = uri.path
             path = os.path.abspath(path).rstrip("/")
             realpath = os.path.abspath(os.path.realpath(path))
             add_target(name, realpath, must_exist=must_exist, readwrite=readwrite)

@@ -108,7 +108,34 @@ recipe:
       default: "deliberate use of Python keyword to make sure validate() doesn't barf"
     with:
       default: "deliberate use of Python keyword to make sure validate() doesn't barf"
-
+    recipe-file:
+      dtype: File
+      default: test_recipe.yml
+      must_exist: True
+    recipe-file-2:
+      dtype: File
+      default: test_recipe_notexists.yml
+      must_exist: False
+    recipe-dirs:
+      dtype: List[Directory]
+      default: ['.', '..', '~']
+    recipe-uri:
+      dtype: URI
+      default: file://test_recipe.yml
+      must_exist: true
+    recipe-uri-2:
+      dtype: List[URI]
+      default: [file://test_recipe.yml, s3://some.s3.path]
+      must_exist: true
+  outputs:
+    output-dir:    
+      dtype: Directory
+      mkdir: true
+      default: tmp/tmp
+    output-uri:    
+      dtype: URI
+      mkdir: true
+      default: tmp/tmp
 
   assign:
     foo: bar
