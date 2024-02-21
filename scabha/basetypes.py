@@ -2,6 +2,7 @@ from dataclasses import field, dataclass
 from collections import OrderedDict
 from typing import List
 from .exceptions import UnsetError
+import os.path
 
 def EmptyDictDefault():
     return field(default_factory=lambda:OrderedDict())
@@ -45,13 +46,15 @@ class SkippedOutput(Unresolved):
     def __str__(self):
         return f"Skipped({self.value})"
 
-import os.path
-
 class File(str):
 
     @property
     def NAME(self):
         return File(os.path.basename(self))
+    
+    @property
+    def PATH(self):
+        return File(os.path.abspath(self))
 
     @property
     def DIR(self):
@@ -68,6 +71,10 @@ class File(str):
     @property
     def EXT(self):
         return os.path.splitext(self)[1]
+    
+    @property
+    def EXISTS(self):
+        return os.path.exists(self)
 
 
 class Directory(File):
