@@ -1,17 +1,19 @@
+import os
 import re
 import click
 from scabha.exceptions import SchemaError
 from .cargo import Parameter, UNSET, _UNSET_DEFAULT
-from .basetypes import EmptyDictDefault
-from typing import *
+from .basetypes import EmptyDictDefault, File
+from typing import List, File, Dict, DefaultDict, Any
 from dataclasses import dataclass, make_dataclass, field
 from omegaconf import OmegaConf, MISSING
 from collections.abc import MutableSet, MutableSequence, MutableMapping
 
 def schema_to_dataclass(io: Dict[str, Parameter], class_name: str, bases=(), post_init: Optional[Callable] =None):
-    """Converts a scabha schema to a dataclass.
-       Each parameter in the schema will correspond to a field. Metadata of fields will contain:
-        'help' for info, 'choices' for the choices field, 'parameter' for parameter name
+    """
+    Converts a scabha schema to a dataclass.
+    Each parameter in the schema will correspond to a field. Metadata of fields will contain:
+    'help' for info, 'choices' for the choices field, 'parameter' for parameter name
 
     Args:
         io (Dict[str, Parameter]): dict of parameters
@@ -138,8 +140,8 @@ class Schema(object):
 def clickify_parameters(schemas: Union[str, Dict[str, Any]]):
 
     if type(schemas) is str:
-        schemas = OmegaConf.merge(OmegaConf.structured(Schema), 
-                               OmegaConf.load(schemas))
+        schemas = OmegaConf.merge(OmegaConf.structured(Schema),
+                                OmegaConf.load(schemas))
 
     decorator_chain = None
     for io in schemas.inputs, schemas.outputs:
@@ -206,3 +208,38 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]]):
                 decorator_chain = lambda x,deco=deco,chain=decorator_chain: chain(deco(x))
 
     return decorator_chain
+
+@dataclass
+class SchemaSpec:
+    inputs: Dict[str, Parameter]
+    outputs: Dict[str, Parameter]
+    libs: Dict[str, Any]
+
+def paramfile_loader(paramfiles: List[File], sources: List[File] = [], schema_spec=None, use_cache=False) -> Dict:
+    """Load a scabha-style parameter defintion using.
+
+    Args:
+        paramfiles (List[File]): Name of parameter definition files
+        sources (List[Dict], optional): Parameter definition dependencies 
+        (a.k.a files specified via_include)
+
+    Returns:
+        Dict: Schema object
+    """
+    args_defn = OmegaConf.structured(schema_spec or SchemaSpec)
+    if isinstance(paramfiles, File):
+        paramfiles = [File]
+    
+    if isinstance(sources, File):
+        sources = [File]
+        
+    srcs = []
+    for src in sources:
+        if not src.EXISTS:
+            raise FileNotFoundError(f"Source file for either of {paramfiles} could not be found at {src.PATH}")
+        srcs.append(configuratt.load(src, use_cache=use_cache))
+        
+    struct_args, _ = configuratt.load_nested(paramfiles, structured=args_defn,
+                                            use_sources=srcs, use_cache=use_cache)
+    
+    return OmegaConf.create(struct_args)
