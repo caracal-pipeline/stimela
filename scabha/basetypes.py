@@ -1,6 +1,8 @@
 from dataclasses import field, dataclass
 from collections import OrderedDict
 from typing import List
+import os.path
+import re
 from .exceptions import UnsetError
 
 def EmptyDictDefault():
@@ -45,10 +47,32 @@ class SkippedOutput(Unresolved):
     def __str__(self):
         return f"Skipped({self.value})"
 
-import os.path
 
-class File(str):
+class URI(str):
+    def __init__(self, value):
+        self.protocol, self.path, self.remote = URI.parse(value)
 
+    @staticmethod
+    def parse(value: str, expand_user=True):
+        """
+        Parses URI. If URI does not start with "protocol://", assumes "file://"
+        
+        Returns tuple of (protocol, path, is_remote)
+
+        If expand_user is True, ~ in (file-protocol) paths will be expanded.
+        """
+        match = re.fullmatch("((\w+)://)(.*)", value)
+        if not match:
+            protocol, path, remote = "file", value, False
+        else:
+            _, protocol, path = match.groups()
+            remote = protocol != "file"
+        if not remote and expand_user:
+            path = os.path.expanduser(path)
+        return protocol, path, remote
+
+
+class File(URI):
     @property
     def NAME(self):
         return File(os.path.basename(self))
@@ -69,12 +93,19 @@ class File(str):
     def EXT(self):
         return os.path.splitext(self)[1]
 
-
 class Directory(File):
     pass
 
 class MS(Directory):
     pass
+
+FILE_TYPES = (File, MS, Directory, URI)
+
+def is_file_type(dtype):
+    return any(dtype == t for t in FILE_TYPES)
+
+def is_file_list_type(dtype):
+    return any(dtype == List[t] for t in FILE_TYPES)
 
 
 
