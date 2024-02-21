@@ -4,10 +4,11 @@ import click
 from scabha.exceptions import SchemaError
 from .cargo import Parameter, UNSET, _UNSET_DEFAULT
 from .basetypes import EmptyDictDefault, File
-from typing import List, File, Dict, DefaultDict, Any
+from typing import List, Union, Optional, Callable, Dict, DefaultDict, Any
 from dataclasses import dataclass, make_dataclass, field
 from omegaconf import OmegaConf, MISSING
 from collections.abc import MutableSet, MutableSequence, MutableMapping
+from scabha import configuratt
 
 def schema_to_dataclass(io: Dict[str, Parameter], class_name: str, bases=(), post_init: Optional[Callable] =None):
     """
@@ -228,16 +229,16 @@ def paramfile_loader(paramfiles: List[File], sources: List[File] = [], schema_sp
     """
     args_defn = OmegaConf.structured(schema_spec or SchemaSpec)
     if isinstance(paramfiles, File):
-        paramfiles = [File]
+        paramfiles = [paramfiles]
     
     if isinstance(sources, File):
-        sources = [File]
+        sources = [sources]
         
     srcs = []
     for src in sources:
         if not src.EXISTS:
             raise FileNotFoundError(f"Source file for either of {paramfiles} could not be found at {src.PATH}")
-        srcs.append(configuratt.load(src, use_cache=use_cache))
+        srcs.append(configuratt.load(src, use_cache=use_cache)[0])
         
     struct_args, _ = configuratt.load_nested(paramfiles, structured=args_defn,
                                             use_sources=srcs, use_cache=use_cache)
