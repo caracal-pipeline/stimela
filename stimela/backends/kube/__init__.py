@@ -133,10 +133,11 @@ class KubeBackendOptions(object):
     # subclasses for options
     @dataclass
     class DaskCluster(object):
+        enable: bool = False
         capture_logs: bool = True
         capture_logs_style: Optional[str] = "blue"
         name: Optional[str] = None
-        num_workers: int = 0
+        num_workers: int = 1
         threads_per_worker: int = 1
         memory_limit: Optional[str] = None
         worker_pod: KubePodSpec = KubePodSpec()
@@ -184,20 +185,22 @@ class KubeBackendOptions(object):
 
     @dataclass
     class DebugOptions(object):
-        print: int = 0                      # debug-print level. Higher numbers mean more verbosity
+        verbose: int = 0                      # debug log level. Higher numbers mean more verbosity
         pause_on_start: bool = False        # pause instead of running payload
         pause_on_cleanup: bool = False      # pause before attempting cleanup
+
+        save_spec: Optional[str] = None     # if set, pod/job specs will be saved as YaML to the named file. {}-substitutions apply to filename.
+
+        # if >0, events will be collected and reported
+        log_events:  bool = False
+        # format string for reporting kubernetes events, this can include rich markup
+        event_format:  str = "=NOSUBST('\[k8s event type: {event.type}, reason: {event.reason}] {event.message}')"
+        event_colors:  Dict[str, str] = DictDefault(
+                                warning="blue", error="yellow", default="grey50")
     
     debug: DebugOptions = DebugOptions()                            
 
     job_pod:        KubePodSpec = KubePodSpec()
-
-    # if >0, events will be collected and reported
-    verbose_events:        int = 0
-    # format string for reporting kubernetes events, this can include rich markup
-    verbose_event_format:  str = "=NOSUBST('\[k8s event type: {event.type}, reason: {event.reason}] {event.message}')"
-    verbose_event_colors:  Dict[str, str] = DictDefault(
-                            warning="blue", error="yellow", default="grey50")
     
     capture_logs_style: Optional[str] = "blue"
 
@@ -256,21 +259,32 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     from . import run_kube
     return run_kube.run(cab=cab, params=params, fqname=fqname, backend=backend, log=log, subst=subst)
 
-_kube_client = _kube_config = _kube_context = None
+_kube_client = _kube_config = _kube_context = _kube_namespace = None 
 
 def get_kube_api(context: Optional[str]=None):
-    global _kube_client
-    global _kube_config
-    global _kube_context
+    global _kube_client, _kube_config, _kube_context, _kube_namespace
 
     if _kube_config is None:
         _kube_config = True
-        _kube_context = context
         kubernetes.config.load_kube_config(context=context)
-    elif context != _kube_context:
+        contexts, current_context = kubernetes.config.list_kube_config_contexts()
+        if context is None:
+            context = current_context['name']
+        _kube_context = context
+        for ctx in contexts:
+            if ctx['name'] == context:
+                break
+            _kube_namespace = ctx['context']['namespace']
+        else:
+            _kube_namespace = "default"
+
+    elif context is not None and context != _kube_context:
         raise BackendError(f"k8s context has changed (was {_kube_context}, now {context}), this is not permitted")
 
-    return core_v1_api.CoreV1Api(), CustomObjectsApi()
+    return _kube_namespace, core_v1_api.CoreV1Api(), CustomObjectsApi()
+
+def get_context_namespace():
+    return _kube_context, _kube_namespace
 
 _uid = os.getuid()
 _gid = os.getgid()

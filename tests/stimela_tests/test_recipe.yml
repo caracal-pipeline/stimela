@@ -96,6 +96,19 @@ recipe:
     band:
       choices: [L, UHF, K]
       default: L
+    elem-xyz:
+      default: x
+      choices: [x,y,z]
+    elemlist-xyz:
+      dtype: Union[str, List[str]]
+      element_choices: [x,y,z]
+    elemlist_xyz:
+      default: "deliberate use of _ vs - to check validate() avoiding this situation"
+    continue:
+      default: "deliberate use of Python keyword to make sure validate() doesn't barf"
+    with:
+      default: "deliberate use of Python keyword to make sure validate() doesn't barf"
+
 
   assign:
     foo: bar

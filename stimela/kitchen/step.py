@@ -5,10 +5,12 @@ from omegaconf import MISSING, OmegaConf, DictConfig, ListConfig
 from omegaconf.errors import OmegaConfBaseException
 from collections import OrderedDict
 from contextlib import nullcontext
+from rich.syntax import Syntax
 
 from stimela.config import EmptyDictDefault, EmptyListDefault
 import stimela
 from stimela import log_exception, stimelogging, task_stats
+from stimela.stimelogging import log_rich_payload
 from stimela.backends import StimelaBackendSchema, runner
 from stimela.exceptions import *
 import scabha.exceptions
@@ -266,6 +268,7 @@ class Step:
 
     def prevalidate(self, subst: Optional[SubstitutionNS]=None, root=False):
         self.finalize()
+        self.cargo.apply_dynamic_schemas(self.params, subst)
         # validate cab or recipe
         params = self.validated_params = self.cargo.prevalidate(self.params, subst, root=root)
         # add missing outputs
@@ -321,6 +324,7 @@ class Step:
         # skipping step? ignore the build
         if self.skip is True and not build_skips:
             return
+        backend = OmegaConf.merge(backend, self.cargo.backend or {}, self.backend or {})
         log = log or self.log
         # recurse into sub-recipe 
         from .recipe import Recipe
@@ -330,30 +334,59 @@ class Step:
         else:
             # validate backend settings and call the build function
             try:
-                backend = OmegaConf.merge(backend, self.cargo.backend or {}, self.backend or {})
-                backend = OmegaConf.to_object(OmegaConf.merge(StimelaBackendSchema, backend))
-                backend_wrapper = runner.validate_backend_settings(backend, log=log)
+                backend_opts = OmegaConf.merge(backend, self.cargo.backend or {}, self.backend or {})
+                if getattr(backend_opts, 'verbose', 0):
+                    opts_yaml = OmegaConf.to_yaml(backend_opts)
+                    log_rich_payload(self.log, "effective backend settings are", opts_yaml, syntax="yaml") 
+                backend_opts = OmegaConf.to_object(OmegaConf.merge(stimela.CONFIG.opts.backend, backend_opts))
+                backend_wrapper = runner.validate_backend_settings(backend_opts, log=log)
             except Exception as exc:
                 newexc = BackendError("error validating backend settings", exc)
                 raise newexc from None
-            log.info(f"building image for step '{self.fqname}'")
+            log.info(f"building image for step '{self.fqname}' using the {backend_wrapper.backend_name} backend")
             with task_stats.declare_subtask(self.name):
                 return backend_wrapper.build(self.cargo, log=log, rebuild=rebuild)
 
 
-    def run(self, backend={}, subst=None, parent_log=None):
-        """Runs the step"""
+    def run(self, backend: Optional[Dict] = {}, subst: Optional[Dict[str, Any]] = None, 
+            is_outer_step: bool=False,
+            parent_log: Optional[logging.Logger] = None) -> Dict[str, Any]:
+        """executes the step
+
+        Args:
+            backend (Dict, optional): Backend settings inherited from parent.
+            subst (Dict[str, Any], optional): Substitution namespace. Defaults to None.
+            parent_log (logging.Logger, optional): parent logger for parent-related messages. Defaults to using the step logger if not supplied.
+
+        Raises:
+            StepValidationError: _description_
+            StepValidationError: _description_
+            StepValidationError: _description_
+            StimelaCabRuntimeError: _description_
+            RuntimeError: _description_
+            StepValidationError: _description_
+
+        Returns:
+            Dict[str, Any]: step outputs
+        """
+
         from .recipe import Recipe
 
         # some messages go to the parent logger -- if not defined, default to our own logger
         if parent_log is None:
             parent_log = self.log
 
+        backend = OmegaConf.merge(backend, self.cargo.backend or {}, self.backend or {})
+
         # validate backend settings
         try:
-            backend = OmegaConf.merge(backend, self.cargo.backend or {}, self.backend or {})
-            backend_opts = evaluate_and_substitute_object(backend, subst, recursion_level=-1, location=[self.fqname, "backend"])
-            backend_opts = OmegaConf.to_object(OmegaConf.merge(StimelaBackendSchema, backend_opts))
+            backend_opts = OmegaConf.merge(stimela.CONFIG.opts.backend, backend)
+            backend_opts = evaluate_and_substitute_object(backend_opts, subst, recursion_level=-1, location=[self.fqname, "backend"])
+            if not is_outer_step and backend_opts.verbose:
+                opts_yaml = OmegaConf.to_yaml(backend_opts)
+                log_rich_payload(self.log, "current backend settings are", opts_yaml, syntax="yaml") 
+            backend_opts = OmegaConf.merge(StimelaBackendSchema, backend_opts)
+            backend_opts = OmegaConf.to_object(backend_opts)
             backend_wrapper = runner.validate_backend_settings(backend_opts, log=self.log)
         except Exception as exc:
             newexc = BackendError("error validating backend settings", exc)

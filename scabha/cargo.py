@@ -337,6 +337,8 @@ class Cargo(object):
             self._dyn_schema = getattr(mod, funcname, None)
             if not callable(self._dyn_schema):
                 raise DefinitionError(f"{modulename}.{funcname} is not a valid callable")
+            # make backup copy of original inputs/outputs
+            self._original_inputs_outputs = self.inputs.copy(), self.outputs.copy()
 
     @property
     def inputs_outputs(self):
@@ -363,12 +365,12 @@ class Cargo(object):
             self.log = log
             self.logopts = config.opts.log.copy()
 
-    def apply_dynamic_schemas(self, params):
+    def apply_dynamic_schemas(self, params, subst: Optional[SubstitutionNS]=None):
         # update schemas, if dynamic schema is enabled
         if self._dyn_schema:
             self._inputs_outputs = None
             try:
-                self.inputs, self.outputs = self._dyn_schema(params, self.inputs, self.outputs)
+                self.inputs, self.outputs = self._dyn_schema(params, *self._original_inputs_outputs)
             except Exception as exc:
                 raise SchemaError(f"error evaluating dynamic schema", exc) # [exc, sys.exc_info()[2]])
             for io in self.inputs, self.outputs:
@@ -383,10 +385,18 @@ class Cargo(object):
             for schema in self.outputs.values():
                 schema._is_input = False
             # re-resolve implicits
-            self._resolve_implicit_parameters(params)
+            self._resolve_implicit_parameters(params, subst)
 
-    def _resolve_implicit_parameters(self, params):
+    def _resolve_implicit_parameters(self, params, subst: Optional[SubstitutionNS]=None):
+        # remove previously defined implicits
+        current = subst and getattr(subst, 'current', None)
+        for p in self._implicit_params:
+            if p in params:
+                del params[p]
+            if current and p in current:
+                del current[p]
         self._implicit_params = set()
+        # regenerate
         for name, schema in self.inputs_outputs.items():
             if schema.implicit is not None and type(schema.implicit) is not Unresolved:
                 if name in params and name not in self._implicit_params and params[name] != schema.implicit:
@@ -395,6 +405,8 @@ class Cargo(object):
                    raise SchemaError(f"implicit parameter {name} also has a default value")
                 params[name] = schema.implicit
                 self._implicit_params.add(name)
+                if current:
+                    current[name] = schema.implicit
 
 
     def prevalidate(self, params: Optional[Dict[str, Any]], subst: Optional[SubstitutionNS]=None, root=False):
@@ -403,7 +415,12 @@ class Cargo(object):
         A dynamic schema, if defined, is applied at this point."""
         self.finalize()
         # add implicits, if resolved
-        self._resolve_implicit_parameters(params)
+        # remove previous ones from substitution namespace
+        if subst and hasattr(subst, 'current'):
+            for p in self._implicit_params:
+                if p in subst.current:
+                    del subst.current[p]
+        self._resolve_implicit_parameters(params, subst)
         # assign unset categories
         for name, schema in self.inputs_outputs.items():
             schema.get_category()
@@ -422,7 +439,7 @@ class Cargo(object):
         If remote_fs is True, doesn't check files and directories.
         """
         assert(self.finalized)
-        self._resolve_implicit_parameters(params)
+        self._resolve_implicit_parameters(params, subst)
 
         # check inputs
         params1 = validate_parameters(params, self.inputs, defaults=self.defaults, subst=subst, fqname=self.fqname,

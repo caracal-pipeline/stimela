@@ -6,7 +6,7 @@ import time, datetime
 import threading
 from stimela.exceptions import BackendError
 from stimela.utils.xrun_asyncio import dispatch_to_log
-from stimela.stimelogging import update_process_status
+from stimela.task_stats import update_process_status
 from stimela.kitchen.cab import Cab, Parameter
 
 from kubernetes.client import ApiException
@@ -19,7 +19,7 @@ from stimela.backends.utils import resolve_remote_mounts
 class PodProxy(object):
 
     def __init__(self, kube: KubeBackendOptions, podname: str, image_name: str, command: str, log: logging.Logger):
-        self.kube_api, _ = get_kube_api()
+        self.namespace, self.kube_api, _ = get_kube_api()
         self.kube = kube
         self.name = podname
         self.log = log
@@ -177,7 +177,7 @@ class PodProxy(object):
         for cont in containers:
             contname = cont['name']
             try:
-                loglines = self.kube_api.read_namespaced_pod_log(name=self.name, namespace=self.kube.namespace, container=contname)
+                loglines = self.kube_api.read_namespaced_pod_log(name=self.name, namespace=self.namespace, container=contname)
                 for line in loglines.split("\n"):
                     if line:
                         dispatch_to_log(self.log, line, contname, "stdout", prefix=f"{contname}#", 
@@ -195,7 +195,7 @@ class PodProxy(object):
                 try:
                     # rich.print(f"[yellow]started log thread for {name}[/yellow]")
                     # Open a stream to the logs
-                    stream = self.kube_api.read_namespaced_pod_log(name=name, namespace=self.kube.namespace, container=container, 
+                    stream = self.kube_api.read_namespaced_pod_log(name=name, namespace=self.namespace, container=container, 
                                                                 _preload_content=False, follow=True)
                     for line in stream.stream():
                         dispatch_to_log(self.log, line.decode().rstrip(), name, "stdout", prefix=prefix, style=style, output_wrangler=None)
@@ -215,12 +215,12 @@ class PodProxy(object):
             cont = self.step_init_container
             for path in mkdir_list:
                 error = f"VALIDATION ERROR: mkdir {path} failed"
-                self.add_init_container_command(cont, f"if mkdir -p {path}; then echo Created directory {path}; else echo {error}; exit 1; fi; ")
+                self.add_init_container_command(cont, f"ls {path} >/dev/null; if mkdir -p {path}; then echo Created directory {path}; else echo {error}; exit 1; fi; ")
             for path in must_exist_list:
                 error = f"VALIDATION ERROR: {path} doesn\\'t exist"
-                self.add_init_container_command(cont, f"if test -e '{path}'; then echo Checking {path}: exists; else echo {error}; exit 1; fi; ")
+                self.add_init_container_command(cont, f"ls {path} >/dev/null; if test -e '{path}'; then echo Checking {path}: exists; else echo {error}; exit 1; fi; ")
             for path in remove_if_exists_list:
-                self.add_init_container_command(cont, f"if test -e {path}; then echo Removing {path}; rm -fr {path}; true; fi; ")
+                self.add_init_container_command(cont, f"ls {path} >/dev/null; if test -e {path}; then echo Removing {path}; rm -fr {path}; true; fi; ")
             # make sure the relevant mounts are provided inside init container
             for mount in active_mounts:
                 self.add_init_container_mount(cont, self._mounts[mount], mount)
@@ -247,7 +247,7 @@ class PodProxy(object):
                 if thread.is_alive() and aux_pod:
                     self.log.info(f"{desc} alive, trying to delete associated pod")
                     try:
-                        self.kube_api.delete_namespaced_pod(name=aux_pod, namespace=self.kube.namespace)
+                        self.kube_api.delete_namespaced_pod(name=aux_pod, namespace=self.namespace)
                     except ApiException as exc:
                         self.log.warning(f"deleting pod {aux_pod} failed: {exc}")
                         pass
@@ -264,7 +264,7 @@ class PodProxy(object):
             command = ["/bin/sh", "-c", command]
         has_input = bool(input)
 
-        resp = stream(self.kube_api.connect_get_namespaced_pod_exec, self.name, self.kube.namespace,
+        resp = stream(self.kube_api.connect_get_namespaced_pod_exec, self.name, self.namespace,
                     command=command,
                     stderr=True, stdin=has_input,
                     stdout=True, tty=False,

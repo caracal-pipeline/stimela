@@ -18,7 +18,7 @@ from stimela.kitchen.cab import Cab
 from stimela.config import ConfigExceptionTypes
 from stimela.exceptions import RecipeValidationError
 
-from .run import load_recipe_file
+from .run import load_recipe_files
 
 @cli.command("doc",
     help="""
@@ -66,56 +66,39 @@ def doc(items: List[str] = [], do_list=False, implicit=False, obscure=False, all
             log_exception(exc)
             sys.exit(2)
 
-
+    # load all recipe/config files
+    files_to_load = []
+    names_to_document = []
     for item in items:
-        # a filename -- treat it as a config
-        if os.path.isfile(item):
-            log.info(f"loading recipe/config {item}")
-
-            # if file contains a recipe entry, treat it as a full config (that can include cabs etc.)
-            conf, recipe_deps = load_recipe_file(item)
-
-            # anything that is not a standard config section will be treated as a recipe
-            recipes = [name for name in conf if name not in stimela.CONFIG]
-
-            if len(recipes) == 1:
-                default_recipe = recipes[0]
-
-            for name in recipes:
-                try:
-                    # cast section to Recipe and remove from loaded conf
-                    recipe = OmegaConf.structured(Recipe)
-                    recipe = OmegaConf.unsafe_merge(recipe, conf[name])
-                except Exception as exc:
-                    log.error(f"recipe '{name}': {exc}")
-                    sys.exit(2)
-                del conf[name]
-                # add to global namespace
-                stimela.CONFIG.lib.recipes[name] = recipe
-
-            # the rest is safe to merge into config as is
-            stimela.CONFIG = OmegaConf.unsafe_merge(stimela.CONFIG, conf)
-        
-        # else treat as a wildcard for recipe names or cab names
+        if os.path.isfile(item) and os.path.splitext(item)[1].lower() in (".yml", ".yaml"):
+            files_to_load.append(item)
+            log.info(f"will load recipe/config file '{item}'")
         else:
-            recipe_names = fnmatch.filter(stimela.CONFIG.lib.recipes.keys(), item)
-            cab_names = fnmatch.filter(stimela.CONFIG.cabs.keys(), item)
-            if not recipe_names and not cab_names:
-                log.error(f"'{item}' does not match any files, recipes or cab names. Try -l/--list")
-                sys.exit(2)
+            names_to_document.append(item)
+    
+    # load config and recipes from all given files
+    if files_to_load:
+        load_recipe_files(files_to_load)
 
-            for name in recipe_names:
-                recipe = load_recipe(name, stimela.CONFIG.lib.recipes[name])
-                tree = top_tree.add(f"Recipe: [bold]{name}[/bold]")
-                recipe.rich_help(tree, max_category=max_category)
-            
-            for name in cab_names:
-                cab = Cab(**stimela.CONFIG.cabs[name])
-                cab.finalize(config=stimela.CONFIG)
-                tree = top_tree.add(f"Cab: [bold]{name}[/bold]")
-                cab.rich_help(tree, max_category=max_category)
+    for item in names_to_document:
+        recipe_names = fnmatch.filter(stimela.CONFIG.lib.recipes.keys(), item)
+        cab_names = fnmatch.filter(stimela.CONFIG.cabs.keys(), item)
+        if not recipe_names and not cab_names:
+            log.error(f"'{item}' does not match any files, recipes or cab names. Try -l/--list")
+            sys.exit(2)
 
-            found_something = True
+        for name in recipe_names:
+            recipe = load_recipe(name, stimela.CONFIG.lib.recipes[name])
+            tree = top_tree.add(f"Recipe: [bold]{name}[/bold]")
+            recipe.rich_help(tree, max_category=max_category)
+        
+        for name in cab_names:
+            cab = Cab(**stimela.CONFIG.cabs[name])
+            cab.finalize(config=stimela.CONFIG)
+            tree = top_tree.add(f"Cab: [bold]{name}[/bold]")
+            cab.rich_help(tree, max_category=max_category)
+
+        found_something = True
 
     if do_list or (not found_something and not default_recipe):
 
