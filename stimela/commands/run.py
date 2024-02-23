@@ -5,7 +5,8 @@ import os.path
 import yaml
 import sys
 import traceback
-import atexit
+import re
+import importlib
 from datetime import datetime
 from typing import List, Optional, Tuple
 from collections import OrderedDict
@@ -30,6 +31,18 @@ def load_recipe_files(filenames: List[str]):
     full_conf = OmegaConf.create()
     full_deps = configuratt.ConfigDependencies()
     for filename in filenames:
+        # check for (location)filename.yaml or (location)/filename.yaml style
+        match1 = re.fullmatch("^\\((.+)\\)/?(.+)$", filename)
+        match2 = re.fullmatch("^([\w.]+)::(.+)$", filename)
+        if match1 or match2:
+            modulename, filename = (match1 or match2).groups()
+            try:
+                mod = importlib.import_module(modulename)
+            except ImportError as exc:
+                log_exception(f"error importing {modulename}", exc)
+                sys.exit(2)
+            filename = os.path.join(os.path.dirname(mod.__file__), filename)
+        # try loading
         try:
             conf, deps = configuratt.load(filename, use_sources=[stimela.CONFIG, full_conf], no_toplevel_cache=True)
         except ConfigExceptionTypes as exc:
@@ -153,7 +166,7 @@ def run(parameters: List[str] = [], dry_run: bool = False, last_recipe: bool = F
             except Exception as exc:
                 log_exception(f"error parsing {pp}", exc)
                 errcode = 2
-        elif os.path.isfile(pp) and os.path.splitext(pp)[1].lower() in (".yml", ".yaml"):
+        elif os.path.splitext(pp)[1].lower() in (".yml", ".yaml"):
             files_to_load.append(pp)
             log.info(f"will load recipe/config file '{pp}'")
         else:
