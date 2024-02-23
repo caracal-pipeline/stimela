@@ -15,7 +15,6 @@ from stimela.utils.xrun_asyncio import xrun
 
 from stimela.exceptions import BackendError
 
-
 # path to default srun binary
 _default_srun_path = None
 
@@ -24,6 +23,7 @@ class SlurmOptions(object):
     enable: bool = False                            # enables passing off jobs to slurm via srun
     srun_path: Optional[str] = None                 # path to srun executable
     srun_opts: Dict[str, str] = EmptyDictDefault()  # extra options passed to srun. "--" prepended, and "_" replaced by "-"
+    srun_opts_build: Optional[Dict[str, str]] = None  # extra options passed to srun for build commands. If None, use srun_opts
     build_local: bool = True                        # if True, images will be built locally (i.e. on the head node) even when slurm is enabled
     # these will be checked for
     required_mem_opts: Optional[List[str]] = ListDefault("mem", "mem-per-cpu", "mem-per-gpu")
@@ -43,7 +43,7 @@ class SlurmOptions(object):
                 raise BackendError(f"slurm.srun_path '{self.srun}' is not an executable")
             return self.srun
         
-    def run_command_wrapper(self, args: List[str], fqname: Optional[str]=None, log: Optional[logging.Logger]=None) -> List[str]:
+    def _wrap(self, srun_opts: Dict[str, Any], args: List[str], fqname: Optional[str]=None) -> List[str]:
         output_args = [self.get_executable()]
 
         # reverse fqname to make job name (more informative that way)
@@ -51,16 +51,19 @@ class SlurmOptions(object):
             output_args += ["-J", '.'.join(fqname.split('.')[::-1])]
 
         # add all base options that have been specified
-        for name, value in self.srun_opts.items():
+        for name, value in srun_opts.items():
             output_args += ["--" + name, value]
 
         output_args += args
         return output_args
-    
-    def build_command_wrapper(self, args: List[str], fqname: Optional[str]=None, log: Optional[logging.Logger]=None) -> List[str]:
+
+    def wrap_run_command(self, args: List[str], fqname: Optional[str]=None, log: Optional[logging.Logger]=None) -> List[str]:
+        return self._wrap(self.srun_opts, args, fqname)        
+
+    def wrap_build_command(self, args: List[str], fqname: Optional[str]=None, log: Optional[logging.Logger]=None) -> List[str]:
         if self.build_local:
             return args
-        return self.run_command_wrapper(args, fqname=fqname, log=log)
+        return self._wrap(self.srun_opts_build if self.srun_opts_build is not None else self.srun_opts, args, fqname)        
     
     def validate(self, log: logging.Logger):
         if self.required_mem_opts:

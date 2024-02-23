@@ -252,10 +252,7 @@ def cleanup(backend: 'stimela.backend.StimelaBackendOptions', log: logging.Logge
 def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
         backend: 'stimela.backend.StimelaBackendOptions',
         log: logging.Logger, subst: Optional[Dict[str, Any]] = None,
-        command_wrapper: Optional[Callable] = None):
-    # normally runner.py won't allow this, but check just in case
-    if command_wrapper:
-        raise BackendError(f"kube backend cannot be used with a command wrapper")
+        wrapper: Optional['stimela.backends.runner.BackendWrapper'] = None):
     from . import run_kube
     return run_kube.run(cab=cab, params=params, fqname=fqname, backend=backend, log=log, subst=subst)
 
