@@ -48,7 +48,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
         backend: backed settings object
         log (logger): logger to use
         subst (Optional[Dict[str, Any]]): Substitution dict for commands etc., if any.
-        wrapper (BackendWrapper): wraper for command line
+        wrapper (BackendWrapper): wrapper for command line
     Returns:
         Any: return value (e.g. exit code) of content
     """

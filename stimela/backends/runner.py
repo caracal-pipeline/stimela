@@ -2,13 +2,11 @@ import logging
 from typing import Dict, Optional, Any, Callable, List
 from dataclasses import dataclass
 from omegaconf import OmegaConf
-from omegaconf.errors import OmegaConfBaseException 
 import stimela
-from stimela.backends import StimelaBackendOptions, StimelaBackendSchema
+from stimela.backends import StimelaBackendOptions
 from stimela.exceptions import BackendError
-from abc import abstractmethod
 
-from . import get_backend, get_backend_status
+from . import get_backend
 
 
 class EmptyBackendWrapper(object):
