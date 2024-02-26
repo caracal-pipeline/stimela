@@ -226,7 +226,7 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                             flags = {}
 
                         # check for (location)filename.yaml or (location)/filename.yaml style
-                        match= re.match("^\\((.+)\\)/?(.+)$", incl)
+                        match = re.match("^\\((.+)\\)/?(.+)$", incl)
                         if match:
                             modulename, filename = match.groups()
                             if modulename.startswith("."):
