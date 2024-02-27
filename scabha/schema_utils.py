@@ -220,7 +220,7 @@ class SchemaSpec:
     outputs: Dict[str, Parameter]
     libs: Dict[str, Any]
 
-def paramfile_loader(paramfiles: List[File], sources: List[File] = [], schema_spec=None, use_cache=False) -> Dict:
+def paramfile_loader(paramfiles: File|List[File], sources: File|List[File] = [], schema_spec=None, use_cache=False) -> Dict:
     """Load a scabha-style parameter defintion using.
 
     Args:
