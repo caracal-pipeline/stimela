@@ -47,7 +47,6 @@ class SkippedOutput(Unresolved):
     def __str__(self):
         return f"Skipped({self.value})"
 
-
 class URI(str):
     def __init__(self, value):
         self.protocol, self.path, self.remote = URI.parse(value)
@@ -76,6 +75,10 @@ class File(URI):
     @property
     def NAME(self):
         return File(os.path.basename(self))
+    
+    @property
+    def PATH(self):
+        return File(os.path.abspath(self))
 
     @property
     def DIR(self):
@@ -92,6 +95,10 @@ class File(URI):
     @property
     def EXT(self):
         return os.path.splitext(self)[1]
+    
+    @property
+    def EXISTS(self):
+        return os.path.exists(self)
 
 class Directory(File):
     pass
@@ -106,7 +113,4 @@ def is_file_type(dtype):
 
 def is_file_list_type(dtype):
     return any(dtype == List[t] for t in FILE_TYPES)
-
-
-
 
