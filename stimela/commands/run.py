@@ -5,7 +5,8 @@ import os.path
 import yaml
 import sys
 import traceback
-import atexit
+import re
+import importlib
 from datetime import datetime
 from typing import List, Optional, Tuple
 from collections import OrderedDict
@@ -30,6 +31,18 @@ def load_recipe_files(filenames: List[str]):
     full_conf = OmegaConf.create()
     full_deps = configuratt.ConfigDependencies()
     for filename in filenames:
+        # check for (location)filename.yaml or (location)/filename.yaml style
+        match1 = re.fullmatch("^\\((.+)\\)/?(.+)$", filename)
+        match2 = re.fullmatch("^([\w.]+)::(.+)$", filename)
+        if match1 or match2:
+            modulename, filename = (match1 or match2).groups()
+            try:
+                mod = importlib.import_module(modulename)
+            except ImportError as exc:
+                log_exception(f"error importing {modulename}", exc)
+                sys.exit(2)
+            filename = os.path.join(os.path.dirname(mod.__file__), filename)
+        # try loading
         try:
             conf, deps = configuratt.load(filename, use_sources=[stimela.CONFIG, full_conf], no_toplevel_cache=True)
         except ConfigExceptionTypes as exc:
@@ -100,20 +113,24 @@ def load_recipe_files(filenames: List[str]):
 @click.option("-e", "--enable-step", "enable_steps", metavar="STEP(s)", multiple=True,
                 help="""Force-enable steps even if the recipe marks them as skipped. Use commas, or give multiple times 
                 for multiple steps.""")
+@click.option("-c", "--config", "config_equals", metavar="X.Y.Z=VALUE", nargs=1, multiple=True,
+                help="""tweak configuration options.""")
 @click.option("-a", "--assign", metavar="PARAM VALUE", nargs=2, multiple=True,
                 help="""assigns values to parameters: equivalent to PARAM=VALUE, but plays nicer with the shell's 
-                tab completion.""")
-@click.option("-C", "--config", "config_assign", metavar="X.Y.Z VALUE", nargs=2, multiple=True,
-                help="""tweak configuration sections.""")
+                tab completion feature.""")
+@click.option("-C", "--config-assign", metavar="X.Y.Z VALUE", nargs=2, multiple=True,
+                help="""tweak configuration options: same function -c/--config, but plays nicer with the shell's 
+                tab completion feature.""")
 @click.option("-l", "--last-recipe", is_flag=True,
                 help="""if multiple recipes are defined, selects the last one for execution.""")
 @click.option("-d", "--dry-run", is_flag=True,
                 help="""Doesn't actually run anything, only prints the selected steps.""")
 @click.option("-p", "--profile", metavar="DEPTH", type=int,
                 help="""Print per-step profiling stats to this depth. 0 disables.""")
-@click.argument("parameters", nargs=-1, metavar="(cab name | filename.yml [filename.yml...] [recipe name]) [PARAM=VALUE] [X.Y.Z=VALUE] ...", required=True) 
+@click.argument("parameters", nargs=-1, metavar="filename.yml ... [recipe name] [PARAM=VALUE] ...", required=True) 
 def run(parameters: List[str] = [], dry_run: bool = False, last_recipe: bool = False, profile: Optional[int] = None,
     assign: List[Tuple[str, str]] = [],
+    config_equals: List[str] = [],
     config_assign: List[Tuple[str, str]] = [],
     step_ranges: List[str] = [], tags: List[str] = [], skip_tags: List[str] = [], enable_steps: List[str] = [],
     build=False, rebuild=False, build_skips=False):
@@ -149,19 +166,12 @@ def run(parameters: List[str] = [], dry_run: bool = False, last_recipe: bool = F
             except Exception as exc:
                 log_exception(f"error parsing {pp}", exc)
                 errcode = 2
-        elif os.path.isfile(pp) and os.path.splitext(pp)[1].lower() in (".yml", ".yaml"):
+        elif os.path.splitext(pp)[1].lower() in (".yml", ".yaml"):
             files_to_load.append(pp)
             log.info(f"will load recipe/config file '{pp}'")
-        elif pp in stimela.CONFIG.cabs:
-            if recipe_name is not None or cab_name is not None:
-                log_exception(f"multiple recipe and/or cab names given")
-                errcode = 2
-            else:
-                log.info(f"treating '{pp}' as a cab name")
-                cab_name = pp
         else:
-            if recipe_name is not None or cab_name is not None:
-                log_exception(f"multiple recipe and/or cab names given")
+            if recipe_name is not None:
+                log_exception(f"multiple recipe names given")
                 errcode = 2
             else:
                 recipe_name = pp
@@ -178,13 +188,20 @@ def run(parameters: List[str] = [], dry_run: bool = False, last_recipe: bool = F
 
     # load config settigs from --config arguments
     try:
+        stimela.CONFIG.merge_with(OmegaConf.from_dotlist(config_equals))
+    except OmegaConfBaseException as exc:
+        log_exception(f"error loading -c/--config assignments", exc)
+        sys.exit(2)
+    try:
         dotlist = [f"{key}={value}" for key, value in config_assign]
         stimela.CONFIG.merge_with(OmegaConf.from_dotlist(dotlist))
     except OmegaConfBaseException as exc:
-        log_exception(f"error loading --config assignments", exc)
+        log_exception(f"error loading -C/--config-assign assignments", exc)
         sys.exit(2)
 
     # run a cab
+    # this is currenty always None (see https://github.com/caracal-pipeline/stimela/issues/234), so effectively
+    # disabled. Leaving the code in place to re-enable another time. 
     if cab_name is not None:
         log.info(f"setting up cab {cab_name}")
 

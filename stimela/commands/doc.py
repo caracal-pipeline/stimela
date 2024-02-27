@@ -9,14 +9,13 @@ from rich import print as rich_print
 from omegaconf import OmegaConf
 
 import stimela
-from scabha import configuratt
 from stimela import logger, log_exception
 from stimela.main import cli
 from scabha.cargo import ParameterCategory
 from stimela.kitchen.recipe import Recipe
 from stimela.kitchen.cab import Cab
-from stimela.config import ConfigExceptionTypes
 from stimela.exceptions import RecipeValidationError
+from stimela.task_stats import destroy_progress_bar
 
 from .run import load_recipe_files
 
@@ -34,13 +33,11 @@ from .run import load_recipe_files
                 help="""Increases level of detail to include all inputs/outputs.""")
 @click.option("-R", "--required", is_flag=True,
                 help="""Decreases level of detail to include required inputs/outputs only.""")
-@click.argument("items", nargs=-1, metavar="filename.yml|cab name|recipe name|...") 
-def doc(items: List[str] = [], do_list=False, implicit=False, obscure=False, all=False, required=False):
+@click.argument("what", nargs=-1, metavar="filename.yml ... [recipe name] [cab name]", required=True) 
+def doc(what: List[str] = [], do_list=False, implicit=False, obscure=False, all=False, required=False):
 
     log = logger()
-    top_tree = Tree(f"stimela doc {' '.join(items)}", guide_style="dim")
-    found_something = False
-    default_recipe = None
+    top_tree = Tree(f"stimela doc {' '.join(what)}", guide_style="dim")
 
     if required:
         max_category = ParameterCategory.Required
@@ -69,8 +66,8 @@ def doc(items: List[str] = [], do_list=False, implicit=False, obscure=False, all
     # load all recipe/config files
     files_to_load = []
     names_to_document = []
-    for item in items:
-        if os.path.isfile(item) and os.path.splitext(item)[1].lower() in (".yml", ".yaml"):
+    for item in what:
+        if os.path.splitext(item)[1].lower() in (".yml", ".yaml"):
             files_to_load.append(item)
             log.info(f"will load recipe/config file '{item}'")
         else:
@@ -80,49 +77,60 @@ def doc(items: List[str] = [], do_list=False, implicit=False, obscure=False, all
     if files_to_load:
         load_recipe_files(files_to_load)
 
+    destroy_progress_bar()
+    
+    log.info(f"loaded {len(stimela.CONFIG.cabs)} cab definition(s) and {len(stimela.CONFIG.lib.recipes)} recipe(s)")
+
+    if not stimela.CONFIG.lib.recipes and not stimela.CONFIG.cabs:
+        log.error(f"Nothing to document")
+        sys.exit(2)
+
+    recipes_to_document = set()
+    cabs_to_document = set()
+
     for item in names_to_document:
         recipe_names = fnmatch.filter(stimela.CONFIG.lib.recipes.keys(), item)
         cab_names = fnmatch.filter(stimela.CONFIG.cabs.keys(), item)
         if not recipe_names and not cab_names:
-            log.error(f"'{item}' does not match any files, recipes or cab names. Try -l/--list")
+            log.error(f"'{item}' does not match any recipe or cab names. Try -l/--list")
             sys.exit(2)
+        recipes_to_document.update(recipe_names)
+        cabs_to_document.update(cab_names)
 
-        for name in recipe_names:
+    # if nothing was specified, and only one cab/only one recipe is defined, print that
+    if not names_to_document:
+        if len(stimela.CONFIG.lib.recipes) == 1 and not stimela.CONFIG.cabs:
+            recipes_to_document.update(stimela.CONFIG.lib.recipes.keys())
+        elif len(stimela.CONFIG.cabs) == 1 and not stimela.CONFIG.lib.recipes:
+            cabs_to_document.update(stimela.CONFIG.cabs.keys())
+
+    if recipes_to_document or cabs_to_document:
+        for name in recipes_to_document:
             recipe = load_recipe(name, stimela.CONFIG.lib.recipes[name])
             tree = top_tree.add(f"Recipe: [bold]{name}[/bold]")
             recipe.rich_help(tree, max_category=max_category)
         
-        for name in cab_names:
+        for name in cabs_to_document:
             cab = Cab(**stimela.CONFIG.cabs[name])
             cab.finalize(config=stimela.CONFIG)
             tree = top_tree.add(f"Cab: [bold]{name}[/bold]")
             cab.rich_help(tree, max_category=max_category)
 
-        found_something = True
-
-    if do_list or (not found_something and not default_recipe):
-
+    # list recipes and cabs -- also do this by default if nothing explicit was documented    
+    if do_list or not (recipes_to_document or cabs_to_document):
         if stimela.CONFIG.lib.recipes:
             subtree = top_tree.add("Recipes:")
             table = Table.grid("", "", padding=(0,2))
             for name, recipe in stimela.CONFIG.lib.recipes.items():
                 table.add_row(f"[bold]{name}[/bold]", recipe.info)
             subtree.add(table)
-        elif not do_list and not found_something:
-            log.error(f"nothing particular to document, please specify a recipe name or a cab name, or use -l/--list")
-            sys.exit(2)
 
-    if default_recipe and not found_something:
-        recipe = load_recipe(name, stimela.CONFIG.lib.recipes[default_recipe])
-        tree = top_tree.add(f"Recipe: [bold]{default_recipe}[/bold]")
-        recipe.rich_help(tree, max_category=max_category)
-
-    if do_list:
-        subtree = top_tree.add("Cabs:")
-        table = Table.grid("", "", padding=(0,2))
-        for name, cab in stimela.CONFIG.cabs.items():
-            table.add_row(f"[bold]{name}[/bold]", cab.info)
-        subtree.add(table)            
+        if stimela.CONFIG.cabs:
+            subtree = top_tree.add("Cabs:")
+            table = Table.grid("", "", padding=(0,2))
+            for name, cab in stimela.CONFIG.cabs.items():
+                table.add_row(f"[bold]{name}[/bold]", cab.info)
+            subtree.add(table)            
         
     rich_print(top_tree)
 

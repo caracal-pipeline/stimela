@@ -38,7 +38,7 @@ def build_command_line(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], s
 def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
         backend: 'stimela.backend.StimelaBackendOptions',
         log: logging.Logger, subst: Optional[Dict[str, Any]] = None,
-        command_wrapper: Optional[Callable] = None):
+        wrapper: Optional['stimela.backends.runner.BackendWrapper'] = None):
     """
     Runs cab contents
 
@@ -48,7 +48,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
         backend: backed settings object
         log (logger): logger to use
         subst (Optional[Dict[str, Any]]): Substitution dict for commands etc., if any.
-        command_wrapper (Callable): takes a list of args and returns modified list of args
+        wrapper (BackendWrapper): wrapper for command line
     Returns:
         Any: return value (e.g. exit code) of content
     """
@@ -84,8 +84,8 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
     # log.info(f"argument lengths are {[len(a) for a in args]}")
     
-    if command_wrapper:
-        args = command_wrapper(args)
+    if wrapper:
+        args = wrapper.wrap_run_command(args, fqname=fqname, log=log)
 
     retcode = xrun(args[0], args[1:], shell=False, log=log,
                 output_wrangler=cabstat.apply_wranglers,

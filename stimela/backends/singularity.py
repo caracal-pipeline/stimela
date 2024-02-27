@@ -15,7 +15,7 @@ from stimela.utils.xrun_asyncio import xrun
 
 from stimela.exceptions import BackendError
 
-from . import native, docker
+from . import native
 
 @dataclass
 class SingularityBackendOptions(object):
@@ -100,7 +100,7 @@ def get_image_info(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.Sti
 
 
 def build(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBackendOptions', log: logging.Logger,
-          command_wrapper: Optional[Callable]=None,
+          wrapper: Optional['stimela.backend.runner.BackendWrapper']=None,
           build=True, rebuild=False):
     """Builds image for cab, if necessary.
 
@@ -198,8 +198,8 @@ def build(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBacke
 
         args = [BINARY, "build", simg_path, f"docker://{image_name}"]
 
-        if command_wrapper:
-            args = command_wrapper(args, log=log)
+        if wrapper:
+            args = wrapper.wrap_build_command(args, log=log)
 
         retcode = xrun(args[0], args[1:], shell=False, log=log,
                     return_errcode=True, command_name="(singularity build)", 
@@ -222,7 +222,7 @@ def build(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBacke
 def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
         backend: 'stimela.backend.StimelaBackendOptions',
         log: logging.Logger, subst: Optional[Dict[str, Any]] = None,
-        command_wrapper: Optional[Callable] = None):
+        wrapper: Optional['stimela.backends.runner.BackendWrapper'] = None):
 
     """Runs cab contents
 
@@ -239,7 +239,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     native.update_rlimits(backend.rlimits, log)
 
     # get path to image, rebuilding if backend options allow this
-    simg_path = build(cab, backend=backend, log=log, build=False)
+    simg_path = build(cab, backend=backend, log=log, build=False, wrapper=wrapper)
 
     # build up command line    
     cwd = os.getcwd()
@@ -271,8 +271,8 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
     # log.info(f"argument lengths are {[len(a) for a in args]}")
 
-    if command_wrapper:
-        args = command_wrapper(args, fqname=fqname, log=log)
+    if wrapper:
+        args = wrapper.wrap_run_command(args, fqname=fqname, log=log)
 
     retcode = xrun(args[0], args[1:], shell=False, log=log,
                 output_wrangler=cabstat.apply_wranglers,
