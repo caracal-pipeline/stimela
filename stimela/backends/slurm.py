@@ -25,8 +25,12 @@ class SlurmOptions(object):
     srun_opts: Dict[str, str] = EmptyDictDefault()  # extra options passed to srun. "--" prepended, and "_" replaced by "-"
     srun_opts_build: Optional[Dict[str, str]] = None  # extra options passed to srun for build commands. If None, use srun_opts
     build_local: bool = True                        # if True, images will be built locally (i.e. on the head node) even when slurm is enabled
-    # these will be checked for
-    required_mem_opts: Optional[List[str]] = ListDefault("mem", "mem-per-cpu", "mem-per-gpu")
+    
+    # ## disabling this for now
+    # # these will be checked for
+    # required_mem_opts: Optional[List[str]] = ListDefault("mem", "mem-per-cpu", "mem-per-gpu")
+    # # this will be applied if the required above are missing
+    # default_mem_opt: str = "8GB"
 
     def get_executable(self):
         global _default_srun_path
@@ -66,10 +70,10 @@ class SlurmOptions(object):
         return self._wrap(self.srun_opts_build if self.srun_opts_build is not None else self.srun_opts, args, fqname)        
     
     def validate(self, log: logging.Logger):
-        if self.required_mem_opts:
-            if not set(self.srun_opts.keys()).intersection(self.required_mem_opts):
-                raise BackendError(f"slurm.srun_opts must set one of the following: {', '.join(self.required_mem_opts)}")
-
+        pass
+        # if self.required_mem_opts:
+        #     if not set(self.srun_opts.keys()).intersection(self.required_mem_opts):
+        #         self.srun_opts['mem'] = self.default_mem_opt
 
 
 

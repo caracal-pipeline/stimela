@@ -37,12 +37,20 @@ from stimela.main import cli
                 tab completion feature.""")
 @click.option("-l", "--last-recipe", is_flag=True,
                 help="""if multiple recipes are defined, selects the last one for building.""")
+@click.option("-S", "--singularity", "enable_singularity", is_flag=True,
+                help="""Selects the singularity backend (shortcut for -C opts.backend.select=singularity)""")
+@click.option("--slurm", "enable_slurm", is_flag=True,
+                help="""Enables the slurm backend wrapper (shortcut for -C backend.slurm.enable=True)""")
 @click.argument("what", metavar="filename.yml ... [recipe name] [PARAM=VALUE] ...", nargs=-1, required=True) 
 def build(what: str, last_recipe: bool = False, rebuild: bool = False, all_steps: bool=False,
             config_equals: List[str] = [],
             config_assign: List[Tuple[str, str]] = [],
-            step_ranges: List[str] = [], tags: List[str] = [], skip_tags: List[str] = [], enable_steps: List[str] = []):
+            step_ranges: List[str] = [], tags: List[str] = [], skip_tags: List[str] = [], enable_steps: List[str] = [],
+            enable_singularity=False,
+            enable_slurm=False):
     return run.callback(what, last_recipe=last_recipe, step_ranges=step_ranges, 
         tags=tags, skip_tags=skip_tags, enable_steps=enable_steps,
         config_equals=config_equals, config_assign=config_assign,
-        build=True, rebuild=rebuild, build_skips=all_steps)
+        build=True, rebuild=rebuild, build_skips=all_steps,
+        enable_singularity=enable_singularity,
+        enable_slurm=enable_slurm)
