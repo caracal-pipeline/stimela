@@ -16,6 +16,13 @@ hierarchical:
 relative:
   _include: (.)test_include2.yaml
 
+structured:
+  _include:
+    (.):
+      test_include2.yaml
+    .:
+      test_include2.yaml
+
 flat:
   _use: hierarchical
   _flatten: true
