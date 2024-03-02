@@ -70,9 +70,10 @@ class SlurmOptions(object):
         return self._wrap(self.srun_opts_build if self.srun_opts_build is not None else self.srun_opts, args, fqname)        
     
     def validate(self, log: logging.Logger):
-        if self.required_mem_opts:
-            if not set(self.srun_opts.keys()).intersection(self.required_mem_opts):
-                self.srun_opts['mem'] = self.default_mem_opt
+        pass
+        # if self.required_mem_opts:
+        #     if not set(self.srun_opts.keys()).intersection(self.required_mem_opts):
+        #         self.srun_opts['mem'] = self.default_mem_opt
 
 
 
