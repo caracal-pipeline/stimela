@@ -28,7 +28,56 @@ from stimela.kitchen.recipe import Recipe, Step, RecipeSchema, join_quote
 from stimela import task_stats
 import stimela.backends
 
+_yaml_extensions = {".yml", ".yaml", ".YML", ".YAML"}
+
+def resolve_recipe_file(filename: str):
+    """
+    Resolves a recipe file, which may be specified as (module)recipe.yml or module::recipe.yml, with
+    the suffix being optional.
+
+    Returns real path if file resolved, or None if filename should not be treated as a recipe file.
+
+    Raises FileNotFoundError if filename is a recipe file that doesn't exist.
+    """
+    ext = os.path.splitext(filename)[1].lower()
+    # unrecognized extension -- treat as non-filename
+    if ext and ext not in _yaml_extensions:
+        return None
+
+    # check for (location)filename.yml or (location)/filename.yml style
+    match1 = re.fullmatch("^\\((.+)\\)/?(.+)$", filename)
+    match2 = re.fullmatch("^([\w.]+)::(.+)$", filename)
+    if match1 or match2:
+        modulename, fname = (match1 or match2).groups()
+        try:
+            mod = importlib.import_module(modulename)
+        except ImportError as exc:
+            raise FileNotFoundError(f"{filename} not found ({exc})")
+        # get filename
+        fname = os.path.join(os.path.dirname(mod.__file__), fname)
+        if ext:
+            if os.path.exists(fname):
+                return fname
+            else:
+                raise FileNotFoundError(f"{filename} resolves to {fname}, which doesn't exist")
+        # else check for implicit extension        
+        else:
+            for ext in _yaml_extensions:
+                path = f"{fname}{ext}"
+                if os.path.exists(path):
+                    return path
+            else:
+                raise FileNotFoundError(f"{filename} resolves to {fname}, which doesn't match any YaML files")
+    # no match and no extension, treat as non-filename
+    if not ext:
+        return None
+    if os.path.exists(filename):
+        return filename
+    raise FileNotFoundError(f"{filename} doesn't exist")
+
+
 def load_recipe_files(filenames: List[str]):
+    """Loads a set of config or recipe files. Returns list of recipes loaded."""
 
     full_conf = OmegaConf.create()
     full_deps = configuratt.ConfigDependencies()
@@ -183,15 +232,22 @@ def run(parameters: List[str] = [], dry_run: bool = False, last_recipe: bool = F
             except Exception as exc:
                 log_exception(f"error parsing {pp}", exc)
                 errcode = 2
-        elif os.path.splitext(pp)[1].lower() in (".yml", ".yaml"):
-            files_to_load.append(pp)
-            log.info(f"will load recipe/config file '{pp}'")
         else:
-            if recipe_or_cab is not None:
+            try:
+                filename = resolve_recipe_file(pp)
+            except FileNotFoundError as exc:
+                log_exception(exc)
+                errcode = 2
+                continue
+            if filename:
+                files_to_load.append(filename)
+                log.info(f"will load recipe/config file {filename}")
+            elif recipe_or_cab is not None:
                 log_exception(f"multiple recipe/cab names given")
                 errcode = 2
             else:
                 recipe_or_cab = pp
+                log.info(f"treating {pp} as a recipe or cab name")
 
     if errcode:
         sys.exit(errcode)
