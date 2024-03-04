@@ -739,10 +739,12 @@ class Recipe(Cargo):
         return own_params, unset_params
 
 
-    def prevalidate(self, params: Dict[str, Any], subst: Optional[SubstitutionNS]=None, root=False):
-        self.finalize()
+    def prevalidate(self, params: Dict[str, Any], subst: Optional[SubstitutionNS]=None, backend=None, root=False):
+        self.finalize(backend=backend)
         self.log.debug("prevalidating recipe")
         errors = []
+
+        backend = OmegaConf.merge(backend or self.config.opts.backend, self.backend or {})
 
         # split parameters into our own, and per-step, and UNSET directives
         params,  unset_params = self._preprocess_parameters(params)
@@ -785,7 +787,7 @@ class Recipe(Cargo):
         # we call this twice, potentially, so define as a function
         def prevalidate_self(params):
             try:
-                params1 = Cargo.prevalidate(self, params, subst=subst_outer)
+                params1 = Cargo.prevalidate(self, params, subst=subst_outer, backend=backend)
                 # mark params that have become unset 
                 unset_params.update(set(params) - set(params1))
                 params = params1

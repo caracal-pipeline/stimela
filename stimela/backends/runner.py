@@ -48,7 +48,7 @@ def validate_backend_settings(backend_opts: Dict[str, Any], log: logging.Logger)
         backend_opts = OmegaConf.to_object(backend_opts)
 
     backend_name = backend = None
-    selected = backend_opts.select or ['native']
+    selected = backend_opts.select or ['singularity', 'native']
     # select containerization engine, if any
     for name in selected: 
         # check that backend has not been disabled

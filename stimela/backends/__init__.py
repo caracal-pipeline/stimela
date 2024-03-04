@@ -47,7 +47,7 @@ class StimelaBackendOptions(object):
     # overrides registries -- useful if you have a pull-through cache set up
     override_registries: Dict[str, str] = EmptyDictDefault()
     
-    select: Any = ""   # should be Union[str, List[str]], but OmegaConf doesn't support it, so handle in __post_init__ for now
+    select: Any = "singularity,native"   # should be Union[str, List[str]], but OmegaConf doesn't support it, so handle in __post_init__ for now
     
     singularity: Optional[SingularityBackendOptions] = None
     kube: Optional[KubeBackendOptions] = None

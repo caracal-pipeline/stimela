@@ -1,4 +1,4 @@
-import glob
+import importlib
 import os, os.path, time, sys, platform, traceback
 from typing import Any, List, Dict, Optional, Union
 from enum import Enum
@@ -11,8 +11,6 @@ from yaml.error import YAMLError
 import stimela
 from stimela.exceptions import *
 from stimela import log_exception
-
-CONFIG_FILE = os.path.expanduser("~/.config/stimela.conf")
 
 from scabha import configuratt
 from scabha.cargo import ListOrString, EmptyDictDefault, EmptyListDefault
@@ -64,12 +62,19 @@ def DefaultDirs():
 _CONFIG_BASENAME = "stimela.conf"
 _STIMELA_CONFDIR = os.path.os.path.expanduser("~/.stimela")
 
+# check for cultcargo module
+try:
+    ccmod = importlib.import_module("cultcargo")
+except ImportError:
+    ccmod = None
+
 # dict of config file locations to check, in order of preference
 CONFIG_LOCATIONS = OrderedDict(
     package = os.path.join(os.path.dirname(__file__), _CONFIG_BASENAME),
     local   = _CONFIG_BASENAME,
     venv    = os.environ.get('VIRTUAL_ENV', None) and os.path.join(os.environ['VIRTUAL_ENV'], _CONFIG_BASENAME),
     stimela = os.path.isdir(_STIMELA_CONFDIR) and os.path.join(_STIMELA_CONFDIR, _CONFIG_BASENAME),
+    cultcargo = ccmod and os.path.join(os.path.dirname(ccmod.__file__), _CONFIG_BASENAME),
     user    = os.path.join(os.path.expanduser("~/.config"), _CONFIG_BASENAME),
 )
 

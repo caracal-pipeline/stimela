@@ -266,8 +266,8 @@ class Step:
             runner.validate_backend_settings(backend_opts, log=log)
 
 
-    def prevalidate(self, subst: Optional[SubstitutionNS]=None, root=False):
-        self.finalize()
+    def prevalidate(self, subst: Optional[SubstitutionNS]=None, root=False, backend=None):
+        self.finalize(backend=backend)
         self.cargo.apply_dynamic_schemas(self.params, subst)
         # validate cab or recipe
         params = self.validated_params = self.cargo.prevalidate(self.params, subst, root=root)
@@ -320,11 +320,11 @@ class Step:
                 raise AssignmentError(f"{self.name}: invalid assignment {key}={value}", exc)
 
 
-    def build(self, backend={}, rebuild=False, build_skips=False, log: Optional[logging.Logger] = None):
+    def build(self, backend=None, rebuild=False, build_skips=False, log: Optional[logging.Logger] = None):
         # skipping step? ignore the build
         if self.skip is True and not build_skips:
             return
-        backend = OmegaConf.merge(backend, self.cargo.backend or {}, self.backend or {})
+        backend = OmegaConf.merge(backend or {}, self.cargo.backend or {}, self.backend or {})
         log = log or self.log
         # recurse into sub-recipe 
         from .recipe import Recipe
@@ -334,7 +334,7 @@ class Step:
         else:
             # validate backend settings and call the build function
             try:
-                backend_opts = OmegaConf.merge(backend, self.cargo.backend or {}, self.backend or {})
+                backend_opts = OmegaConf.merge(self.config.opts.backend, backend)
                 if getattr(backend_opts, 'verbose', 0):
                     opts_yaml = OmegaConf.to_yaml(backend_opts)
                     log_rich_payload(self.log, "effective backend settings are", opts_yaml, syntax="yaml") 
@@ -348,7 +348,7 @@ class Step:
                 return backend_runner.build(self.cargo, log=log, rebuild=rebuild)
 
 
-    def run(self, backend: Optional[Dict] = {}, subst: Optional[Dict[str, Any]] = None, 
+    def run(self, backend: Optional[Dict] = None, subst: Optional[Dict[str, Any]] = None, 
             is_outer_step: bool=False,
             parent_log: Optional[logging.Logger] = None) -> Dict[str, Any]:
         """executes the step
@@ -376,11 +376,11 @@ class Step:
         if parent_log is None:
             parent_log = self.log
 
-        backend = OmegaConf.merge(backend, self.cargo.backend or {}, self.backend or {})
+        backend = OmegaConf.merge(backend or {}, self.cargo.backend or {}, self.backend or {})
 
         # validate backend settings
         try:
-            backend_opts = OmegaConf.merge(stimela.CONFIG.opts.backend, backend)
+            backend_opts = OmegaConf.merge(self.config.opts.backend, backend)
             backend_opts = evaluate_and_substitute_object(backend_opts, subst, recursion_level=-1, location=[self.fqname, "backend"])
             if not is_outer_step and backend_opts.verbose:
                 opts_yaml = OmegaConf.to_yaml(backend_opts)
