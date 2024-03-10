@@ -156,8 +156,9 @@ The ``management.cleanup`` section can be used to specify a list of filename pat
 
 Cab flavours
 ************
+.. _cab_flavours:
 
-A cab can correspond to a Python function or a CASA task. This is specified via the ``flavour`` attribute -- we saw an example of this just above with the ``casa.flagsummary`` cab. Its definition tells Stimela that the cab is implemented by invoking a CASA task underneath. Other flavours are ``python`` (for Python functions) and ``python-code`` (for inline Python code). The default flavour, corresponding to a binary command, is called ``binary``.
+A cab can also correspond to a Python function or a CASA task. This is specified via the ``flavour`` attribute -- we saw an example of this just above with the ``casa.flagsummary`` cab. Its definition tells Stimela that the cab is implemented by invoking a CASA task underneath. Other flavours are ``python`` (for Python functions) and ``python-code`` (for inline Python code). The default flavour, corresponding to a binary command, is called ``binary``.
 
 Specifying flavour options
 --------------------------
@@ -170,11 +171,13 @@ An alternative way to specify flavours is to make ``flavour`` a sub-section, and
             command: flagmanager
             flavour: 
                 kind: casa-task
-                casa: '/usr/local/bin/casa'
-                casa_opts: '--nologger'
+                path: /usr/local/bin/casa
+                opts: [--nologger]
                 log_full_command: true
 
-The above tells Stimela to usr a non-default CASA intepreter, and to pass it an extra option on the command line. The ``log_full_command: true`` setting will cause the complete command line, including the encoded inputs (as opposed to just the command name) to be logged when the cab is invoked, which can be useful for debugging.
+The above tells Stimela to use a non-default CASA intepreter, and to pass it specific extra options on the command line. The ``log_full_command: true`` setting will cause the complete command line, including the encoded inputs (as opposed to just the command name) to be logged when the cab is invoked, which can be useful for debugging.
+
+Note that the CASA path and option settings can also be defined globally via :ref:`Stimela configuration <options>`.
 
 Callable flavours
 -----------------

@@ -19,6 +19,12 @@ At the top level, the namespace has the following sections:
     
   * ``opts.log``, defining :ref:`logging <logfiles>` settings;
 
+  * ``opts.runtime``, defining some runtime settings, in particular:
+
+    * ``opts.runtime.casa.path``, giving the default path to the CASA interpreter (for :ref:`CASA-flavour cabs <cab_flavours>`).
+
+    * ``opts.runtime.casa.opts``, giving a list of extra options to be passed to the CASA interpreter.
+
   * ``opts.profile``, defining profiling settings;
 
   * ``opts.include``, giving a set of paths to search for when :ref:`_include statements <include>` are used.
