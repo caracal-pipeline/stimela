@@ -25,6 +25,7 @@ def resolve_required_mounts(mounts: Dict[str, bool],
             if must_exist:
                 raise SchemaError(f"parameter '{param_name}': path '{path}' does not exist")
             path = os.path.dirname(path)
+        path = path.rstrip("/")
         mounts[path] = mounts.get(path) or readwrite
 
     # go through parameters and accumulate target paths
@@ -68,7 +69,7 @@ def resolve_required_mounts(mounts: Dict[str, bool],
                     if not os.path.isabs(path):
                         path = os.path.abspath(os.path.join(os.path.dirname(chain[-1]), path))
                     chain.append(path)
-                    mounts[path] = mounts.get(path) or readwrite
+                    add_target(name, path, must_exist=True, readwrite=readwrite)
             path = os.path.dirname(path)
 
     # now eliminate unnecessary mounts (those that have a parent mount with no lower read/write privileges)
@@ -85,6 +86,8 @@ def resolve_required_mounts(mounts: Dict[str, bool],
 
     for path in skip_targets:
         mounts.pop(path)
+
+    # sort paths so that 
 
 
 def resolve_remote_mounts(params: Dict[str, Any], 
