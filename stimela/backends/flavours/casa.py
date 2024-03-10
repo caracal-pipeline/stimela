@@ -1,12 +1,12 @@
 import re
 import os.path
 import json
-from typing import Optional, Any, Union, Dict
+from typing import Optional, Any, Union, Dict, List
 from dataclasses import dataclass
 
 import stimela
+from scabha.basetypes import EmptyListDefault
 from scabha.exceptions import SubstitutionError
-from stimela.exceptions import CabValidationError
 from stimela.kitchen.cab import Cab
 from scabha.cab_utils import CAB_OUTPUT_PREFIX
 from stimela.kitchen import wranglers
@@ -20,8 +20,8 @@ from .python_flavours import form_python_function_call
 @dataclass
 class CasaTaskFlavour(_CallableFlavour):
     kind: str = "casa-task"
-    casa: Optional[str] = None
-    casa_opts: Optional[str] = None
+    path: Optional[str] = None                       # path to CASA executable
+    opts: Optional[List[str]] = EmptyListDefault()   # additional options 
 
     def finalize(self, cab: Cab):
         super().finalize(cab)
@@ -46,20 +46,18 @@ class CasaTaskFlavour(_CallableFlavour):
                 command = context.evaluate(cab.command, location=["command"])
             except Exception as exc:
                 raise SubstitutionError(f"error substituting casa task '{cab.command}'", exc)
-            if self.casa:
+            casa_config = stimela.CONFIG.opts.runtime.get('casa', {})
+            casa = self.path or casa_config.get('path', 'casa')
+            try:
+                casa = context.evaluate(casa, location=["path"])
+            except Exception as exc:
+                raise SubstitutionError(f"error substituting casa path '{casa}'", exc)
+            casa_opts = self.opts or casa_config.get('opts', ["--log2term", "--nologger", "--nologfile"]) or []
+            if casa_opts:
                 try:
-                    casa = context.evaluate(self.casa, location=["casa"])
-                except Exception as exc:
-                    raise SubstitutionError(f"error substituting casa path '{casa}'", exc)
-            else:
-                casa = stimela.CONFIG.opts.runtime.get('casa', "casa")
-            if self.casa_opts:
-                try:
-                    casa_opts = context.evaluate(self.casa_opts, location=["casa_opts"])
+                    casa_opts = [context.evaluate(opt, location=["opts"]) for opt in casa_opts]
                 except Exception as exc:
                     raise SubstitutionError(f"error substituting casa options '{casa_opts}'", exc)
-            else:
-                casa_opts = stimela.CONFIG.opts.runtime.get('casa_opts', "--log2term --nologger --nologfile")
 
         # check for virtual_env
         if virtual_env and "/" not in command:
@@ -94,7 +92,7 @@ kw = {{key: stringify(value) for key, value in kw.items()}}
 
 """
 
-        args =  casa.strip().split() + casa_opts.strip().split() + ["-c", code, params_string]
+        args =  casa.strip().split() + list(casa_opts) + ["-c", code, params_string]
         return args
 
 
