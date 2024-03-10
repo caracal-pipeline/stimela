@@ -79,8 +79,6 @@ You can also tell Stimela to scatter a loop over a number of worker processes, a
             over: image-list
             scatter: 16
 
-This will run up to 16 iterations of the loop concurrently.  
-
-The current implementation of scatter uses a process pool on the same node that the recipe is being run on. Coming soon: options to scatter the iterations via slurm or Kubernetes pods.
+This will run up to 16 iterations of the loop concurrently. Use ``scatter: -1`` to run all iterations concurrently. Single-node users beware, this is an easy way to overload a node! However, with the Kubernetes backend or the Slurm backend wrapper, this can very effectively leverage a cluster.
 
 

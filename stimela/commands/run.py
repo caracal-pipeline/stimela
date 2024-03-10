@@ -247,7 +247,7 @@ def run(parameters: List[str] = [], dry_run: bool = False, last_recipe: bool = F
                 errcode = 2
             else:
                 recipe_or_cab = pp
-                log.info(f"treating {pp} as a recipe or cab name")
+                log.info(f"treating '{pp}' as a recipe or cab name")
 
     if errcode:
         sys.exit(errcode)

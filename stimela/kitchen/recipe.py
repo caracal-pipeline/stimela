@@ -75,18 +75,6 @@ class Recipe(Cargo):
     # make recipe a for_loop-gather (i.e. parallel for loop)
     for_loop: Optional[ForLoopClause] = None
 
-    # logging control, overrides opts.log.init_logname and opts.log.logname 
-    init_logname: Optional[str] = None
-    logname: Optional[str] = None
-    batch: Optional[Batch] = None
-
-    #
-    
-    # # if not None, do a while loop with the conditional
-    # _while: Conditional = None
-    # # if not None, do an until loop with the conditional
-    # _until: Conditional = None
-
     def __post_init__ (self):
         Cargo.__post_init__(self)
         # flatten aliases and assignments

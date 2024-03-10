@@ -54,9 +54,17 @@ def resolve_required_mounts(mounts: Dict[str, bool],
             if schema.access_parent_dir or schema.write_parent_dir:
                 add_target(name, os.path.dirname(path), must_exist=True, readwrite=schema.write_parent_dir)
                 add_target(name, os.path.dirname(realpath), must_exist=True, readwrite=schema.write_parent_dir)
-            # for symlink targets, we need to mount the parent directory of the link too
+            # initial set of things that need to be mounted, this includes the path for a start
             if os.path.islink(path):
-                add_target(name, os.path.dirname(path), must_exist=True, readwrite=readwrite)
+                chain = [path]
+                while os.path.islink(path):
+                    # Resolve the symlink one step.
+                    path = os.readlink(path)
+                    # Check if the path is absolute; if not, resolve it relative to the directory of the previous link.
+                    if not os.path.isabs(path):
+                        path = os.path.join(os.path.dirname(chain[-1]), path)
+                    chain.append(path)
+                    add_target(name, os.path.dirname(path), must_exist=True, readwrite=readwrite)
             else:
                 add_target(name, path, must_exist=must_exist, readwrite=readwrite)
     

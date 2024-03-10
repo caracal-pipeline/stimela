@@ -4,11 +4,11 @@
 Basics
 ######
 
-Stimela is *workflow management* framework. The two basic elements of stimela are *cabs* and *recipes*.
+Stimela is *workflow management* framework. The two basic elements of Stimela are *cabs* and *recipes*.
 
 * **Cabs**: a cab is an atomic task that can be invoked in a workflow. Cabs come in a few different :ref:`flavours <cabdefs>`: 
 
-  * a standalone excutable
+  * an executable command
   
   * a Python function
    
@@ -16,14 +16,21 @@ Stimela is *workflow management* framework. The two basic elements of stimela ar
    
   * a CASA task
      
-  A *cab definition* (see :ref:`cabdefs`) is a YaML document that tells stimela how to invoke the task, and what its inputs and outputs are (this is collectively known as a *schema*). You can write your own cab definitions, and mix-and-match them with standard cabs shipped in stimela's companion ``cult-cargo`` package.
+  A *cab definition* (see :ref:`cabdefs`) is a YaML document that tells Stimela how to invoke the task, and what its inputs and outputs are (this is collectively known as a *schema*). You can write your own cab definitions, and mix-and-match them with standard cabs shipped in stimela's companion ``cult-cargo`` package.
 
-  Cabs cab be executed natively (i.e. directly on the host OS), inside a Python virtual environment, or in a :ref:`container <containers>`. The latter option is key to making reproducable workflows.
-
+  
 * **Recipes**: a recipe is a YaML document describing a workflow, in terms of a sequence of **steps**. Each step invokes a cab, or another recipe (a.k.a. nested recipe). Steps have *parameters* which are matched (*validated*) against the schema of the underlying cab. Stimela provides a number of powerful mechanisms to pass parameters between steps.
   
-  Recipes also have inputs and outputs, described by the recipe's *schema*. (This is what allows them to be nested.)
-  
+  Recipes also have inputs and outputs, described by the recipe's *schema* (which is what allows them to be nested.)
+
+Cabs and recipes cab be executed natively (i.e. directly on the host OS), inside a Python virtual environment, inside a container, on a Kubernetes cluster, and/or as a Slurm job. See :ref:`backends <backends>` for more detail.
+
+
+Stimela and cult-cargo
+======================
+
+Stimela by itself does not predefine any cabs. Instead, the idea is that separate packages such as ``cult-cargo`` (just use pip install) provide cab collections that the user can employ. ``cult-cargo`` is a curated set of cabs for radio interferometry software, maintained by the Stimela developers. Users are also free to roll their own cab definitions, and provide their own cab collections as installable packages.
+
 
 Anatomy of a simple recipe
 ==========================
@@ -92,3 +99,4 @@ Here is a (rather notional and idealized) recipe::
                   output.column: CORRECTED_DATA
   
 The following sections will explain what's going on in more detail.
+

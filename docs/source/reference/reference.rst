@@ -9,10 +9,11 @@ Stimela reference
    :maxdepth: 3
    :caption: stimela reference:
 
-   cabdefs
+   backend_ref
    logfiles
    options
+   cabdefs
+   schema_ref
    policies
-   containers
    
 
