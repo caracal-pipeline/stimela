@@ -54,7 +54,7 @@ class Step:
     cab: Optional[Any] = None                       # if not None, this step is a cab and this is the cab name
     recipe: Optional[Any] = None                    # if not None, this step is a nested recipe
     params: Dict[str, Any] = EmptyDictDefault()     # assigns parameter values
-    info: Optional[str] = None                      # comment or info
+    info: Optional[str] = None                      # comment or info string
     skip: Optional[str] = None                      # if this evaluates to True, step is skipped.  
     skip_if_outputs: Optional[str] = None           # skip if outputs "exist' or "fresh"
     tags: List[str] = EmptyListDefault()

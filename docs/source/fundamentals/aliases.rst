@@ -107,6 +107,7 @@ This tells Stimela that the recipe's ``ms`` input is an alias for the ``ms`` inp
 
 Auto-aliases
 ------------
+.. _auto_aliases:
 
 Consider the following notional recipe::
 

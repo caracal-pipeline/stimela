@@ -24,21 +24,21 @@ If you want to use these cabs in your recipe, you'll need to add this at the top
 
     _include: my-cabs.yml
 
-This will cause stimela to read in ``my-cabs.yml``, and paste in the content as if it was part of the recipe in the first place. Of course, you might want to use some ``cult_cargo`` cabs alongside your custom ones, in which case your include section will look something like::
+This will cause stimela to read in ``my-cabs.yml``, and paste in the content as if it was part of the recipe in the first place. Of course, you might want to use some ``cult-cargo`` cabs alongside your custom ones, in which case your include section will look something like::
 
     _include: 
-        - (cult_cargo)wsclean.yml
+        - (cultcargo)wsclean.yml
         - my-cabs.yml
 
-The ()-form tells stimela to look for ``wsclean.yml`` inside the Python package named ``cult_cargo``, wherever that happens to reside. You will have presumably installed it via ``pip`` in the usual way, and you don't actually need to know where exactly it is installed, as stimela will take care of finding it for you using the standard Python machinery. In the second case, stimela will look for ``my-cabs.yml`` in the current directory, then in a few standard locations such as ``~/lib/stimela``. You can set the ``STIMELA_INCLUDE`` environment variable to specify a custom set of paths to look in.
+The ()-form tells stimela to look for ``wsclean.yml`` inside the Python package named ``cultcargo``, wherever that happens to reside. You will have presumably installed it via ``pip`` in the usual way, and you don't actually need to know where exactly it is installed, as stimela will take care of finding it for you using the standard Python machinery. In the second case, stimela will look for ``my-cabs.yml`` in the current directory, then in a few standard locations such as ``~/lib/stimela``. You can set the ``STIMELA_INCLUDE`` environment variable to specify a custom set of paths to look in.
 
-Includes are recursive
+Includes can be nested
 ^^^^^^^^^^^^^^^^^^^^^^
 
-Includes can be recursive. In real life, your ``my-cabs.yml`` might actually look like::
+Includes can be nested. In real life, your ``my-cabs.yml`` might actually look like::
 
     _include:
-        - (cult_cargo)wsclean.yml
+        - (cultcargo)wsclean.yml
 
     cabs:
         foo:
@@ -53,11 +53,11 @@ Includes are a "merge"
 
 Include works in the sense of a "merge" (or a "union") with prior content. Consider that in the example above, both ``my-cabs.yml`` and ``wsclean.yml`` will contain a ``cabs`` section with different content. The resulting ``cabs`` section available to stimela will contain subsections from both of the included files -- the two ``cabs`` sections will have been merged. What happens when the contents clash? The answer is that everything is merged. 
 
-More strictly, subsequent content *augments* previously included content: section content is merged, while any "leaf" items are overwritten. This is a very powerful feature. For example, imagine that you want to try an unreleased version of WSClean, which you've built from the latest source under ``~/src/wsclean/build``. Furthermore, the ``cult_cargo`` definition of the ``wsclean`` cab doesn't know about a new parameter that is available in the new build, but it is something that you need to use. Also, you'd like to modify the default value of a standard parameter. You can simply augment the cult ``wsclean`` definition by putting this into ``my-cabs.yml``::
+More strictly, subsequent content *augments* previously included content: section content is merged, while any "leaf" items are overwritten. This is a very powerful feature. For example, imagine that you want to try an unreleased version of WSClean, which you've built from the latest source under ``~/src/wsclean/build``. Furthermore, the ``cult-cargo`` definition of the ``wsclean`` cab doesn't know about a new parameter that is available in the new build, but it is something that you need to use. Also, you'd like to modify the default value of a standard parameter. You can simply augment the cult ``wsclean`` definition by putting this into ``my-cabs.yml``::
 
     
     _include:
-        - (cult_cargo)wsclean.yml
+        - (cultcargo)wsclean.yml
 
     cabs:
         wsclean:
@@ -67,7 +67,7 @@ More strictly, subsequent content *augments* previously included content: sectio
                     default: "my own default value"
                 new-parameter:
                     dtype: int 
-                    info: "I added this parameter, since it was missing in cult_cargo"
+                    info: "I added this parameter, since it was missing in cult-cargo"
         foo:
             command: foo
             inputs:
@@ -75,8 +75,32 @@ More strictly, subsequent content *augments* previously included content: sectio
 
 Equivalently, you can do the augmentation by providing a ``cabs: wsclean`` section directly in the recipe file.
 
-Includes can also be nested
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Pre- and post-includes
+^^^^^^^^^^^^^^^^^^^^^^
+
+Since includes are a merge, the order of the merge is important. Included content comes first: anything listed in an ``_include`` section is loaded first (i.e. *pre-included*), after which the remaining content of the YaML file is merged in, and thus can augment whatever was pre-included. 
+
+If you would like to include a file that augments your content after it's loaded, use an ``_include_post`` section::
+
+    _include:
+        - (cultcargo)wsclean.yml
+
+    cabs:
+        wsclean:
+            command: ~/src/wsclean/build/wsclean  # my own build
+
+    my-recipe:
+        ...
+
+    _include_post:
+        - tweaks.yml
+
+Anything given in ``_include_post`` will be merged in *after* the YaML content (*post-included*), thus potentially augmenting the content.
+
+Note that the actual order in which ``_include`` and ``_include_post`` sections appear in the YaML file is not important. The former is always processed first, then the rest of the YaML content is merged in, then the latter is post-included. We prefer to give both the include and post-include statements at the top of any given YaML file, for readability.
+
+Includes can appear inside sub-sections
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 As mentioned above, includes are processed at point of invocation. This means that subsections can contain their own ``_include`` that is processed at that subsection's level. You could choose to rewrite ``my-cabs.yml`` without an enclosing ``cabs`` section, like so::
 
@@ -95,9 +119,47 @@ As mentioned above, includes are processed at point of invocation. This means th
 
 We don't necessarily advocate doing this for cab definitions, as this can make them confusing and less reusable. There are, however, other instances where breaking out a subsection into an include can make things neater (see :ref:`anatomy` for an example.)
 
+Include paths and dangers thereof
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Nested includes provide potential for all sorts of mischief. Imagine you're including from package ``foo``, which contains two files, ``bar.yml`` and ``baz.yml``, with ``bar.yml`` containing the statement ``_include: baz.yml``.
+
+If your recipe now invokes ``_include: (foo)bar.yml``, ``bar.yml`` will include ``baz.yml`` correctly, because Stimela will know to look for it at the same location as ``bar.yml``. **Unless!** your current directory happens to contain its own version of ``baz.yml``, in which case that one will be pulled in, and not the one under ``foo``.
+
+This is actually a feature (Stimela always looks in a certain set of include paths, starting from CWD), as it allows for more flexible configurations if deployed correctly. For example, optional local configuration files can override deafult package configuration files in this way. But it can also lead to confusion.
+
+The correct way for the ``foo`` package to avoid confusion is to have ``bar.yml`` use ``_include: (.)baz.yml`` instead. The ``(.)`` construct tells Stimela to look for ``baz.yml`` at the same location that it was included from, and ignore the normal include paths. (Python programmers will recognize the analogy to ``from . import baz`` or ``import .baz``).
+
+Bottom line: ``_include: baz.yml`` allows the user to override ``baz.yml`` by providing their own version. ``_include: (.)baz.yml`` means include the package version, and no other.
+
+Structured includes and optional includes
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The reader will already have noticed that an ``_include`` statement may contain a single file, or a sequence of files. When including 
+multiple documents from the same location, you may also structure the include statement to save repetition::
+
+    _include:
+        (cultcargo):
+            wsclean.yml
+            breizorro.yml
+        some_directory:
+            foo.yml
+            bar.yml
+        .:
+            local.yml   # same as _include: local.yml
+
+Finally, if you want to make an include optional, append ``[optional]`` to the filename::
+
+    _include:
+        - (cultcargo)wsclean.yml[optional]
+
+This will cause Stimela to happily proceed if the include is not found (whether the recipe remains functional is another matter). This may be useful to support optionally-installed packages.
+
 
 Use: reusing content
 --------------------
+
+.. _use_statement:
 
 The special ``_use`` section is closely related to ``_include``, but instead of pulling in YaML files, it copies in previously defined sections. A typical use case for ``_use`` (excusing the pun) is "library" content. You'll want to use ``_use`` (excusing the pun) if you find yourself often repeating identical bits of YaML. For example, if your recipe contains multiple imaging steps where you invoke the imager with a largely the same set of parameters, you can avoid repetition like so::
 
@@ -125,7 +187,7 @@ The special ``_use`` section is closely related to ``_include``, but instead of 
 
 Here, the definition of the ``image-1`` step is copied over into ``image-2``, then tweaked. Note how the merge-and-augment semantics are exactly the same as for ``_include``. That is, subsections are merged, and "leaf" values are modified. 
 
-In passing, we should note that both ``_include`` and ``_use`` will accept either a single string (interpreted as a filename, or a section name), or a sequence of strings. In the latter case, the sequence is treated as multiple filenames (section names), which are all merged together in order.
+Note that ``_use`` will accept either a single string, or a sequence of strings. In the latter case, the sequence is treated as multiple ections names, which are all merged together in the given order.
 
 An alternative way to modularize the above is to use the standard ``lib`` namespace of stimela. In particular, ``lib.steps`` is meant to contain reusable step definitions. You could recast the above in terms of a "standard" imager invocation, by incuding something like this in ``my-cabs.yml``::
 
@@ -167,21 +229,21 @@ The sharp-eyed reader will have spotted one limitation to the merge-and-augment 
 The ``_scrub`` keyword is provided to overcome this restriction. Any section listed in ``_scrub`` will be removed from anything brought in by ``_include`` or ``_use``. A (rather futile) example would be::
 
     _include:
-        - (cult_cargo)wsclean.yml
+        - (cultcargo)wsclean.yml
     _scrub:
         - cabs.wsclean
 
 This will pull in the (presumed) WSClean definition from ``cult-cargo``, them proceed to remove it (presumably remove it, as the cult definiton could contain more than than ``cabs.wsclean``). A somewhat more useful example would be if one wanted to completely redefine a WSClean input (as opposed to tweaking the standard definition, as above)::
 
     _include:
-        - (cult_cargo)wsclean.yml
+        - (cult-cargo)wsclean.yml
     _scrub:
         - cabs.wsclean.inputs.redefined-parameter
 
     cabs:
         wsclean:
             inputs:
-                redefined-paramater:
+                redefined-parameter:
                     dtype: int
                     default: 0
                     info: "this input is redefined from scratch"
@@ -213,8 +275,8 @@ As far as basic modularity goes, a sensible workflow that works well for one of 
 
   * Project-specific recipes live in their own repository, along with a few project-specific cab and step definitions (e.g. ``rrat-cabs.yml``).
   * More generic cab definitions live in a separate repository (https://github.com/o-smirnov/omstimelation). The project-specific cabs include this as ``_include: omstimelation/oms-cabs.yml``.
-  * ``oms-cabs.yml`` includes ``cult_cargo``.
-  * Cab definitions can be promoted "upstream". That is, some project-specific tools initially wrapped in ``rrat-cabs.yml`` eventually get generic enough to graduate to ``omstimelation``. If they are even more generic, they can be considered for submission to ``cult-cargo``.
+  * ``oms-cabs.yml`` includes ``cult-cargo``.
+  * Cab definitions can eventually be promoted "upstream". Some project-specific tools that were initially wrapped in ``rrat-cabs.yml`` eventually get generic enough to graduate to ``omstimelation``. From there, if they are even more generally useful, they can be considered for promotion to ``cult-cargo``.
 
 
 

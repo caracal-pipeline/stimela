@@ -50,8 +50,6 @@ class StimelaOptions(object):
     log: StimelaLogConfig = StimelaLogConfig()
     ## list of paths to search with _include
     include: List[str] = EmptyListDefault()
-    ## Miscellaneous runtime option 
-    runtime: Dict[str, Any] = EmptyDictDefault()
     ## Profiling options
     profile: StimelaProfilingOptions = StimelaProfilingOptions()
 

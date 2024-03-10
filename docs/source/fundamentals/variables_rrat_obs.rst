@@ -9,7 +9,7 @@ rrat-observation-sets.yml
 
 Content of ``rrat-observation.sets.yml``::
 
-    run.node:
+    config.run.node:
         baker:
             obs: L1
             ncpu: 64

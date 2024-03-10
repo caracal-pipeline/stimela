@@ -111,6 +111,9 @@ In the context of a step's parameter evaluation, the following namespaces are re
     
   * ``info.fqname`` is the fully-qualified name of the step, e.g. ``calibration-recipe.image-1``.
 
+  * ``info.taskname`` is similar to ``fqname``, but if the recipe is a for-loop, it will include a loop counter, i.e. ``top-recipe.0.sub-recipe.1.step``. Note
+  that this works to any level of nesting.
+
   The ``info`` namespace is particularly useful for forming up filenames.   
 
 * ``config`` refers to the top-level configuration namespace, which effectively contains everything known to stimela. For example, ``config.opts`` are options, ``config.cabs`` are cab definitions, etc.
@@ -183,12 +186,12 @@ OmegaConf interpolations
 
 A related, but more basic, kind of substitution is invoked via the ``${}`` construct. This invokes the `OmegaConf variable interpolation <https://omegaconf.readthedocs.io/en/usage.html#variable-interpolation>`_ mechanism::
 
-   cabs:
-        breizorro:
-            command: breizorro
-            image: ${vars.cult-cargo.registry}/breizorro:cc${vars.cult-cargo.version}
+   vars:
+        x: 1
+        y: ${vars.x}
  
-
+Note that this kind of substition happens on a much more basic level, when the YaML itself is loaded. We don't tend to employ it much 
+(if at all), since the ``_use`` and ``_include`` extensions (see next section) tend to be a lot more useful.
 
 
 

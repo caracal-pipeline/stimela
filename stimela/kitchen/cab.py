@@ -279,8 +279,6 @@ class Cab(Cargo):
             if is_list:
                 # apply formatting policies to a list of values
                 if format_list_policy:
-                    if len(format_list_policy) != len(value):
-                        raise CabValidationError("length of format_list_policy does not match length of '{name}'", log=self.log)
                     value = [fmt.format(*value, **value_dict) for fmt in format_list_policy]
                 elif format_policy:
                     value = [format_policy.format(x, **value_dict) for x in value]

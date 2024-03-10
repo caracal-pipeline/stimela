@@ -96,6 +96,7 @@ Note that a simpler and more typical pattern is to set up logging options via a 
 
 Assign-based-on
 ===============
+.. _assign_based_on:
 
 What if you wanted to assign a variable based on the value of another variable? The ``assign_based_on`` section (at recipe or step level) can be used to accomplish this. Here is an example::
 
@@ -129,7 +130,7 @@ Note the following:
 * In all other cases (see ``DEFAULT``), we set the ``ms`` variable to "data-c.ms", and the ``band`` variable to "UHF". If ``DEFAULT`` was missing, Stimela would report an error if ``obs`` was set to something other than "a" or "b".
 * Assign-based-ons can be chained: once ``band`` is set to "L" or "UHF" based on ``obs``, Stimela then knows to set ``pixel-size`` variable accordingly.
 
-The sub-sections of ``assign_based_on`` can refer to recipe inputs, variables, or :ref:`configuration <options>` settings (using dot-syntax, as e.g. ``run.node`` below).
+The sub-sections of ``assign_based_on`` can refer to recipe inputs, variables, or :ref:`configuration <options>` settings (using dot-syntax, as e.g. ``config.run.node`` below).
 
 This feature is particularly useful if you want to set up a whole bunch of things based on a single input (``obs``, in this case). Tip: you can combine this with :ref:`include` to structure your reduction recipes into a specific "configuration" file, and a generic "recipe proper". Here's a real-life example. Let's say we have a "configuration" file called ``rrat-observation-sets.yml`` :ref:`with these contents <variables_rrat>`. In the recipe itself, we then have::
 
@@ -140,7 +141,7 @@ This feature is particularly useful if you want to set up a whole bunch of thing
             obs:
                 info: "Selects observation, see rrat-observation-sets.yml"
 
-The "configuration" file then contains all the details of the specific datasets to which the recipe can be applied, while the recipe itself remains completely generic; the dataset (and all its associated options and tweaks) can be selected at runtime by setting the ``obs`` parameter. As a bonus (see the ``run.node`` section), we can also specify different defaults based on which particular node the recipe is executed on. Note that ``run.node`` is an entry in the :ref:`configuration namespace <options>`.
+The "configuration" file then contains all the details of the specific datasets to which the recipe can be applied, while the recipe itself remains completely generic; the dataset (and all its associated options and tweaks) can be selected at runtime by setting the ``obs`` parameter. As a bonus (see the ``config.run.node`` entry), we can also specify different defaults based on which particular node the recipe is executed on. Note that ``run.node`` is an entry in the :ref:`configuration namespace <options>`.
 
 
 

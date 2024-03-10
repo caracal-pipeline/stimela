@@ -1,15 +1,16 @@
 .. highlight: yml
 .. _installation:
 
-Installing and running stimela
+Installing and running Stimela
 ##############################
 
 
-Stimela requires Python 3.7 or higher. For containerization support (WIP), you'll also need Singularity installed. You can still run stimela in "native" mode without Singularity.
+Stimela requires Python 3.7 or higher. For containerization support, you'll also need `Singularity (Apptainer) <https://apptainer.org/>`_ installed. You can still run stimela in "native" mode without Singularity. 
+
+If you plan to use the Slurm and Kubernetes backends, you'll also need the `Slurm scheduler <https://slurm.schedmd.com/>`_ and/or the `Python Kubernetes client <https://pypi.org/project/kubernetes/>`_.
 
 Installing from PyPI
 ====================
-
 
 Stimela is available from PyPI, thus you can simply do (possibly, in a virtual environment)::
     
@@ -49,6 +50,13 @@ A ``recipe_name`` is only needed if the YaML file contains more than one recipe 
 
 Arguments such as ``foo=x`` can be used to specify recipe parameters. An alternative form is ``-a/--assign foo x`` (useful because it allows shell tab-completion on values.)
 
+If you want to run just a single cab, use::
+
+  $ stimela run cultcargo::wsclean ms=my.ms prefix=test size=1024 scale=1asec
+
+This will invoke the ``wsclean`` cab from ``cult-cargo``, passing it the listed parameters. Use ``run -S`` to invoke the Singularity backend.
+
+
 Getting help
 ============
 
@@ -60,7 +68,9 @@ Recipes (and things called :ref:`cabs <cabdef>`) can come with their own embedde
 
     $ stimela doc recipe.yml [anything]
 
-...where ``anything`` can be a recipe name or a cab name.
+...where ``anything`` can be a recipe name or a cab name (provided that cab is loaded by the recipe). To get help on a cab provided by cult-cargo without specifying a recipe, use e.g.::
+
+    $ stimela doc cultcargo::wsclean
 
 
 
