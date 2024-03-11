@@ -87,9 +87,6 @@ def resolve_required_mounts(mounts: Dict[str, bool],
     for path in skip_targets:
         mounts.pop(path)
 
-    # sort paths so that 
-
-
 def resolve_remote_mounts(params: Dict[str, Any], 
                             inputs: Dict[str, Parameter], 
                             outputs: Dict[str, Parameter],
