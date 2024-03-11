@@ -334,15 +334,18 @@ def run(parameters: List[str] = [], dry_run: bool = False, last_recipe: bool = F
     if cab_name is not None:
         # create step config by merging in settings (var=value pairs from the command line) 
         outer_step = Step(cab=cab_name, params=params)
-        outer_step.name = outer_step.fqname = cab_name
+        outer_step.name = cab_name
         # provide basic substitutions for running the step below
         subst = SubstitutionNS()
         info = SubstitutionNS(fqname=cab_name, label=cab_name, label_parts=[], suffix='', taskname=cab_name)
         subst._add_('info', info, nosubst=True)
         subst._add_('config', stimela.CONFIG, nosubst=True) 
         subst._add_('current', SubstitutionNS(**params))
-
+        # create step logger manually, since we won't be doing the normal recipe-level log management
+        step_logger = stimela.logger().getChild(cab_name)
+        step_logger.propagate = True
         try:
+            outer_step.finalize(fqname=cab_name, log=step_logger)
             outer_step.prevalidate(root=True, subst=subst)
         except ScabhaBaseException as exc:
             log_exception(exc)

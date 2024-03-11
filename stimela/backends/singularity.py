@@ -252,7 +252,10 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     mounts = {cwd: True}
     # get extra required filesystem bindings
     resolve_required_mounts(mounts, params, cab.inputs, cab.outputs)
-    for path, rw in mounts.items():
+
+    # sort mount paths before iterating -- this ensures that parent directories come first
+    # (singularity doesn't like it if you specify a bind of a subdir before a bind of a parent) 
+    for path, rw in sorted(mounts.items()):
         args += ["--bind", f"{path}:{path}:{'rw' if rw else 'ro'}"]
 
     args += [simg_path]
