@@ -15,7 +15,7 @@ from . import _CallableFlavour, _BaseFlavour
 
 def form_python_function_call(function: str, cab: Cab, params: Dict[str, Any]):
     """
-    Helper. Converts a function name and a list of parameters into a string 
+    Helper. Converts a function name and a list of parameters into a string
     representation of a Python function call that can be parsed by the interpreter.
     Uses the cab schema info and policies to decide which parametets to include.
 
@@ -39,7 +39,7 @@ def get_python_interpreter_args(cab: Cab, subst: Dict[str, Any], virtual_env: Op
     invoke the interpreter. Invokes a virtual environment as appropriate.
 
     Args:
-        cab (Cab):              cab definition 
+        cab (Cab):              cab definition
         subst (Dict[str, Any]): substitution namespace
 
     Raises:
@@ -47,7 +47,7 @@ def get_python_interpreter_args(cab: Cab, subst: Dict[str, Any], virtual_env: Op
 
     Returns:
         List[str]: [command, arguments, ...] needed to invoke the interpreter
-    """    
+    """
     # get virtual env, if specified
     if virtual_env:
         virtual_env = os.path.expanduser(virtual_env)
@@ -92,7 +92,7 @@ class PythonCallableFlavour(_CallableFlavour):
         from stimela.backends import resolve_image_name
         return resolve_image_name(backend, cab.image or CONFIG.images['default-python'])
 
-    def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any], 
+    def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any],
                       virtual_env: Optional[str]=None, check_executable: bool = True):
         # substitute command and split into module/function
         with substitutions_from(subst, raise_errors=True) as context:
@@ -109,6 +109,7 @@ class PythonCallableFlavour(_CallableFlavour):
 
         # convert inputs into a JSON string
         pass_params = cab.filter_input_params(params)
+        pass_params = {key.replace("-","_").replace(".","__"): value for key, value in pass_params.items()}
         params_string = base64.b64encode(
                             zlib.compress(json.dumps(pass_params).encode('ascii'), 2)
                         ).decode('ascii')
@@ -171,7 +172,7 @@ class PythonCodeFlavour(_BaseFlavour):
         from stimela.backends import resolve_image_name
         return resolve_image_name(backend, cab.image or CONFIG.images['default-python'])
 
-    def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any], 
+    def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any],
                       virtual_env: Optional[str]=None, check_executable: bool = True):
         # do substitutions on command, if necessary
         if self.subst:
@@ -207,7 +208,7 @@ class PythonCodeFlavour(_BaseFlavour):
             if self.output_vars:
                 for name in pass_outputs:
                     var_name = name.replace("-", "_").replace(".", "__")
-                    post_command += f"yield_output(**{{'{name}': {var_name}}})\n"                
+                    post_command += f"yield_output(**{{'{name}': {var_name}}})\n"
 
         # form up interpreter invocation
         args = get_python_interpreter_args(cab, subst, virtual_env=virtual_env)
