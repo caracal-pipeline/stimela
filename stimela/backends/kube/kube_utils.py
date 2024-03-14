@@ -73,9 +73,10 @@ def apply_pod_spec(kps, pod_spec: Dict[str, Any], predefined_pod_specs: Dict[str
             res = pod_spec['containers'][0].setdefault('resources', {})
             if kps.cpu.request:
                 res.setdefault('requests', {})['cpu'] = kps.cpu.request
+                log.info(f"setting {kind} CPU request to {kps.cpu.request}")
             if kps.cpu.limit:
                 res.setdefault('limits', {})['cpu'] = kps.cpu.limit
-            log.info(f"setting {kind} CPU resources to {res['limits']['cpu']}")
+                log.info(f"setting {kind} CPU limits to {kps.cpu.limit}")
 
     return pod_spec
 
