@@ -3,8 +3,12 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to the stimela 2.0 documentation page
-=========================================================
+Stimela 2.0
+===========
+
+Stimela is a workflow management framework for creating portable and reproducible data processing pipelines.
+
+
 
 .. toctree::
    :maxdepth: 1

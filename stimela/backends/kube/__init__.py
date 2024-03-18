@@ -270,8 +270,8 @@ def get_kube_api(context: Optional[str]=None):
         _kube_context = context
         for ctx in contexts:
             if ctx['name'] == context:
+                _kube_namespace = ctx['context']['namespace']
                 break
-            _kube_namespace = ctx['context']['namespace']
         else:
             _kube_namespace = "default"
 
