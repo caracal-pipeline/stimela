@@ -1,9 +1,12 @@
 from dataclasses import field, dataclass
 from collections import OrderedDict
-from typing import List
+from typing import List, Union, get_args, get_origin
 import os.path
 import re
 from .exceptions import UnsetError
+from itertools import zip_longest
+from typeguard import check_type, TypeCheckError
+
 
 def EmptyDictDefault():
     return field(default_factory=lambda:OrderedDict())
@@ -55,7 +58,7 @@ class URI(str):
     def parse(value: str, expand_user=True):
         """
         Parses URI. If URI does not start with "protocol://", assumes "file://"
-        
+
         Returns tuple of (protocol, path, is_remote)
 
         If expand_user is True, ~ in (file-protocol) paths will be expanded.
@@ -75,7 +78,7 @@ class File(URI):
     @property
     def NAME(self):
         return File(os.path.basename(self))
-    
+
     @property
     def PATH(self):
         return File(os.path.abspath(self))
@@ -95,7 +98,7 @@ class File(URI):
     @property
     def EXT(self):
         return os.path.splitext(self)[1]
-    
+
     @property
     def EXISTS(self):
         return os.path.exists(self)
@@ -114,3 +117,64 @@ def is_file_type(dtype):
 def is_file_list_type(dtype):
     return any(dtype == List[t] for t in FILE_TYPES)
 
+
+class Skip(object):
+    def iterate_samples(self, collection):
+        return ()
+
+
+def get_filelikes(dtype, value, filelikes=None):
+    """Recursively recover all filelike elements from a composite dtype."""
+
+    filelikes = set() if filelikes is None else filelikes
+
+    origin = get_origin(dtype)
+    args = get_args(dtype)
+
+    if origin:  # Implies composition.
+
+        if origin is dict:
+
+            # No further work required for empty collections.
+            if len(value) == 0:
+                return filelikes
+
+            k_dtype, v_dtype = args
+
+            for k, v in value.items():
+                filelikes = get_filelikes(k_dtype, k, filelikes)
+                filelikes = get_filelikes(v_dtype, v, filelikes)
+
+        elif origin in (tuple, list, set):
+
+            # No further work required for empty collections.
+            if len(value) == 0:
+                return filelikes
+
+            # This is a special case for tuples of arbitrary
+            # length i.e. list-like behaviour.
+            if ... in args:
+                args = tuple([a for a in args if a != ...])
+
+            for dt, v in zip_longest(args, value, fillvalue=args[0]):
+                filelikes = get_filelikes(dt, v, filelikes)
+
+        elif origin is Union:
+
+            for dt in args:
+
+                try:
+                    # Do not check collection member types. 
+                    check_type(value, dt, collection_check_strategy=Skip())
+                except TypeCheckError:
+                    continue
+                filelikes = get_filelikes(dt, value, filelikes)
+
+        else:
+            raise ValueError(f"Failed to traverse {dtype} dtype when looking for files.")
+
+    else:
+        if is_file_type(dtype):
+            filelikes.add(value)
+
+    return filelikes
