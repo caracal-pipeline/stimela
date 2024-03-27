@@ -256,6 +256,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     mounts = {cwd: True}
     # add extra binds
     for path, rw in backend.singularity.bind_dirs.items():
+        path = os.path.expanduser(path)
         mounts[path] = mounts.get(path, False) or (rw == ReadWriteMode.rw)
 
     # get extra required filesystem bindings
