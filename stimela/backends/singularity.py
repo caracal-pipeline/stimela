@@ -1,21 +1,23 @@
 import subprocess
 import os
-import re
 import logging
-from stimela import utils
+from enum import Enum
 import stimela
 from shutil import which
 from dataclasses import dataclass
 from omegaconf import OmegaConf
 from typing import Dict, List, Any, Optional, Callable
 from contextlib import ExitStack
-from scabha.basetypes import EmptyListDefault
+from scabha.basetypes import EmptyDictDefault
 import datetime
 from stimela.utils.xrun_asyncio import xrun
 
 from stimela.exceptions import BackendError
 
 from . import native
+
+ReadWriteMode = Enum("ReadWriteMode", "ro rw", module=__name__)
+
 
 @dataclass
 class SingularityBackendOptions(object):
@@ -26,6 +28,8 @@ class SingularityBackendOptions(object):
     executable: Optional[str] = None
     remote_only: bool = False      # if True, won't look for singularity on local system -- useful in combination with slurm wrapper
 
+    # optional extra bindings
+    bind_dirs: Dict[str, ReadWriteMode] = EmptyDictDefault()
     # @dataclass
     # class EmptyVolume(object):
     #     name: str
@@ -250,6 +254,10 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     
     # initial set of mounts has cwd as read-write
     mounts = {cwd: True}
+    # add extra binds
+    for path, rw in backend.singularity.bind_dirs.items():
+        mounts[path] = mounts.get(path, False) or (rw == ReadWriteMode.rw)
+
     # get extra required filesystem bindings
     resolve_required_mounts(mounts, params, cab.inputs, cab.outputs)
 
