@@ -5,7 +5,7 @@ from omegaconf import MISSING, OmegaConf, DictConfig, ListConfig
 from omegaconf.errors import OmegaConfBaseException
 from collections import OrderedDict
 from contextlib import nullcontext
-from rich.syntax import Syntax
+from rich.markup import escape
 
 from stimela.config import EmptyDictDefault, EmptyListDefault
 import stimela
@@ -287,7 +287,7 @@ class Step:
         if self.log.isEnabledFor(level):
             self.log.log(level, f"### {title}", extra=extra)
             for line in self.summary(recursive=False, inputs=inputs, outputs=outputs, ignore_missing=ignore_missing):
-                self.log.log(level, line, extra=extra)
+                self.log.log(level, escape(line), extra=extra)
 
     def log_exception(self, exc, severity="error", log=None):
         log_exception(exc, severity=severity, log=log or self.log)

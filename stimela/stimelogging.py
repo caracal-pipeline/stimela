@@ -16,6 +16,8 @@ from rich.markup import escape
 from rich.padding import Padding
 from rich.syntax import Syntax
 from rich.pretty import Pretty
+from rich.errors import MarkupError
+from warnings import warn
 
 from . import task_stats
 
@@ -45,7 +47,18 @@ class StimelaConsoleHander(rich.logging.RichHandler):
         self._console = console
 
     def emit(self, record):
-        rich.logging.RichHandler.emit(self, record)
+        try:
+            rich.logging.RichHandler.emit(self, record)
+        # backstop -- message should have been properly markup-escaped
+        except MarkupError:
+            record.msg = escape(record.msg)
+            self._console.print(f"Malformed markup in log message: {record.msg}", markup=False, style="red")
+            self._console.print(f"This is a (probably harmless) bug -- but please report", markup=False, style="red")
+            try:
+                rich.logging.RichHandler.emit(self, record)
+            except MarkupError:
+                self._console.print(f"Malformed markup after escaping -- this is surely a bug -- please report", markup=False, style="red")
+
         if hasattr(record, 'console_payload'):
             self._console.print(record.console_payload, highlight=getattr(record, 'console_highlight', None))
 
