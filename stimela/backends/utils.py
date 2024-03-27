@@ -4,7 +4,7 @@ from typing import Dict, List, Any, Dict
 from stimela.kitchen.cab import Cab, Parameter
 from scabha.exceptions import SchemaError
 from stimela.exceptions import BackendError
-from scabha.basetypes import File, Directory, MS, URI
+from scabha.basetypes import File, Directory, MS, URI, get_filelikes
 
 ## commenting out for now -- will need to fix when we reactive the kube backend (and have tests for it)
 
@@ -34,11 +34,9 @@ def resolve_required_mounts(mounts: Dict[str, bool],
         if schema is None:
             raise SchemaError(f"parameter {name} not in defined inputs or outputs for this cab. This should have been caught by validation earlier!")
 
-        if schema.is_file_type:
-            files = [value]
-        elif schema.is_file_list_type:
-            files = value
-        else:
+        files = get_filelikes(schema._dtype, value)
+
+        if not files:
             continue
 
         must_exist = schema.must_exist and name in inputs 
