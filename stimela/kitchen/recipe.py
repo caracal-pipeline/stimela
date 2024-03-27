@@ -756,11 +756,14 @@ class Recipe(Cargo):
                 subst._add_('root', subst_outer.root, nosubst=True)
             if 'recipe' in subst_outer:
                 subst._add_('parent', subst_outer.recipe, nosubst=True)
+            else:
+                subst_outer._add_('parent', subst_outer.recipe, nosubst=True)
         else:
             subst_outer = SubstitutionNS()
             subst_outer._add_('info', info.copy(), nosubst=True)
             subst_outer._add_('config', self.config, nosubst=True) 
             subst_outer.current = subst.recipe
+            subst_outer.recipe = subst.recipe
 
         # update assignments
         self.update_assignments(subst, params=params, ignore_subst_errors=True)
@@ -790,6 +793,10 @@ class Recipe(Cargo):
             # merge again, since values may have changed
             subst.recipe._merge_(params)
             return params
+
+        # keep copy of original params to avoid reevaluating {}-substitutions
+        # (i.e. when the escape "{{" turns into "{", we don't want to treat that as a substitution)
+        orig_params = params.copy()  
 
         params = prevalidate_self(params)
 
@@ -841,7 +848,7 @@ class Recipe(Cargo):
                         # if alias is set in step but not with us, mark it as propagating down
                         if alias.param in alias.step.validated_params:
                             alias.from_step = from_step = revalidate_self = True
-                            params[name] = alias.step.validated_params[alias.param]
+                            params[name] = orig_params[name] = alias.step.validated_params[alias.param]
                             # and break out, we do this for the first matching step only
                             break
                     # if we propagated an input value down from a step, check if we need to propagate it up to any other steps
@@ -854,7 +861,7 @@ class Recipe(Cargo):
 
             # do we or any steps need to be revalidated?
             if revalidate_self:
-                params = prevalidate_self(params)
+                params = prevalidate_self(orig_params)
             if revalidate_steps:
                 prevalidate_steps()
 
