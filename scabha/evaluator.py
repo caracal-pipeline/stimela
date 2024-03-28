@@ -635,18 +635,18 @@ class Evaluator(object):
                         recursive,
                         verbose
                     )
-                elif isinstance(value, list):
+                elif isinstance(value, (list, ListConfig)):
                     params_out[name] = type(value)(
                         [
-                            self.evaluate_dict(
-                                {"dummy": v},
+                            ele for ele in self.evaluate_dict(
+                                {f"[{i}]": v for i, v in enumerate(value)},
                                 corresponding_ns,
                                 defaults,
                                 sublocation,
                                 raise_substitution_errors,
                                 recursive,
                                 verbose
-                            )["dummy"] for v in value
+                            ).values()
                         ]
                     )
 
