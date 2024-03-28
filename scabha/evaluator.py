@@ -625,6 +625,31 @@ class Evaluator(object):
                         params_out[name] = new_value
                         if corresponding_ns:
                             corresponding_ns[name] = new_value
+                elif isinstance(value, (dict, DictConfig)):
+                    params_out[name] = self.evaluate_dict(
+                        value,
+                        corresponding_ns,
+                        defaults,
+                        sublocation,
+                        raise_substitution_errors,
+                        recursive,
+                        verbose
+                    )
+                elif isinstance(value, (list, ListConfig)):
+                    params_out[name] = type(value)(
+                        [
+                            *self.evaluate_dict(
+                                {f"[{i}]": v for i, v in enumerate(value)},
+                                corresponding_ns,
+                                defaults,
+                                sublocation,
+                                raise_substitution_errors,
+                                recursive,
+                                verbose
+                            ).values()
+                        ]
+                    )
+
         return params_out
 
 
