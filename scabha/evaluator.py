@@ -638,7 +638,7 @@ class Evaluator(object):
                 elif isinstance(value, (list, ListConfig)):
                     params_out[name] = type(value)(
                         [
-                            ele for ele in self.evaluate_dict(
+                            *self.evaluate_dict(
                                 {f"[{i}]": v for i, v in enumerate(value)},
                                 corresponding_ns,
                                 defaults,
