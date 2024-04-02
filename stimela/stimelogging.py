@@ -291,6 +291,7 @@ def update_file_logger(log: logging.Logger, logopts: DictConfig, nesting: int = 
         setup_file_logger(log, path, level=logopts.level, symlink=logopts.symlink)
     else:
         disable_file_logger(log)
+        log.propagate = True
 
 
 def get_logfile_dir(log: logging.Logger):
