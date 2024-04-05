@@ -24,6 +24,7 @@ pydantic = "^1.10.2"
 psutil = "^5.9.3"
 rich = "^13.7.0"
 dill = "^0.3.6"
+typeguard = "^4.2.1"
 
 [tool.poetry.scripts]
 stimela = "stimela.main:cli"
