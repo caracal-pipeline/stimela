@@ -385,6 +385,9 @@ class Recipe(Cargo):
                 if len(self.steps) != len(tagged_steps):
                     self.log.info(f"{len(self.steps) - len(tagged_steps)} step(s) skipped due to tags ({', '.join(skip_tags)})")
 
+            always_steps = {k for k, v in self.steps.items() if "always" in v.tags}
+            self.log.info(f"{len(always_steps)} step(s) selected via 'always' tag: ({', '.join(always_steps)})")
+
             # add steps explicitly enabled by --step
             if step_ranges:
                 all_step_names = list(self.steps.keys())
@@ -415,7 +418,7 @@ class Recipe(Cargo):
                         step_subset.add(name)
                 # specified subset becomes *the* subset
                 self.log.info(f"{len(step_subset)} step(s) selected by name")
-                tagged_steps = step_subset
+                tagged_steps = step_subset | always_steps
 
             if not tagged_steps:
                 self.log.info("no steps have been selected for execution")
