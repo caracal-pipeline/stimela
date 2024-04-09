@@ -335,7 +335,7 @@ class Recipe(Cargo):
             step.skip = step._skip = True
 
     def restrict_steps(self, tags: List[str] = [], skip_tags: List[str] = [], 
-                             step_ranges: List[str] = [], enable_steps: List[str]=[]):
+                             step_ranges: List[str] = [], skip_steps: List[str] = [], enable_steps: List[str]=[]):
         try:
             # extract subsets of tags and step specifications that refer to sub-recipes
             # this will map name -> (tags, skip_tags, step_ranges, enable_steps). Name is '' for the parent recipe.
@@ -419,6 +419,10 @@ class Recipe(Cargo):
                 # specified subset becomes *the* subset
                 self.log.info(f"{len(step_subset)} step(s) selected by name")
                 tagged_steps = step_subset | always_steps
+
+            if skip_steps:
+                self.log.info(f"{len(skip_steps)} step(s) explicitly skipped: ({', '.join(skip_steps)})")
+                tagged_steps -= skip_steps  # Forcefully skipped steps apply last.
 
             if not tagged_steps:
                 self.log.info("no steps have been selected for execution")
