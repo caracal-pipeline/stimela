@@ -2,13 +2,14 @@ import os
 import re
 import click
 from scabha.exceptions import SchemaError
-from .cargo import Parameter, UNSET, _UNSET_DEFAULT
+from .cargo import Parameter, UNSET, _UNSET_DEFAULT, Cargo
 from typing import List, Union, Optional, Callable, Dict, DefaultDict, Any
 from .basetypes import EmptyDictDefault, File, is_file_type
 from dataclasses import dataclass, make_dataclass, field
 from omegaconf import OmegaConf, MISSING
 from collections.abc import MutableSet, MutableSequence, MutableMapping
 from scabha import configuratt
+from collections import OrderedDict
 
 def schema_to_dataclass(io: Dict[str, Parameter], class_name: str, bases=(), post_init: Optional[Callable] =None):
     """
@@ -149,13 +150,15 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]]):
                                 OmegaConf.load(schemas))
 
     decorator_chain = None
-    for io in schemas.inputs, schemas.outputs:
+    inputs = Cargo.flatten_schemas(OrderedDict(), schemas.inputs, "inputs")
+    outputs = Cargo.flatten_schemas(OrderedDict(), schemas.outputs, "outputs")
+    for io in inputs, outputs:
         for name, schema in io.items():
             # skip outputs, unless they're named outputs
             if io is schemas.outputs and not (schema.is_file_type and not schema.implicit):
                 continue
 
-            name = name.replace("_", "-")
+            name = name.replace("_", "-").replace(".", "-")
             optname = f"--{name}"
             dtype = schema.dtype
             validator = None
@@ -189,7 +192,7 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]]):
                 optnames.append(f"-{schema.abbreviation}")
 
             if schema.policies.positional:
-                if schema.default in (UNSET, _UNSET_DEFAULT):
+                if schema.default in (UNSET, _UNSET_DEFAULT) or schema.suppress_cli_default:
                     deco = click.argument(name, type=dtype, callback=validator,
                                         required=schema.required,
                                         metavar=schema.metavar)
@@ -198,7 +201,7 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]]):
                                         default=schema.default, required=schema.required,
                                         metavar=schema.metavar)
             else:
-                if schema.default in (UNSET, _UNSET_DEFAULT):
+                if schema.default in (UNSET, _UNSET_DEFAULT) or schema.suppress_cli_default:
                     deco = click.option(*optnames, type=dtype, callback=validator,
                                         required=schema.required,
                                         metavar=schema.metavar, help=schema.info)

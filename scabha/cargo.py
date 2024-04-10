@@ -88,6 +88,7 @@ class ParameterPolicies(object):
     pass_missing_as_none: Optional[bool] = None
 
 
+
 # This is used to classify parameters, for cosmetic and help purposes.
 # Usually set automatically based on whether a parameter is required, whether a default is provided, etc.
 ParameterCategory = IntEnum("ParameterCategory",
@@ -161,6 +162,11 @@ class Parameter(object):
 
     # arbitrary metadata associated with parameter
     metadata: Dict[str, Any] = EmptyDictDefault()
+    
+    # If True, when constructing a CLI from the schema, omit the default value (if any).
+    # Useful when the tool constructs itw own default values.
+    suppress_cli_default: bool = False
+
 
 
     def __post_init__(self):
