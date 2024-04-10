@@ -159,9 +159,8 @@ def load_recipe_files(filenames: List[str]):
                 Use [BEGIN]:[END] to specify a range of steps. Note that cherry-picking an individual step via this option
                 also impies --enable-step.""")
 @click.option("-k", "--skip-step", "skip_ranges", metavar="STEP(s)", multiple=True,
-                help="""forcefully skip specific step(s) from the recipe. Use commas, or give multiple times to
-                cherry-pick steps. Use [BEGIN]:[END] to specify a range of steps. Note that cherry-picking an
-                individual step via this option also impies --enable-step.""")
+                help="""forcefully skip specific recipe step(s). Use commas, or give multiple times to
+                cherry-pick steps. Use [BEGIN]:[END] to specify a range of steps.""")
 @click.option("-t", "--tags", "tags", metavar="TAG(s)", multiple=True,
                 help="""only runs steps wth the given tags (and also steps tagged as "always"). 
                 Use commas, or give multiple times for multiple tags.""")
