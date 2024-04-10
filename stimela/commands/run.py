@@ -158,9 +158,10 @@ def load_recipe_files(filenames: List[str]):
                 help="""only runs specific step(s) from the recipe. Use commas, or give multiple times to cherry-pick steps.
                 Use [BEGIN]:[END] to specify a range of steps. Note that cherry-picking an individual step via this option
                 also impies --enable-step.""")
-@click.option("-k", "--skip-step", "skip_steps", metavar="STEP(s)", multiple=True,
-                help="""Forcefully skip the spcified step. This is option is primarily for skipping specific steps in
-                a tagged group.""")
+@click.option("-k", "--skip-step", "skip_ranges", metavar="STEP(s)", multiple=True,
+                help="""forcefully skip specific step(s) from the recipe. Use commas, or give multiple times to
+                cherry-pick steps. Use [BEGIN]:[END] to specify a range of steps. Note that cherry-picking an
+                individual step via this option also impies --enable-step.""")
 @click.option("-t", "--tags", "tags", metavar="TAG(s)", multiple=True,
                 help="""only runs steps wth the given tags (and also steps tagged as "always"). 
                 Use commas, or give multiple times for multiple tags.""")
@@ -198,7 +199,7 @@ def run(parameters: List[str] = [], dry_run: bool = False, last_recipe: bool = F
     config_equals: List[str] = [],
     config_assign: List[Tuple[str, str]] = [],
     step_ranges: List[str] = [], tags: List[str] = [], skip_tags: List[str] = [], enable_steps: List[str] = [],
-    skip_steps: List[str] = [],
+    skip_ranges: List[str] = [],
     build=False, rebuild=False, build_skips=False,
     enable_native=False,
     enable_singularity=False,
@@ -418,7 +419,7 @@ def run(parameters: List[str] = [], dry_run: bool = False, last_recipe: bool = F
         # select recipe substeps based on command line, and exit if nothing to run
         if not build_skips: 
             selection_options = []
-            for opts in (tags, skip_tags, step_ranges, skip_steps, enable_steps):
+            for opts in (tags, skip_tags, step_ranges, skip_ranges, enable_steps):
                 selection_options.append(set(itertools.chain(*(opt.split(",") for opt in opts))))
             
             try:
