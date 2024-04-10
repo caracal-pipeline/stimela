@@ -388,6 +388,14 @@ class Recipe(Cargo):
             selected_steps = set.union(*(selected_steps or [set()]))
             skipped_steps = set.union(*(skipped_steps or [set()]))
 
+            self.log.info(f"the following step(s) are marked as always run: ({', '.join(always_steps)})")
+            self.log.info(f"the following step(s) are marked as never run: ({', '.join(never_steps)})")
+            self.log.info(f"the following step(s) have been selected by tag: ({', '.join(tag_selected_steps)})")
+            self.log.info(f"the following step(s) have been skipped by tag: ({', '.join(tag_skipped_steps)})")
+            self.log.info(f"the following step(s) have been explicitly selected: ({', '.join(selected_steps)})")
+            self.log.info(f"the following step(s) have been explicitly skipped: ({', '.join(skipped_steps)})")
+            self.log.info(f"the following step(s) have been cherry-picked: ({', '.join(cherry_picked_steps)})")
+
             # Build up the active steps according to option priority.
             active_steps = (tag_selected_steps | selected_steps) or set(self.steps.keys())
             active_steps |= always_steps
