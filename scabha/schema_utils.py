@@ -148,6 +148,9 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]]):
     if type(schemas) is str:
         schemas = OmegaConf.merge(OmegaConf.structured(Schema),
                                 OmegaConf.load(schemas))
+    else:
+        schemas = OmegaConf.merge(OmegaConf.structured(Schema),
+                                  dict(inputs=schemas.inputs, outputs=schemas.outputs))
 
     decorator_chain = None
     inputs = Cargo.flatten_schemas(OrderedDict(), schemas.inputs, "inputs")
