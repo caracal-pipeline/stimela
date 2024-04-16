@@ -25,6 +25,7 @@ from .step import Step
 from stimela import task_stats 
 from stimela import backends
 from stimela.backends import StimelaBackendSchema
+from stimela.kitchen.utils import keys_from_sel_string
 
 
 class DeferredAlias(Unresolved):
@@ -334,11 +335,17 @@ class Recipe(Cargo):
             self.log.warning(f"will skip step '{label}'")
             step.skip = step._skip = True
 
-    def restrict_steps(self, tags: List[str] = [], skip_tags: List[str] = [], 
-                             step_ranges: List[str] = [], enable_steps: List[str]=[]):
+    def restrict_steps(
+        self,
+        tags: List[str] = [],
+        skip_tags: List[str] = [],
+        step_ranges: List[str] = [],
+        skip_ranges: List[str] = [],
+        enable_steps: List[str] = []
+    ):
         try:
             # extract subsets of tags and step specifications that refer to sub-recipes
-            # this will map name -> (tags, skip_tags, step_ranges, enable_steps). Name is '' for the parent recipe.
+            # this will map name -> (tags, skip_tags, step_ranges, enable_steps). Name is None for the parent recipe.
             subrecipe_entries = OrderedDict()
             def process_specifier_list(specs: List[str], num=0):
                 for spec in specs:
@@ -348,83 +355,71 @@ class Recipe(Cargo):
                             raise StepSelectionError(f"'{subrecipe}.{spec}' does not refer to a valid subrecipe")
                     else:
                         subrecipe = None
-                    entry = subrecipe_entries.setdefault(subrecipe, ([],[],[],[])) 
+                    entry = subrecipe_entries.setdefault(subrecipe, ([],[],[],[],[]))
                     entry[num].append(spec)
             # this builds up all the entries given on the command-line
-            for num, options in enumerate((tags, skip_tags, step_ranges, enable_steps)):
+            for num, options in enumerate((tags, skip_tags, step_ranges, skip_ranges, enable_steps)):
                 process_specifier_list(options, num)
 
-            # process our own entries
-            tags, skip_tags, step_ranges, enable_steps = subrecipe_entries.get(None, ([],[],[],[]))
+            # process our own entries - the parent recipe has None key.
+            tags, skip_tags, step_ranges, skip_ranges, enable_steps = subrecipe_entries.get(None, ([],[],[],[],[]))
 
-            # apply enabled steps
+            # We have to handle the following functionality:
+            #   - user specifies specific tag(s) to run
+            #   - user specifies specific tag(s) to skip
+            #   - user specifies step(s) to run
+            #   - user specifies step(s) to skip
+            #   - ensure steps tagged with always run unless explicitly skipped
+            #   - individually specified steps to run must be force enabled
+
+            always_steps = {k for k, v in self.steps.items() if "always" in v.tags}
+            never_steps = {k for k, v in self.steps.items() if "never" in v.tags}
+            tag_selected_steps = {k for k, v in self.steps.items() for t in tags if t in v.tags}
+            tag_skipped_steps = {k for k, v in self.steps.items() for t in skip_tags if t in v.tags}
+            selected_steps = [keys_from_sel_string(self.steps, sel_string) for sel_string in step_ranges]
+            skipped_steps = [keys_from_sel_string(self.steps, sel_string) for sel_string in skip_ranges]
+
+            # Steps which are singled out are special (cherry-picked). They MUST be enabled and run.
+            # NOTE: Single step slices (e.g last_step:) will also trigger this behaviour and may be
+            # worth raising a warning over.
+            cherry_picked_steps = set.union(*([sel for sel in selected_steps if len(sel) == 1] or [set()]))
+            enable_steps.extend(list(cherry_picked_steps))
+
+            selected_steps = set.union(*(selected_steps or [set()]))
+            skipped_steps = set.union(*(skipped_steps or [set()]))
+
+            self.log.info(f"the following step(s) are marked as always run: ({', '.join(always_steps)})")
+            self.log.info(f"the following step(s) are marked as never run: ({', '.join(never_steps)})")
+            self.log.info(f"the following step(s) have been selected by tag: ({', '.join(tag_selected_steps)})")
+            self.log.info(f"the following step(s) have been skipped by tag: ({', '.join(tag_skipped_steps)})")
+            self.log.info(f"the following step(s) have been explicitly selected: ({', '.join(selected_steps)})")
+            self.log.info(f"the following step(s) have been explicitly skipped: ({', '.join(skipped_steps)})")
+            self.log.info(f"the following step(s) have been cherry-picked: ({', '.join(cherry_picked_steps)})")
+
+            # Build up the active steps according to option priority.
+            active_steps = (tag_selected_steps | selected_steps) or set(self.steps.keys())
+            active_steps |= always_steps
+            active_steps -= tag_skipped_steps
+            active_steps -= never_steps
+            active_steps -= skipped_steps
+            active_steps |= cherry_picked_steps
+
+            # Enable steps explicitly enabled by the user as well as those
+            # implicitly enabled by cherry-picking above.
             for name in enable_steps:
                 if name in self.steps:
                     self.enable_step(name)  # config file may have skip=True, but we force-enable here
                 else:
                     raise StepSelectionError(f"'{name}' does not refer to a valid step")
 
-            # select subset based on tags/skip_tags, this will be a list of names
-            tagged_steps = set()
-
-            # if tags are given, only use steps with (tags+{"always"}-skip_tags)
-            if tags:
-                tags = set(tags) | {"always"}
-                tags.difference_update(skip_tags)
-                for step_name, step in self.steps.items():
-                    if (tags & step.tags):
-                        tagged_steps.add(step_name)
-                        self.log.info(f"step '{step_name}' selected based on tags {tags & step.tags}")
-                self.log.info(f"{len(tagged_steps)} of {len(self.steps)} step(s) selected via tags ({', '.join(tags)})")
-            # else, use steps without any tag in (skip_tags + {"never"})
-            else:
-                skip_tags = set(skip_tags) | {"never"}
-                for step_name, step in self.steps.items():
-                    if not (skip_tags & step.tags):
-                        tagged_steps.add(step_name)
-                if len(self.steps) != len(tagged_steps):
-                    self.log.info(f"{len(self.steps) - len(tagged_steps)} step(s) skipped due to tags ({', '.join(skip_tags)})")
-
-            # add steps explicitly enabled by --step
-            if step_ranges:
-                all_step_names = list(self.steps.keys())
-                step_subset = set()
-                for name in step_ranges:
-                    if ':' in name:
-                        begin, end = name.split(':', 1)
-                        if begin:
-                            try:
-                                first = all_step_names.index(begin)
-                            except ValueError as exc:
-                                raise StepSelectionError(f"no such step: '{begin}' (in '{name}')")
-                        else:
-                            first = 0
-                        if end:
-                            try:
-                                last = all_step_names.index(end)
-                            except ValueError as exc:
-                                raise StepSelectionError(f"no such step: '{end}' (in '{name}')")
-                        else:
-                            last = len(self.steps)-1
-                        step_subset.update(name for name in all_step_names[first:last+1] if name in tagged_steps)
-                    # explicit step name: enable, and add to tagged_steps
-                    else:
-                        if name not in all_step_names:
-                            raise StepSelectionError(f"no such step: '{name}'")
-                        self.enable_step(name)  # config file may have skip=True, but we force-enable here
-                        step_subset.add(name)
-                # specified subset becomes *the* subset
-                self.log.info(f"{len(step_subset)} step(s) selected by name")
-                tagged_steps = step_subset
-
-            if not tagged_steps:
+            if not active_steps:
                 self.log.info("no steps have been selected for execution")
                 return 0
             else:
-                if len(tagged_steps) != len(self.steps):
+                if len(active_steps) != len(self.steps):
                     # apply skip flags 
                     for label, step in self.steps.items():
-                        if label not in tagged_steps:
+                        if label not in active_steps:
                             step.skip = step._skip = True
                             # remove auto-aliases associated with skipped steps
 
