@@ -142,7 +142,6 @@ def _validate_list(text: str, element_type, schema, sep=",", brackets=True):
 def _validate_tuple(text: str, element_types, schema, sep=",", brackets=True):
     if not text:
         return schema.default
-    print(text, element_types)
     if brackets:
         if text == "[]":
             return []
