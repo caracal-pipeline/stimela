@@ -2,7 +2,7 @@ import os
 import re
 import click
 from scabha.exceptions import SchemaError
-from .cargo import Parameter, UNSET, _UNSET_DEFAULT, Cargo
+from .cargo import Parameter, UNSET, _UNSET_DEFAULT, Cargo, ParameterPolicies
 from typing import List, Union, Optional, Callable, Dict, DefaultDict, Any
 from .basetypes import EmptyDictDefault, File, is_file_type
 from dataclasses import dataclass, make_dataclass, field
@@ -160,13 +160,23 @@ def _validate_tuple(text: str, element_types, schema, sep=",", brackets=True):
 class Schema(object):
     inputs: Dict[str, Parameter] = EmptyDictDefault()
     outputs: Dict[str, Parameter] = EmptyDictDefault()
+    policies: Optional[Dict[str, Any]] = None
 
 
-def clickify_parameters(schemas: Union[str, Dict[str, Any]]):
+def clickify_parameters(schemas: Union[str, Dict[str, Any]],
+                        default_policies: Dict[str, Any] = None):
 
     if type(schemas) is str:
         schemas = OmegaConf.merge(OmegaConf.structured(Schema),
                                 OmegaConf.load(schemas))
+        
+    # get default policies from argument or schemas
+    if default_policies:
+        default_policies = OmegaConf.merge(OmegaConf.structured(ParameterPolicies), default_policies)
+    elif getattr(schemas, 'policies', None):
+        default_policies = OmegaConf.merge(OmegaConf.structured(ParameterPolicies), schemas.policies)
+    else:
+        default_policies = ParameterPolicies()
 
     decorator_chain = None
     inputs = Cargo.flatten_schemas(OrderedDict(), getattr(schemas, 'inputs', {}), "inputs")
@@ -176,6 +186,11 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]]):
             # skip outputs, unless they're named outputs
             if io is outputs and not (schema.is_file_type and not schema.implicit):
                 continue
+
+            policies = OmegaConf.merge(default_policies, schema.policies)
+            # impose default repeat policy of using a single argument for a list, i.e. X1,X2,X3
+            if policies.repeat is None:
+                policies.repeat = ","
 
             name = name.replace("_", "-").replace(".", "-")
             optname = f"--{name}"
@@ -198,38 +213,37 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]]):
                 # List[x] type? Add validation callback to convert elements
                 if list_match:
                     elem_type = _atomic_types.get(list_match.group(1).strip(), str)
-                    if schema.policies.repeat == 'list':
+                    if policies.repeat == 'list':
                         nargs = -1
                         dtype = elem_type
-                    elif schema.policies.repeat == 'repeat':
+                    elif policies.repeat == 'repeat':
                         multiple = True
                         dtype = elem_type
-                    elif schema.policies.repeat == '[]':  # else assume [X,Y] or X,Y syntax
+                    elif policies.repeat == '[]':  # else assume [X,Y] or X,Y syntax
                         dtype = str
                         validator = lambda ctx, param, value, etype=dtype, schema=schema: \
                             _validate_list(value, element_type=elem_type, schema=schema)
-                    elif schema.policies.repeat is not None:  # assume XrepY syntax
+                    elif policies.repeat is not None:  # assume XrepY syntax
                         dtype = str
                         validator = lambda ctx, param, value, etype=dtype, schema=schema: \
                             _validate_list(value, element_type=elem_type, schema=schema, 
-                                           sep=schema.policies.repeat, brackets=False)
+                                           sep=policies.repeat, brackets=False)
                     else:
                         raise SchemaError(f"list-type parameter '{name}' does not have a repeat policy set")
                 elif tuple_match:
                     elem_types = tuple(_atomic_types.get(t.strip(), str) for t in tuple_match.group(1).split(","))
-                    if schema.policies.repeat == 'list' or schema.policies.repeat == 'repeat':
+                    if policies.repeat == 'list' or policies.repeat == 'repeat':
                         nargs = len(elem_types)
-                        #multiple = True
                         dtype = elem_types
-                    elif schema.policies.repeat == '[]':  # else assume [X,Y] or X,Y syntax
+                    elif policies.repeat == '[]':  # else assume [X,Y] or X,Y syntax
                         dtype = str
                         validator = lambda ctx, param, value, etype=dtype, schema=schema: \
                             _validate_tuple(value, element_types=elem_types, schema=schema)
-                    elif schema.policies.repeat is not None:  # assume XrepY syntax
+                    elif policies.repeat is not None:  # assume XrepY syntax
                         dtype = str
                         validator = lambda ctx, param, value, etype=dtype, schema=schema: \
                             _validate_tuple(value, element_types=elem_types, schema=schema,
-                                           sep=schema.policies.repeat, brackets=False)
+                                           sep=policies.repeat, brackets=False)
                     else:
                         raise SchemaError(f"tuple-type parameter '{name}' does not have a repeat policy set")
                 else:
@@ -247,7 +261,7 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]]):
             if schema.abbreviation:
                 optnames.append(f"-{schema.abbreviation}")
 
-            if schema.policies.positional:
+            if policies.positional:
                 kwargs = dict(type=dtype, callback=validator, required=schema.required, nargs=nargs,
                               metavar=schema.metavar)
                 if not schema.default in (UNSET, _UNSET_DEFAULT) and not schema.suppress_cli_default:
