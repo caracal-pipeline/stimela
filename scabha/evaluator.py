@@ -580,7 +580,7 @@ class Evaluator(object):
                     defaults: Dict[str, Any] = {}, 
                     sublocation = [],
                     raise_substitution_errors: bool = True, 
-                    recursive: bool = False,
+                    recursive: bool = True,
                     verbose: bool = False):
         params_out = params
         for name, value in list(params.items()):
@@ -625,6 +625,31 @@ class Evaluator(object):
                         params_out[name] = new_value
                         if corresponding_ns:
                             corresponding_ns[name] = new_value
+                elif isinstance(value, (dict, DictConfig)) and recursive:
+                    params_out[name] = self.evaluate_dict(
+                        value,
+                        corresponding_ns,
+                        defaults,
+                        sublocation=sublocation + [name],
+                        raise_substitution_errors=raise_substitution_errors,
+                        recursive=True,
+                        verbose=verbose
+                    )
+                elif isinstance(value, (list, ListConfig)) and recursive:
+                    params_out[name] = type(value)(
+                        [
+                            *self.evaluate_dict(
+                                {f"[{i}]": v for i, v in enumerate(value)},
+                                corresponding_ns,
+                                defaults,
+                                sublocation=sublocation + [name],
+                                raise_substitution_errors=raise_substitution_errors,
+                                recursive=True,
+                                verbose=verbose
+                            ).values()
+                        ]
+                    )
+
         return params_out
 
 
