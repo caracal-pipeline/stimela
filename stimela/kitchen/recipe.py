@@ -400,7 +400,7 @@ class Recipe(Cargo):
             active_steps = (tag_selected_steps | selected_steps) or set(self.steps.keys())
             active_steps |= always_steps
             active_steps -= tag_skipped_steps
-            active_steps -= never_steps
+            active_steps -= (never_steps - (tag_selected_steps | selected_steps))
             active_steps -= skipped_steps
             active_steps |= cherry_picked_steps
 
