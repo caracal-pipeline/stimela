@@ -250,8 +250,6 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
                     # anything else will be just a string
                     dtype = str
 
-            # if name == 'catalogs':
-            #     print(f"catalogs: {dtype}")
             # choices?
             if schema.choices:
                 dtype = click.Choice(schema.choices)
