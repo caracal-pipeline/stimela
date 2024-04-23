@@ -361,6 +361,8 @@ class Recipe(Cargo):
             for num, options in enumerate((tags, skip_tags, step_ranges, skip_ranges, enable_steps)):
                 process_specifier_list(options, num)
 
+            self.log.info(f"selecting recipe steps for (sub)recipe: [bold green]{self.name}[/bold green]")
+
             # process our own entries - the parent recipe has None key.
             tags, skip_tags, step_ranges, skip_ranges, enable_steps = subrecipe_entries.get(None, ([],[],[],[],[]))
 
@@ -395,13 +397,20 @@ class Recipe(Cargo):
             selected_steps = set.union(*(selected_steps or [set()]))
             skipped_steps = set.union(*(skipped_steps or [set()]))
 
-            self.log.info(f"the following step(s) are marked as always run: ({', '.join(always_steps)})")
-            self.log.info(f"the following step(s) are marked as never run: ({', '.join(never_steps)})")
-            self.log.info(f"the following step(s) have been selected by tag: ({', '.join(tag_selected_steps)})")
-            self.log.info(f"the following step(s) have been skipped by tag: ({', '.join(tag_skipped_steps)})")
-            self.log.info(f"the following step(s) have been explicitly selected: ({', '.join(selected_steps)})")
-            self.log.info(f"the following step(s) have been explicitly skipped: ({', '.join(skipped_steps)})")
-            self.log.info(f"the following step(s) have been cherry-picked: ({', '.join(cherry_picked_steps)})")
+            if always_steps:
+                self.log.info(f"the following step(s) are marked as always run: ({', '.join(always_steps)})")
+            if never_steps:
+                self.log.info(f"the following step(s) are marked as never run: ({', '.join(never_steps)})")
+            if tag_selected_steps:
+                self.log.info(f"the following step(s) have been selected by tag: ({', '.join(tag_selected_steps)})")
+            if tag_selected_steps:
+                self.log.info(f"the following step(s) have been skipped by tag: ({', '.join(tag_skipped_steps)})")
+            if selected_steps:
+                self.log.info(f"the following step(s) have been explicitly selected: ({', '.join(selected_steps)})")
+            if skipped_steps:
+                self.log.info(f"the following step(s) have been explicitly skipped: ({', '.join(skipped_steps)})")
+            if cherry_picked_steps:
+                self.log.info(f"the following step(s) have been cherry-picked: ({', '.join(cherry_picked_steps)})")
 
             # Build up the active steps according to option priority.
             active_steps = (tag_selected_steps | selected_steps) or set(self.steps.keys())
