@@ -438,7 +438,7 @@ class Recipe(Cargo):
                     self.log.info(f"    [bold green]{' '.join(scheduled_steps)}[/bold green]")
 
                 # now recurse into sub-recipes. If nothing was specified for a sub-recipe,
-                # we still need to recurve in to make sure it applies its tags,
+                # we still need to recurse in to make sure it applies its tags,
                 for label, step in self.steps.items():
                     if label in active_steps and isinstance(step.cargo, Recipe):
                         options = subrecipe_entries.get(label, ([],[],[],[],[]))
