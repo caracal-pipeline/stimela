@@ -352,7 +352,7 @@ class Recipe(Cargo):
                     if '.' in spec:
                         subrecipe, spec = spec.split('.', 1)
                         if subrecipe not in self.steps or not isinstance(self.steps[subrecipe].cargo, Recipe):
-                            raise StepSelectionError(f"'{subrecipe}.{spec}' does not refer to a valid subrecipe")
+                            raise StepSelectionError(f"'{subrecipe}' (in '{subrecipe}.{spec}') does not refer to a valid subrecipe")
                     else:
                         subrecipe = None
                     entry = subrecipe_entries.setdefault(subrecipe, ([],[],[],[],[]))
@@ -361,8 +361,17 @@ class Recipe(Cargo):
             for num, options in enumerate((tags, skip_tags, step_ranges, skip_ranges, enable_steps)):
                 process_specifier_list(options, num)
 
+            self.log.info(f"selecting recipe steps for (sub)recipe: [bold green]{self.name}[/bold green]")
+
             # process our own entries - the parent recipe has None key.
             tags, skip_tags, step_ranges, skip_ranges, enable_steps = subrecipe_entries.get(None, ([],[],[],[],[]))
+
+            # Check that all specified tags (if any), exist.
+            known_tags = set.union(*([v.tags for v in self.steps.values()] or [set()]))
+            unknown_tags = (set(tags) | set(skip_tags)) - known_tags
+            if unknown_tags:
+                unknown_tags = "', '".join(unknown_tags)
+                raise StepSelectionError(f"Unknown tag(s) '{unknown_tags}'")
 
             # We have to handle the following functionality:
             #   - user specifies specific tag(s) to run
@@ -388,19 +397,26 @@ class Recipe(Cargo):
             selected_steps = set.union(*(selected_steps or [set()]))
             skipped_steps = set.union(*(skipped_steps or [set()]))
 
-            self.log.info(f"the following step(s) are marked as always run: ({', '.join(always_steps)})")
-            self.log.info(f"the following step(s) are marked as never run: ({', '.join(never_steps)})")
-            self.log.info(f"the following step(s) have been selected by tag: ({', '.join(tag_selected_steps)})")
-            self.log.info(f"the following step(s) have been skipped by tag: ({', '.join(tag_skipped_steps)})")
-            self.log.info(f"the following step(s) have been explicitly selected: ({', '.join(selected_steps)})")
-            self.log.info(f"the following step(s) have been explicitly skipped: ({', '.join(skipped_steps)})")
-            self.log.info(f"the following step(s) have been cherry-picked: ({', '.join(cherry_picked_steps)})")
+            if always_steps:
+                self.log.info(f"the following step(s) are marked as always run: ({', '.join(always_steps)})")
+            if never_steps:
+                self.log.info(f"the following step(s) are marked as never run: ({', '.join(never_steps)})")
+            if tag_selected_steps:
+                self.log.info(f"the following step(s) have been selected by tag: ({', '.join(tag_selected_steps)})")
+            if tag_selected_steps:
+                self.log.info(f"the following step(s) have been skipped by tag: ({', '.join(tag_skipped_steps)})")
+            if selected_steps:
+                self.log.info(f"the following step(s) have been explicitly selected: ({', '.join(selected_steps)})")
+            if skipped_steps:
+                self.log.info(f"the following step(s) have been explicitly skipped: ({', '.join(skipped_steps)})")
+            if cherry_picked_steps:
+                self.log.info(f"the following step(s) have been cherry-picked: ({', '.join(cherry_picked_steps)})")
 
             # Build up the active steps according to option priority.
             active_steps = (tag_selected_steps | selected_steps) or set(self.steps.keys())
             active_steps |= always_steps
             active_steps -= tag_skipped_steps
-            active_steps -= never_steps
+            active_steps -= never_steps - tag_selected_steps
             active_steps -= skipped_steps
             active_steps |= cherry_picked_steps
 
@@ -430,10 +446,12 @@ class Recipe(Cargo):
                     self.log.info(f"the following recipe steps have been selected for execution:")
                     self.log.info(f"    [bold green]{' '.join(scheduled_steps)}[/bold green]")
 
-                # now recurse into sub-recipes
-                for subrecipe, options in subrecipe_entries.items():
-                    if subrecipe is not None:
-                        self.steps[subrecipe].cargo.restrict_steps(*options)
+                # now recurse into sub-recipes. If nothing was specified for a sub-recipe,
+                # we still need to recurse in to make sure it applies its tags,
+                for label, step in self.steps.items():
+                    if label in active_steps and isinstance(step.cargo, Recipe):
+                        options = subrecipe_entries.get(label, ([],[],[],[],[]))
+                        step.cargo.restrict_steps(*options)
 
                 return len(scheduled_steps)
         except StepSelectionError as exc:

@@ -1,0 +1,53 @@
+cabs:
+  echo:
+    command: echo 
+    info: this cab simply echoes the 'message' input
+    policies:
+      positional: true
+    inputs:
+      message: 
+        default: "running step {info.fqname}"
+        
+opts:
+  log:
+    dir: test-logs/logs-{config.run.datetime} 
+    nest: 3
+    symlink: logs
+
+lib:
+  recipes:
+    subrecipe:
+      info: "this is a subrecipe"
+      steps:
+        t1-always:
+          cab: echo
+          tags: [always]
+        t2-never-foo:
+          cab: echo
+          tags: [never, foo]
+        t3:
+          cab: echo
+        t4-foo-bar:
+          cab: echo
+          tags: [foo, bar]
+        t5-bar:
+          cab: echo
+          tags: [bar]
+        t6-skip:
+          cab: echo
+          skip: true
+
+recipe:
+  info: "this is a top-level recipe to test tags and skips"
+  steps:
+    s1: 
+      cab: echo
+      tags: [always]
+    s2:
+      recipe: subrecipe
+    s3:
+      recipe: subrecipe
+      tags: [never, foo]
+    s4:
+      recipe: subrecipe
+      tags: [foo]
