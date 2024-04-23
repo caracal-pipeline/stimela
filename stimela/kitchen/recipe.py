@@ -364,6 +364,11 @@ class Recipe(Cargo):
             # process our own entries - the parent recipe has None key.
             tags, skip_tags, step_ranges, skip_ranges, enable_steps = subrecipe_entries.get(None, ([],[],[],[],[]))
 
+            # Check that all specified tags (if any), exist.
+            known_tags = set.union(*([v.tags for v in self.steps.values()] or [set()]))
+            assert len(set(tags) - known_tags) == 0, f"Unrecognised tag(s) specified in -t/--tags: {tags}."
+            assert len(set(skip_tags) - known_tags) == 0, f"Unrecognised tag(s) specified in --skip-tags: {skip_tags}."
+
             # We have to handle the following functionality:
             #   - user specifies specific tag(s) to run
             #   - user specifies specific tag(s) to skip
