@@ -352,7 +352,7 @@ class Recipe(Cargo):
                     if '.' in spec:
                         subrecipe, spec = spec.split('.', 1)
                         if subrecipe not in self.steps or not isinstance(self.steps[subrecipe].cargo, Recipe):
-                            raise StepSelectionError(f"'{subrecipe}.{spec}' does not refer to a valid subrecipe")
+                            raise StepSelectionError(f"'{subrecipe}' (in '{subrecipe}.{spec}') does not refer to a valid subrecipe")
                     else:
                         subrecipe = None
                     entry = subrecipe_entries.setdefault(subrecipe, ([],[],[],[],[]))
@@ -430,10 +430,12 @@ class Recipe(Cargo):
                     self.log.info(f"the following recipe steps have been selected for execution:")
                     self.log.info(f"    [bold green]{' '.join(scheduled_steps)}[/bold green]")
 
-                # now recurse into sub-recipes
-                for subrecipe, options in subrecipe_entries.items():
-                    if subrecipe is not None:
-                        self.steps[subrecipe].cargo.restrict_steps(*options)
+                # now recurse into sub-recipes. If nothing was specified for a sub-recipe,
+                # we still need to recurve in to make sure it applies its tags,
+                for label, step in self.steps.items():
+                    if label in active_steps and isinstance(step.cargo, Recipe):
+                        options = subrecipe_entries.get(label, ([],[],[],[],[]))
+                        step.cargo.restrict_steps(*options)
 
                 return len(scheduled_steps)
         except StepSelectionError as exc:
