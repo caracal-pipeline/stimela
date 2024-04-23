@@ -366,8 +366,10 @@ class Recipe(Cargo):
 
             # Check that all specified tags (if any), exist.
             known_tags = set.union(*([v.tags for v in self.steps.values()] or [set()]))
-            assert len(set(tags) - known_tags) == 0, f"Unrecognised tag(s) specified in -t/--tags: {tags}."
-            assert len(set(skip_tags) - known_tags) == 0, f"Unrecognised tag(s) specified in --skip-tags: {skip_tags}."
+            unknown_tags = (set(tags) | set(skip_tags)) - known_tags
+            if unknown_tags:
+                unknown_tags = "', '".join(unknown_tags)
+                raise StepSelectionError(f"Unknown tag(s) '{unknown_tags}'")
 
             # We have to handle the following functionality:
             #   - user specifies specific tag(s) to run
