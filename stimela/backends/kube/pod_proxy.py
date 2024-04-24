@@ -118,7 +118,7 @@ class PodProxy(object):
         if self._session_init_container is None:
             self._session_init_container = dict(
                 name="volume-session-init",
-                image="busybox",
+                image="quay.io/quay/busybox",
                 command=["/bin/sh", "-c", ""],
                 volumeMounts=[])
             self.pod_spec.setdefault('initContainers', []).append(self._session_init_container)
@@ -129,7 +129,7 @@ class PodProxy(object):
         if self._step_init_container is None:
             self._step_init_container = dict(
                 name="volume-step-init",
-                image="busybox",
+                image="quay.io/quay/busybox",
                 command=["/bin/sh", "-c", ""],
                 securityContext=dict(
                         runAsNonRoot = self.uinfo.uid!=0,

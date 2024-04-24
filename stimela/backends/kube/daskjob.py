@@ -95,6 +95,8 @@ def split_args(args):
 def daskjob_template(args):
     labels = dict(args.labels)
 
+    env_var = [{"name": k, "value": v} for k, v in args.environment_variables.items()]
+
     return {
         "apiVersion": "kubernetes.dask.org/v1",
         "kind": "DaskJob",
@@ -133,7 +135,8 @@ def daskjob_template(args):
                                         {
                                             "name": "SCHEDULER_ENV",
                                             "value": "hello-world",
-                                        }
+                                        },
+                                        *env_var
                                     ],
                                     "image": args.image,
                                     "imagePullPolicy": args.pull_policy,
@@ -186,7 +189,11 @@ def daskjob_template(args):
                                         "$(DASK_SCHEDULER_ADDRESS)",
                                     ],
                                     "env": [
-                                        {"name": "WORKER_ENV", "value": "hello-world"}
+                                        {
+                                            "name": "WORKER_ENV",
+                                            "value": "hello-world"
+                                        },
+                                        *env_var
                                     ],
                                     "image": args.image,
                                     "imagePullPolicy": args.pull_policy,

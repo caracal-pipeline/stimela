@@ -140,6 +140,7 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                     # cmdline=["/bin/sh", "-c", "while true;do date;sleep 5; done"],
                     service_account=kube.service_account,
                     mount_file=None,
+                    environment_variables=kube.env
                 )))
 
                 # apply pod type specifications
