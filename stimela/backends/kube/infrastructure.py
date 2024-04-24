@@ -39,6 +39,7 @@ def _delete_pod(kube_api, podname, namespace, log, warn_not_found=True):
     log.info(f"deleting pod {podname}")
     try:
         resp = kube_api.delete_namespaced_pod(name=podname, namespace=namespace)
+        log.debug(f"delete_namespaced_pod({podname}): {resp}")
     except ApiException as exc:
         body = json.loads(exc.body)
         if "reason" in body and body["reason"] == "NotFound" and warn_not_found:
@@ -46,7 +47,6 @@ def _delete_pod(kube_api, podname, namespace, log, warn_not_found=True):
         else:
             log_exception(BackendError(f"k8s API error while deleting pod {podname}", (exc, body)), 
                         severity="error", log=log)
-    log.debug(f"delete_namespaced_pod({podname}): {resp}")
 
 def cleanup(backend: StimelaBackendOptions, log: logging.Logger):
     return init(backend, log, cleanup=True)
