@@ -82,7 +82,7 @@ def doc(what: List[str] = [], do_list=False, implicit=False, obscure=False, all=
     
     # load config and recipes from all given files
     if files_to_load:
-        load_recipe_files(files_to_load)
+        top_level_recipes = load_recipe_files(files_to_load)
 
     destroy_progress_bar()
 
@@ -109,9 +109,10 @@ def doc(what: List[str] = [], do_list=False, implicit=False, obscure=False, all=
 
     # if nothing was specified, and only one cab/only one recipe is defined, print that
     if not names_to_document:
-        if len(stimela.CONFIG.lib.recipes) == 1 and not stimela.CONFIG.cabs:
-            recipes_to_document.update(stimela.CONFIG.lib.recipes.keys())
-        elif len(stimela.CONFIG.cabs) == 1 and not stimela.CONFIG.lib.recipes:
+        if len(top_level_recipes) == 1:
+            recipes_to_document.update(top_level_recipes)
+            log.info("a single top-level recipe is defined, documenting it by default. Use -l to list all defined recipes/cabs")
+        elif len(stimela.CONFIG.cabs) == 1 and not top_level_recipes:
             cabs_to_document.update(stimela.CONFIG.cabs.keys())
 
     if recipes_to_document or cabs_to_document:

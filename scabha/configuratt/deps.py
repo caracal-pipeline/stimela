@@ -15,9 +15,9 @@ from .common import *
 @dataclass
 class FailRecord(object):
     filename: str
-    origin: Optional[str]
-    modulename: Optional[str]
-    fname: Optional[str]
+    origin: Optional[str] = None
+    modulename: Optional[str] = None
+    fname: Optional[str] = None
 
 @dataclass
 class RequirementRecord(object):
