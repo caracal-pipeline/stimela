@@ -133,14 +133,14 @@ def doc(what: List[str] = [], do_list=False, implicit=False, obscure=False, all=
             subtree = top_tree.add("Recipes:")
             table = Table.grid("", "", padding=(0,2))
             for name, recipe in stimela.CONFIG.lib.recipes.items():
-                table.add_row(f"[bold]{name}[/bold]", recipe.info)
+                table.add_row(f"[bold]{name}[/bold]", getattr(recipe, 'info', ''))
             subtree.add(table)
 
         if stimela.CONFIG.cabs:
             subtree = top_tree.add("Cabs:")
             table = Table.grid("", "", padding=(0,2))
             for name, cab in stimela.CONFIG.cabs.items():
-                table.add_row(f"[bold]{name}[/bold]", cab.info)
+                table.add_row(f"[bold]{name}[/bold]", getattr(cab, 'info', ''))
             subtree.add(table)            
         
     rich_print(top_tree)
