@@ -563,13 +563,27 @@ class Recipe(Cargo):
                 # define schema based on copy of the target, but preserve default
                 io[alias_name] = copy.copy(schema)
                 alias_schema = io[alias_name] 
-                # check that 
-                # default set from own schema, ignoring parameter setting 
+                # if default set in recipe schema, ignore any parameter setting in the step 
                 if orig_schema is not None and orig_schema.default is not UNSET:
-                    # also clear parameter setting to propagate our default
                     if step_param_name in step.params:
                         del step.params[step_param_name]
                     alias_schema.default = orig_schema.default
+                # else check if explicit value or a default is specified in the step -- make it the recipe default
+                else:
+                    if step_param_name in step.params:
+                        defval = step.params[step_param_name]
+                    elif step_param_name in step.cargo.defaults:
+                        defval = step.cargo.defaults[step_param_name]
+                    else:
+                        defval = schema.default
+                    if defval is not UNSET:
+                        alias_schema.required = False
+                        alias_schema.default = defval
+                        ## see https://github.com/caracal-pipeline/stimela/issues/284. No longer convinced
+                        ## these parameters should be marked as Hidden. After all, the recipe explicitly specifies them!
+                        ## mark it as hidden -- no need to expose parameters that are internally set this way
+                        # alias_schema.category = ParameterCategory.Hidden
+                # propagate info from recipe schema
                 if orig_schema and orig_schema.info:
                     alias_schema.info = orig_schema.info
                 # required flag overrides, if set from our own schema
@@ -580,14 +594,6 @@ class Recipe(Cargo):
                     alias_schema.category = category
                 elif orig_schema is not None and orig_schema.category is not None:
                     alias_schema.category = orig_schema.category
-                # parameter is not required if alias target is set in step
-                if step_param_name in step.params or \
-                        step_param_name in step.cargo.defaults or \
-                        schema.default is not UNSET:
-                    alias_schema.required = False
-                    alias_schema.default = UNSET
-                    # mark it as hidden -- no need to expose parameters that are internally set this way
-                    alias_schema.category = ParameterCategory.Hidden
 
             # if step parameter is implicit, mark the alias as implicit. Note that this only applies to outputs
             if schema.implicit:
