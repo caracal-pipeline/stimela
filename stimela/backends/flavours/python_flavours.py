@@ -51,13 +51,15 @@ def get_python_interpreter_args(cab: Cab, subst: Dict[str, Any], virtual_env: Op
     # get virtual env, if specified
     if virtual_env:
         virtual_env = os.path.expanduser(virtual_env)
-        interpreter = f"{virtual_env}/bin/python"
+        interpreter = f"{virtual_env}/bin/{cab.flavour.interpreter_binary}"
         if not os.path.isfile(interpreter):
-            raise CabValidationError(f"virtual environment {virtual_env} doesn't exist")
+            raise CabValidationError(f"{interpreter} doesn't exist")
     else:
-        interpreter = "python"
+        interpreter = cab.flavour.interpreter_binary
 
-    return [interpreter, "-u"]
+    args =  cab.flavour.interpreter_command.format(python=interpreter).split()
+
+    return args
 
 
 @dataclass
@@ -67,6 +69,10 @@ class PythonCallableFlavour(_CallableFlavour):
     expected to be in the form of [package.]module.function
     """
     kind: str = "python"
+    # name of python binary to use  
+    interpreter_binary: str = "python"
+    # Full command used to launch interpreter. {python} gets substituted for the interpreter path
+    interpreter_command: str = "{python} -u"
     # don't log full command by default, as that's full of code
     log_full_command: bool = False
 
@@ -155,6 +161,10 @@ class PythonCodeFlavour(_BaseFlavour):
     output_vars: bool = True
     # if True, command will have {}-substitutions done on it
     subst: bool = False
+    # name of python binary to use  
+    interpreter_binary: str = "python"
+    # Full command used to launch interpreter. {python} gets substituted for the interpreter path
+    interpreter_command: str = "{python} -u"
     # don't log full command by default, as that's full of code
     log_full_command: bool = False
 

@@ -18,6 +18,7 @@ class FailRecord(object):
     origin: Optional[str] = None
     modulename: Optional[str] = None
     fname: Optional[str] = None
+    warn: bool = True
 
 @dataclass
 class RequirementRecord(object):
