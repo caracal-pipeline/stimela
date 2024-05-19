@@ -145,6 +145,9 @@ def get_filelikes(dtype, value, filelikes=None):
 
     filelikes = set() if filelikes is None else filelikes
 
+    if value is UNSET or type(value) is UNSET:
+      return []
+      
     origin = get_origin(dtype)
     args = get_args(dtype)
 
