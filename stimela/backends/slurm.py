@@ -1,17 +1,10 @@
-import subprocess
 import os
-import re
 import logging
-from stimela import utils
-import stimela
 from shutil import which
-from dataclasses import dataclass, make_dataclass
+from dataclasses import dataclass
 from omegaconf import OmegaConf
-from typing import Dict, List, Any, Optional, Tuple
-from contextlib import ExitStack
-from scabha.basetypes import EmptyListDefault, EmptyDictDefault, ListDefault
-import datetime
-from stimela.utils.xrun_asyncio import xrun
+from typing import Dict, List, Any, Optional
+from scabha.basetypes import EmptyDictDefault
 
 from stimela.exceptions import BackendError
 
@@ -31,6 +24,7 @@ class SlurmOptions(object):
     # required_mem_opts: Optional[List[str]] = ListDefault("mem", "mem-per-cpu", "mem-per-gpu")
     # # this will be applied if the required above are missing
     # default_mem_opt: str = "8GB"
+    
 
     def get_executable(self):
         global _default_srun_path
@@ -75,7 +69,4 @@ class SlurmOptions(object):
         #     if not set(self.srun_opts.keys()).intersection(self.required_mem_opts):
         #         self.srun_opts['mem'] = self.default_mem_opt
 
-
-
 SlurmOptionsSchema = OmegaConf.structured(SlurmOptions)
-

@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Optional, Any, Callable, List
+from typing import Dict, Optional, Any, List
 from dataclasses import dataclass
 from omegaconf import OmegaConf
 import stimela
@@ -32,11 +32,11 @@ class BackendRunner(object):
         
     def build(self, cab: 'stimela.kitchen.cab.Cab', log: logging.Logger, rebuild=False):
         if not hasattr(self.backend, 'build'):
-           log.warning(f"the {self.backend_name} backend does support or require image builds")
+            log.warning(f"the {self.backend_name} backend does support or require image builds")
         else:
             return self.backend.build(cab, backend=self.opts, log=log, rebuild=rebuild,
                                 wrapper=self.wrapper)
-
+    
 
 def validate_backend_settings(backend_opts: Dict[str, Any], log: logging.Logger) -> BackendRunner:
     """Checks that backend settings refer to a valid backend
@@ -76,6 +76,5 @@ def validate_backend_settings(backend_opts: Dict[str, Any], log: logging.Logger)
         wrapper = EmptyBackendWrapper()
 
     return BackendRunner(opts=backend_opts, is_remote=is_remote, is_remote_fs=is_remote_fs, 
-                          backend=backend, backend_name=backend_name,
-                          wrapper=wrapper)
-
+                        backend=backend, backend_name=backend_name,
+                        wrapper=wrapper)

@@ -6,14 +6,11 @@ import stimela
 from shutil import which
 from dataclasses import dataclass
 from omegaconf import OmegaConf
-from typing import Dict, List, Any, Optional, Callable
-from contextlib import ExitStack
+from typing import Dict, Any, Optional
 from scabha.basetypes import EmptyDictDefault
 import datetime
 from stimela.utils.xrun_asyncio import xrun
-
 from stimela.exceptions import BackendError
-
 from . import native
 
 ReadWriteMode = Enum("ReadWriteMode", "ro rw", module=__name__)
@@ -36,6 +33,7 @@ class SingularityBackendOptions(object):
     #     mount: str
 
     # tmp_dirs: List[EmptyVolume] = EmptyListDefault()
+    
 
 SingularityBackendSchema = OmegaConf.structured(SingularityBackendOptions)
 
@@ -43,6 +41,7 @@ STATUS = VERSION = BINARY = None
 
 # images rebuilt in this run
 _rebuilt_images = set()
+
 
 def is_available(opts: Optional[SingularityBackendOptions] = None):
     global STATUS, VERSION, BINARY
@@ -104,8 +103,8 @@ def get_image_info(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.Sti
 
 
 def build(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBackendOptions', log: logging.Logger,
-          wrapper: Optional['stimela.backend.runner.BackendWrapper']=None,
-          build=True, rebuild=False):
+            wrapper: Optional['stimela.backend.runner.BackendWrapper']=None,
+            build=True, rebuild=False):
     """Builds image for cab, if necessary.
 
     build: if True, build missing images regardless of backend settings
