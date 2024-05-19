@@ -222,8 +222,11 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                         if match:
                             incl = match.group(1)
                             flags = set([x.strip().lower() for x in match.group(2).split(",")])
+                            warn = 'warn' in flags
+                            optional = 'optional' in flags
                         else:
                             flags = {}
+                            warn = optional = False
 
                         # check for (location)filename.yaml or (location)/filename.yaml style
                         match = re.match("^\\((.+)\\)/?(.+)$", incl)
@@ -232,9 +235,9 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                             if modulename.startswith("."):
                                 filename = os.path.join(os.path.dirname(pathname), modulename, filename)
                                 if not os.path.exists(filename):
-                                    if 'optional' in flags:
-                                        dependencies.add_fail(FailRecord(filename, pathname))
-                                        if 'warn' in flags:
+                                    if optional:
+                                        dependencies.add_fail(FailRecord(filename, pathname,warn=warn))
+                                        if warn:
                                             print(f"Warning: unable to find optional include {incl} ({filename})")
                                         continue
                                     raise ConfigurattError(f"{errloc}: {keyword} {incl} does not exist")
@@ -242,27 +245,42 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                                 try:
                                     mod = importlib.import_module(modulename)
                                 except ImportError as exc:
-                                    if 'optional' in flags:
-                                        dependencies.add_fail(FailRecord(incl, pathname, modulename=modulename, fname=filename))
-                                        if 'warn' in flags:
+                                    if optional:
+                                        dependencies.add_fail(FailRecord(incl, pathname, modulename=modulename, 
+                                                                         fname=filename, warn=warn))
+                                        if warn:
                                             print(f"Warning: unable to import module for optional include {incl}")
                                         continue
                                     raise ConfigurattError(f"{errloc}: {keyword} {incl}: can't import {modulename} ({exc})")
+                                if mod.__file__ is not None:
+                                    path = os.path.dirname(mod.__file__)
+                                else:
+                                    path = getattr(mod, '__path__', None)
+                                    if path is None:
+                                        if optional:
+                                            dependencies.add_fail(FailRecord(incl, pathname, modulename=modulename, 
+                                                                             fname=filename, warn=warn))
+                                            if warn:
+                                                print(f"Warning: unable to resolve path for optional include {incl}, does {modulename} contain __init__.py?")
+                                            continue
+                                        raise ConfigurattError(f"{errloc}: {keyword} {incl}: can't resolve path for {modulename}, does it contain __init__.py?")
+                                    path = path[0]
 
-                                filename = os.path.join(os.path.dirname(mod.__file__), filename)
+                                filename = os.path.join(path, filename)
                                 if not os.path.exists(filename):
-                                    if 'optional' in flags:
-                                        dependencies.add_fail(FailRecord(incl, pathname, modulename=modulename, fname=filename))
-                                        if 'warn' in flags:
+                                    if optional:
+                                        dependencies.add_fail(FailRecord(incl, pathname, modulename=modulename, 
+                                                                         fname=filename, warn=warn))
+                                        if warn:
                                             print(f"Warning: unable to find optional include {incl}")
                                         continue
                                     raise ConfigurattError(f"{errloc}: {keyword} {incl}: {filename} does not exist")
                         # absolute path -- one candidate
                         elif os.path.isabs(incl):
                             if not os.path.exists(incl):
-                                if 'optional' in flags:
-                                    dependencies.add_fail(FailRecord(incl, pathname))
-                                    if 'warn' in flags:
+                                if optional:
+                                    dependencies.add_fail(FailRecord(incl, pathname, warn=warn))
+                                    if warn:
                                         print(f"Warning: unable to find optional include {incl}")
                                     continue
                                 raise ConfigurattError(f"{errloc}: {keyword} {incl} does not exist")
@@ -275,9 +293,9 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                                 if os.path.exists(filename):
                                     break
                             else:
-                                if 'optional' in flags:
-                                    dependencies.add_fail(FailRecord(incl, pathname))
-                                    if 'warn' in flags:
+                                if optional:
+                                    dependencies.add_fail(FailRecord(incl, pathname, warn=warn))
+                                    if warn:
                                         print(f"Warning: unable to find optional include {incl}")
                                     continue
                                 raise ConfigurattError(f"{errloc}: {keyword} {incl} not found in {':'.join(paths)}")
