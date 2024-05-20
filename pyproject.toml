@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "stimela"
-version = "2.0"
+version = "2.0.1"
 description = "Framework for system agnostic pipelines for (not just) radio interferometry"
 authors = ["Sphesihle Makhathini <sphemakh@gmail.com>", "Oleg Smirnov and RATT <osmirnov@gmail.com>"]
 readme = "README.rst"

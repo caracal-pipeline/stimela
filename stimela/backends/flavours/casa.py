@@ -73,7 +73,7 @@ class CasaTaskFlavour(_CallableFlavour):
         self.script = tempfile.NamedTemporaryFile(suffix=".py", mode="wt")
         self.script.write(f"""
 import sys, json
-kw = json.loads(sys.argv[-1])
+kw = json.loads('{params_string}')
 
 try:
     utype = unicode
@@ -93,8 +93,9 @@ kw = {{key: stringify(value) for key, value in kw.items()}}
 {command}(**kw)
 
 """)
+        self.script.flush()
 
-        args =  casa.strip().split() + list(casa_opts) + ["-c", self.script.name, params_string]
+        args =  casa.strip().split() + list(casa_opts) + ["-c", self.script.name]
         return args
     
     def __del__(self):
