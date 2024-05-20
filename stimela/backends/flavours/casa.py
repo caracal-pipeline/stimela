@@ -70,38 +70,32 @@ class CasaTaskFlavour(_CallableFlavour):
         params_string = json.dumps(pass_params)
 
         # unicode instance only exists in python2, python3 bytes
-        self.script = tempfile.NamedTemporaryFile(suffix=".py", mode="wt")
-        self.script.write(f"""
+        code = f"""
 import sys, json
-kw = json.loads('{params_string}')
+kwin = json.loads('{params_string}')
 
 try:
     utype = unicode
 except NameError:
     utype = bytes
 
-def stringify(x):
-    if isinstance(x, (utype, str)):
-        return str(x)
-    elif isinstance(x, list):
-        return [stringify(y) for y in x]
-    else:
-        return x
+kw = dict()
 
-kw = {{key: stringify(value) for key, value in kw.items()}}
+for key, val in kwin.items():
+    # stringify in a loop to avoid isue #300
+    if isinstance(val, (utype, str)):
+        x = str(val)
+    elif isinstance(val, list):
+        x = [stringify(y) for y in val]
+    else:
+        x = val
+        
+    kw[key] = x
 
 {command}(**kw)
 
-""")
-        self.script.flush()
+"""
 
-        args =  casa.strip().split() + list(casa_opts) + ["-c", self.script.name]
+        args =  casa.strip().split() + list(casa_opts) + ["-c", code]
         return args
-    
-    def __del__(self):
-        # Delete tempfile when done
-        if hasattr(self, "script"):
-            self.script.close()
-        return 0
-
 
