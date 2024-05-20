@@ -71,30 +71,12 @@ class CasaTaskFlavour(_CallableFlavour):
 
         # unicode instance only exists in python2, python3 bytes
         code = f"""
-import sys, json
-kwin = json.loads('{params_string}')
+import json
+from io import StringIO
 
-try:
-    utype = unicode
-except NameError:
-    utype = bytes
-
-
-kw = dict()
-
-for key, val in kwin.items():
-    # stringify in a loop to avoid isue #300
-    if isinstance(val, (utype, str)):
-        x = str(val)
-    elif isinstance(val, list):
-        try:
-            x = list(map(lambda a: str(a) if isinstance(a, (unicode, str)) else a, val))
-        except NameError:
-            x = list(map(lambda a: str(a) if isinstance(a, (bytes, str)) else a, val))
-    else:
-        x = val
-        
-    kw[key] = x
+# cast to string/bytes
+stdr = StringIO('{params_string}').read()
+kw = json.loads(stdr.encode('ascii', errors='ignore'))
 
 {command}(**kw)
 
