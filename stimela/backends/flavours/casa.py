@@ -79,6 +79,7 @@ try:
 except NameError:
     utype = bytes
 
+
 kw = dict()
 
 for key, val in kwin.items():
@@ -86,7 +87,10 @@ for key, val in kwin.items():
     if isinstance(val, (utype, str)):
         x = str(val)
     elif isinstance(val, list):
-        x = [stringify(y) for y in val]
+        try:
+            x = list(map(lambda a: str(a) if isinstance(a, (unicode, str)) else a, val))
+        except NameError:
+            x = list(map(lambda a: str(a) if isinstance(a, (bytes, str)) else a, val))
     else:
         x = val
         
@@ -98,4 +102,6 @@ for key, val in kwin.items():
 
         args =  casa.strip().split() + list(casa_opts) + ["-c", code]
         return args
+    
+
 
