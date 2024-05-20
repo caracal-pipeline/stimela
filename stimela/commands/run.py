@@ -107,9 +107,10 @@ def load_recipe_files(filenames: List[str]):
         full_deps.update(deps)
 
     # warn user if any includes failed
-    if full_deps.fails:
-        logger().warning(f"{len(full_deps.fails)} optional includes were not found, some cabs may not be available")
-        for path, dep in full_deps.fails.items():
+    failed_includes = {path: dep for path, dep in full_deps.fails.items() if dep.warn}
+    if failed_includes:
+        logger().warning(f"{len(failed_includes)} optional includes were not found")
+        for path, dep in failed_includes.items():
             logger().warning(f"    {path} (from {dep.origin})")
 
     # merge into full config dependencies

@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from omegaconf.omegaconf import OmegaConf
 from omegaconf.errors import OmegaConfBaseException
 from collections import OrderedDict
+import psutil
 
 from yaml.error import YAMLError
 import stimela
@@ -268,9 +269,12 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
     runtime = dict(
         date=_ds, 
         time=_ts, datetime=f"{_ds}-{_ts}", 
+        ncpu=psutil.cpu_count(logical=True),
         node=platform.node().split('.', 1)[0],
         hostname=platform.node(), 
         env={key: value.replace('${', '\${') for key, value in os.environ.items()})
+    runtime['ncpu-logical'] = psutil.cpu_count(logical=True)
+    runtime['ncpu-physical'] = psutil.cpu_count(logical=False)
 
     conf.run = OmegaConf.create(runtime)
 
