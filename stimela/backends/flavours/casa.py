@@ -75,7 +75,7 @@ import json
 from io import StringIO
 
 # cast to string/bytes
-stdr = StringIO('{params_string}').read()
+stdr = StringIO('''{params_string}''').read()
 kw = json.loads(stdr.encode('ascii', errors='ignore'))
 
 {command}(**kw)
