@@ -333,7 +333,10 @@ async def run_process_status_update():
     if progress_bar:
         with contextlib.suppress(asyncio.CancelledError):
             while True:
-                update_process_status()
+                try:
+                    update_process_status()
+                except psutil.NoSuchProcess:
+                    continue
                 await asyncio.sleep(1)
 
 _printed_stats = dict(
