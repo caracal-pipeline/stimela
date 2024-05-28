@@ -247,11 +247,24 @@ def update_process_status():
 
     # form up sample datum
     s = TaskStatsDatum(num_samples=1)
+
+    # Grab the stimela process and its children (recursively).
+    stimela_process = psutil.Process()
+    stimela_children = stimela_process.children(recursive=True)
+
+    # Assume that all child processes belong to the same task.
+    # TODO: Handling of children is rudimentary at present.
+    # How would this work for scattered/parallel steps?
+    if stimela_children and ti:
+        processes = stimela_children
+    else:
+        processes = [stimela_process]
+
     # CPU and memory
-    s.cpu = psutil.cpu_percent()
-    mem = psutil.virtual_memory()
-    s.mem_used = round(mem.total*mem.percent/100 / 2**30)
-    s.mem_total = round(mem.total / 2**30)
+    s.cpu = sum(p.cpu_percent(interval=1) for p in processes)
+    system_memory = psutil.virtual_memory().total
+    s.mem_used = round(sum(p.memory_info().rss for p in processes) / 2**30)
+    s.mem_total = round(system_memory / 2**30)
     # load
     s.load, _, _ = psutil.getloadavg()
 
