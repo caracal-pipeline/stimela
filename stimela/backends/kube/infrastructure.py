@@ -2,13 +2,11 @@ import logging
 import atexit
 import json
 import time
-import rich
 from typing import Optional, Dict, List
 
 from stimela.backends import StimelaBackendOptions
-from stimela.stimelogging import log_exception, declare_chapter
+from stimela.stimelogging import log_exception
 from stimela.task_stats import update_process_status
-from scabha.basetypes import EmptyListDefault
 
 from stimela.exceptions import BackendError
 from . import session_id, session_user, resource_labels, run_kube, KubeBackendOptions, get_kube_api, get_context_namespace
@@ -104,7 +102,7 @@ def init(backend: StimelaBackendOptions, log: logging.Logger, cleanup: bool = Fa
 
     # cleanup transient PVCs
     transient_pvcs = {name: pvc for name, pvc in active_pvcs.items() 
-                      if pvc.metadata.labels and 'stimela_transient_pvc' in pvc.metadata.labels}
+                        if pvc.metadata.labels and 'stimela_transient_pvc' in pvc.metadata.labels}
     
     if transient_pvcs:
         if cleanup or kube.infrastructure.on_startup.cleanup_pvcs:

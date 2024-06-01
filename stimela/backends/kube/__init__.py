@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Any, Callable
+from typing import Dict, List, Optional, Any
 from enum import Enum
 from omegaconf import OmegaConf
 from dataclasses import dataclass
@@ -14,14 +14,15 @@ import grp
 import os
 
 import stimela
-from scabha.basetypes import EmptyDictDefault, DictDefault, EmptyListDefault, ListDefault
+from scabha.basetypes import ( EmptyDictDefault, DictDefault, EmptyListDefault, 
+                            ListDefault, EmptyClassDefault)
 from stimela.exceptions import BackendError
 
 session_id = secrets.token_hex(8)
 session_user = getpass.getuser()
 
 resource_labels = dict(stimela_user=session_user,
-                       stimela_session_id=session_id)
+                    stimela_session_id=session_id)
 
 try:
     import kubernetes
@@ -59,8 +60,8 @@ class KubePodSpec(object):
     # selects a specific pod type from a KubeBackendOptions.predefined_pod_specs
     type:           Optional[str] = None
     # memory limit/requirement
-    memory:         Optional[PodLimits] = None
-    cpu:            Optional[PodLimits] = None
+    memory:         Optional[PodLimits] = EmptyClassDefault(PodLimits)
+    cpu:            Optional[PodLimits] = EmptyClassDefault(PodLimits)
     # arbitrary additional structure copied into the pod spec
     custom_pod_spec:  Dict[str, Any] = EmptyDictDefault()
 
@@ -84,8 +85,8 @@ class KubeBackendOptions(object):
             report_pvcs: bool = True                  # report any transient PVCs
             cleanup_pvcs: bool = True                 # cleanup any transient PVCs
 
-        on_exit:    ExitOptions = ExitOptions()         # startup behaviour options
-        on_startup: StartupOptions = StartupOptions()   # cleanup behaviour options
+        on_exit:    ExitOptions = EmptyClassDefault(ExitOptions)         # startup behaviour options
+        on_startup: StartupOptions = EmptyClassDefault(StartupOptions)   # cleanup behaviour options
 
     @dataclass 
     class Volume(object):
@@ -140,8 +141,8 @@ class KubeBackendOptions(object):
         num_workers: int = 1
         threads_per_worker: int = 1
         memory_limit: Optional[str] = None
-        worker_pod: KubePodSpec = KubePodSpec()
-        scheduler_pod: KubePodSpec = KubePodSpec()
+        worker_pod: KubePodSpec = EmptyClassDefault(KubePodSpec)
+        scheduler_pod: KubePodSpec = EmptyClassDefault(KubePodSpec)
         forward_dashboard_port: int = 8787          # set to non-0 to forward the http dashboard to this local port
 
     @dataclass
@@ -157,15 +158,15 @@ class KubeBackendOptions(object):
         mkdir: bool = False         # create dir, if it is missing
 
 
-    enable:         bool = True
+    enable: bool = True
 
     # infrastructure settings are global and can't be changed per cab or per step
-    infrastructure: Infrastructure = Infrastructure()
+    infrastructure: Infrastructure = EmptyClassDefault(Infrastructure)
 
     context:        Optional[str] = None   # k8s context -- use default if not given -- can't change
     namespace:      Optional[str] = None   # k8s namespace
     
-    dask_cluster:   Optional[DaskCluster] = None  # if set, a DaskJob will be created
+    dask_cluster:   Optional[DaskCluster] = EmptyClassDefault(DaskCluster)  # if set, a DaskJob will be created
     service_account: str = "compute-runner"
     kubectl_path:   str = "kubectl"
 
@@ -198,9 +199,10 @@ class KubeBackendOptions(object):
         event_colors:  Dict[str, str] = DictDefault(
                                 warning="blue", error="yellow", default="grey50")
     
-    debug: DebugOptions = DebugOptions()                            
+    debug: DebugOptions = EmptyClassDefault(DebugOptions)
 
-    job_pod:        KubePodSpec = KubePodSpec()
+
+    job_pod: KubePodSpec = EmptyClassDefault(KubePodSpec)
     
     capture_logs_style: Optional[str] = "blue"
 
@@ -216,7 +218,7 @@ class KubeBackendOptions(object):
         home_ramdisk:   bool = True              # home dir mounted as RAM disk, else local disk
         inject_nss:     bool = True              # inject user info for NSS_WRAPPER
 
-    user: UserInfo = UserInfo()
+    user: UserInfo = EmptyClassDefault(UserInfo)
     
     # user-defined set of pod types -- each is a pod spec structure keyed by pod_type
     predefined_pod_specs: Dict[str, Dict[str, Any]] = EmptyDictDefault()
