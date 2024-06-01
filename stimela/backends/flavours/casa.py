@@ -65,22 +65,12 @@ class CasaTaskFlavour(_CallableFlavour):
             command = f"{virtual_env}/bin/{command}"
 
         self.command_name = command
-        # convert inputs into a JSON string
-        pass_params = cab.filter_input_params(params)
-        params_string = json.dumps(pass_params)
-
-        # unicode instance only exists in python2, python3 bytes
-        code = f"""
-import json
-from io import StringIO
-
-# cast to string/bytes
-stdr = StringIO('''{params_string}''').read()
-kw = json.loads(stdr.encode('ascii', errors='ignore'))
-
-{command}(**kw)
-
-"""
+        pass_params = dict(cab.filter_input_params(params))
+        
+        # parse the params direcly as python dictionary
+        # no need to string conversion between strings/bytes/unicode
+        # this works for both python 2.7 and 3.x
+        code = f"{command}(**{pass_params})"
 
         args =  casa.strip().split() + list(casa_opts) + ["-c", code]
         return args
