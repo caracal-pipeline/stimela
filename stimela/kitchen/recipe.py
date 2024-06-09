@@ -179,7 +179,7 @@ class Recipe(Cargo):
             Substitution errors are ignored at this stage, a final round of re-evaluation with ignore=False is done at the end.
             """
             # flatten assignments
-            flattened = flatten_dict(assignments)
+            flattened = assignments # flatten_dict(assignments)
             # drop entries protected from assignment
             flattened = {name: value for name, value in flattened.items() if name not in self._protected_from_assign}
             # merge into recipe namespace

@@ -410,6 +410,8 @@ class Step:
             skip = self._skip
             if self._skip is None and subst is not None:
                 skip = evaluate_and_substitute_object(self.skip, subst, location=[self.fqname, "skip"])
+                if skip is UNSET:  # skip: =IFSET(recipe.foo) will return UNSET
+                    skip = False
                 self.log.debug(f"dynamic skip attribute evaluation returns {skip}")
                 # formulas with unset variables return UNSET instance
                 if isinstance(skip, UNSET):
