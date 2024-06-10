@@ -621,12 +621,12 @@ class Evaluator(object):
                                 del corresponding_ns[name]
                     elif new_value is not value and new_value != value:
                         if params_out is params:
-                            params_out = params.copy()
+                            params_out = OrderedDict(**params)
                         params_out[name] = new_value
                         if corresponding_ns:
                             corresponding_ns[name] = new_value
                 elif isinstance(value, (dict, DictConfig)) and recursive:
-                    params_out[name] = self.evaluate_dict(
+                    value = self.evaluate_dict(
                         value,
                         corresponding_ns,
                         defaults,
@@ -635,9 +635,9 @@ class Evaluator(object):
                         recursive=True,
                         verbose=verbose
                     )
+                    params_out[name] = value
                 elif isinstance(value, (list, ListConfig)) and recursive:
-                    params_out[name] = type(value)(
-                        [
+                    seq = [
                             *self.evaluate_dict(
                                 {f"[{i}]": v for i, v in enumerate(value)},
                                 corresponding_ns,
@@ -648,7 +648,7 @@ class Evaluator(object):
                                 verbose=verbose
                             ).values()
                         ]
-                    )
+                    params_out[name] = type(value)(seq)
 
         return params_out
 
