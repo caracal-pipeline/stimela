@@ -471,7 +471,6 @@ class Step:
                 if schema.is_input or schema.is_named_output:
                     invalid.append(name)
             if invalid:
-                invalid = self.invalid_params + self.unresolved_params
                 if skip:
                     parent_log_warning(f"invalid inputs: {join_quote(invalid)}")
                     if not skip_warned:
