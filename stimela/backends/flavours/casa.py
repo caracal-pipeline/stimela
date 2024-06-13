@@ -3,6 +3,7 @@ import os.path
 import json
 from typing import Optional, Any, Union, Dict, List
 from dataclasses import dataclass
+import tempfile
 
 import stimela
 from scabha.basetypes import EmptyListDefault
@@ -39,7 +40,7 @@ class CasaTaskFlavour(_CallableFlavour):
         return resolve_image_name(backend, cab.image or CONFIG.images['default-casa'])
 
     def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any], 
-                              virtual_env: Optional[str]=None, check_executable: bool = True):
+                            virtual_env: Optional[str]=None, check_executable: bool = True):
 
         with substitutions_from(subst, raise_errors=True) as context:
             try:
@@ -64,35 +65,15 @@ class CasaTaskFlavour(_CallableFlavour):
             command = f"{virtual_env}/bin/{command}"
 
         self.command_name = command
-        # convert inputs into a JSON string
-        pass_params = cab.filter_input_params(params)
-        params_string = json.dumps(pass_params)
+        pass_params = dict(cab.filter_input_params(params))
+        
+        # parse the params direcly as python dictionary
+        # no need to string conversion between strings/bytes/unicode
+        # this works for both python 2.7 and 3.x
+        code = f"{command}(**{pass_params})"
 
-        # unicode instance only exists in python2, python3 bytes
-        code = f"""
-import sys, json
-kw = json.loads(sys.argv[-1])
-
-try:
-    utype = unicode
-except NameError:
-    utype = bytes
-
-def stringify(x):
-    if isinstance(x, (utype, str)):
-        return str(x)
-    elif isinstance(x, list):
-        return [stringify(y) for y in x]
-    else:
-        return x
-
-kw = {{key: stringify(value) for key, value in kw.items()}}
-
-{command}(**kw)
-
-"""
-
-        args =  casa.strip().split() + list(casa_opts) + ["-c", code, params_string]
+        args =  casa.strip().split() + list(casa_opts) + ["-c", code]
         return args
+    
 
 

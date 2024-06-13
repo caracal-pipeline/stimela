@@ -1,11 +1,11 @@
 import logging
 from dataclasses import dataclass
-from typing import Union, Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 from enum import Enum
 from omegaconf import ListConfig, OmegaConf
 from stimela.exceptions import BackendSpecificationError, BackendError
 from stimela.stimelogging import log_exception
-from scabha.basetypes import EmptyDictDefault
+from scabha.basetypes import EmptyDictDefault, EmptyClassDefault
 
 from .singularity import SingularityBackendOptions
 from .kube import KubeBackendOptions
@@ -49,17 +49,17 @@ class StimelaBackendOptions(object):
     
     select: Any = "singularity,native"   # should be Union[str, List[str]], but OmegaConf doesn't support it, so handle in __post_init__ for now
     
-    singularity: Optional[SingularityBackendOptions] = None
-    kube: Optional[KubeBackendOptions] = None
-    native: Optional[NativeBackendOptions] = None 
+    singularity: Optional[SingularityBackendOptions] = EmptyClassDefault(SingularityBackendOptions)
+    kube: Optional[KubeBackendOptions] = EmptyClassDefault(KubeBackendOptions)
+    native: Optional[NativeBackendOptions] = EmptyClassDefault(NativeBackendOptions)
     docker: Optional[Dict] = None  # placeholder for future impl
-    slurm: Optional[SlurmOptions] = None   
+    slurm: Optional[SlurmOptions] = EmptyClassDefault(SlurmOptions)
 
     ## Resource limits applied during run -- see resource module
     rlimits: Dict[str, Any] = EmptyDictDefault()
 
     verbose: int = 0  # be verbose about backend selections. Higher levels mean more verbosity
-
+    
     def __post_init__(self):
         # resolve "select" field
         if type(self.select) is str:

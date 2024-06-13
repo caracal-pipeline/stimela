@@ -1,9 +1,9 @@
 import dataclasses
-import re, importlib, sys
+import re, importlib
 from collections import OrderedDict
-from enum import Enum, IntEnum
-from dataclasses import dataclass, field
-from omegaconf import MISSING, ListConfig, DictConfig, OmegaConf
+from enum import IntEnum
+from dataclasses import dataclass
+from omegaconf import ListConfig, DictConfig, OmegaConf
 
 import rich.box
 import rich.markup
@@ -13,7 +13,6 @@ from rich.markdown import Markdown
 from .exceptions import ParameterValidationError, DefinitionError, SchemaError, AssignmentError
 from .validate import validate_parameters, Unresolved
 from .substitutions import SubstitutionNS
-from .basetypes import EmptyDictDefault, EmptyListDefault, UNSET, is_file_list_type, is_file_type
 
 # need * imports from both to make eval(self.dtype, globals()) work
 from typing import *
@@ -147,7 +146,7 @@ class Parameter(object):
     nom_de_guerre: Optional[str] = None
 
     # policies object, specifying a non-default way to handle this parameter
-    policies: ParameterPolicies = field(default_factory=ParameterPolicies)
+    policies: ParameterPolicies = EmptyClassDefault(ParameterPolicies)
 
     # Parameter category, purely cosmetic, used for generating help and debug messages.
     # Assigned automatically if None, but a schema may explicitly mark parameters as e.g.
@@ -275,8 +274,8 @@ class Cargo(object):
                         value = value.strip()
                         default = default.strip()
                         if (default.startswith('"') and default.endswith('"')) or \
-                           (default.startswith("'") and default.endswith("'")): 
-                           default = default[1:-1]
+                        (default.startswith("'") and default.endswith("'")): 
+                            default = default[1:-1]
                         schema['default'] = default
                     # does value end with "*"? Mark as required
                     elif value.endswith("*"):
@@ -410,7 +409,7 @@ class Cargo(object):
                 if name in params and name not in self._implicit_params and params[name] != schema.implicit:
                     raise ParameterValidationError(f"implicit parameter {name} was supplied explicitly")
                 if name in self.defaults:
-                   raise SchemaError(f"implicit parameter {name} also has a default value")
+                    raise SchemaError(f"implicit parameter {name} also has a default value")
                 params[name] = schema.implicit
                 self._implicit_params.add(name)
                 if current:
@@ -434,9 +433,9 @@ class Cargo(object):
             schema.get_category()
 
         params = validate_parameters(params, self.inputs_outputs, defaults=self.defaults, subst=subst, fqname=self.fqname,
-                                          check_unknowns=True, check_required=False, 
-                                          check_inputs_exist=False, check_outputs_exist=False,
-                                          create_dirs=False, ignore_subst_errors=True)
+                                        check_unknowns=True, check_required=False, 
+                                        check_inputs_exist=False, check_outputs_exist=False,
+                                        create_dirs=False, ignore_subst_errors=True)
 
         return params
 
@@ -517,8 +516,8 @@ class Cargo(object):
                     schema.info and info.append(rich.markup.escape(schema.info))
                     attrs and info.append(f"[dim]\[{rich.markup.escape(', '.join(attrs))}][/dim]")
                     table.add_row(f"[bold]{name}[/bold]",
-                                  f"[dim]{rich.markup.escape(str(schema.dtype))}[/dim]",
-                                  " ".join(info))
+                                f"[dim]{rich.markup.escape(str(schema.dtype))}[/dim]",
+                                " ".join(info))
 
     def assign_value(self, key: str, value: Any, override: bool = False):
         """assigns a parameter value to the cargo. 
