@@ -221,12 +221,13 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
                         dtype = elem_type
                     elif policies.repeat == '[]':  # else assume [X,Y] or X,Y syntax
                         dtype = str
-                        validator = lambda ctx, param, value, etype=dtype, schema=schema: \
-                            _validate_list(value, element_type=elem_type, schema=schema)
+                        validator = lambda ctx, param, value, etype=dtype, schema=schema, _type=elem_type: \
+                            _validate_list(value, element_type=_type, schema=schema)
                     elif policies.repeat is not None:  # assume XrepY syntax
                         dtype = str
-                        validator = lambda ctx, param, value, etype=dtype, schema=schema: \
-                            _validate_list(value, element_type=elem_type, schema=schema, 
+                        print(elem_type)
+                        validator = lambda ctx, param, value, etype=dtype, schema=schema, _type=elem_type: \
+                            _validate_list(value, element_type=_type, schema=schema, 
                                            sep=policies.repeat, brackets=False)
                     else:
                         raise SchemaError(f"list-type parameter '{name}' does not have a repeat policy set")
@@ -237,13 +238,17 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
                         dtype = elem_types
                     elif policies.repeat == '[]':  # else assume [X,Y] or X,Y syntax
                         dtype = str
-                        validator = lambda ctx, param, value, etype=dtype, schema=schema: \
-                            _validate_tuple(value, element_types=elem_types, schema=schema)
+                        validator = lambda ctx, param, value, etype=dtype, \
+                                schema=schema, _type=elem_types: \
+                                _validate_tuple(value, element_types=_type,
+                                            schema=schema)
                     elif policies.repeat is not None:  # assume XrepY syntax
                         dtype = str
-                        validator = lambda ctx, param, value, etype=dtype, schema=schema: \
-                            _validate_tuple(value, element_types=elem_types, schema=schema,
-                                           sep=policies.repeat, brackets=False)
+                        validator = lambda ctx, param, value, etype=dtype, \
+                        schema=schema, _type=elem_types: \
+                            _validate_tuple(value, element_types=_type,
+                                            schema=schema,
+                                            sep=policies.repeat, brackets=False)
                     else:
                         raise SchemaError(f"tuple-type parameter '{name}' does not have a repeat policy set")
                 else:
