@@ -18,6 +18,7 @@ from scabha import configuratt
 from scabha.basetypes import UNSET
 from scabha.exceptions import ScabhaBaseException
 from scabha.substitutions import SubstitutionNS
+from scabha.configuratt.resolvers import resolve_wildcards
 from stimela import stimelogging
 import stimela.config
 from stimela.config import ConfigExceptionTypes
@@ -139,6 +140,8 @@ def load_recipe_files(filenames: List[str]):
                 sys.exit(2)
             recipe_names.append(name)
     
+    update_conf = resolve_wildcards(update_conf, name="recipes", location="")
+
     try:
         stimela.CONFIG.merge_with(update_conf)
     except Exception as exc:

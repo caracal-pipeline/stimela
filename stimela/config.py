@@ -226,7 +226,7 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
             global CONFIG_LOADED
             log.info(f"loading config from {config_file}")
             try:
-                newconf, deps = configuratt.load(config_file, use_sources=[conf], verbose=verbose, use_cache=False)
+                newconf, deps = configuratt.load(config_file, use_sources=[conf], use_wildcards=True, verbose=verbose, use_cache=False)
                 dependencies.update(deps)
                 conf = merge_extra_config(conf, newconf)
                 if not CONFIG_LOADED:
@@ -234,7 +234,7 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
             except ConfigExceptionTypes as exc:
                 if verbose:
                     traceback.print_exc()
-                log_exception(ConfigError("error reading {config_file}", exc))
+                log_exception(ConfigError(f"error reading {config_file}", exc))
             return conf
 
         # add standard configs 

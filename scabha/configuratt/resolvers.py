@@ -332,6 +332,7 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
 
                 # merge: our section overrides anything that has been included
                 conf = OmegaConf.unsafe_merge(accum_pre or {}, conf, accum_post or {})
+
                 if accum_pre or accum_post:
                     updated = True
                 if selfrefs:
@@ -369,13 +370,9 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                         return base
                     return None
                 
-                base = load_use_sections("_use")
-                if base is not None:
-                    base.merge_with(conf)
-                    conf = base
-                post = load_use_sections("_use_post")
-                if post is not None:
-                    conf.merge_with(post)
+                accum_pre = load_use_sections("_use") 
+                accum_post = load_use_sections("_use_post")
+                conf = OmegaConf.unsafe_merge(accum_pre or {}, conf, accum_post or {})
                 
                 if selfrefs:
                     use_sources[0] = conf
@@ -393,7 +390,7 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                 # reassigning is expensive, so only do it if there was an actual change 
                 if value1 is not value:
                     conf[key] = value1
-                    
+
     # recurse into lists
     elif isinstance(conf, ListConfig):
         # recurse in
@@ -410,3 +407,75 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                     conf[i] = value
 
     return conf, dependencies
+
+
+def resolve_wildcards(conf, location: str, name: str):
+    """Resolves wildcards in config, recursively
+
+    Parameters
+    ----------
+    conf : OmegaConf object
+        input configuration object
+    location : str
+        location of this configuration section, used for messages
+    name : str
+        name of this configuration file, used for messages
+
+    Returns
+    -------
+    output OmegaConf object    
+
+    Raises
+    ------
+    ConfigurattError
+        If a wildcard was invalid
+    """
+    errloc = f"config error at {location or 'top level'} in {name}"
+
+    if isinstance(conf, DictConfig):
+        # recurse into content
+        for key, value in conf.items_ex(resolve=False):
+            if isinstance(value, (DictConfig, ListConfig)):
+                value1 = resolve_wildcards(value, name=name, location=f"{location}.{key}" if location else key)
+                # reassigning is expensive, so only do it if there was an actual change 
+                if value1 is not value:
+                    conf[key] = value1
+
+        # merge wildcards
+        seen_content = {}
+        updated_content = {}
+        delete_keys = []
+        for key, value in conf.items_ex(resolve=False):
+            if "*" in key or "?" in key:
+                matches = fnmatch.filter(seen_content.keys(), key)
+                if matches:
+                    delete_keys.append(key)
+                    for entry in matches:
+                        content = seen_content[entry]
+                        if isinstance(content, DictConfig):
+                            if not isinstance(value, DictConfig):
+                                raise ConfigurattError(f"{errloc}: wildcard '{key}', which is not a section, matches section '{entry}'")
+                            seen_content[entry] = updated_content[entry] = OmegaConf.unsafe_merge(content, value)
+                        else:
+                            if isinstance(value, DictConfig):
+                                raise ConfigurattError(f"{errloc}: wildcard '{key}', which is a section, matches non-section '{entry}'")
+                            seen_content[entry] = updated_content[entry] = value
+                else:
+                    raise ConfigurattError(f"{errloc}: wildcard '{key}' does not match any content")
+            else:
+                seen_content[key] = value
+        # update content if wildcards had effect
+        for key in delete_keys:
+            del conf[key]
+        for key, value in updated_content.items():
+            conf[key] = value
+
+    # recurse into lists
+    elif isinstance(conf, ListConfig):
+        for i, value in enumerate(conf._iter_ex(resolve=False)):
+            if isinstance(value, (DictConfig, ListConfig)):
+                value1 = resolve_wildcards(value, name=name, location=f"{location or ''}[{i}]")
+                if value1 is not value:
+                    conf[i] = value
+    return conf
+                    

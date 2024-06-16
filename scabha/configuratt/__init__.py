@@ -8,7 +8,7 @@ from yaml.error import YAMLError
 
 from scabha.exceptions import ScabhaBaseException
 from .deps import ConfigDependencies
-from .resolvers import resolve_config_refs
+from .resolvers import resolve_config_refs, resolve_wildcards
 from .cache import load_cache, save_cache
 from .common import *
 
@@ -16,6 +16,7 @@ from .common import *
 def load(path: str, use_sources: Optional[List[DictConfig]] = [], name: Optional[str]=None, 
         location: Optional[str]=None, 
         includes: bool=True, selfrefs: bool=True, include_path: str=None, 
+        use_wildcards: bool = False,
         use_cache: bool = True,
         no_toplevel_cache = False,
         include_stack = [],
@@ -56,6 +57,9 @@ def load(path: str, use_sources: Optional[List[DictConfig]] = [], name: Optional
                             include_stack=include_stack + [path])
         # update overall dependencies
         dependencies.update(deps)
+        # resolve wildcards
+        if use_wildcards:
+            conf = resolve_wildcards(conf, location=location, name=name)
 
         # # check for missing requirements
         # dependencies.scan_requirements(conf, location, path)
