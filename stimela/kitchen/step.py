@@ -422,8 +422,9 @@ class Step:
 
             # Since prevalidation will have populated default values for potentially missing parameters, use those values
             # For parameters that aren't missing, use whatever value that was suplied
-            params = self.validated_params.copy()
-            params.update(**self.params)
+            # preserve order of specified params, to allow ordered substitutions to occur
+            params = self.params.copy()
+            params.update([(key, value) for key, value in self.validated_params.items() if key not in params])
 
             skip_warned = False   # becomes True when warnings are given
 
