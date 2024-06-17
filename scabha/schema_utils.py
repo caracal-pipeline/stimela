@@ -225,7 +225,6 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
                             _validate_list(value, element_type=_type, schema=schema)
                     elif policies.repeat is not None:  # assume XrepY syntax
                         dtype = str
-                        print(elem_type)
                         validator = lambda ctx, param, value, etype=dtype, schema=schema, _type=elem_type: \
                             _validate_list(value, element_type=_type, schema=schema, 
                                            sep=policies.repeat, brackets=False)
