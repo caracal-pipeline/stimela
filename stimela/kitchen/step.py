@@ -268,9 +268,15 @@ class Step:
 
     def prevalidate(self, subst: Optional[SubstitutionNS]=None, root=False, backend=None):
         self.finalize(backend=backend)
-        self.cargo.apply_dynamic_schemas(self.params, subst)
+        # apply dynamic schemas
+        params = self.params
+        if self.cargo.has_dynamic_schemas:
+            # prevalidate in order to resolve substitutions in existing parameters
+            params = self.cargo.prevalidate(params, subst, root=root)
+            self.cargo.apply_dynamic_schemas(params, subst)
+            # will prevvalidate again below based on these updated schemas
         # validate cab or recipe
-        params = self.validated_params = self.cargo.prevalidate(self.params, subst, root=root)
+        params = self.validated_params = self.cargo.prevalidate(params, subst, root=root)
         # add missing outputs
         for name in self.cargo.outputs:
             if name not in params:
