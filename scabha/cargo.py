@@ -1,5 +1,6 @@
 import dataclasses
 import re, importlib
+import traceback
 from collections import OrderedDict
 from enum import IntEnum
 from dataclasses import dataclass
@@ -381,10 +382,13 @@ class Cargo(object):
         if self._dyn_schema:
             # delete implicit parameters, since they may have come from older version of schema
             params = self._delete_implicit_parameters(params, subst)
+            # get rid of unsets
+            params = {key: value for key, value in params.items() if value is not UNSET and type(value) is not UNSET}
             try:
                 self.inputs, self.outputs = self._dyn_schema(params, *self._original_inputs_outputs)
             except Exception as exc:
-                raise SchemaError(f"error evaluating dynamic schema", exc) # [exc, sys.exc_info()[2]])
+                lines = traceback.format_exc().strip().split("\n")
+                raise SchemaError(f"error evaluating dynamic schema", lines) # [exc, sys.exc_info()[2]])
             self._inputs_outputs = None  # to regenerate
             for io in self.inputs, self.outputs:
                 for name, schema in list(io.items()):
