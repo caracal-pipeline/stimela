@@ -1,5 +1,6 @@
 import dataclasses
 import re, importlib
+import traceback
 from collections import OrderedDict
 from enum import IntEnum
 from dataclasses import dataclass
@@ -372,14 +373,23 @@ class Cargo(object):
             self.log = log
             self.logopts = config.opts.log.copy()
 
+    @property
+    def has_dynamic_schemas(self):
+        return bool(self._dyn_schema)
+    
     def apply_dynamic_schemas(self, params, subst: Optional[SubstitutionNS]=None):
         # update schemas, if dynamic schema is enabled
         if self._dyn_schema:
-            self._inputs_outputs = None
+            # delete implicit parameters, since they may have come from older version of schema
+            params = self._delete_implicit_parameters(params, subst)
+            # get rid of unsets
+            params = {key: value for key, value in params.items() if value is not UNSET and type(value) is not UNSET}
             try:
                 self.inputs, self.outputs = self._dyn_schema(params, *self._original_inputs_outputs)
             except Exception as exc:
-                raise SchemaError(f"error evaluating dynamic schema", exc) # [exc, sys.exc_info()[2]])
+                lines = traceback.format_exc().strip().split("\n")
+                raise SchemaError(f"error evaluating dynamic schema", lines) # [exc, sys.exc_info()[2]])
+            self._inputs_outputs = None  # to regenerate
             for io in self.inputs, self.outputs:
                 for name, schema in list(io.items()):
                     if isinstance(schema, DictConfig):
@@ -394,8 +404,7 @@ class Cargo(object):
             # re-resolve implicits
             self._resolve_implicit_parameters(params, subst)
 
-    def _resolve_implicit_parameters(self, params, subst: Optional[SubstitutionNS]=None):
-        # remove previously defined implicits
+    def _delete_implicit_parameters(self, params, subst: Optional[SubstitutionNS]=None):
         current = subst and getattr(subst, 'current', None)
         for p in self._implicit_params:
             if p in params:
@@ -403,7 +412,13 @@ class Cargo(object):
             if current and p in current:
                 del current[p]
         self._implicit_params = set()
+        return params
+
+    def _resolve_implicit_parameters(self, params, subst: Optional[SubstitutionNS]=None):
+        # remove previously defined implicits
+        self._delete_implicit_parameters(params, subst)
         # regenerate
+        current = subst and getattr(subst, 'current', None)
         for name, schema in self.inputs_outputs.items():
             if schema.implicit is not None and type(schema.implicit) is not Unresolved:
                 if name in params and name not in self._implicit_params and params[name] != schema.implicit:
@@ -422,11 +437,6 @@ class Cargo(object):
         A dynamic schema, if defined, is applied at this point."""
         self.finalize()
         # add implicits, if resolved
-        # remove previous ones from substitution namespace
-        if subst and hasattr(subst, 'current'):
-            for p in self._implicit_params:
-                if p in subst.current:
-                    del subst.current[p]
         self._resolve_implicit_parameters(params, subst)
         # assign unset categories
         for name, schema in self.inputs_outputs.items():
