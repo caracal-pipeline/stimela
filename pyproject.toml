@@ -2,7 +2,7 @@
 name = "stimela"
 version = "2.0.1"
 description = "Framework for system agnostic pipelines for (not just) radio interferometry"
-authors = ["Sphesihle Makhathini <sphemakh@gmail.com>", "Oleg Smirnov and RATT <osmirnov@gmail.com>"]
+authors = ["Oleg Smirnov and RATT <osmirnov@gmail.com>", "Sphesihle Makhathini <sphemakh@gmail.com>"]
 readme = "README.rst"
 license = "GNU GPL v2"
 include = [{ path = "tests" }]
