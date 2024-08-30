@@ -169,7 +169,7 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
     if type(schemas) is str:
         schemas = OmegaConf.merge(OmegaConf.structured(Schema),
                                 OmegaConf.load(schemas))
-        
+
     # get default policies from argument or schemas
     if default_policies:
         default_policies = OmegaConf.merge(OmegaConf.structured(ParameterPolicies), default_policies)
@@ -226,7 +226,7 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
                     elif policies.repeat is not None:  # assume XrepY syntax
                         dtype = str
                         validator = lambda ctx, param, value, etype=dtype, schema=schema, _type=elem_type: \
-                            _validate_list(value, element_type=_type, schema=schema, 
+                            _validate_list(value, element_type=_type, schema=schema,
                                            sep=policies.repeat, brackets=False)
                     else:
                         raise SchemaError(f"list-type parameter '{name}' does not have a repeat policy set")
@@ -274,7 +274,10 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
                               required=schema.required, multiple=multiple,
                               metavar=schema.metavar, help=schema.info)
                 if not schema.default in (UNSET, _UNSET_DEFAULT) and not schema.suppress_cli_default:
-                    kwargs['default'] = schema.default
+                    if policies.pass_missing_as_none:
+                        kwargs['default'] = None
+                    else:
+                        kwargs['default'] = schema.default
                 deco = click.option(*optnames, **kwargs)
             if decorator_chain is None:
                 decorator_chain = deco
@@ -289,13 +292,13 @@ class SchemaSpec:
     outputs: Dict[str, Parameter]
     libs: Dict[str, Any]
 
-def paramfile_loader(paramfiles: Union[File, List[File]], sources: Union[File, List[File]] = [], 
+def paramfile_loader(paramfiles: Union[File, List[File]], sources: Union[File, List[File]] = [],
                      schema_spec=None, use_cache=False) -> Dict:
     """Load a scabha-style parameter defintion using.
 
     Args:
         paramfiles (List[File]): Name of parameter definition files
-        sources (List[Dict], optional): Parameter definition dependencies 
+        sources (List[Dict], optional): Parameter definition dependencies
         (a.k.a files specified via_include)
 
     Returns:
@@ -304,18 +307,18 @@ def paramfile_loader(paramfiles: Union[File, List[File]], sources: Union[File, L
     args_defn = OmegaConf.structured(schema_spec or SchemaSpec)
     if isinstance(paramfiles, File):
         paramfiles = [paramfiles]
-    
+
     if isinstance(sources, File):
         sources = [sources]
-        
+
     srcs = []
     for src in sources:
         if not src.EXISTS:
             raise FileNotFoundError(f"Source file for either of {paramfiles} could not be found at {src.PATH}")
         srcs.append(configuratt.load(src, use_cache=use_cache)[0])
-        
+
     struct_args, _ = configuratt.load_nested(paramfiles, structured=args_defn,
                                             use_sources=srcs, use_cache=use_cache)
-    
+
     return OmegaConf.create(struct_args)
 
