@@ -187,7 +187,10 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
             if io is outputs and not (schema.is_file_type and not schema.implicit):
                 continue
 
-            policies = OmegaConf.merge(default_policies, schema.policies)
+            # None should not take precedence in the merge
+            merge_policies = {k: v for k, v in schema.policies.items() if v is not None}
+            policies = OmegaConf.merge(default_policies, merge_policies)
+
             # impose default repeat policy of using a single argument for a list, i.e. X1,X2,X3
             if policies.repeat is None:
                 policies.repeat = ","
@@ -274,10 +277,11 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
                               required=schema.required, multiple=multiple,
                               metavar=schema.metavar, help=schema.info)
                 if not schema.default in (UNSET, _UNSET_DEFAULT) and not schema.suppress_cli_default:
+                    kwargs['default'] = schema.default
+                elif schema.default in (UNSET, _UNSET_DEFAULT):
                     if policies.pass_missing_as_none:
                         kwargs['default'] = None
-                    else:
-                        kwargs['default'] = schema.default
+
                 deco = click.option(*optnames, **kwargs)
             if decorator_chain is None:
                 decorator_chain = deco
