@@ -193,7 +193,7 @@ def load_recipe_files(filenames: List[str]):
                 help="""Selects the kubernetes backend (shortcut for -C opts.backend.select=kube)""")
 @click.option("--slurm", "enable_slurm", is_flag=True,
                 help="""Enables the slurm backend wrapper (shortcut for -C backend.slurm.enable=True)""")
-@click.option("--dump-config", is_flag=True,
+@click.option("-dc", "--dump-config", is_flag=True,
                 help="""Dump the equivalent stimela config to a file""")
 @click.argument("parameters", nargs=-1, metavar="filename.yml ... [recipe or cab name] [PARAM=VALUE] ...", required=True)
 def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = False, last_recipe: bool = False, profile: Optional[int] = None,
