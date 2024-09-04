@@ -1,7 +1,10 @@
-import os.path, re, stat, itertools, logging, yaml, shlex
+import os.path
+import itertools
+import yaml
+import shlex
 from typing import Any, List, Dict, Optional, Union
 from collections import OrderedDict
-from enum import Enum, IntEnum
+from enum import Enum
 from dataclasses import dataclass
 from omegaconf import MISSING, OmegaConf, DictConfig
 from omegaconf.errors import OmegaConfBaseException
@@ -10,9 +13,8 @@ import rich.markup
 from scabha.cargo import Parameter, Cargo, ListOrString, ParameterPolicies, ParameterCategory
 from stimela.exceptions import CabValidationError, StimelaCabRuntimeError, StimelaBaseImageError
 from scabha.exceptions import SchemaError
-from scabha.basetypes import EmptyDictDefault, EmptyListDefault
+from scabha.basetypes import EmptyDictDefault, EmptyListDefault, EmptyClassDefault
 from stimela.backends import flavours, StimelaBackendSchema
-import stimela
 from . import wranglers
 from scabha.substitutions import substitutions_from
 
@@ -103,10 +105,10 @@ class Cab(Cargo):
     parameter_passing: ParameterPassingMechanism = ParameterPassingMechanism.args
 
     # cab management and cleanup definitions
-    management: CabManagement = CabManagement()
+    management: CabManagement = EmptyClassDefault(CabManagement)
 
     # default parameter conversion policies
-    policies: ParameterPolicies = ParameterPolicies()
+    policies: ParameterPolicies = EmptyClassDefault(ParameterPolicies)
 
     def __post_init__ (self):
         Cargo.__post_init__(self)
@@ -175,9 +177,9 @@ class Cab(Cargo):
             return default
 
     def build_command_line(self, params: Dict[str, Any], 
-                           subst: Optional[Dict[str, Any]] = None, 
-                           virtual_env: Optional[str] = None,
-                           check_executable: bool = True):
+                        subst: Optional[Dict[str, Any]] = None, 
+                        virtual_env: Optional[str] = None,
+                        check_executable: bool = True):
         
         try:
             with substitutions_from(subst, raise_errors=True) as context:
@@ -466,6 +468,5 @@ CabSchema = None
 def get_cab_schema():
     global CabSchema
     if CabSchema is None:
-        import stimela.config
         CabSchema = OmegaConf.structured(Cab)
     return CabSchema

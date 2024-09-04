@@ -1,6 +1,6 @@
 import logging, datetime, resource, os.path
 
-from typing import Dict, Optional, Any, List, Callable
+from typing import Dict, Optional, Any
 
 import stimela
 import stimela.kitchen

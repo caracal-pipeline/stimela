@@ -268,9 +268,15 @@ class Step:
 
     def prevalidate(self, subst: Optional[SubstitutionNS]=None, root=False, backend=None):
         self.finalize(backend=backend)
-        self.cargo.apply_dynamic_schemas(self.params, subst)
+        # apply dynamic schemas
+        params = self.params
+        if self.cargo.has_dynamic_schemas:
+            # prevalidate in order to resolve substitutions in existing parameters
+            params = self.cargo.prevalidate(params, subst, root=root)
+            self.cargo.apply_dynamic_schemas(params, subst)
+            # will prevvalidate again below based on these updated schemas
         # validate cab or recipe
-        params = self.validated_params = self.cargo.prevalidate(self.params, subst, root=root)
+        params = self.validated_params = self.cargo.prevalidate(params, subst, root=root)
         # add missing outputs
         for name in self.cargo.outputs:
             if name not in params:
@@ -410,6 +416,8 @@ class Step:
             skip = self._skip
             if self._skip is None and subst is not None:
                 skip = evaluate_and_substitute_object(self.skip, subst, location=[self.fqname, "skip"])
+                if skip is UNSET:  # skip: =IFSET(recipe.foo) will return UNSET
+                    skip = False
                 self.log.debug(f"dynamic skip attribute evaluation returns {skip}")
                 # formulas with unset variables return UNSET instance
                 if isinstance(skip, UNSET):
@@ -420,8 +428,9 @@ class Step:
 
             # Since prevalidation will have populated default values for potentially missing parameters, use those values
             # For parameters that aren't missing, use whatever value that was suplied
-            params = self.validated_params.copy()
-            params.update(**self.params)
+            # preserve order of specified params, to allow ordered substitutions to occur
+            params = self.params.copy()
+            params.update([(key, value) for key, value in self.validated_params.items() if key not in params])
 
             skip_warned = False   # becomes True when warnings are given
 
@@ -469,7 +478,6 @@ class Step:
                 if schema.is_input or schema.is_named_output:
                     invalid.append(name)
             if invalid:
-                invalid = self.invalid_params + self.unresolved_params
                 if skip:
                     parent_log_warning(f"invalid inputs: {join_quote(invalid)}")
                     if not skip_warned:

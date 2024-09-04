@@ -1,9 +1,8 @@
 import importlib
-import os, os.path, time, sys, platform, traceback
-from typing import Any, List, Dict, Optional, Union
-from enum import Enum
+import os, os.path, time, platform, traceback
+from typing import Any, List, Dict, Optional
 from dataclasses import dataclass, field
-from omegaconf.omegaconf import MISSING, OmegaConf
+from omegaconf.omegaconf import OmegaConf
 from omegaconf.errors import OmegaConfBaseException
 from collections import OrderedDict
 import psutil
@@ -14,7 +13,7 @@ from stimela.exceptions import *
 from stimela import log_exception
 
 from scabha import configuratt
-from scabha.cargo import ListOrString, EmptyDictDefault, EmptyListDefault
+from scabha.basetypes import EmptyDictDefault, EmptyListDefault, EmptyClassDefault
 from stimela.backends import StimelaBackendOptions
 
 @dataclass 
@@ -22,18 +21,16 @@ class StimelaLogConfig(object):
     enable: bool = True                          
     name: str = "log-{info.fqname}"          # Default name for log file. info dict and {config.x.y} is substituted.
     ext: str = ".txt"                        # Default extension for log file.
- 
     dir: str = "."                               # Default directory for log files
 
     symlink: Optional[str] = None                # Will make named symlink to the log directory. A useful pattern is e.g. dir="logs-{config.run.datetime}", symlink="logs",
-                                                 # then each run has its own log dir, and "logs" always points to the latest one
+                                            # then each run has its own log dir, and "logs" always points to the latest one
 
     # how deep to nest individual log files. 0 means one log per recipe, 1 means one per step, 2 per each substep, etc. 
     nest: int = 999                             
     
     level: str = "INFO"                          # level at which we log
-
-
+    
 
 ## overall Stimela config schema
 
@@ -44,17 +41,18 @@ import stimela.backends
 class StimelaProfilingOptions(object):
     print_depth: int = 9999
     unroll_loops: bool = False
-
+    
 @dataclass
 class StimelaOptions(object):
-    backend: StimelaBackendOptions = StimelaBackendOptions()
-    log: StimelaLogConfig = StimelaLogConfig()
+    backend: StimelaBackendOptions = EmptyClassDefault(StimelaBackendOptions)
+    log: StimelaLogConfig = EmptyClassDefault(StimelaLogConfig)
     ## list of paths to search with _include
     include: List[str] = EmptyListDefault()
     ## Miscellaneous runtime options (runtime.casa, etc.)     
     runtime: Dict[str, Any] = EmptyDictDefault()    
     ## Profiling options
-    profile: StimelaProfilingOptions = StimelaProfilingOptions()
+    profile: StimelaProfilingOptions = EmptyClassDefault(StimelaProfilingOptions)
+    
 
 
 def DefaultDirs():
@@ -161,15 +159,17 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
         steps: Dict[str, Any] = EmptyDictDefault()
         misc: Dict[str, Any] = EmptyDictDefault()
         wisdom: Dict[str, Any] = EmptyDictDefault()
+        
 
     @dataclass 
     class StimelaConfig:
         images: Dict[str, ImageInfo] = EmptyDictDefault()
-        lib: StimelaLibrary = StimelaLibrary()
+        lib: StimelaLibrary = EmptyClassDefault(StimelaLibrary)
         cabs: Dict[str, Cab] = EmptyDictDefault()
-        opts: StimelaOptions = StimelaOptions()
+        opts: StimelaOptions = EmptyClassDefault(StimelaOptions)
         vars: Dict[str, Any] = EmptyDictDefault()
         run:  Dict[str, Any] = EmptyDictDefault()
+        
 
     base_configs = lib_configs = cab_configs = []
 
