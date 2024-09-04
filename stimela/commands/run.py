@@ -196,7 +196,7 @@ def load_recipe_files(filenames: List[str]):
 @click.option("--dump-config", is_flag=True,
                 help="""Dump the equivalent stimela config to a file""")
 @click.argument("parameters", nargs=-1, metavar="filename.yml ... [recipe or cab name] [PARAM=VALUE] ...", required=True)
-def run(parameters: List[str] = [], dry_run: bool = False, last_recipe: bool = False, profile: Optional[int] = None,
+def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = False, last_recipe: bool = False, profile: Optional[int] = None,
     assign: List[Tuple[str, str]] = [],
     config_equals: List[str] = [],
     config_assign: List[Tuple[str, str]] = [],
@@ -448,8 +448,9 @@ def run(parameters: List[str] = [], dry_run: bool = False, last_recipe: bool = F
             log.debug(line)
 
     if dump_config:
-        import ipdb; ipdb.set_trace()
-        OmegaConf.save(stimela.config, f="test.yaml")
+        filename = os.path.join(logdir, "stimela.recipe.config.yaml")
+        log.info(f"recipe config will be saved under {filename}")
+        OmegaConf.save(stimela.CONFIG, f=filename)
 
     if dry_run:
         log.info("dry run was requested, exiting")
