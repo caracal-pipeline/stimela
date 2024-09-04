@@ -125,9 +125,12 @@ def nested_schema_to_dataclass(nested: Dict[str, Dict], class_name: str, bases=(
 
 _atomic_types = dict(bool=bool, str=str, int=int, float=float)
 
-def _validate_list(text: str, element_type, schema, sep=",", brackets=True):
+def _validate_list(text: str, element_type, schema, sep=",", brackets=True, pass_missing_as_none=False):
     if not text:
-        return schema.default
+        if schema.default in (UNSET, _UNSET_DEFAULT) and pass_missing_as_none:
+            return None
+        else:
+            return schema.default
     if brackets:
         if text == "[]":
             return []
@@ -139,9 +142,12 @@ def _validate_list(text: str, element_type, schema, sep=",", brackets=True):
     except ValueError:
         raise click.BadParameter(f"can't convert to '{schema.dtype}'")
 
-def _validate_tuple(text: str, element_types, schema, sep=",", brackets=True):
+def _validate_tuple(text: str, element_types, schema, sep=",", brackets=True, pass_missing_as_none=False):
     if not text:
-        return schema.default
+        if schema.default in (UNSET, _UNSET_DEFAULT) and pass_missing_as_none:
+            return None
+        else:
+            return schema.default
     if brackets:
         if text == "[]":
             return []
@@ -225,12 +231,14 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
                     elif policies.repeat == '[]':  # else assume [X,Y] or X,Y syntax
                         dtype = str
                         validator = lambda ctx, param, value, etype=dtype, schema=schema, _type=elem_type: \
-                            _validate_list(value, element_type=_type, schema=schema)
+                            _validate_list(value, element_type=_type, schema=schema,
+                                           pass_missing_as_none=policies.pass_missing_as_none)
                     elif policies.repeat is not None:  # assume XrepY syntax
                         dtype = str
                         validator = lambda ctx, param, value, etype=dtype, schema=schema, _type=elem_type: \
                             _validate_list(value, element_type=_type, schema=schema,
-                                           sep=policies.repeat, brackets=False)
+                                           sep=policies.repeat, brackets=False,
+                                           pass_missing_as_none=policies.pass_missing_as_none)
                     else:
                         raise SchemaError(f"list-type parameter '{name}' does not have a repeat policy set")
                 elif tuple_match:
@@ -243,14 +251,16 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
                         validator = lambda ctx, param, value, etype=dtype, \
                                 schema=schema, _type=elem_types: \
                                 _validate_tuple(value, element_types=_type,
-                                            schema=schema)
+                                                schema=schema,
+                                                pass_missing_as_none=policies.pass_missing_as_none)
                     elif policies.repeat is not None:  # assume XrepY syntax
                         dtype = str
                         validator = lambda ctx, param, value, etype=dtype, \
                         schema=schema, _type=elem_types: \
                             _validate_tuple(value, element_types=_type,
                                             schema=schema,
-                                            sep=policies.repeat, brackets=False)
+                                            sep=policies.repeat, brackets=False,
+                                            pass_missing_as_none=policies.pass_missing_as_none)
                     else:
                         raise SchemaError(f"tuple-type parameter '{name}' does not have a repeat policy set")
                 else:
@@ -278,10 +288,8 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
                               metavar=schema.metavar, help=schema.info)
                 if not schema.default in (UNSET, _UNSET_DEFAULT) and not schema.suppress_cli_default:
                     kwargs['default'] = schema.default
-                elif schema.default in (UNSET, _UNSET_DEFAULT):
-                    if policies.pass_missing_as_none:
-                        kwargs['default'] = None
-
+                elif schema.default in (UNSET, _UNSET_DEFAULT) and policies.pass_missing_as_none:
+                    kwargs['default'] = None
                 deco = click.option(*optnames, **kwargs)
             if decorator_chain is None:
                 decorator_chain = deco
