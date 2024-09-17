@@ -87,6 +87,16 @@ class SubstitutionNS(OrderedDict):
         for key, value in self.items():
             OrderedDict.__setitem__(newcopy, key, value)
         return newcopy
+    
+    def deepcopy(self):
+        newcopy = SubstitutionNS()
+        OrderedDict.__setattr__(newcopy, "_name_", self._name_)
+        OrderedDict.__setattr__(newcopy, "_nosubst_", set())
+        for key, value in self.items():
+            if isinstance(value, SubstitutionNS):
+                value = value.deepcopy()
+            OrderedDict.__setitem__(newcopy, key, value)
+        return newcopy
 
     def _update_(self, **kw):
         """Updates items in the namespace using _add_()"""

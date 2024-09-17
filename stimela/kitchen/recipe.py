@@ -172,12 +172,14 @@ class Recipe(Cargo):
 
         # accumulate all assignments for a final round of evaluation
         assign = {}
+        ignore_unknown_names = set()
 
         def do_assign(assignments):
             """Helper function to process a list of assignments. Called repeatedly
             for the assign section, and for each assign_based_on entry.
             Substitution errors are ignored at this stage, a final round of re-evaluation with ignore=False is done at the end.
             """
+            ignore_unk = assignments.pop('_ignore_unknown_assignments', False)
             # flatten assignments
             flattened = assignments # flatten_dict(assignments)
             # drop entries protected from assignment
@@ -189,7 +191,10 @@ class Recipe(Cargo):
                 flattened = evaluate_and_substitute(flattened, subst, subst.recipe, location=[whose.fqname], ignore_subst_errors=True)
             except Exception as exc:
                 raise AssignmentError(f"{whose.fqname}: error evaluating assignments", exc)
-            assign.update(flattened)
+            updates = {key: value for key, value in flattened.items() if key not in assign}
+            if ignore_unk:
+                ignore_unknown_names.update(updates.keys())
+            assign.update(updates)
 
         # perform direct assignments
         do_assign(whose.assign)
@@ -245,9 +250,9 @@ class Recipe(Cargo):
             raise AssignmentError(f"{whose.fqname}: error evaluating assignments", exc)
         # dispatch and reassign, since substitutions may have been performed
         for key, value in assign.items():
-            self.assign_value(key, value, subst=subst, whose=whose)
+            self.assign_value(key, value, subst=subst, whose=whose, ignore_unknown=key in ignore_unknown_names)
 
-    def assign_value(self, key: str, value: Any, override: bool = False,
+    def assign_value(self, key: str, value: Any, override: bool = False, ignore_unknown: bool = False,
                      subst: Optional[Dict[str, Any]] = None, whose: Optional[Any] = None):
         """assigns a parameter value to the recipe. Handles nested assignments and 
         assignments to local log options.
@@ -266,6 +271,8 @@ class Recipe(Cargo):
             comps = nested_key.split('.')
             while len(comps) > 1:
                 if comps[0] not in container:
+                    if ignore_unknown:
+                        return
                     raise AssignmentError(f"{self.fqname}: invalid assignment {key}={value}")
                 container = container[comps[0]]
                 comps.pop(0)
@@ -282,7 +289,7 @@ class Recipe(Cargo):
                 self.defaults[key] = value
         # assigning to a substep? Invoke nested assignment
         elif nesting is not None and nesting in self.steps:
-            return self.steps[nesting].assign_value(subkey, value, override=override)
+            return self.steps[nesting].assign_value(subkey, value, override=override, ignore_unknown=ignore_unknown)
         # assigning to config?
         elif nesting == "config":
             assign_nested(self.config, subkey, value)
@@ -958,6 +965,7 @@ class Recipe(Cargo):
 
             subst.recipe = SubstitutionNS(**params)
             subst.current = subst.recipe
+            subst.ancestral = subst.recipe
 
         if 'current' in subst:
             subst.current._add_('steps', self._prevalidated_steps, nosubst=True)
@@ -1211,8 +1219,14 @@ class Recipe(Cargo):
                 subst._add_('root', subst_outer.root, nosubst=True)
             if 'recipe' in subst_outer:
                 subst._add_('parent', subst_outer.recipe, nosubst=True)
+            if 'ancestral' in subst_outer:
+                subst._add_('ancestral', subst_outer.ancestral.deepcopy(), nosubst=True)
+                subst.ancestral._merge_(subst.recipe)
+            else:
+                subst._add_('parent', subst.recipe, nosubst=True)
         else:
             subst.root = subst.recipe
+            subst.ancestral = subst.recipe
 
         subst_copy = subst.copy()
         self.update_assignments(subst, params=params, ignore_subst_errors=True)
