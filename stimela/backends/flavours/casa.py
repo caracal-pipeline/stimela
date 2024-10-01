@@ -27,7 +27,8 @@ class CasaTaskFlavour(_CallableFlavour):
     def finalize(self, cab: Cab):
         super().finalize(cab)
 
-        err_patt = re.compile("(?P<content>(\tSEVERE\s+(?!MeasTable)|ABORTING|\*\*\* Error \*\*\*)(.*))$")
+        # catch CASA error messages, except the MeasTable::dUTC complaints which are all-pervasive
+        err_patt = re.compile("(?P<content>(\tSEVERE\s+(?!MeasTable::dUTC)|ABORTING|\*\*\* Error \*\*\*)(.*))$")
         cab._wranglers.append((
             err_patt, [
                 wranglers.DeclareError(err_patt, "ERROR", message="CASA error: {content}" )
