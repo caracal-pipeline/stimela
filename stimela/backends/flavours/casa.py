@@ -27,7 +27,7 @@ class CasaTaskFlavour(_CallableFlavour):
     def finalize(self, cab: Cab):
         super().finalize(cab)
 
-        err_patt = re.compile("(?P<content>(\tSEVERE\t|ABORTING|\*\*\* Error \*\*\*)(.*))$")
+        err_patt = re.compile("(?P<content>(\tSEVERE\s+(?!MeasTable)|ABORTING|\*\*\* Error \*\*\*)(.*))$")
         cab._wranglers.append((
             err_patt, [
                 wranglers.DeclareError(err_patt, "ERROR", message="CASA error: {content}" )
