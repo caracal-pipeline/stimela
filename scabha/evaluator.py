@@ -319,7 +319,7 @@ def construct_parser():
         (Literal("&"), 2, opAssoc.LEFT, BinaryHandler.pa),
         (Literal("^"), 2, opAssoc.LEFT, BinaryHandler.pa),
         (Literal("|"), 2, opAssoc.LEFT, BinaryHandler.pa),
-        (reduce(operator.or_, map(Literal, ("==", "!=", ">", "<", ">=", "<="))), 2, opAssoc.LEFT, BinaryHandler.pa),
+        (reduce(operator.or_, map(Literal, ("==", "!=", ">=", "<=", ">", "<"))), 2, opAssoc.LEFT, BinaryHandler.pa),
         (CaselessKeyword("in")|CaselessKeyword("not in"), 2, opAssoc.LEFT, BinaryHandler.pa),
         (CaselessKeyword("not"), 1, opAssoc.RIGHT, UnaryHandler.pa),
         (CaselessKeyword("and")|CaselessKeyword("or"), 2, opAssoc.LEFT, BinaryHandler.pa),
