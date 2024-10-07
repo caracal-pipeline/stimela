@@ -12,6 +12,7 @@ def test_parser():
             "a.b + b.c - c.d",
             "a.b + b.c * c.d",
             "a.b + -b.c",
+            "a.b <= 0",
             "a.b", 
             "IFSET(a.b)",
                 ]:
