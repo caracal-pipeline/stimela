@@ -23,6 +23,7 @@ class CasaTaskFlavour(_CallableFlavour):
     kind: str = "casa-task"
     path: Optional[str] = None                       # path to CASA executable
     opts: Optional[List[str]] = EmptyListDefault()   # additional options 
+    wrapper: Optional[str] = None                    # wrapper command (e.g. xvfb-run -a)
 
     def finalize(self, cab: Cab):
         super().finalize(cab)
@@ -60,10 +61,14 @@ class CasaTaskFlavour(_CallableFlavour):
                     casa_opts = [context.evaluate(opt, location=["opts"]) for opt in casa_opts]
                 except Exception as exc:
                     raise SubstitutionError(f"error substituting casa options '{casa_opts}'", exc)
-
-        # check for virtual_env
-        if virtual_env and "/" not in command:
-            command = f"{virtual_env}/bin/{command}"
+            wrapper = self.wrapper if self.wrapper is not None else casa_config.get('wrapper', 'xvfb-run -a')
+            if wrapper:
+                try:
+                    wrapper = [context.evaluate(wrapper, location=["wrapper"])]
+                except Exception as exc:
+                    raise SubstitutionError(f"error substituting wrapper '{wrapper}'", exc)
+            else:
+                wrapper = []
 
         self.command_name = command
         pass_params = dict(cab.filter_input_params(params))
@@ -73,7 +78,7 @@ class CasaTaskFlavour(_CallableFlavour):
         # this works for both python 2.7 and 3.x
         code = f"{command}(**{pass_params})"
 
-        args =  casa.strip().split() + list(casa_opts) + ["-c", code]
+        args =  wrapper + casa.strip().split() + list(casa_opts) + ["-c", code]
         return args
     
 
