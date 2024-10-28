@@ -169,13 +169,13 @@ As we saw above, a parameter value starting with ``=`` invokes the formula parse
    
   * ``STRIPEXT(`` *path* ``)`` returns the path minus the extension. 
 
-  * ``IS_NUM(arg)`` true if the argument is a numeric type
+  * ``IS_NUM(arg)`` true if the argument is a numeric type.
 
-  * ``IS_STR(arg)`` true if the argument is a string type
+  * ``IS_STR(arg)`` true if the argument is a string type.
 
   * ``VALID(arg)`` true if the argument is valid, and evaluates to non-zero. This is a useful pattern when dealing 
   with parameters of a mixed type (that can be e.g. strings or numbers). For example, ``recipe.a > 0`` would throw an 
-  error is ``a`` is a string, but ``VALID(recipe.a > 0)
+  error is ``a`` is a string, but ``VALID(recipe.a > 0)`` would return False in this case.
   
 
 As should be evident from the list above, certain functions expect arguments of a particular type (for example, the pathname manipulation functions expect strings). 
