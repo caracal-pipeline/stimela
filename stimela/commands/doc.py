@@ -14,7 +14,7 @@ from stimela.main import cli
 from scabha.cargo import ParameterCategory
 from stimela.kitchen.recipe import Recipe
 from stimela.kitchen.cab import Cab
-from stimela.exceptions import RecipeValidationError
+from stimela.exceptions import RecipeValidationError, CabValidationError
 from stimela.task_stats import destroy_progress_bar
 
 from .run import load_recipe_files, resolve_recipe_file
@@ -122,8 +122,14 @@ def doc(what: List[str] = [], do_list=False, implicit=False, obscure=False, all=
             recipe.rich_help(tree, max_category=max_category)
         
         for name in cabs_to_document:
-            cab = Cab(**stimela.CONFIG.cabs[name])
-            cab.finalize(config=stimela.CONFIG)
+            try:
+                cab = Cab(**stimela.CONFIG.cabs[name])
+                cab.finalize(config=stimela.CONFIG)
+            except Exception as exc:
+                if not isinstance(exc, CabValidationError):
+                    exc = CabValidationError(f"error loading cab '{name}'", exc)
+                log_exception(exc)
+                sys.exit(2)
             tree = top_tree.add(f"Cab: [bold]{name}[/bold]")
             cab.rich_help(tree, max_category=max_category)
 
