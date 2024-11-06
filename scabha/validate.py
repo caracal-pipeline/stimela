@@ -16,7 +16,7 @@ from scabha.basetypes import Unresolved
 from .exceptions import Error, ParameterValidationError, SchemaError, SubstitutionErrorList
 from .substitutions import SubstitutionNS, substitutions_from
 from .basetypes import URI, File, Directory, MS, UNSET
-from .evaluator import Evaluator
+from .evaluator import Evaluator, is_formula_or_substitution
 
 def join_quote(values):
     return "'" + "', '".join(values) + "'" if values else ""
@@ -57,6 +57,7 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
                         defaults: Optional[Dict[str, Any]] = None,
                         subst: Optional[SubstitutionNS] = None,
                         fqname: str = "",
+                        validate_types=True,
                         check_unknowns=True,    
                         check_required=True,
                         check_inputs_exist=True,
@@ -74,6 +75,7 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
         fqname: fully-qualified name of the parameter set (e.g. "recipe_name.step_name"), used in error messages. If not given,
                 errors will report parameter names only
 
+        validate_types (bool): if True, datatypes etc. will be validated. If False, only brief checks are done
         check_unknowns (bool): if True, unknown parameters (not in schema) raise an error
         check_required (bool): if True, missing parameters with required=True will raise an error
         check_inputs_exist (bool): if True, input files with must_exist={None,True} in schema must exist, or will raise an error. 
@@ -128,16 +130,21 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
                                         ignore_subst_errors=ignore_subst_errors, 
                                         location=[fqname])
 
-    # split inputs into unresolved substitutions, and proper inputs
-    unresolved = {name: value for name, value in inputs.items() if isinstance(value, Unresolved)}
-    inputs = {name: value for name, value in inputs.items() if not isinstance(value, Unresolved)}
-
     # check that required args are present
     if check_required:
         missing = [mkname(name) for name, schema in schemas.items() 
-                    if schema.required and inputs.get(name) is UNSET and name not in unresolved]
+                    if schema.required and inputs.get(name, UNSET) is UNSET]
         if missing:
             raise ParameterValidationError(f"missing required parameters: {join_quote(missing)}")
+
+    # if not validating types, then stop checking at this point
+    if not validate_types:
+        return inputs
+
+    # split inputs into unresolved substitutions, and proper inputs
+
+    unresolved = {name: value for name, value in inputs.items() if isinstance(value, Unresolved)}
+    inputs = {name: value for name, value in inputs.items() if not isinstance(value, Unresolved)}
 
     # create dataclass from parameter schema
     validated = {}

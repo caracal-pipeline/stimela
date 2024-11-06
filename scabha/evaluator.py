@@ -652,6 +652,20 @@ class Evaluator(object):
 
         return params_out
 
+def is_formula_or_substitution(x):
+    """Returns True if argument is a formula, or is amenable to substitution"""
+    if not type(x) is str:
+        return False
+    # formula parser implies True
+    if x.startswith("=") and not x.startswith("=="):
+        return True
+    # else check for formatting
+    try:
+        x.format()
+        # if we get here with no errors, string did not contain substitutions
+        return False
+    except:
+        return True
 
 
 if __name__ == "__main__":

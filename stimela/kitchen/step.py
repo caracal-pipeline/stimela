@@ -111,7 +111,8 @@ class Step:
             if (inputs and (schema.is_input or schema.is_named_output)) or \
                 (outputs and schema.is_output):
                 summary_params[name] = value
-        return self.cargo and self.cargo.summary(recursive=recursive, params=summary_params, ignore_missing=ignore_missing)
+        return self.cargo and self.cargo.summary(recursive=recursive, params=summary_params, 
+                                                 ignore_missing=ignore_missing, inputs=inputs, outputs=outputs)
 
     @property
     def finalized(self):
@@ -250,7 +251,6 @@ class Step:
             # build dictionary of defaults from cargo
             self.defaults = {name: schema.default for name, schema in self.cargo.inputs_outputs.items() 
                              if schema.default is not UNSET and not isinstance(schema.default, Unresolved) }
-            self.defaults.update(**self.cargo.defaults)
             
             # set missing parameters from defaults
             for name, value in self.defaults.items():
@@ -589,7 +589,8 @@ class Step:
                                     os.unlink(path)
 
                 if type(self.cargo) is Recipe:
-                    self.cargo._run(params, subst, backend=backend)
+                    outputs = self.cargo._run(params, subst, backend=backend)
+                    params.update(outputs)
                 elif type(self.cargo) is Cab:
                     cabstat = backend_runner.run(self.cargo, params=params, log=self.log, subst=subst, fqname=self.fqname)
                     # check for runstate

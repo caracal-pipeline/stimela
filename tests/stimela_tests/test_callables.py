@@ -11,7 +11,7 @@ def callable_function_dict(a: int, b: str):
 
 def test_wrangler_replace_suppress():
     print("===== expecting no errors =====")
-    retcode, output = run("stimela -v run test_callables.yml")
+    retcode, output = run("stimela -v -b native run test_callables.yml")
     assert retcode == 0
     print(output)
     assert verify_output(output, 'y = 46barbar')

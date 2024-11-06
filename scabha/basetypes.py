@@ -49,7 +49,7 @@ class UNSET(Unresolved):
     pass
 
 class Placeholder(Unresolved):
-    """Marks placeholder values that are guaranteed to resolve later, such as fot-loop iterants"""
+    """Marks placeholder values that are guaranteed to resolve later, such as for-loop iterants"""
     pass
 
 class SkippedOutput(Unresolved):

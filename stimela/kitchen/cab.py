@@ -147,13 +147,22 @@ class Cab(Cargo):
         # check flavours
         self.flavour = flavours.init_cab_flavour(self)
 
+    def finalize(self, config=None, log=None, fqname=None, backend=None, nesting=0):
+        if not self.finalized:
+            super().finalize(config, log=log, fqname=fqname, backend=backend, nesting=nesting)
+            self._finalize_defaults()
 
-    def summary(self, params=None, recursive=True, ignore_missing=False):
+    def summary(self, params=None, recursive=True, ignore_missing=False, inputs=True, outputs=True):
         lines = [f"cab {self.name}:"] 
         if params is not None:
             Cargo.add_parameter_summary(params, lines)
-            lines += [f"  {name} = ???" for name, schema in self.inputs_outputs.items()
-                        if name not in params and (not ignore_missing or schema.required)]
+            if not ignore_missing:
+                if inputs:
+                    lines += [f"  {name} = ???" for name, schema in self.inputs.items()
+                                if name not in params and schema.required]
+                if outputs:
+                    lines += [f"  {name} = ???" for name, schema in self.outputs.items()
+                                if name not in params and schema.required]
         return lines
 
     def rich_help(self, tree, max_category=ParameterCategory.Optional):

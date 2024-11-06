@@ -102,7 +102,7 @@ class Parameter(object):
     # for input parameters, this flag indicates a read-write (aka input-output aka mixed-mode) parameter e.g. an MS
     writable: bool = False
     # data type
-    dtype: str = "str"
+    dtype: Optional[str] = None
     # specifies that the value is implicitly set inside the step (i.e. not a free parameter). Typically used with filenames
     implicit: Any = None
     # optonal list of arbitrary tags, used to group parameters
@@ -121,6 +121,9 @@ class Parameter(object):
 
     # default value
     default: Any = _UNSET_DEFAULT
+
+    # description of default/implicit value (printed e.g. to help strings), if not set, formed from default/implicit
+    default_desc: Optional[str] = None
 
     # list of aliases for this parameter (i.e. references to other parameters whose schemas/values this parameter shares)
     aliases: Optional[List[str]] = ()
@@ -181,15 +184,20 @@ class Parameter(object):
             return value
         self.default = natify(self.default)
         self.choices = natify(self.choices)
+        self.original_dtype_unspecified = self.dtype is None
 
-        # converts string dtype into proper type object
-        # yes I know eval() is naughty but this is the best we can do for now
-        # see e.g. https://stackoverflow.com/questions/67500755/python-convert-type-hint-string-representation-from-docstring-to-actual-type-t
-        # The alternative is a non-standard API call i.e. typing._eval_type()
-        try:
-            self._dtype = eval(self.dtype, globals())
-        except Exception as exc:
-            raise SchemaError(f"'{self.dtype}' is not a valid dtype", exc)
+        if self.dtype is None:
+            self.dtype = "str"
+            self._dtype = str
+        else:
+            # converts string dtype into proper type object
+            # yes I know eval() is naughty but this is the best we can do for now
+            # see e.g. https://stackoverflow.com/questions/67500755/python-convert-type-hint-string-representation-from-docstring-to-actual-type-t
+            # The alternative is a non-standard API call i.e. typing._eval_type()
+            try:
+                self._dtype = eval(self.dtype, globals())
+            except Exception as exc:
+                raise SchemaError(f"'{self.dtype}' is not a valid dtype", exc)
 
         self._is_file_type = is_file_type(self._dtype)
         self._is_file_list_type = is_file_list_type(self._dtype)
@@ -323,11 +331,24 @@ class Cargo(object):
             schema._is_input = False
         for name in self.inputs.keys():
             if name in self.outputs:
-                raise DefinitionError(f"parameter '{name}' appears in both inputs and outputs")
+                raise SchemaError(f"parameter '{name}' appears in both inputs and outputs")
         self._inputs_outputs = None
         self._implicit_params = set()   # marks implicitly set values
-        # flatten defaults and aliases
+        # flatten defaults 
         self.defaults = self.flatten_param_dict(OrderedDict(), self.defaults)
+        # copy defaults into schemas 
+        for name, value in list(self.defaults.items()):
+            schema = self.inputs.get(name) or self.outputs.get(name)
+            # ignore unknown defaults for now, they may be processed by subclasses later
+            if schema is None:
+                continue
+            del self.defaults[name]
+            if schema.implicit is not None:
+                raise SchemaError(f"defaults section contains value for '{name}', which is declared implicit")
+            elif schema.default is UNSET:
+                schema.default = value
+            elif schema.default != value:
+                raise SchemaError(f"defaults section conflicts with a default declaration for '{name}'")
         # pausterized name
         self.name_ = re.sub(r'\W', '_', self.name or "")  # pausterized name
         # config and logger objects
@@ -363,6 +384,13 @@ class Cargo(object):
         """Returns list of unresolved parameters"""
         return [name for name, value in params.items() if isinstance(value, Unresolved)]
 
+    def _finalize_defaults(self):
+        # no defaults should be left
+        if self.defaults:    
+            names = [f"'{key}'" for key in self.defaults]
+            raise SchemaError(f"defaults section refers to unknown parameter(s) {', '.join(names)}")
+        # clear defaults to catch any bugs down the line -- should not be used again!
+        self.defaults = None
 
     def finalize(self, config=None, log=None, fqname=None, backend=None, nesting=0):
         if not self.finalized:
@@ -422,9 +450,9 @@ class Cargo(object):
         for name, schema in self.inputs_outputs.items():
             if schema.implicit is not None and type(schema.implicit) is not Unresolved:
                 if name in params and name not in self._implicit_params and params[name] != schema.implicit:
-                    raise ParameterValidationError(f"implicit parameter {name} was supplied explicitly")
-                if name in self.defaults:
-                    raise SchemaError(f"implicit parameter {name} also has a default value")
+                    raise ParameterValidationError(f"implicit parameter '{name}' was supplied explicitly")
+                if schema.default is not UNSET:
+                    raise SchemaError(f"implicit parameter '{name}' also has a default value")
                 params[name] = schema.implicit
                 self._implicit_params.add(name)
                 if current:
@@ -442,8 +470,8 @@ class Cargo(object):
         for name, schema in self.inputs_outputs.items():
             schema.get_category()
 
-        params = validate_parameters(params, self.inputs_outputs, defaults=self.defaults, subst=subst, fqname=self.fqname,
-                                        check_unknowns=True, check_required=False, 
+        params = validate_parameters(params, self.inputs_outputs, subst=subst, fqname=self.fqname,
+                                        check_unknowns=True, check_required=True, validate_types=False, 
                                         check_inputs_exist=False, check_outputs_exist=False,
                                         create_dirs=False, ignore_subst_errors=True)
 
@@ -459,12 +487,12 @@ class Cargo(object):
         self._resolve_implicit_parameters(params, subst)
 
         # check inputs
-        params1 = validate_parameters(params, self.inputs, defaults=self.defaults, subst=subst, fqname=self.fqname,
+        params1 = validate_parameters(params, self.inputs, subst=subst, fqname=self.fqname,
                                                 check_unknowns=False, check_required=not loosely, 
                                                 check_inputs_exist=not loosely and not remote_fs, check_outputs_exist=False,
                                                 create_dirs=not loosely and not remote_fs)
         # check outputs
-        params1.update(**validate_parameters(params, self.outputs, defaults=self.defaults, subst=subst, fqname=self.fqname,
+        params1.update(**validate_parameters(params, self.outputs, subst=subst, fqname=self.fqname,
                                                 check_unknowns=False, check_required=False, 
                                                 check_inputs_exist=not loosely and not remote_fs, check_outputs_exist=False,
                                                 create_dirs=not loosely and not remote_fs))
@@ -481,7 +509,7 @@ class Cargo(object):
             impl = self.inputs_outputs[name].implicit
             if type(impl) is not Unresolved:
                 params[name] = self.inputs_outputs[name].implicit
-        params.update(**validate_parameters(params, self.outputs, defaults=self.defaults, subst=subst, fqname=self.fqname,
+        params.update(**validate_parameters(params, self.outputs, subst=subst, fqname=self.fqname,
                                                 check_unknowns=False, check_required=not loosely, 
                                                 check_inputs_exist=not loosely and not remote_fs, 
                                                 check_outputs_exist=not loosely and not remote_fs,
@@ -515,13 +543,16 @@ class Cargo(object):
                 subtree.add(table)
                 for name, schema in schemas:
                     attrs = []
-                    default = self.defaults.get(name, schema.default)
-                    if schema.implicit:
-                        attrs.append(f"implicit: {schema.implicit}")
-                    if default is not UNSET and not isinstance(default, Unresolved):
-                        attrs.append(f"default: {default}")
-                    if schema.choices:
-                        attrs.append(f"choices: {', '.join(schema.choices)}")
+                    if schema.default_desc is not None:
+                        attrs.append(schema.default_desc)
+                    else:
+                        default = schema.default
+                        if schema.implicit:
+                            attrs.append(f"implicit: {schema.implicit}")
+                        if default is not UNSET and not isinstance(default, Unresolved):
+                            attrs.append(f"default: {default}")
+                        if schema.choices:
+                            attrs.append(f"choices: {', '.join(schema.choices)}")
                     info = []
                     schema.info and info.append(rich.markup.escape(schema.info))
                     attrs and info.append(f"[dim]\[{rich.markup.escape(', '.join(attrs))}][/dim]")

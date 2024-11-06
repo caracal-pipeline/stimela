@@ -36,14 +36,14 @@ def verify_output(output, *regexes):
 
 def test_test_aliasing():
     print("===== expecting an error since required parameters are missing =====")
-    retcode, _ = run(f"stimela -v exec test_aliasing.yml")
+    retcode, _ = run(f"stimela -v -b native exec test_aliasing.yml")
     assert retcode != 0 
 
     print("===== expecting no errors now =====")
-    retcode, output = run("stimela -v doc test_aliasing.yml")
+    retcode, output = run("stimela -v -b native doc test_aliasing.yml")
 
     print("===== expecting no errors now =====")
-    retcode, output = run("stimela -v exec test_aliasing.yml a=1 s3.a=1 s4.a=1 e=e f=f")
+    retcode, output = run("stimela -v -b native exec test_aliasing.yml a=1 s3.a=1 s4.a=1 e=e f=f")
     assert retcode == 0
     print(output)
     assert verify_output(output, 
@@ -53,43 +53,43 @@ def test_test_aliasing():
 
 def test_test_nesting():
     print("===== expecting no errors =====")
-    retcode, output = run("stimela -v exec test_nesting.yml demo_recipe")
+    retcode, output = run("stimela -v -b native exec test_nesting.yml demo_recipe")
     assert retcode == 0
     print(output)
 
 
 def test_test_recipe():
     print("===== expecting an error since 'msname' parameter is missing =====")
-    retcode = os.system("stimela -v exec test_recipe.yml selfcal.image_name=bar")
+    retcode = os.system("stimela -v -b native exec test_recipe.yml selfcal.image_name=bar")
     assert retcode != 0 
 
     print("===== expecting an error due to elem-xyz choices wrong =====")
-    retcode = os.system("stimela -v exec test_recipe.yml selfcal.image_name=bar msname=foo elem-xyz=t elemlist-xyz=[x,y]")
+    retcode = os.system("stimela -v -b native exec test_recipe.yml selfcal.image_name=bar msname=foo elem-xyz=t elemlist-xyz=[x,y]")
     assert retcode != 0
 
     print("===== expecting an error due to elem-xyz choices wrong =====")
-    retcode = os.system("stimela -v exec test_recipe.yml selfcal.image_name=bar msname=foo elem-xyz=x elemlist-xyz=[x,t]")
+    retcode = os.system("stimela -v -b native exec test_recipe.yml selfcal.image_name=bar msname=foo elem-xyz=x elemlist-xyz=[x,t]")
     assert retcode != 0
 
     print("===== expecting no errors now =====")
-    retcode = os.system("stimela -v exec test_recipe.yml selfcal.image_name=bar msname=foo elem-xyz=x elemlist-xyz=[x,y]")
+    retcode = os.system("stimela -v -b native exec test_recipe.yml selfcal.image_name=bar msname=foo elem-xyz=x elemlist-xyz=[x,y]")
     assert retcode == 0
 
     print("===== expecting no errors now =====")
-    retcode = os.system("stimela -v exec test_recipe.yml selfcal.image_name=bar msname=foo elem-xyz=x elemlist-xyz=x")
+    retcode = os.system("stimela -v -b native exec test_recipe.yml selfcal.image_name=bar msname=foo elem-xyz=x elemlist-xyz=x")
     assert retcode == 0
 
 def test_test_loop_recipe():
     print("===== expecting an error since 'ms' parameter is missing =====")
-    retcode = os.system("stimela -v exec test_loop_recipe.yml cubical_image_loop")
+    retcode = os.system("stimela -v -b native exec test_loop_recipe.yml cubical_image_loop")
     assert retcode != 0
 
     print("===== expecting no errors now =====")
-    retcode = os.system("stimela -v exec test_loop_recipe.yml cubical_image_loop ms=foo")
+    retcode = os.system("stimela -v -b native exec test_loop_recipe.yml cubical_image_loop ms=foo")
     assert retcode == 0
 
     print("===== expecting no errors now =====")
-    retcode = os.system("stimela exec test_loop_recipe.yml same_as_cubical_image_loop ms=foo")
+    retcode = os.system("stimela -b native exec test_loop_recipe.yml same_as_cubical_image_loop ms=foo")
     assert retcode == 0
 
     for name in "abc":
@@ -97,14 +97,14 @@ def test_test_loop_recipe():
         if not os.path.exists(msname):
             os.mkdir(msname)
     print("===== expecting no errors now =====")
-    retcode = os.system("stimela exec test_loop_recipe.yml loop_recipe")
+    retcode = os.system("stimela -b native exec test_loop_recipe.yml loop_recipe")
     assert retcode == 0
 
 def test_scatter():
     print("===== expecting no errors now =====")
-    retcode = os.system("stimela exec test_scatter.yml basic_loop")
+    retcode = os.system("stimela -b native exec test_scatter.yml basic_loop")
     assert retcode == 0
 
     print("===== expecting no errors now =====")
-    retcode = os.system("stimela exec test_scatter.yml nested_loop")
+    retcode = os.system("stimela -b native exec test_scatter.yml nested_loop")
     assert retcode == 0

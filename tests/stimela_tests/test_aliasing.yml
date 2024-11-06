@@ -34,6 +34,8 @@ opts:
     dir: test-logs/logs-{config.run.datetime} 
     nest: 3
     symlink: logs
+  backend:
+    select: native
 
 recipe:
   name: "alias test recipe"
@@ -89,4 +91,4 @@ recipe:
             params:
               c: 2
       params:
-        a: '{info.fqname}'
+        a: 'fqname={info.fqname}'
