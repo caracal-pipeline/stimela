@@ -204,7 +204,7 @@ class ParseOutput(_BaseWrangler):
         self.name = name or group
         if group in regex.groupindex:
             self.gid = group
-        elif re.fullmatch('\d+', group):
+        elif re.fullmatch(r'\d+', group):
             gid = int(group)
             if gid > regex.groups:
                 raise CabValidationError(f"wrangler action '{spec}' for '{regex.pattern}': {gid} is not a valid ()-group")
