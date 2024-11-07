@@ -13,9 +13,9 @@ from .cache import load_cache, save_cache
 from .common import *
 
 
-def load(path: str, use_sources: Optional[List[DictConfig]] = [], name: Optional[str]=None, 
-        location: Optional[str]=None, 
-        includes: bool=True, selfrefs: bool=True, include_path: str=None, 
+def load(path: str, use_sources: Optional[List[DictConfig]] = [], name: Optional[str]=None,
+        location: Optional[str]=None,
+        includes: bool=True, selfrefs: bool=True, include_path: str=None,
         use_cache: bool = True,
         no_toplevel_cache = False,
         include_stack = [],
@@ -24,7 +24,7 @@ def load(path: str, use_sources: Optional[List[DictConfig]] = [], name: Optional
 
     Args:
         path (str): path to config file
-        use_sources (Optional[List[DictConfig]]): list of existing configs to be used to resolve "_use" references, 
+        use_sources (Optional[List[DictConfig]]): list of existing configs to be used to resolve "_use" references,
                 or None to disable
         name (Optional[str]): name of this config file, used for error messages
         location (Optional[str]): location where this config is being loaded (if not at root level)
@@ -37,7 +37,7 @@ def load(path: str, use_sources: Optional[List[DictConfig]] = [], name: Optional
 
     Returns:
         Tuple of (conf, dependencies)
-            conf (DictConfig): config object    
+            conf (DictConfig): config object
             dependencies (ConfigDependencies): filenames that were _included
     """
     use_toplevel_cache = use_cache and not no_toplevel_cache
@@ -51,7 +51,7 @@ def load(path: str, use_sources: Optional[List[DictConfig]] = [], name: Optional
         # include ourself into sources, if _use is in effect, and we've enabled selfrefs
         if use_sources is not None and selfrefs:
             use_sources = [subconf] + list(use_sources)
-        conf, deps = resolve_config_refs(subconf, pathname=path, location=location, name=name, 
+        conf, deps = resolve_config_refs(subconf, pathname=path, location=location, name=name,
                             includes=includes, use_cache=use_cache, use_sources=use_sources, include_path=include_path,
                             include_stack=include_stack + [path])
         # update overall dependencies
@@ -65,11 +65,11 @@ def load(path: str, use_sources: Optional[List[DictConfig]] = [], name: Optional
 
     return conf, dependencies
 
-def load_nested(filelist: List[str], 
+def load_nested(filelist: List[str],
                 structured: Optional[DictConfig] = None,
                 typeinfo = None,
                 use_sources: Optional[List[DictConfig]] = [],
-                location: Optional[str] = None,  
+                location: Optional[str] = None,
                 nameattr: Union[Callable, str, None] = None,
                 config_class: Optional[str] = None,
                 include_path: Optional[str] = None,
@@ -91,18 +91,18 @@ def load_nested(filelist: List[str],
         if set, contents of files are being loaded under 'location.subsection_name'. If not set, then 'subsection_name' is being
         loaded at root level. This is used for correctly formatting error messages and such.
     nameattr : Union[Callable, str, None]
-        if None, subsection_name will be taken from the basename of the file. If set to a string such as 'name', will set 
-        subsection_name from that field in the subsection config. If callable, will be called with the subsection config object as a single 
+        if None, subsection_name will be taken from the basename of the file. If set to a string such as 'name', will set
+        subsection_name from that field in the subsection config. If callable, will be called with the subsection config object as a single
         argument, and must return the subsection name
     config_class : Optional[str]
         name of config dataclass to form (when using typeinfo), if None, then generated automatically
-    include_path : Optional[str] 
+    include_path : Optional[str]
         if set, path to each config file will be included in the section as element 'include_path'
 
     Returns
     -------
         Tuple of (conf, dependencies)
-            conf (DictConfig): config object    
+            conf (DictConfig): config object
             dependencies (set): set of filenames that were _included
 
     Raises
@@ -127,7 +127,7 @@ def load_nested(filelist: List[str],
             if nameattr is None:
                 name = os.path.splitext(os.path.basename(path))[0]
             elif callable(nameattr):
-                name = nameattr(subconf) 
+                name = nameattr(subconf)
             elif nameattr in subconf:
                 name = subconf.get(nameattr)
             else:
@@ -142,7 +142,7 @@ def load_nested(filelist: List[str],
             # apply schema
             if structured is not None:
                 try:
-                    subconf = OmegaConf.merge(structured, subconf) 
+                    subconf = OmegaConf.merge(structured, subconf)
                 except (OmegaConfBaseException, YAMLError) as exc:
                     raise ConfigurattError(f"schema error in {path}: {exc}")
 
@@ -156,7 +156,7 @@ def load_nested(filelist: List[str],
             # datacls.__module__ == __name__  # for pickling
             structured = OmegaConf.structured(datacls)
             section_content = OmegaConf.merge(structured, section_content)
-    
+
         if use_cache:
             save_cache(filelist, section_content, dependencies, verbose=verbose)
 
@@ -194,7 +194,7 @@ def check_requirements(conf: DictConfig, bases: List[DictConfig], strict: bool =
 
     def _scan(section, location=""):
         # Short-circuit out if section is empty. Seems both DictConfig and ListConfig can be a kind of None
-        # (funny OmegeConf API feature), where they're an instance of DictConfig or ListConfig, but don't support __getitem__. 
+        # (funny OmegeConf API feature), where they're an instance of DictConfig or ListConfig, but don't support __getitem__.
         #
         if not section:
             return [], False
