@@ -272,7 +272,7 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
         ncpu=psutil.cpu_count(logical=True),
         node=platform.node().split('.', 1)[0],
         hostname=platform.node(), 
-        env={key: value.replace('${', '\${') for key, value in os.environ.items()})
+        env={key: value.replace('${', r'\${') for key, value in os.environ.items()})
     runtime['ncpu-logical'] = psutil.cpu_count(logical=True)
     runtime['ncpu-physical'] = psutil.cpu_count(logical=False)
 

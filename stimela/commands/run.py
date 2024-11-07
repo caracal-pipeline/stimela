@@ -46,7 +46,7 @@ def resolve_recipe_file(filename: str):
 
     # check for (location)filename.yml or (location)/filename.yml style
     match1 = re.fullmatch("^\\((.+)\\)/?(.+)$", filename)
-    match2 = re.fullmatch("^([\w.]+)::(.+)$", filename)
+    match2 = re.fullmatch(r"^([\w.]+)::(.+)$", filename)
     if match1 or match2:
         modulename, fname = (match1 or match2).groups()
         try:
@@ -84,7 +84,7 @@ def load_recipe_files(filenames: List[str]):
     for filename in filenames:
         # check for (location)filename.yaml or (location)/filename.yaml style
         match1 = re.fullmatch("^\\((.+)\\)/?(.+)$", filename)
-        match2 = re.fullmatch("^([\w.]+)::(.+)$", filename)
+        match2 = re.fullmatch(r"^([\w.]+)::(.+)$", filename)
         if match1 or match2:
             modulename, filename = (match1 or match2).groups()
             try:

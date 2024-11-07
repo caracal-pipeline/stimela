@@ -70,7 +70,7 @@ class URI(str):
 
         If expand_user is True, ~ in (file-protocol) paths will be expanded.
         """
-        match = re.fullmatch("((\w+)://)(.*)", value)
+        match = re.fullmatch(r'((\w+)://)(.*)', value)
         if not match:
             protocol, path, remote = "file", value, False
         else:

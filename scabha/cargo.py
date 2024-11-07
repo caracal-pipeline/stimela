@@ -524,7 +524,7 @@ class Cargo(object):
                         attrs.append(f"choices: {', '.join(schema.choices)}")
                     info = []
                     schema.info and info.append(rich.markup.escape(schema.info))
-                    attrs and info.append(f"[dim]\[{rich.markup.escape(', '.join(attrs))}][/dim]")
+                    attrs and info.append(f"[dim]\\[{rich.markup.escape(', '.join(attrs))}][/dim]")
                     table.add_row(f"[bold]{name}[/bold]",
                                 f"[dim]{rich.markup.escape(str(schema.dtype))}[/dim]",
                                 " ".join(info))
