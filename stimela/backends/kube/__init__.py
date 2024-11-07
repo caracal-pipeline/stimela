@@ -195,7 +195,7 @@ class KubeBackendOptions(object):
         # if >0, events will be collected and reported
         log_events:  bool = False
         # format string for reporting kubernetes events, this can include rich markup
-        event_format:  str = "=NOSUBST('\[k8s event type: {event.type}, reason: {event.reason}] {event.message}')"
+        event_format:  str = "=NOSUBST('\\[k8s event type: {event.type}, reason: {event.reason}] {event.message}')"
         event_colors:  Dict[str, str] = DictDefault(
                                 warning="blue", error="yellow", default="grey50")
     

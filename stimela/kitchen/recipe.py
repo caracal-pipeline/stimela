@@ -506,7 +506,7 @@ class Recipe(Cargo):
             alias_target = alias_target.replace("$", alias_name.rsplit('.', 1)[-1])
             step_spec, step_param_name = alias_target.split('.', 1)
             # treat label as a "(cabtype)" specifier?
-            if re.match('^\(.+\)$', step_spec):
+            if re.match(r'^\(.+\)$', step_spec):
                 steps = [(label, step) for label, step in self.steps.items() 
                         if (isinstance(step.cargo, Cab) and step.cab == step_spec[1:-1]) or
                             (isinstance(step.cargo, Recipe) and step.recipe == step_spec[1:-1])]

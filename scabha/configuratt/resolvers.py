@@ -218,7 +218,7 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                         if not incl:
                             raise ConfigurattError(f"{errloc}: empty {keyword} specifier")
                         # check for [flags] at end of specifier
-                        match = re.match("^(.*)\[(.*)\]$", incl)
+                        match = re.match(r'^(.*)\[(.*)\]$', incl)
                         if match:
                             incl = match.group(1)
                             flags = set([x.strip().lower() for x in match.group(2).split(",")])
