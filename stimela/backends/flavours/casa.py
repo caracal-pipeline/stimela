@@ -29,7 +29,8 @@ class CasaTaskFlavour(_CallableFlavour):
         super().finalize(cab)
 
         # catch CASA error messages, except the MeasTable::dUTC complaints which are all-pervasive
-        err_patt = re.compile("(?P<content>(\tSEVERE\s+(?!MeasTable::dUTC)|ABORTING|\*\*\* Error \*\*\*)(.*))$")
+        rex = "(?P<content>(\tSEVERE\\s+(?!([a-z]+::)?MeasTable::dUTC)|ABORTING|\\*\\*\\* Error \\*\\*\\*)(.*))$"
+        err_patt = re.compile(rex)
         cab._wranglers.append((
             err_patt, [
                 wranglers.DeclareError(err_patt, "ERROR", message="CASA error: {content}" )
@@ -64,7 +65,7 @@ class CasaTaskFlavour(_CallableFlavour):
             wrapper = self.wrapper if self.wrapper is not None else casa_config.get('wrapper', 'xvfb-run -a')
             if wrapper:
                 try:
-                    wrapper = [context.evaluate(wrapper, location=["wrapper"])]
+                    wrapper = context.evaluate(wrapper, location=["wrapper"]).split()
                 except Exception as exc:
                     raise SubstitutionError(f"error substituting wrapper '{wrapper}'", exc)
             else:
