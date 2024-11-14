@@ -80,14 +80,14 @@ def apply_pod_spec(kps, pod_spec: Dict[str, Any], predefined_pod_specs: Dict[str
     return pod_spec
 
 class StatusReporter(object):
-    def __init__(self, log: logging.Logger, 
+    def __init__(self, log: logging.Logger,
                  podname: str,
                  kube: KubeBackendOptions,
                  event_handler: None,
                  update_interval: float = 1,
                  enable_metrics: bool = True):
         self.kube = kube
-        self.namespace, self.kube_api, self.custom_api = get_kube_api() 
+        self.namespace, self.kube_api, self.custom_api = get_kube_api()
         self.log = log
         self.podname = podname
         self.label_selector = f"stimela_job={podname}"
@@ -126,7 +126,7 @@ class StatusReporter(object):
     @property
     def connected(self):
         return self._connected
-    
+
     @connected.setter
     def connected(self, status: bool):
         if status:
@@ -138,7 +138,7 @@ class StatusReporter(object):
     def log_events(self):
         # get list of associated pods
         try:
-            pods = self.kube_api.list_namespaced_pod(namespace=self.namespace, label_selector=self.label_selector, 
+            pods = self.kube_api.list_namespaced_pod(namespace=self.namespace, label_selector=self.label_selector,
                                                      _request_timeout=self._request_timeout)
         except ApiException as exc:
             self.report_api_error("list_namespaced_pod", exc)
@@ -147,7 +147,7 @@ class StatusReporter(object):
         for kind, name in objects:
             # get new events
             try:
-                events = self.kube_api.list_namespaced_event(namespace=self.namespace, 
+                events = self.kube_api.list_namespaced_event(namespace=self.namespace,
                                 field_selector=f"involvedObject.kind={kind},involvedObject.name={name}",
                                 _request_timeout=self._request_timeout)
             except ApiException as exc:
@@ -167,10 +167,10 @@ class StatusReporter(object):
                         color = self.kube.debug.event_colors.get(event.type.lower()) \
                                 or self.kube.debug.event_colors.get("default")
                         # escape console markup on string fields
-                        for key, value in event.__dict__.items():                         
+                        for key, value in event.__dict__.items():
                             if type(value) is str:
                                 setattr(event, key, escape(value))
-                        self.log.info(self.kube.debug.event_format.format(event=event), 
+                        self.log.info(self.kube.debug.event_format.format(event=event),
                                       extra=dict(color=color) if color else {})
 
     def update(self):
@@ -202,7 +202,7 @@ class StatusReporter(object):
                     # get container states
                     if pod.status.container_statuses:
                         for cst in pod.status.container_statuses:
-                            for state in cst.state.waiting, cst.state.terminated: 
+                            for state in cst.state.waiting, cst.state.terminated:
                                 if hasattr(state, 'reason'):
                                     pod_status += f":{state.reason}"
                     self.pod_statuses[pname] = pod_status
@@ -267,7 +267,7 @@ class StatusReporter(object):
             cores = totals['cpu']
             mem_gb = round(totals['memory'] / 2**30)
             report_metrics += [
-                f"cores [green]{totals['cpu']:.2f}[/green]", 
+                f"cores [green]{totals['cpu']:.2f}[/green]",
                 f"mem [green]{mem_gb}[/green]G"
             ]
             stats = dict(k8s_cores=cores, k8s_mem=mem_gb)
@@ -276,7 +276,7 @@ class StatusReporter(object):
 
         if self._last_disconnected is not None:
             report_metrics.append("reconnected")
-        
+
         return report_metrics, stats
 
 

@@ -5,7 +5,7 @@ from scabha.exceptions import SchemaError
 from .cargo import Parameter, UNSET, _UNSET_DEFAULT, Cargo, ParameterPolicies
 from typing import List, Union, Optional, Callable, Dict, DefaultDict, Any
 from .basetypes import EmptyDictDefault, File, is_file_type
-from dataclasses import dataclass, make_dataclass, field
+from dataclasses import dataclass, make_dataclass, field, asdict
 from omegaconf import OmegaConf, MISSING
 from collections.abc import MutableSet, MutableSequence, MutableMapping
 from scabha import configuratt
@@ -193,8 +193,13 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
             if io is outputs and not (schema.is_file_type and not schema.implicit):
                 continue
 
+
+            # sometimes required to convert ParameterPolicies object to dict
+            try:
+                merge_policies = {k: v for k, v in schema.policies.items() if v is not None}
+            except Exception as e:
+                merge_policies = {k: v for k, v in asdict(schema.policies).items() if v is not None}
             # None should not take precedence in the merge
-            merge_policies = {k: v for k, v in schema.policies.items() if v is not None}
             policies = OmegaConf.merge(default_policies, merge_policies)
 
             # impose default repeat policy of using a single argument for a list, i.e. X1,X2,X3
