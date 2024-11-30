@@ -109,7 +109,7 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
             command = f"cd {kube.dir}; {command}"
 
     try:
-        with declare_subtask(f"{os.path.basename(command_name)}.kube-init", status_reporter=statrep.update):
+        with declare_subtask(f"{cab.name}.kube-init", status_reporter=statrep.update):
             log.info(f"using image {image_name}")
 
             # create pod labels
@@ -363,7 +363,7 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                 # do we need to chdir
                 log.info(f"running: {command}")
 
-        with declare_subtask(f"{os.path.basename(command_name)}.kube-run", status_reporter=statrep.update):
+        with declare_subtask(f"{cab.name}.kube-run", status_reporter=statrep.update):
             retcode = None
             connected = True
             last_log_timestamp = None
