@@ -2,6 +2,7 @@ import os.path
 import itertools
 import yaml
 import shlex
+import re
 from typing import Any, List, Dict, Optional, Union
 from collections import OrderedDict
 from enum import Enum
@@ -130,7 +131,14 @@ class Cab(Cargo):
 
         # set name from command or image
         if self.name is None:
-            self.name = self.command.split()[0] or self.image
+            self.name = self.command or self.image
+            
+        # split off first word of name to avoid non-alphanumeric characters
+        match = re.match("(\w+)", self.name)
+        if match:
+            self.name = match.group(1)
+        else:
+            self.name = "unnamed"
 
         # check backend setting
         if self.backend:

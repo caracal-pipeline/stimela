@@ -247,12 +247,12 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
     # build up command line    
     cwd = os.getcwd()
-    env = [f"{k}={v}" for k, v in backend.singularity.env.items()]
     args = [backend.singularity.executable or BINARY, 
             "exec", 
             "--containall",
-            "--pwd", cwd,
-            "--env", ",".join(env)]
+            "--pwd", cwd]
+    if backend.singularity.env:
+        arg += ["--env", ",".join([f"{k}={v}" for k, v in backend.singularity.env.items()])]
 
     # initial set of mounts has cwd as read-write
     mounts = {cwd: True}

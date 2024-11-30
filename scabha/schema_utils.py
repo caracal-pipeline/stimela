@@ -193,7 +193,6 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
             if io is outputs and not (schema.is_file_type and not schema.implicit):
                 continue
 
-
             # sometimes required to convert ParameterPolicies object to dict
             try:
                 merge_policies = {k: v for k, v in schema.policies.items() if v is not None}

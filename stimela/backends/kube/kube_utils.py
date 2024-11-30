@@ -65,9 +65,10 @@ def apply_pod_spec(kps, pod_spec: Dict[str, Any], predefined_pod_specs: Dict[str
             # good practice to set these equal
             if kps.memory.request:
                 res.setdefault('requests', {})['memory'] = kps.memory.request or kps.memory.limit
+                log.info(f"setting {kind} memory request to {res['requests']['memory']}")
             if kps.memory.limit:
                 res.setdefault('limits', {})['memory'] = kps.memory.limit or kps.memory.request
-            log.info(f"setting {kind} memory resources to {res['limits']['memory']}")
+                log.info(f"setting {kind} memory limit to {res['limits']['memory']}")
         if kps.cpu is not None:
             res = pod_spec['containers'][0].setdefault('resources', {})
             if kps.cpu.request:
@@ -75,7 +76,7 @@ def apply_pod_spec(kps, pod_spec: Dict[str, Any], predefined_pod_specs: Dict[str
                 log.info(f"setting {kind} CPU request to {kps.cpu.request}")
             if kps.cpu.limit:
                 res.setdefault('limits', {})['cpu'] = kps.cpu.limit
-                log.info(f"setting {kind} CPU limits to {kps.cpu.limit}")
+                log.info(f"setting {kind} CPU limit to {kps.cpu.limit}")
 
     return pod_spec
 

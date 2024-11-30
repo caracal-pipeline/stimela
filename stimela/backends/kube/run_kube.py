@@ -42,9 +42,6 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
         Any: return value (e.g. exit code) of content
     """
 
-    if not cab.image:
-        raise BackendError(f"kube backend requires cab.image to be set")
-
     kube = backend.kube
 
     args = cab.flavour.get_arguments(cab, params, subst, check_executable=False)
