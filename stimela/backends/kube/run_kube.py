@@ -142,15 +142,15 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
 
                 # apply pod type specifications
                 if kube.dask_cluster.worker_pod:
-                    print(kube.dask_cluster.worker_pod)
-                    print(dask_job_spec[0]["spec"]["cluster"]["spec"]["worker"]["spec"])
+                    dprint(1, kube.dask_cluster.worker_pod)
+                    dprint(1, dask_job_spec[0]["spec"]["cluster"]["spec"]["worker"]["spec"])
                     dask_job_spec[0]["spec"]["cluster"]["spec"]["worker"]["spec"] = \
                         apply_pod_spec(kube.dask_cluster.worker_pod, dask_job_spec[0]["spec"]["cluster"]["spec"]["worker"]["spec"],
                                                             kube.predefined_pod_specs, log, kind='worker')
-                    print("Worker pod success")
+                    dprint(1, "Worker pod success")
                 if kube.dask_cluster.scheduler_pod:
-                    print(kube.dask_cluster.scheduler_pod)
-                    print(dask_job_spec[0]["spec"]["cluster"]["spec"]["scheduler"]["spec"])
+                    dprint(1, kube.dask_cluster.scheduler_pod)
+                    dprint(1, dask_job_spec[0]["spec"]["cluster"]["spec"]["scheduler"]["spec"])
                     dask_job_spec[0]["spec"]["cluster"]["spec"]["scheduler"]["spec"] = \
                         apply_pod_spec(kube.dask_cluster.scheduler_pod, dask_job_spec[0]["spec"]["cluster"]["spec"]["scheduler"]["spec"],
                                                             kube.predefined_pod_specs, log, kind='scheduler')

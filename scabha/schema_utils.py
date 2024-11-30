@@ -194,10 +194,10 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
                 continue
 
             # sometimes required to convert ParameterPolicies object to dict
-            try:
-                merge_policies = {k: v for k, v in schema.policies.items() if v is not None}
-            except Exception as e:
+            if isinstance(schema.policies, ParameterPolicies):
                 merge_policies = {k: v for k, v in asdict(schema.policies).items() if v is not None}
+            else:
+                merge_policies = {k: v for k, v in schema.policies.items() if v is not None}
             # None should not take precedence in the merge
             policies = OmegaConf.merge(default_policies, merge_policies)
 
