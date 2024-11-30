@@ -129,24 +129,6 @@ class Cab(Cargo):
             else:
                 raise CabValidationError(f"cab {self.name}: invalid image setting")
 
-        # set name from command or image
-        if self.name is None:
-            self.name = self.command or self.image
-            
-        # split off first word of name to avoid non-alphanumeric characters
-        match = re.match("(\w+)", self.name)
-        if match:
-            self.name = match.group(1)
-        else:
-            self.name = "unnamed"
-
-        # check backend setting
-        if self.backend:
-            try:
-                OmegaConf.merge(StimelaBackendSchema, self.backend)
-            except OmegaConfBaseException as exc:
-                raise CabValidationError(f"cab {self.name}: invalid backend setting", exc)
-
         # setup wranglers
         self._wranglers = []
         for pattern, actions in self.management.wranglers.items():
@@ -154,6 +136,24 @@ class Cab(Cargo):
 
         # check flavours
         self.flavour = flavours.init_cab_flavour(self)
+
+        # set name from command or image
+        if self.name is None:
+            self.name = self.command or self.image
+
+        # split off first word of name to avoid non-alphanumeric characters
+        match = re.match("(\w+)", self.name)
+        if match:
+            self.name = match.group(1) or self.flavour.kind
+        else:
+            self.name = self.flavour.kind
+
+        # check backend setting
+        if self.backend:
+            try:
+                OmegaConf.merge(StimelaBackendSchema, self.backend)
+            except OmegaConfBaseException as exc:
+                raise CabValidationError(f"cab {self.name}: invalid backend setting", exc)
 
 
     def summary(self, params=None, recursive=True, ignore_missing=False):
