@@ -5,7 +5,7 @@ from scabha.exceptions import SchemaError
 from .cargo import Parameter, UNSET, _UNSET_DEFAULT, Cargo, ParameterPolicies
 from typing import List, Union, Optional, Callable, Dict, DefaultDict, Any
 from .basetypes import EmptyDictDefault, File, is_file_type
-from dataclasses import dataclass, make_dataclass, field
+from dataclasses import dataclass, make_dataclass, field, asdict
 from omegaconf import OmegaConf, MISSING
 from collections.abc import MutableSet, MutableSequence, MutableMapping
 from scabha import configuratt
@@ -125,9 +125,12 @@ def nested_schema_to_dataclass(nested: Dict[str, Dict], class_name: str, bases=(
 
 _atomic_types = dict(bool=bool, str=str, int=int, float=float)
 
-def _validate_list(text: str, element_type, schema, sep=",", brackets=True):
+def _validate_list(text: str, element_type, schema, sep=",", brackets=True, pass_missing_as_none=False):
     if not text:
-        return schema.default
+        if schema.default in (UNSET, _UNSET_DEFAULT) and pass_missing_as_none:
+            return None
+        else:
+            return schema.default
     if brackets:
         if text == "[]":
             return []
@@ -139,9 +142,12 @@ def _validate_list(text: str, element_type, schema, sep=",", brackets=True):
     except ValueError:
         raise click.BadParameter(f"can't convert to '{schema.dtype}'")
 
-def _validate_tuple(text: str, element_types, schema, sep=",", brackets=True):
+def _validate_tuple(text: str, element_types, schema, sep=",", brackets=True, pass_missing_as_none=False):
     if not text:
-        return schema.default
+        if schema.default in (UNSET, _UNSET_DEFAULT) and pass_missing_as_none:
+            return None
+        else:
+            return schema.default
     if brackets:
         if text == "[]":
             return []
@@ -169,7 +175,7 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
     if type(schemas) is str:
         schemas = OmegaConf.merge(OmegaConf.structured(Schema),
                                 OmegaConf.load(schemas))
-        
+
     # get default policies from argument or schemas
     if default_policies:
         default_policies = OmegaConf.merge(OmegaConf.structured(ParameterPolicies), default_policies)
@@ -187,7 +193,14 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
             if io is outputs and not (schema.is_file_type and not schema.implicit):
                 continue
 
-            policies = OmegaConf.merge(default_policies, schema.policies)
+            # sometimes required to convert ParameterPolicies object to dict
+            if isinstance(schema.policies, ParameterPolicies):
+                merge_policies = {k: v for k, v in asdict(schema.policies).items() if v is not None}
+            else:
+                merge_policies = {k: v for k, v in schema.policies.items() if v is not None}
+            # None should not take precedence in the merge
+            policies = OmegaConf.merge(default_policies, merge_policies)
+
             # impose default repeat policy of using a single argument for a list, i.e. X1,X2,X3
             if policies.repeat is None:
                 policies.repeat = ","
@@ -222,12 +235,14 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
                     elif policies.repeat == '[]':  # else assume [X,Y] or X,Y syntax
                         dtype = str
                         validator = lambda ctx, param, value, etype=dtype, schema=schema, _type=elem_type: \
-                            _validate_list(value, element_type=_type, schema=schema)
+                            _validate_list(value, element_type=_type, schema=schema,
+                                           pass_missing_as_none=policies.pass_missing_as_none)
                     elif policies.repeat is not None:  # assume XrepY syntax
                         dtype = str
                         validator = lambda ctx, param, value, etype=dtype, schema=schema, _type=elem_type: \
-                            _validate_list(value, element_type=_type, schema=schema, 
-                                           sep=policies.repeat, brackets=False)
+                            _validate_list(value, element_type=_type, schema=schema,
+                                           sep=policies.repeat, brackets=False,
+                                           pass_missing_as_none=policies.pass_missing_as_none)
                     else:
                         raise SchemaError(f"list-type parameter '{name}' does not have a repeat policy set")
                 elif tuple_match:
@@ -240,14 +255,16 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
                         validator = lambda ctx, param, value, etype=dtype, \
                                 schema=schema, _type=elem_types: \
                                 _validate_tuple(value, element_types=_type,
-                                            schema=schema)
+                                                schema=schema,
+                                                pass_missing_as_none=policies.pass_missing_as_none)
                     elif policies.repeat is not None:  # assume XrepY syntax
                         dtype = str
                         validator = lambda ctx, param, value, etype=dtype, \
                         schema=schema, _type=elem_types: \
                             _validate_tuple(value, element_types=_type,
                                             schema=schema,
-                                            sep=policies.repeat, brackets=False)
+                                            sep=policies.repeat, brackets=False,
+                                            pass_missing_as_none=policies.pass_missing_as_none)
                     else:
                         raise SchemaError(f"tuple-type parameter '{name}' does not have a repeat policy set")
                 else:
@@ -275,6 +292,8 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
                               metavar=schema.metavar, help=schema.info)
                 if not schema.default in (UNSET, _UNSET_DEFAULT) and not schema.suppress_cli_default:
                     kwargs['default'] = schema.default
+                elif schema.default in (UNSET, _UNSET_DEFAULT) and policies.pass_missing_as_none:
+                    kwargs['default'] = None
                 deco = click.option(*optnames, **kwargs)
             if decorator_chain is None:
                 decorator_chain = deco
@@ -289,13 +308,13 @@ class SchemaSpec:
     outputs: Dict[str, Parameter]
     libs: Dict[str, Any]
 
-def paramfile_loader(paramfiles: Union[File, List[File]], sources: Union[File, List[File]] = [], 
+def paramfile_loader(paramfiles: Union[File, List[File]], sources: Union[File, List[File]] = [],
                      schema_spec=None, use_cache=False) -> Dict:
     """Load a scabha-style parameter defintion using.
 
     Args:
         paramfiles (List[File]): Name of parameter definition files
-        sources (List[Dict], optional): Parameter definition dependencies 
+        sources (List[Dict], optional): Parameter definition dependencies
         (a.k.a files specified via_include)
 
     Returns:
@@ -304,18 +323,18 @@ def paramfile_loader(paramfiles: Union[File, List[File]], sources: Union[File, L
     args_defn = OmegaConf.structured(schema_spec or SchemaSpec)
     if isinstance(paramfiles, File):
         paramfiles = [paramfiles]
-    
+
     if isinstance(sources, File):
         sources = [sources]
-        
+
     srcs = []
     for src in sources:
         if not src.EXISTS:
             raise FileNotFoundError(f"Source file for either of {paramfiles} could not be found at {src.PATH}")
         srcs.append(configuratt.load(src, use_cache=use_cache)[0])
-        
+
     struct_args, _ = configuratt.load_nested(paramfiles, structured=args_defn,
                                             use_sources=srcs, use_cache=use_cache)
-    
+
     return OmegaConf.create(struct_args)
 

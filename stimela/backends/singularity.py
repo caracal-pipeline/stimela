@@ -27,6 +27,7 @@ class SingularityBackendOptions(object):
 
     # optional extra bindings
     bind_dirs: Dict[str, ReadWriteMode] = EmptyDictDefault()
+    env: Dict[str, str] = EmptyDictDefault()
     # @dataclass
     # class EmptyVolume(object):
     #     name: str
@@ -250,7 +251,9 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
             "exec", 
             "--containall",
             "--pwd", cwd]
-    
+    if backend.singularity.env:
+        args += ["--env", ",".join([f"{k}={v}" for k, v in backend.singularity.env.items()])]
+
     # initial set of mounts has cwd as read-write
     mounts = {cwd: True}
     # add extra binds

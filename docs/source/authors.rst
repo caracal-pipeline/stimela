@@ -19,4 +19,4 @@ Contributors
 * Athanaseus Ramaila
 * Lexy Andati
 * Simon Perkins
-* Landmman Bester
+* Landman Bester
