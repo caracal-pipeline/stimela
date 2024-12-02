@@ -142,7 +142,7 @@ class Cab(Cargo):
             self.name = self.command or self.image
 
         # split off first word of name to avoid non-alphanumeric characters
-        match = re.match("(\w+)", self.name)
+        match = re.match(r"(\w+)", self.name)
         if match:
             self.name = match.group(1) or self.flavour.kind
         else:
