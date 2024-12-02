@@ -52,7 +52,7 @@ class RunExecGroup(click.Group):
                 help="Add directory to _include paths. Can be given multiple times.")
 @click.option('--clear-cache', '-C', is_flag=True, 
                 help="Reset the configuration cache. First thing to try in case of strange configuration errors.")
-@click.option('--boring', '-b', is_flag=True, 
+@click.option('--boring', '-B', is_flag=True, 
                 help="Disables progress bar and any other fancy console outputs.")
 @click.option('--verbose', '-v', is_flag=True, 
               help='Be extra verbose in output.')
