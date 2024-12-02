@@ -221,8 +221,8 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
             elif dtype in ("MS", "File", "Directory"):
                 dtype = click.Path(exists=(io is schemas.inputs))
             else:
-                list_match = re.fullmatch("List\[(.*)\]", dtype)
-                tuple_match = re.fullmatch("Tuple\[(.*)\]", dtype)
+                list_match = re.fullmatch(r"List\[(.*)\]", dtype)
+                tuple_match = re.fullmatch(r"Tuple\[(.*)\]", dtype)
                 # List[x] type? Add validation callback to convert elements
                 if list_match:
                     elem_type = _atomic_types.get(list_match.group(1).strip(), str)

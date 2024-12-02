@@ -39,7 +39,7 @@ k8s_memory_units_in_bytes = {
 }
 
 def resolve_unit(quantity:str, units: Dict = k8s_memory_units_in_bytes):
-    match = re.fullmatch("^(\d+)(.*)$", quantity)
+    match = re.fullmatch(r"^(\d+)(.*)$", quantity)
     if not match or match.group(2) not in units:
         raise ApiException(f"invalid quantity '{quantity}'")
     return int(match.group(1))*units[match.group(2)]
