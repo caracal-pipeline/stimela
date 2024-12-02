@@ -171,10 +171,56 @@ class Schema(object):
 
 def clickify_parameters(schemas: Union[str, Dict[str, Any]],
                         default_policies: Dict[str, Any] = None):
+    """
+    Create command line parameters from a YAML schema. Uses the click
+    package.
+
+    Args:
+        schemas (str): The YAML filename for the parameter schema.
+        default_policies: Needs documentation.
+
+    Example:
+    =======
+    The following code defines a simple function that takes two parameters.
+    The schema is contained in the file hello/hello.yml. It contains
+
+        inputs:
+            count:
+                dtype: int
+                default: 1
+            name:
+                dtype: str
+                required: true
+
+        outputs:
+        {}
+
+        policies:
+            pass_missing_as_none: true
+
+    The corresponding python code uses clickify_parameters as 
+    a decorator:
+        import click
+
+        from scabha.schema_utils import clickify_parameters
+        from omegaconf import OmegaConf
+
+
+        @click.command()
+        @clickify_parameters('hello/hello.yml')
+        def hello(**kw):
+            # Simple program that greets NAME for a total of COUNT times.
+            opts = OmegaConf.create(kw)
+
+            for x in range(opts.count):
+                click.echo(f"Hello {opts.name}!")
+    Returns:
+        Nothing
+    """
 
     if type(schemas) is str:
         schemas = OmegaConf.merge(OmegaConf.structured(Schema),
-                                OmegaConf.load(schemas))
+                                  OmegaConf.load(schemas))
 
     # get default policies from argument or schemas
     if default_policies:
