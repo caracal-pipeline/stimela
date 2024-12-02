@@ -51,7 +51,7 @@ class ParameterPolicies(object):
 
     # skip this parameter
     skip: Optional[bool] = None
-    # if True, implicit parameters will be skipped 
+    # if True, implicit parameters will be skipped
     skip_implicits: Optional[bool] = None
 
     # if set, {}-substitutions on this paramater will not be done
@@ -162,7 +162,7 @@ class Parameter(object):
 
     # arbitrary metadata associated with parameter
     metadata: Dict[str, Any] = EmptyDictDefault()
-    
+
     # If True, when constructing a CLI from the schema, omit the default value (if any).
     # Useful when the tool constructs itw own default values.
     suppress_cli_default: bool = False
@@ -207,18 +207,18 @@ class Parameter(object):
                 self.category = ParameterCategory.Optional
         return self.category
 
-    @property 
+    @property
     def is_input(self):
         return self._is_input
 
-    @property 
+    @property
     def is_output(self):
         return not self._is_input
 
     @property
     def is_file_type(self):
         """True if parameter is a file or directory type"""
-        return self._is_file_type 
+        return self._is_file_type
 
     @property
     def is_file_list_type(self):
@@ -275,7 +275,7 @@ class Cargo(object):
                         value = value.strip()
                         default = default.strip()
                         if (default.startswith('"') and default.endswith('"')) or \
-                        (default.startswith("'") and default.endswith("'")): 
+                        (default.startswith("'") and default.endswith("'")):
                             default = default[1:-1]
                         schema['default'] = default
                     # does value end with "*"? Mark as required
@@ -376,7 +376,7 @@ class Cargo(object):
     @property
     def has_dynamic_schemas(self):
         return bool(self._dyn_schema)
-    
+
     def apply_dynamic_schemas(self, params, subst: Optional[SubstitutionNS]=None):
         # update schemas, if dynamic schema is enabled
         if self._dyn_schema:
@@ -443,7 +443,7 @@ class Cargo(object):
             schema.get_category()
 
         params = validate_parameters(params, self.inputs_outputs, defaults=self.defaults, subst=subst, fqname=self.fqname,
-                                        check_unknowns=True, check_required=False, 
+                                        check_unknowns=True, check_required=False,
                                         check_inputs_exist=False, check_outputs_exist=False,
                                         create_dirs=False, ignore_subst_errors=True)
 
@@ -460,12 +460,12 @@ class Cargo(object):
 
         # check inputs
         params1 = validate_parameters(params, self.inputs, defaults=self.defaults, subst=subst, fqname=self.fqname,
-                                                check_unknowns=False, check_required=not loosely, 
+                                                check_unknowns=False, check_required=not loosely,
                                                 check_inputs_exist=not loosely and not remote_fs, check_outputs_exist=False,
                                                 create_dirs=not loosely and not remote_fs)
         # check outputs
         params1.update(**validate_parameters(params, self.outputs, defaults=self.defaults, subst=subst, fqname=self.fqname,
-                                                check_unknowns=False, check_required=False, 
+                                                check_unknowns=False, check_required=False,
                                                 check_inputs_exist=not loosely and not remote_fs, check_outputs_exist=False,
                                                 create_dirs=not loosely and not remote_fs))
         return params1
@@ -482,8 +482,8 @@ class Cargo(object):
             if type(impl) is not Unresolved:
                 params[name] = self.inputs_outputs[name].implicit
         params.update(**validate_parameters(params, self.outputs, defaults=self.defaults, subst=subst, fqname=self.fqname,
-                                                check_unknowns=False, check_required=not loosely, 
-                                                check_inputs_exist=not loosely and not remote_fs, 
+                                                check_unknowns=False, check_required=not loosely,
+                                                check_inputs_exist=not loosely and not remote_fs,
                                                 check_outputs_exist=not loosely and not remote_fs,
                                                 ))
         return params
@@ -530,7 +530,7 @@ class Cargo(object):
                                 " ".join(info))
 
     def assign_value(self, key: str, value: Any, override: bool = False):
-        """assigns a parameter value to the cargo. 
+        """assigns a parameter value to the cargo.
         Recipe will override this to handle nested assignments. Cabs can't be assigned to
         (it will be handled by the wraping step)
         """
@@ -542,7 +542,7 @@ class Cargo(object):
             lines = []
         for name, value in params.items():
             if isinstance(value, (list, tuple)) and len(value) > 10:
-                sep1, sep2 = "()" if isinstance(value, tuple) else "[]" 
+                sep1, sep2 = "()" if isinstance(value, tuple) else "[]"
                 lines.append(f"  {name} = {sep1}{value[0]}, {value[1]}, ..., {value[-1]}{sep2}")
             else:
                 lines.append(f"  {name} = {value}")

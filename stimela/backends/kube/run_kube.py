@@ -42,9 +42,6 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
         Any: return value (e.g. exit code) of content
     """
 
-    if not cab.image:
-        raise BackendError(f"kube backend requires cab.image to be set")
-
     kube = backend.kube
 
     args = cab.flavour.get_arguments(cab, params, subst, check_executable=False)
@@ -80,10 +77,10 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
         objkind = event.involved_object.kind
         objname = event.involved_object.name
         if event.message.startswith("Error: ErrImagePull"):
-            raise BackendError(f"{objkind} '{objname}': failed to pull the image '{image_name}'. Preceding log messages may contain extra information.", 
+            raise BackendError(f"{objkind} '{objname}': failed to pull the image '{image_name}'. Preceding log messages may contain extra information.",
                                event.to_dict())
         if event.reason == "Failed":
-            raise BackendError(f"{objkind} '{objname}' reported a 'Failed' event. Preceding log messages may contain extra information.", 
+            raise BackendError(f"{objkind} '{objname}' reported a 'Failed' event. Preceding log messages may contain extra information.",
                                event.to_dict())
         # if event.reason == "ProvisioningFailed":
         #     raise BackendError(f"{objkind} '{objname}' reported a 'ProvisioningFailed' event. Preceding log messages may contain extra information.",
@@ -101,7 +98,7 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
         def dprint(level, *args, **kw):
             pass
 
-    statrep = StatusReporter(podname=podname, log=log, kube=kube, 
+    statrep = StatusReporter(podname=podname, log=log, kube=kube,
                              event_handler=k8s_event_handler)
 
     if kube.debug.pause_on_start:
@@ -112,12 +109,12 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
             command = f"cd {kube.dir}; {command}"
 
     try:
-        with declare_subtask(f"{os.path.basename(command_name)}.kube-init", status_reporter=statrep.update):
+        with declare_subtask(f"{cab.name}.kube-init", status_reporter=statrep.update):
             log.info(f"using image {image_name}")
 
             # create pod labels
-            pod_labels = dict(stimela_job=podname, 
-                                stimela_fqname=fqname, 
+            pod_labels = dict(stimela_job=podname,
+                                stimela_fqname=fqname,
                                 stimela_cab=os.path.basename(cab.name),
                                 **resource_labels)
 
@@ -133,7 +130,7 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                     namespace=namespace,
                     image=image_name,
                     pull_policy='Always' if kube.always_pull_images else 'IfNotPresent',
-                    memory_limit=kube.dask_cluster.memory_limit if kube.dask_cluster.memory_limit is not None 
+                    memory_limit=kube.dask_cluster.memory_limit if kube.dask_cluster.memory_limit is not None
                                     else kube.dask_cluster.worker_pod.memory and kube.dask_cluster.worker_pod.memory.limit,
                     nworkers=kube.dask_cluster.num_workers,
                     threads_per_worker=kube.dask_cluster.threads_per_worker,
@@ -145,10 +142,15 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
 
                 # apply pod type specifications
                 if kube.dask_cluster.worker_pod:
+                    dprint(1, kube.dask_cluster.worker_pod)
+                    dprint(1, dask_job_spec[0]["spec"]["cluster"]["spec"]["worker"]["spec"])
                     dask_job_spec[0]["spec"]["cluster"]["spec"]["worker"]["spec"] = \
                         apply_pod_spec(kube.dask_cluster.worker_pod, dask_job_spec[0]["spec"]["cluster"]["spec"]["worker"]["spec"],
                                                             kube.predefined_pod_specs, log, kind='worker')
+                    dprint(1, "Worker pod success")
                 if kube.dask_cluster.scheduler_pod:
+                    dprint(1, kube.dask_cluster.scheduler_pod)
+                    dprint(1, dask_job_spec[0]["spec"]["cluster"]["spec"]["scheduler"]["spec"])
                     dask_job_spec[0]["spec"]["cluster"]["spec"]["scheduler"]["spec"] = \
                         apply_pod_spec(kube.dask_cluster.scheduler_pod, dask_job_spec[0]["spec"]["cluster"]["spec"]["scheduler"]["spec"],
                                                             kube.predefined_pod_specs, log, kind='scheduler')
@@ -277,7 +279,7 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                     if kube.debug.save_spec:
                         log.info(f"saving dask job spec to {kube.debug.save_spec}")
                         open(kube.debug.save_spec, "wt").write(yaml.dump(dask_job_spec[0]))
-                    resp = custom_obj_api.create_namespaced_custom_object(group, version, 
+                    resp = custom_obj_api.create_namespaced_custom_object(group, version,
                                             namespace, plural , dask_job_spec[0])
                     dprint(2, "response", resp)
                     dask_job_created = resp
@@ -286,7 +288,7 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                     # wait for dask job to start up
                     while pod.check_status():
                         try:
-                            resp = custom_obj_api.get_namespaced_custom_object_status(group, version, 
+                            resp = custom_obj_api.get_namespaced_custom_object_status(group, version,
                                                     namespace, plural, name=dask_job_name, _request_timeout=(1, 1))
                         except (ConnectionError, HTTPError) as exc:
                             if connected:
@@ -329,7 +331,7 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                     # start port forwarding
                     if kube.dask_cluster.forward_dashboard_port:
                         log.info(f"starting port-forward process for http-dashboard to local port {kube.dask_cluster.forward_dashboard_port}")
-                        port_forward_proc = subprocess.Popen([kube.kubectl_path, 
+                        port_forward_proc = subprocess.Popen([kube.kubectl_path,
                             "port-forward", f"service/{dask_job_name}-scheduler",
                             f"{kube.dask_cluster.forward_dashboard_port}:http-dashboard"])
 
@@ -361,7 +363,7 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                 # do we need to chdir
                 log.info(f"running: {command}")
 
-        with declare_subtask(f"{os.path.basename(command_name)}.kube-run", status_reporter=statrep.update):
+        with declare_subtask(f"{cab.name}.kube-run", status_reporter=statrep.update):
             retcode = None
             connected = True
             last_log_timestamp = None
@@ -371,7 +373,7 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                     for entry in kube_api.read_namespaced_pod_log(name=podname, namespace=namespace, container="job",
                                 follow=True, timestamps=True,
     #                            since_time=last_log_timestamp,
-                                _preload_content=False, 
+                                _preload_content=False,
                                 _request_timeout=(kube.connection_timeout, kube.connection_timeout),
                             ).stream():
                         if not connected:
@@ -388,9 +390,9 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                             if key in seen_logs:
                                 continue
                             seen_logs.add(key)
-                            dispatch_to_log(log, content, command_name, "stdout", 
+                            dispatch_to_log(log, content, command_name, "stdout",
                                             output_wrangler=cabstat.apply_wranglers)
-                
+
                     # check for return code
                     resp = kube_api.read_namespaced_pod_status(name=podname, namespace=namespace)
                     statrep.connected = connected = True
