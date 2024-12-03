@@ -3,6 +3,7 @@ import glob
 import os.path
 import fnmatch
 import pyparsing
+import numpy as np
 pyparsing.ParserElement.enable_packrat()
 from pyparsing import *
 from pyparsing import common
@@ -156,12 +157,33 @@ class FunctionHandler(ResultsHandler):
         def make_range(*x):
             return list(range(*x))
         return self.evaluate_generic_callable(evaluator, "RANGE", make_range, args, min_args=1, max_args=3)
+    
+    def VALID(self, evaluator, args):
+        if len(args) != 1:
+            raise FormulaError(f"{'.'.join(evaluator.location)}: VALID() expects one argument, got {len(args)}")
+        try:
+            result = evaluator._evaluate_result(args[0], allow_unset=True)
+        except (TypeError, ValueError) as exc:
+            return False
+        if type(result) is UNSET:
+            return False
+        return result
 
     def MIN(self, evaluator, args):
         return self.evaluate_generic_callable(evaluator, "MIN", min, args, min_args=1)
 
     def MAX(self, evaluator, args):
         return self.evaluate_generic_callable(evaluator, "MAX", max, args, min_args=1)
+    
+    def IS_STR(self, evaluator, args):
+        def is_str(x):
+            return type(x) is str
+        return self.evaluate_generic_callable(evaluator, "IS_STR", is_str, args, min_args=1, max_args=1)
+    
+    def IS_NUM(self, evaluator, args):
+        def is_num(x):
+            return np.isscalar(x) and (np.isreal(x) or np.isscalar(x)) 
+        return self.evaluate_generic_callable(evaluator, "IS_NUM", is_num, args, min_args=1, max_args=1)
 
     def IF(self, evaluator, args):
         if len(args) < 3 or len(args) > 4:
@@ -300,7 +322,7 @@ def construct_parser():
     
     # functions
     functions = reduce(operator.or_, map(Keyword, ["IF", "IFSET", "GLOB", "EXISTS", "LIST", 
-        "BASENAME", "DIRNAME", "EXTENSION", "STRIPEXT", "MIN", "MAX", "RANGE", "NOSUBST", "SORT", "RSORT"]))
+        "BASENAME", "DIRNAME", "EXTENSION", "STRIPEXT", "MIN", "MAX", "IS_STR", "IS_NUM", "VALID", "RANGE", "NOSUBST", "SORT", "RSORT"]))
     # these functions take one argument, which could also be a sequence
     anyseq_functions = reduce(operator.or_, map(Keyword, ["GLOB", "EXISTS"]))
 
