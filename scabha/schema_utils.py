@@ -125,9 +125,9 @@ def nested_schema_to_dataclass(nested: Dict[str, Dict], class_name: str, bases=(
 
 _atomic_types = dict(bool=bool, str=str, int=int, float=float)
 
-def _validate_list(text: str, element_type, schema, sep=",", brackets=True, pass_missing_as_none=False):
+def _validate_list(text: str, element_type, schema, sep=",", brackets=True):
     if not text:
-        if schema.default in (UNSET, _UNSET_DEFAULT) and pass_missing_as_none:
+        if schema.default in (UNSET, _UNSET_DEFAULT):
             return None
         else:
             return schema.default
@@ -142,9 +142,9 @@ def _validate_list(text: str, element_type, schema, sep=",", brackets=True, pass
     except ValueError:
         raise click.BadParameter(f"can't convert to '{schema.dtype}'")
 
-def _validate_tuple(text: str, element_types, schema, sep=",", brackets=True, pass_missing_as_none=False):
+def _validate_tuple(text: str, element_types, schema, sep=",", brackets=True):
     if not text:
-        if schema.default in (UNSET, _UNSET_DEFAULT) and pass_missing_as_none:
+        if schema.default in (UNSET, _UNSET_DEFAULT):
             return None
         else:
             return schema.default
@@ -254,9 +254,22 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
             name = name.replace("_", "-").replace(".", "-")
             optname = f"--{name}"
             dtype = schema.dtype
+            if type(dtype) is str:
+                dtype = dtype.strip()
             validator = None
             multiple = False
             nargs = 1
+            # process optional
+            optional_match = re.fullmatch(r"Optional\[(.*)\]", dtype)
+            if optional_match:
+                str_dtype = dtype = optional_match.group(1).strip()
+            else:
+                str_dtype = str(dtype)
+            metavar = schema.metavar or str_dtype
+            is_unset = schema.default in (UNSET, _UNSET_DEFAULT)
+            kwargs = dict()
+            if not is_unset and not schema.suppress_cli_default and nargs != -1:
+                kwargs['default'] = schema.default
 
             # sort out option type. Atomic type?
             if dtype in _atomic_types:
@@ -273,44 +286,56 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
                 if list_match:
                     elem_type = _atomic_types.get(list_match.group(1).strip(), str)
                     if policies.repeat == 'list':
+                        if not policies.positional:
+                            raise SchemaError(f"click parameter '{name}': repeat=list policy is only supported for positional=true parameters")
                         nargs = -1
                         dtype = elem_type
+                        metavar = schema.metavar or f"{elem_type.__name__} ..."
                     elif policies.repeat == 'repeat':
                         multiple = True
                         dtype = elem_type
+                        metavar = schema.metavar or f"{elem_type.__name__}"
+                        # multiple options have a click default of () not None
+                        if 'default' not in kwargs:
+                            kwargs['default'] = None
                     elif policies.repeat == '[]':  # else assume [X,Y] or X,Y syntax
                         dtype = str
                         validator = lambda ctx, param, value, etype=dtype, schema=schema, _type=elem_type: \
                             _validate_list(value, element_type=_type, schema=schema,
-                                           pass_missing_as_none=policies.pass_missing_as_none)
+                                           brackets=False)
+                        metavar = schema.metavar or f"{elem_type.__name__},{elem_type.__name__},..."
                     elif policies.repeat is not None:  # assume XrepY syntax
                         dtype = str
+                        sep = policies.repeat
                         validator = lambda ctx, param, value, etype=dtype, schema=schema, _type=elem_type: \
                             _validate_list(value, element_type=_type, schema=schema,
-                                           sep=policies.repeat, brackets=False,
-                                           pass_missing_as_none=policies.pass_missing_as_none)
+                                           sep=sep, brackets=False)
+                        metavar = schema.metavar or f"{elem_type.__name__}{sep}{elem_type.__name__}{sep}..."
                     else:
                         raise SchemaError(f"list-type parameter '{name}' does not have a repeat policy set")
                 elif tuple_match:
                     elem_types = tuple(_atomic_types.get(t.strip(), str) for t in tuple_match.group(1).split(","))
-                    if policies.repeat == 'list' or policies.repeat == 'repeat':
+                    if policies.repeat == 'list':
                         nargs = len(elem_types)
                         dtype = elem_types
+                        metavar = schema.metavar or " ".join(t.__name__ for t in elem_types)
+                    elif policies.repeat == 'repeat':
+                        raise SchemaError(f"tuple-type parameter '{name}' has unsupported repeat policy 'repeat'")
                     elif policies.repeat == '[]':  # else assume [X,Y] or X,Y syntax
                         dtype = str
+                        metavar = schema.metavar or ",".join((t.__name__ for t in elem_types))
                         validator = lambda ctx, param, value, etype=dtype, \
                                 schema=schema, _type=elem_types: \
                                 _validate_tuple(value, element_types=_type,
-                                                schema=schema,
-                                                pass_missing_as_none=policies.pass_missing_as_none)
+                                                schema=schema, brackets=False)
                     elif policies.repeat is not None:  # assume XrepY syntax
                         dtype = str
+                        metavar = schema.metavar or policies.repeat.join((t.__name__ for t in elem_types))
                         validator = lambda ctx, param, value, etype=dtype, \
                         schema=schema, _type=elem_types: \
                             _validate_tuple(value, element_types=_type,
                                             schema=schema,
-                                            sep=policies.repeat, brackets=False,
-                                            pass_missing_as_none=policies.pass_missing_as_none)
+                                            sep=policies.repeat, brackets=False)
                     else:
                         raise SchemaError(f"tuple-type parameter '{name}' does not have a repeat policy set")
                 else:
@@ -327,19 +352,13 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
                 optnames.append(f"-{schema.abbreviation}")
 
             if policies.positional:
-                kwargs = dict(type=dtype, callback=validator, required=schema.required, nargs=nargs,
-                              metavar=schema.metavar)
-                if not schema.default in (UNSET, _UNSET_DEFAULT) and not schema.suppress_cli_default:
-                    kwargs['default'] = schema.default
+                kwargs.update(type=dtype, callback=validator, required=schema.required, nargs=nargs,
+                              metavar=metavar)
                 deco = click.argument(name, **kwargs)
             else:
-                kwargs = dict(type=dtype, callback=validator,
+                kwargs.update(type=dtype, callback=validator, 
                               required=schema.required, multiple=multiple,
-                              metavar=schema.metavar, help=schema.info)
-                if not schema.default in (UNSET, _UNSET_DEFAULT) and not schema.suppress_cli_default:
-                    kwargs['default'] = schema.default
-                elif schema.default in (UNSET, _UNSET_DEFAULT) and policies.pass_missing_as_none:
-                    kwargs['default'] = None
+                              metavar=metavar, help=schema.info)
                 deco = click.option(*optnames, **kwargs)
             if decorator_chain is None:
                 decorator_chain = deco
