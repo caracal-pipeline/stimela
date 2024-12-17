@@ -1,11 +1,14 @@
 #!/usr/bin/env python
-from scabha.schema_utils import clickify_parameters
 from typing import Tuple, List, Optional
 import sys
+import os.path
 import click
+from scabha.schema_utils import clickify_parameters
+
+schema_file = os.path.join(os.path.dirname(__file__), "test_clickify.yaml")
 
 @click.command()
-@clickify_parameters("test_clickify.yaml")
+@clickify_parameters(schema_file)
 def func(name: str, i: int, j: Optional[float] = 1,
          remainder: Optional[List[str]] = None, 
          k: float=2,
