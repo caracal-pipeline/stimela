@@ -6,7 +6,7 @@ import click
 
 @click.command()
 @clickify_parameters("test_clickify.yaml")
-def func(name: str, i: int, j: Optional[float] = None,
+def func(name: str, i: int, j: Optional[float] = 1,
          remainder: Optional[List[str]] = None, 
          k: float=2,
          tup: Optional[Tuple[int, str]] = None, 
@@ -14,7 +14,7 @@ def func(name: str, i: int, j: Optional[float] = None,
          files2: Optional[List[str]] = None,
          files3: Optional[List[str]] = None,
          output: str = None):
-    print(f"{name} {i} {j} {k} {tup}")
+    print(f"name:{name} i:{i} j:{j} k:{k} tup:{tup}")
     print(f"remainder: {remainder}")
     print(f"files1: {files1}")
     print(f"files2: {files2}")
