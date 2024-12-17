@@ -176,8 +176,13 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
     package.
 
     Args:
-        schemas (str): The YAML filename for the parameter schema.
-        default_policies: Needs documentation.
+        schemas (str or Dict): Either the YAML filename from which the parameter schema is loaded,
+            containing inputs, outputs and an [optional] policies section,
+            or a DictConfig object containing inputs/outputs/policies.
+            See https://stimela.readthedocs.io/en/latest/reference/schema_ref.html
+        default_policies: default policies applied to the schema, overrides the policies section
+            if supplied. See ParameterPolicies in scabha/cargo.py, and
+            https://stimela.readthedocs.io/en/latest/reference/policies.html  
 
     Example:
     =======
@@ -195,9 +200,6 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
         outputs:
         {}
 
-        policies:
-            pass_missing_as_none: true
-
     The corresponding python code uses clickify_parameters as 
     a decorator:
         import click
@@ -208,12 +210,9 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
 
         @click.command()
         @clickify_parameters('hello/hello.yml')
-        def hello(**kw):
-            # Simple program that greets NAME for a total of COUNT times.
-            opts = OmegaConf.create(kw)
-
-            for x in range(opts.count):
-                click.echo(f"Hello {opts.name}!")
+        def hello(count: int = 1, name: Optional[str] = None):
+            for x in range(count):
+                click.echo(f"Hello {name}!")
     Returns:
         Nothing
     """
