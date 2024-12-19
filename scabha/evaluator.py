@@ -3,7 +3,6 @@ import glob
 import os.path
 import fnmatch
 import pyparsing
-import numpy as np
 pyparsing.ParserElement.enable_packrat()
 from pyparsing import *
 from pyparsing import common
@@ -182,7 +181,7 @@ class FunctionHandler(ResultsHandler):
     
     def IS_NUM(self, evaluator, args):
         def is_num(x):
-            return np.isscalar(x) and (np.isreal(x) or np.isscalar(x)) 
+            return isinstance(x, (bool, int, float, complex)) 
         return self.evaluate_generic_callable(evaluator, "IS_NUM", is_num, args, min_args=1, max_args=1)
 
     def IF(self, evaluator, args):
