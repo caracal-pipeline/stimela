@@ -617,7 +617,7 @@ class Step:
                 level = logging.WARNING if self.skip else logging.ERROR
                 if not exc.logged:
                     if type(exc) is SubstitutionErrorList:
-                        self.log_exception(StepValidationError(f"unresolved {{}}-substitution(s) in inputs:", exc.nested), severity=severity)
+                        self.log_exception(StepValidationError(f"unresolved {{}}-substitution(s) in outputs:", exc.nested), severity=severity)
                         # for err in exc.errors:
                         #     self.log.log(level, f"  {err}")
                     else:
