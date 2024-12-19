@@ -1,0 +1,42 @@
+inputs:
+  name: 
+    dtype: str
+    required: true
+    policies: 
+      positional: true
+  i: 
+    dtype: int 
+    required: true
+    policies: 
+      positional: true
+  remainder:
+    dtype: List[str]
+    policies: 
+      positional: true
+      repeat: list
+  j: 
+    dtype: float
+  k: 
+    dtype: float
+    default: 2
+  tup: 
+    dtype: Optional[Tuple[int, str]] 
+  files1: 
+    dtype: List[str]
+    policies: 
+      repeat: ' '
+  files2: 
+    dtype: List[File]
+    required: false
+    policies: 
+      repeat: repeat
+  files3: 
+    dtype: List[File]
+    required: false
+    policies: 
+      repeat: '[]'
+
+outputs:
+  output:
+    dtype: File
+    required: false
