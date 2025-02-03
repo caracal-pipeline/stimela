@@ -14,6 +14,7 @@ def test_parser():
             "a.b + -b.c",
             "a.b <= 0",
             "a.b", 
+            # "a.b[c.d]",
             "IFSET(a.b)",
                 ]:
         print(f"\n\n\n=====================\nExpression: {string}\n")
