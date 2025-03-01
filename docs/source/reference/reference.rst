@@ -15,5 +15,8 @@ Stimela reference
    cabdefs
    schema_ref
    policies
+   clickify
+   
+
    
 

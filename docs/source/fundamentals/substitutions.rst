@@ -143,7 +143,9 @@ As we saw above, a parameter value starting with ``=`` invokes the formula parse
 
 * the keyword ``UNSET``. A formula evaluating to ``UNSET`` will result in that parameter becoming unset.
 
-* the keyword ``EMPTY``, evaluating to an empty string
+* the keyword ``EMPTY``, evaluating to an empty string.
+
+* item lookup, e.g. ``current.foo[item]``. The item may be any valid expression.
 
 * built-in functions. The list of available functions is growing with every new stimela version; at time of writing the following are available: 
 
@@ -173,9 +175,9 @@ As we saw above, a parameter value starting with ``=`` invokes the formula parse
 
   * ``IS_STR(arg)`` true if the argument is a string type.
 
-  * ``VALID(arg)`` true if the argument is valid, and evaluates to non-zero. This is a useful pattern when dealing 
-  with parameters of a mixed type (that can be e.g. strings or numbers). For example, ``recipe.a > 0`` would throw an 
-  error is ``a`` is a string, but ``VALID(recipe.a > 0)`` would return False in this case.
+  * ``VALID(arg)`` true if the argument is valid, and evaluates to non-zero. This is a useful pattern when dealing with parameters of a mixed type (that can be e.g. strings or numbers). For example, ``recipe.a > 0`` would throw an  error is ``a`` is a string, but ``VALID(recipe.a > 0)`` would return False in this case.
+
+  * ``GETITEM(list, item)`` equivalent to ``list[item]``.
   
 
 As should be evident from the list above, certain functions expect arguments of a particular type (for example, the pathname manipulation functions expect strings). 
