@@ -121,8 +121,8 @@ class BinaryHandler(ResultsHandler):
         return ret
 
 class GetItemHandler(ResultsHandler):
-    def __init__(self, base, index):
-        self.base, self.index = base, index
+    def __init__(self, base):
+        self.base, self.index = base[0], base[1]
 
     @staticmethod
     def pa(s, l, t):
@@ -321,8 +321,8 @@ class FunctionHandler(ResultsHandler):
 def construct_parser():
     lparen = Literal("(").suppress()
     rparen = Literal(")").suppress()
-    lbrack = Keyword("[").suppress()
-    rbrack = Keyword("]").suppress()
+    lbrack = Literal("[").suppress()
+    rbrack = Literal("]").suppress()
     comma = Literal(",").suppress()
     period = Literal(".").suppress()
     string = (QuotedString('"') | QuotedString("'"))("constant")
@@ -355,9 +355,8 @@ def construct_parser():
                     Opt(delimited_list(expr|SELF)) + 
                     rparen).setParseAction(FunctionHandler.pa)
 
-    getitem = Group(expr + lbrack + expr + rbrack).setParseAction(GetItemHandler.pa)
-    
-    operators = (
+    operators = [
+        ((lbrack + expr + rbrack), 1, opAssoc.LEFT, GetItemHandler.pa),
         (Literal("**"), 2, opAssoc.LEFT, BinaryHandler.pa), 
         (Literal("-")|Literal("+")|Literal("~"), 1, opAssoc.RIGHT, UnaryHandler.pa), 
         (Literal("*")|Literal("//")|Literal("/")|Literal("%"), 2, opAssoc.LEFT, BinaryHandler.pa),
@@ -370,9 +369,9 @@ def construct_parser():
         (CaselessKeyword("in")|CaselessKeyword("not in"), 2, opAssoc.LEFT, BinaryHandler.pa),
         (CaselessKeyword("not"), 1, opAssoc.RIGHT, UnaryHandler.pa),
         (CaselessKeyword("and")|CaselessKeyword("or"), 2, opAssoc.LEFT, BinaryHandler.pa),
-    )
+    ]
 
-    infix = infix_notation(atomic_value | function_call | function_call_anyseq | nested_field, # | getitem,
+    infix = infix_notation(atomic_value | function_call | function_call_anyseq | nested_field,
                             operators)("subexpression")
 
     expr <<= infix
