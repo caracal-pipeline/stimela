@@ -1,0 +1,34 @@
+cabs:
+  touch:
+    command: touch
+    inputs:
+      conditional-file:
+        dtype: File
+        must_exist: false
+        policies:
+          skip: true  # not passed to command
+    outputs:
+      file: 
+        dtype: File
+        policies:
+          positional: true
+
+recipe:
+  steps:
+    touch1:
+      cab: touch
+      params:
+        file: test_conditional_skips1.tmp
+      skip_if_outputs: exist
+
+    touch2:
+      cab: touch
+      params:
+        conditional-file: test_conditional_skips4.tmp
+        file: test_conditional_skips2.tmp
+      skip_if_outputs: fresh
+
+    touch3:
+      cab: touch
+      params:
+        file: test_conditional_skips3.tmp

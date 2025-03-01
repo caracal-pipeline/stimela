@@ -487,11 +487,25 @@ class Step:
                     raise StepValidationError(f"step '{self.name}': invalid inputs: {join_quote(invalid)}", log=self.log)
 
             ## check if we need to skip based on existing/fresh file outputs
+            skip_if_outputs = self.skip_if_outputs
+            # don't check if skipping anyway
+            if skip:
+                skip_if_outputs = None
+            # don't check if remote filesystem
+            elif backend_runner.is_remote_fs:
+                parent_log_info(f"ignoring skip_if_outputs: {skip_if_outputs} because backend has remote filesystem")
+                skip_if_outputs = None
+            # don't check if force-disabled
+            elif (skip_if_outputs == OUTPUTS_EXISTS and stimela.CONFIG.opts.disable_skips.exist) or \
+                    (skip_if_outputs == OUTPUTS_FRESH and stimela.CONFIG.opts.disable_skips.fresh):
+                parent_log_info(f"ignoring skip_if_outputs: {skip_if_outputs} because it has been force-disabled")
+                skip_if_outputs = None
+
             ## if skip on fresh outputs is in effect, find mtime of most recent input 
-            if not backend_runner.is_remote_fs and not skip and self.skip_if_outputs:
+            if skip_if_outputs:
                 # max_mtime will remain 0 if we're not echecking for freshness, or if there are no file-type inputs
                 max_mtime, max_mtime_path = 0, None
-                if self.skip_if_outputs == OUTPUTS_FRESH:
+                if skip_if_outputs == OUTPUTS_FRESH:
                     parent_log_info("checking if file-type outputs of step are fresh")
                     for name, value in params.items():
                         schema = self.inputs_outputs[name]

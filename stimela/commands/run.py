@@ -169,8 +169,12 @@ def load_recipe_files(filenames: List[str]):
                 help="""explicitly skips steps wth the given tags.
                 Use commas, or give multiple times for multiple tags.""")
 @click.option("-e", "--enable-step", "enable_steps", metavar="STEP(s)", multiple=True,
-                help="""Force-enable steps even if the recipe marks them as skipped. Use commas, or give multiple times
+                help="""force-enable steps even if the recipe marks them as skipped. Use commas, or give multiple times
                 for multiple steps.""")
+@click.option("-f", "--disable-fresh-skips", "disable_fresh_skips",  is_flag=True,
+                help="""forces execution of steps with a skip_if_outputs: fresh property.""")
+@click.option("-F", "--disable-exist-skips", "disable_exist_skips",  is_flag=True,
+                help="""forces execution of steps with a skip_if_outputs: exist property.""")
 @click.option("-c", "--config", "config_equals", metavar="X.Y.Z=VALUE", nargs=1, multiple=True,
                 help="""tweak configuration options.""")
 @click.option("-a", "--assign", metavar="PARAM VALUE", nargs=2, multiple=True,
@@ -202,6 +206,7 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
     config_assign: List[Tuple[str, str]] = [],
     step_ranges: List[str] = [], tags: List[str] = [], skip_tags: List[str] = [], enable_steps: List[str] = [],
     skip_ranges: List[str] = [],
+    disable_fresh_skips=False, disable_exist_skips=False,
     build=False, rebuild=False, build_skips=False,
     enable_native=False,
     enable_singularity=False,
@@ -213,6 +218,11 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
     errcode = 0
     recipe_or_cab = None
     files_to_load = []
+
+    if disable_fresh_skips:
+        stimela.CONFIG.opts.disable_skips.fresh = True
+    if disable_exist_skips:
+        stimela.CONFIG.opts.disable_skips.exist = True
 
     def convert_value(value):
         if value == "=UNSET":
