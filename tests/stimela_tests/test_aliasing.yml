@@ -89,4 +89,4 @@ recipe:
             params:
               c: 2
       params:
-        a: '{info.fqname}'
+        a: '{self.fqname}'
