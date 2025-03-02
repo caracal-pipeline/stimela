@@ -55,6 +55,8 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
     tmp_name = session_user + "--" + fqname.replace(".", "--").replace("_", "--")
     token_hex = secrets.token_hex(4)
     podname = tmp_name[0:50] + "--" + token_hex
+    # K8s don't like uppercase
+    podname = podname.lower()
 
     namespace, kube_api, custom_obj_api = get_kube_api()
 
