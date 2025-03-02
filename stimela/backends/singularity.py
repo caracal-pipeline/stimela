@@ -115,6 +115,16 @@ def build(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBacke
         str: path to corresponding singularity image
     """
 
+    # ensure image directory exists
+    if os.path.exists(backend.singularity.image_dir):
+        if not os.path.isdir(backend.singularity.image_dir):
+            raise BackendError(f"invalid singularity image directory {backend.singularity.image_dir}")
+    else:
+        try:
+            os.mkdir(backend.singularity.image_dir)
+        except OSError as exc:
+            raise BackendError(f"failed to create singularity image directory {backend.singularity.image_dir}: {exc}")
+
     image_name, simg_path = get_image_info(cab, backend)
 
     # this is True if we're allowed to build missing images
