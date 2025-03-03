@@ -761,7 +761,8 @@ class Recipe(Cargo):
         subst = SubstitutionNS()
         info = SubstitutionNS(fqname=self.fqname, taskname=self.fqname, label='', label_parts=[], suffix='')
         # mutable=False means these sub-namespaces are not subject to {}-substitutions
-        subst._add_('info', info.copy(), nosubst=True)
+        subst._add_('info', info, nosubst=True)
+        subst._add_('self', info, nosubst=True)
         subst._add_('config', self.config, nosubst=True) 
         subst._add_('steps', {}, nosubst=True)
         subst._add_('previous', {}, nosubst=True)
@@ -777,7 +778,9 @@ class Recipe(Cargo):
                 subst._add_('parent', subst_outer.recipe, nosubst=True)
         else:
             subst_outer = SubstitutionNS()
-            subst_outer._add_('info', info.copy(), nosubst=True)
+            info1 = info.copy()
+            subst_outer._add_('info', info1, nosubst=True)
+            subst_outer._add_('self', info1, nosubst=True)
             subst_outer._add_('config', self.config, nosubst=True) 
             subst_outer.current = subst.recipe
 
@@ -954,6 +957,7 @@ class Recipe(Cargo):
             subst = SubstitutionNS()
             info = SubstitutionNS(fqname=self.fqname)
             subst._add_('info', info, nosubst=True)
+            subst._add_('self', info, nosubst=True)
             subst._add_('config', self.config, nosubst=True) 
 
             subst.recipe = SubstitutionNS(**params)
@@ -1196,7 +1200,9 @@ class Recipe(Cargo):
 
         info = SubstitutionNS(fqname=self.fqname, label='', label_parts=[], suffix='', taskname=taskname)
         # nosubst=True means these sub-namespaces are not subject to {}-substitutions
-        subst._add_('info', info.copy(), nosubst=True)
+        info1 = info.copy()
+        subst._add_('info', info1, nosubst=True)
+        subst._add_('self', info1, nosubst=True)
         subst._add_('config', self.config, nosubst=True)
         subst._add_('steps', {}, nosubst=True)
         subst._add_('previous', {}, nosubst=True)
