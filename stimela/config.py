@@ -41,7 +41,12 @@ import stimela.backends
 class StimelaProfilingOptions(object):
     print_depth: int = 9999
     unroll_loops: bool = False
-    
+
+@dataclass
+class StimelaDisableSkipOptions(object):
+    fresh: bool = False
+    exist: bool = False
+
 @dataclass
 class StimelaOptions(object):
     backend: StimelaBackendOptions = EmptyClassDefault(StimelaBackendOptions)
@@ -52,8 +57,8 @@ class StimelaOptions(object):
     runtime: Dict[str, Any] = EmptyDictDefault()    
     ## Profiling options
     profile: StimelaProfilingOptions = EmptyClassDefault(StimelaProfilingOptions)
-    
-
+    ## Disables skip_if_outputs checks
+    disable_skips: StimelaDisableSkipOptions = EmptyClassDefault(StimelaDisableSkipOptions)
 
 def DefaultDirs():
     return field(default_factory=lambda:dict(indir='.', outdir='.'))

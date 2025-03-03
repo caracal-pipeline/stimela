@@ -15,6 +15,7 @@ def test_parser():
             "a.b <= 0",
             "a.b", 
             "IFSET(a.b)",
+            "a.b[c.d]",
                 ]:
         print(f"\n\n\n=====================\nExpression: {string}\n")
         a = expr.parseString(string, parse_all=True)

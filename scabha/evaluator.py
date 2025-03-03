@@ -120,6 +120,24 @@ class BinaryHandler(ResultsHandler):
             i += incr
         return ret
 
+class GetItemHandler(ResultsHandler):
+    def __init__(self, base):
+        self.base, self.index = base[0], base[1]
+
+    @staticmethod
+    def pa(s, l, t):
+        # https://stackoverflow.com/questions/4571441/recursive-expressions-with-pyparsing
+        return GetItemHandler(*t)
+
+    def evaluate(self, evaluator):
+        base = evaluator._evaluate_result(self.base)
+        index = evaluator._evaluate_result(self.index)
+        if type(base) is UNSET:
+            return base
+        if type(index) is UNSET:
+            return index
+        return base[index]
+
 class FunctionHandler(ResultsHandler):
     def __init__(self, func, *args):
         self.func, self.args = func, args
@@ -174,6 +192,11 @@ class FunctionHandler(ResultsHandler):
     def MAX(self, evaluator, args):
         return self.evaluate_generic_callable(evaluator, "MAX", max, args, min_args=1)
     
+    def GETITEM(self, evaluator, args):
+        def get_item(x, y):
+            return x[y]
+        return self.evaluate_generic_callable(evaluator, "GETITEM", get_item, args, min_args=2, max_args=2)
+
     def IS_STR(self, evaluator, args):
         def is_str(x):
             return type(x) is str
@@ -298,8 +321,8 @@ class FunctionHandler(ResultsHandler):
 def construct_parser():
     lparen = Literal("(").suppress()
     rparen = Literal(")").suppress()
-    lbrack = Keyword("[").suppress()
-    rbrack = Keyword("]").suppress()
+    lbrack = Literal("[").suppress()
+    rbrack = Literal("]").suppress()
     comma = Literal(",").suppress()
     period = Literal(".").suppress()
     string = (QuotedString('"') | QuotedString("'"))("constant")
@@ -320,7 +343,7 @@ def construct_parser():
     expr = Forward()
     
     # functions
-    functions = reduce(operator.or_, map(Keyword, ["IF", "IFSET", "GLOB", "EXISTS", "LIST", 
+    functions = reduce(operator.or_, map(Keyword, ["IF", "IFSET", "GLOB", "EXISTS", "LIST", "GETITEM",
         "BASENAME", "DIRNAME", "EXTENSION", "STRIPEXT", "MIN", "MAX", "IS_STR", "IS_NUM", "VALID", "RANGE", "NOSUBST", "SORT", "RSORT"]))
     # these functions take one argument, which could also be a sequence
     anyseq_functions = reduce(operator.or_, map(Keyword, ["GLOB", "EXISTS"]))
@@ -331,7 +354,9 @@ def construct_parser():
     function_call = Group(functions + lparen + 
                     Opt(delimited_list(expr|SELF)) + 
                     rparen).setParseAction(FunctionHandler.pa)
-    operators = (
+
+    operators = [
+        ((lbrack + expr + rbrack), 1, opAssoc.LEFT, GetItemHandler.pa),
         (Literal("**"), 2, opAssoc.LEFT, BinaryHandler.pa), 
         (Literal("-")|Literal("+")|Literal("~"), 1, opAssoc.RIGHT, UnaryHandler.pa), 
         (Literal("*")|Literal("//")|Literal("/")|Literal("%"), 2, opAssoc.LEFT, BinaryHandler.pa),
@@ -344,7 +369,7 @@ def construct_parser():
         (CaselessKeyword("in")|CaselessKeyword("not in"), 2, opAssoc.LEFT, BinaryHandler.pa),
         (CaselessKeyword("not"), 1, opAssoc.RIGHT, UnaryHandler.pa),
         (CaselessKeyword("and")|CaselessKeyword("or"), 2, opAssoc.LEFT, BinaryHandler.pa),
-    )
+    ]
 
     infix = infix_notation(atomic_value | function_call | function_call_anyseq | nested_field,
                             operators)("subexpression")
@@ -616,11 +641,7 @@ class Evaluator(object):
                 if type(value) is str:
                     try:
                         new_value = self.evaluate(value, sublocation=sublocation + [name])
-                    except AttributeError as err:
-                        if raise_substitution_errors:
-                            raise
-                        new_value = Unresolved(errors=[err])
-                    except SubstitutionError as err:
+                    except (AttributeError, SubstitutionError, ParserError, FormulaError) as err:
                         if raise_substitution_errors:
                             raise
                         new_value = Unresolved(errors=[err])

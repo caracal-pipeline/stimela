@@ -138,6 +138,8 @@ def test_formulas():
         u = [3, 1, 2],
         u1 = '=SORT(current.u)',
         u2 = '=RSORT(current.u)',
+        u3 = '=GETITEM(current.u, 1)',
+        u4 = '=current.u[previous.x]'
     )
     ns._add_("current", current)
     

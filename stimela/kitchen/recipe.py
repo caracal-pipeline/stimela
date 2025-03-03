@@ -928,7 +928,7 @@ class Recipe(Cargo):
                 else:
                     raise ParameterValidationError(f"recipe '{self.name}': for_loop.over={self.for_loop.over} is unset")
                 if strict and isinstance(values, Unresolved):
-                    raise ParameterValidationError(f"recipe '{self.name}': for_loop.over={self.for_loop.over} is unresolved")
+                    raise ParameterValidationError(f"recipe '{self.name}': for_loop.over={self.for_loop.over} is unresolved", [values])
             else:
                 if self._for_loop_values is None:
                     raise ParameterValidationError(f"recipe '{self.name}': for_loop.over is unset")
