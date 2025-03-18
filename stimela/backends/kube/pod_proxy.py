@@ -154,7 +154,7 @@ class PodProxy(object):
         self.add_init_container_mount(cont, volume_name, mount)
 
     def dispatch_container_logs(self, style: str, job: bool = True):
-        containers = self.pod_spec['initContainers']
+        containers = self.pod_spec.get('initContainers', [])
         if job:
             containers += self.pod_spec['containers']
         for cont in containers:
@@ -198,7 +198,7 @@ class PodProxy(object):
             cont = self.step_init_container
             for path in mkdir_list:
                 error = f"VALIDATION ERROR: mkdir {path} failed"
-                self.add_init_container_command(cont, f"if mkdir -p {path}; then echo Created directory {path}; else echo {error}; exit 1; fi; ")
+                self.add_init_container_command(cont, f"if ! test -e '{path}'; then if mkdir -p {path}; then echo Created directory {path}; else echo {error}; exit 1; fi; fi;")
             for path in must_exist_list:
                 error = f"VALIDATION ERROR: {path} doesn\\'t exist"
                 self.add_init_container_command(cont, f"if test -e '{path}'; then echo Checking {path}: exists; else echo {error}; exit 1; fi; ")

@@ -294,7 +294,10 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                         if not connected:
                             log.info("connection resumed", extra=dict(style="green"))
                             connected = statrep.connected = True
-                        job_status = 'status' in resp and resp['status']['jobStatus']
+                        if 'status' in resp:
+                            job_status = resp['status']['jobStatus'] 
+                        else:
+                            job_status = 'Starting'  # presumably...
                         statrep.set_main_status(job_status)
                         # get podname from job once it's running
                         if job_status == 'Running' or job_status.startswith('Success'):
@@ -372,7 +375,10 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
                             connected = True
                         # log.info(f"got [blue]{entry.decode()}[/blue]")
                         for line in entry.decode().rstrip().split("\n"):
-                            timestamp, content = line.split(" ", 1)
+                            if " " not in line:
+                                timestamp, content = line, ''
+                            else:
+                                timestamp, content = line.split(" ", 1)
                             key = timestamp, hash(content)
                             last_log_timestamp = timestamp
                             if key in seen_logs:
@@ -418,7 +424,7 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
             if retcode and cabstat.success is not True:
                 cabstat.declare_failure(f"{command_name} returns error code {retcode} after {elapsed()}")
                 if retcode == 137:
-                    log.error(f"the pod was killed with an out-of-memory condition (backend.kube.memory setting is {kube.memory})")
+                    log.error(f"the pod was killed with an out-of-memory condition (backend.kube.job_pod.memory setting is {kube.job_pod.memory})")
             else:
                 log.info(f"{command_name} returns exit code {retcode} after {elapsed()}")
 
