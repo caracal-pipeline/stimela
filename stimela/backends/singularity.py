@@ -35,15 +35,13 @@ class SingularityBackendOptions(object):
     executable: Optional[str] = None
     remote_only: bool = False      # if True, won't look for singularity on local system -- useful in combination with slurm wrapper
 
+    contain: bool = True           # if True, runs with --contain
+    containall: bool = False       # if True, runs with --containall
+    bind_tmp: bool = True          # if True, implicitly binds an empty /tmp directory
+
     # optional extra bindings
     bind_dirs: Dict[str, BindDir] = EmptyDictDefault()
     env: Dict[str, str] = EmptyDictDefault()
-    # @dataclass
-    # class EmptyVolume(object):
-    #     name: str
-    #     mount: str
-
-    # tmp_dirs: List[EmptyVolume] = EmptyListDefault()
     
 
 SingularityBackendSchema = OmegaConf.structured(SingularityBackendOptions)
@@ -269,8 +267,11 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     cwd = os.getcwd()
     args = [backend.singularity.executable or BINARY, 
             "exec", 
-            "--containall",
             "--pwd", cwd]
+    if backend.singularity.containall:
+        args.append("--containall")
+    elif backend.singularity.contain:
+        args.append("--contain")
     if backend.singularity.env:
         args += ["--env", ",".join([f"{k}={v}" for k, v in backend.singularity.env.items()])]
 
@@ -334,7 +335,18 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
         # redo mounts as a list of (container_path, source_path, rw)
         source_to_containter_path = {src: dest for dest, src in container_to_host_path.items()}
+        # make list of mounts
         mounts = [(source_to_containter_path.get(src, src), src, rw) for src, rw in mounts.items()]
+        # add implicit /tmp mount
+        if backend.singularity.bind_tmp:
+            for target, _, _ in mounts:
+                if target == "/tmp":
+                    log.info("/tmp directory already bound, not adding an explicit binding")
+                    break
+            else:
+                tmpdir = TemporaryDirectory()
+                exit_stack.enter_context(tmpdir)
+                mounts.append(("/tmp", tmpdir.name, True))
 
         # sort mount paths before iterating -- this ensures that parent directories come first
         # (singularity doesn't like it if you specify a bind of a subdir before a bind of a parent) 
