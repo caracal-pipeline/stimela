@@ -79,8 +79,9 @@ class CasaTaskFlavour(_CallableFlavour):
         # this works for both python 2.7 and 3.x
         code = f"{command}(**{pass_params})"
 
-        args =  wrapper + casa.strip().split() + list(casa_opts) + ["-c", code]
-        return args
+        args =  wrapper + casa.strip().split() + list(casa_opts)
+        
+        return args + ["-c", code], args + ["-c", "..."]
     
 
 

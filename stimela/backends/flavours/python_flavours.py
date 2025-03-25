@@ -73,8 +73,6 @@ class PythonCallableFlavour(_CallableFlavour):
     interpreter_binary: str = "python"
     # Full command used to launch interpreter. {python} gets substituted for the interpreter path
     interpreter_command: str = "{python} -u"
-    # don't log full command by default, as that's full of code
-    log_full_command: bool = False
 
     def finalize(self, cab: Cab):
         super().finalize(cab)
@@ -142,8 +140,7 @@ _result = {py_function}(**_inputs)
         """
 
         args = get_python_interpreter_args(cab, subst, virtual_env=virtual_env)
-        args += ["-c", code, params_string]
-        return args
+        return args + ["-c", code, params_string], args + ["-c", "..."]
 
 
 @dataclass
@@ -165,8 +162,6 @@ class PythonCodeFlavour(_BaseFlavour):
     interpreter_binary: str = "python"
     # Full command used to launch interpreter. {python} gets substituted for the interpreter path
     interpreter_command: str = "{python} -u"
-    # don't log full command by default, as that's full of code
-    log_full_command: bool = False
 
     def finalize(self, cab: Cab):
         super().finalize(cab)
@@ -222,5 +217,4 @@ class PythonCodeFlavour(_BaseFlavour):
 
         # form up interpreter invocation
         args = get_python_interpreter_args(cab, subst, virtual_env=virtual_env)
-        args += ["-c", pre_command + command + post_command, params_arg]
-        return args
+        return args + ["-c", pre_command + command + post_command, params_arg], args + ["-c", "..."]

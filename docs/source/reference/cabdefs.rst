@@ -173,9 +173,8 @@ An alternative way to specify flavours is to make ``flavour`` a sub-section, and
                 kind: casa-task
                 path: /usr/local/bin/casa
                 opts: [--nologger]
-                log_full_command: true
 
-The above tells Stimela to use a non-default CASA intepreter, and to pass it specific extra options on the command line. The ``log_full_command: true`` setting will cause the complete command line, including the encoded inputs (as opposed to just the command name) to be logged when the cab is invoked, which can be useful for debugging.
+The above tells Stimela to use a non-default CASA intepreter, and to pass it specific extra options on the command line. 
 
 Note that the CASA path and option settings can also be defined globally via :ref:`Stimela configuration <options>`.
 

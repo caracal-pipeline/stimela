@@ -1,23 +1,31 @@
 import subprocess
 import os
 import logging
+import pathlib
 from enum import Enum
 import stimela
 from shutil import which
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from omegaconf import OmegaConf
-from typing import Dict, Any, Optional
-from scabha.basetypes import EmptyDictDefault
+from typing import Dict, Any, Optional, List
+from scabha.basetypes import EmptyDictDefault, EmptyListDefault, Unresolved
 import datetime
 from stimela.utils.xrun_asyncio import xrun
 from stimela.exceptions import BackendError
 from . import native
 
-ReadWriteMode = Enum("ReadWriteMode", "ro rw", module=__name__)
-
+ReadWrite = Enum("BindMode", "ro rw", module=__name__)
 
 @dataclass
 class SingularityBackendOptions(object):
+    @dataclass
+    class BindDir(object):
+        host: str                       # host path
+        target: Optional[str] = None    # container path: ==host by default
+        mode: ReadWrite = "rw"
+        mkdir: bool = False             # create host directory if it doesn't exist
+        conditional: str = "true"       # bind conditionally (will be formula-evaluated)
+
     enable: bool = True
     image_dir: str = os.path.expanduser("~/.singularity")
     auto_build: bool = True
@@ -26,7 +34,7 @@ class SingularityBackendOptions(object):
     remote_only: bool = False      # if True, won't look for singularity on local system -- useful in combination with slurm wrapper
 
     # optional extra bindings
-    bind_dirs: Dict[str, ReadWriteMode] = EmptyDictDefault()
+    bind_dirs: List[BindDir] = EmptyListDefault()
     env: Dict[str, str] = EmptyDictDefault()
     # @dataclass
     # class EmptyVolume(object):
@@ -218,7 +226,7 @@ def build(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBacke
         retcode = xrun(args[0], args[1:], shell=False, log=log,
                     return_errcode=True, command_name="(singularity build)", 
                     gentle_ctrl_c=True,
-                    log_command=True, 
+                    log_command=' '.join(args), 
                     log_result=True)
 
         if retcode:
@@ -266,26 +274,74 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
     # initial set of mounts has cwd as read-write
     mounts = {cwd: True}
-    # add extra binds
-    for path, rw in backend.singularity.bind_dirs.items():
-        path = os.path.expanduser(path)
-        mounts[path] = mounts.get(path, False) or (rw == ReadWriteMode.rw)
+    # dict of container paths to host paths
+    container_to_host_path = {}
 
-    # get extra required filesystem bindings
-    resolve_required_mounts(mounts, params, cab.inputs, cab.outputs)
+    # add extra binds
+    for bind in backend.singularity.bind_dirs:
+        if not bind.conditional:
+            log.info(f"skipping bind of {bind.host} based on false conditional")
+            continue
+
+        # expand ~ in paths
+        src = os.path.expanduser(bind.host).rstrip("/")
+        dest = os.path.expanduser(bind.target or src).rstrip("/")
+        rw = bind.mode == ReadWrite.rw
+        
+        # resolve symlinks
+        if os.path.realpath(src) != src:
+            src = os.path.realpath(src)
+            log.info(f"using symlink target {src} for bind of {bind.host}")
+        
+        # make directory if needed
+        if bind.mkdir:
+            # I think files can be bound too, so only do this check for directories
+            if os.path.exists(src):
+                if not os.path.isdir(src):
+                    raise BackendError(f"host bind {bind.host} is not a directory", exc)
+            else:
+                try:
+                    pathlib.Path.mkdir(src, parents=True)
+                except Exception as exc:
+                    raise BackendError(f"error creating directory for host bind {bind.host}", exc)
+            
+        # if already present in mounts, potentially upgrade to rw
+        mounts[src] = mounts.get(src, False) or rw
+        # if paths different, create a remapping
+        if src != dest:
+            if dest in container_to_host_path:
+                if container_to_host_path[dest] != src:
+                    raise BackendError(f"bind_dirs: conflicting bind paths for {dest}")
+            else:
+                container_to_host_path[dest] = src
+
+    # get extra required filesystem bindings from supplied parameters
+    resolve_required_mounts(mounts, params, cab.inputs, cab.outputs, remappings=container_to_host_path)
+
+    # redo mounts as a list of (container_path, source_path, rw)
+    source_to_containter_path = {src: dest for dest, src in container_to_host_path.items()}
+    mounts = [(source_to_containter_path.get(src, src), src, rw) for src, rw in mounts.items()]
 
     # sort mount paths before iterating -- this ensures that parent directories come first
     # (singularity doesn't like it if you specify a bind of a subdir before a bind of a parent) 
-    for path, rw in sorted(mounts.items()):
-        args += ["--bind", f"{path}:{path}:{'rw' if rw else 'ro'}"]
+    for dest, src, rw in sorted(mounts):
+        mode = 'rw' if rw else 'ro'
+        if src == dest:
+            log.info(f"binding {src} as {mode}")
+        else:
+            log.info(f"binding {src} to {dest} as {mode}")
+        args += ["--bind", f"{src}:{dest}:{mode}"]
 
     args += [simg_path]
-    args += cab.flavour.get_arguments(cab, params, subst, check_executable=False)
-    log.debug(f"command line is {args}")
+    log_args = args.copy()
+
+    args1, log_args1 = cab.flavour.get_arguments(cab, params, subst, check_executable=False)
+    args += args1
+    log_args += log_args1
 
     cabstat = cab.reset_status()
 
-    command_name = f"{cab.flavour.command_name}"
+    command_name = f"{cab.flavour.command_name}" or None
 
     # run command
     start_time = datetime.datetime.now()
@@ -296,13 +352,15 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     # log.info(f"argument lengths are {[len(a) for a in args]}")
 
     if wrapper:
-        args = wrapper.wrap_run_command(args, fqname=fqname, log=log)
+        args, log_args = wrapper.wrap_run_command(args, log_args, fqname=fqname, log=log)
+
+    log.debug(f"command line is {' '.join(log_args)}")
 
     retcode = xrun(args[0], args[1:], shell=False, log=log,
                 output_wrangler=cabstat.apply_wranglers,
                 return_errcode=True, command_name=command_name, 
                 gentle_ctrl_c=True,
-                log_command=True if cab.flavour.log_full_command else command_name, 
+                log_command=' '.join(log_args), 
                 log_result=False)
 
     # check if output marked it as a fail

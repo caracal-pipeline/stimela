@@ -549,14 +549,17 @@ class Evaluator(object):
         # string? evaluate directly and return
         if type(obj) is str:
             try:
-                return self.evaluate(obj, sublocation=sublocation)
+                value = self.evaluate(obj, sublocation=sublocation)
+                if isinstance(value, Unresolved) and not self.allow_unresolved:
+                    raise SubstitutionError(f"{'.'.join(sublocation)}: unresolved substitution", [value])
+                return value
             except AttributeError as err:
-                if raise_substitution_errors:
-                    raise
+                if raise_substitution_errors or not self.allow_unresolved:
+                    raise SubstitutionError(f"{'.'.join(sublocation)}: substitution error", [err])
                 return Unresolved(errors=[err])
             except SubstitutionError as err:
-                if raise_substitution_errors:
-                    raise
+                if raise_substitution_errors or not self.allow_unresolved:
+                    raise SubstitutionError(f"{'.'.join(sublocation)}: substitution error", [err])
                 return Unresolved(errors=[err])
             
         # helper function

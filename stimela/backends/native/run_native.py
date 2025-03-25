@@ -68,9 +68,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                 raise BackendSpecificationError(f"virtual environment {venv} doesn't exist")
             log.debug(f"virtual environment is {venv}")
 
-    args = build_command_line(cab, params, subst, virtual_env=venv)
-
-    log.debug(f"command line is {args}")
+    args, log_args = build_command_line(cab, params, subst, virtual_env=venv)
 
     cabstat = cab.reset_status()
 
@@ -85,13 +83,15 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     # log.info(f"argument lengths are {[len(a) for a in args]}")
     
     if wrapper:
-        args = wrapper.wrap_run_command(args, fqname=fqname, log=log)
+        args, log_args = wrapper.wrap_run_command(args, log_args, fqname=fqname, log=log)
+        
+    log.debug(f"command line is {' '.join(log_args)}")
 
     retcode = xrun(args[0], args[1:], shell=False, log=log,
                 output_wrangler=cabstat.apply_wranglers,
                 return_errcode=True, command_name=command_name, 
                 gentle_ctrl_c=True,
-                log_command=True if cab.flavour.log_full_command else command_name, 
+                log_command=' '.join(log_args), 
                 log_result=False)
 
     # check if output marked it as a fail
