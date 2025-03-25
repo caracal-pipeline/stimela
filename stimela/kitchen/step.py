@@ -265,7 +265,6 @@ class Step:
                 self.backend or {}))
             runner.validate_backend_settings(backend_opts, log=log)
 
-
     def prevalidate(self, subst: Optional[SubstitutionNS]=None, root=False, backend=None):
         self.finalize(backend=backend)
         # apply dynamic schemas
