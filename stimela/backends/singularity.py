@@ -97,7 +97,7 @@ def get_image_info(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.Sti
         simg_path = cab.image.path
         if not os.path.exists(simg_path):
             raise BackendError(f"image {simg_path} for cab '{cab.name}' doesn't exist")
-        return os.path.basename(simg_path), simg_path, False
+        return os.path.basename(simg_path), simg_path
 
     image_name = cab.flavour.get_image_name(cab, backend)
 
