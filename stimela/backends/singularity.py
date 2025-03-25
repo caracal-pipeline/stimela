@@ -298,10 +298,10 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
             # I think files can be bound too, so only do this check for directories
             if os.path.exists(src):
                 if not os.path.isdir(src):
-                    raise BackendError(f"host bind {bind.host} is not a directory", exc)
+                    raise BackendError(f"host bind {bind.host} is not a directory")
             else:
                 try:
-                    pathlib.Path.mkdir(src, parents=True)
+                    pathlib.Path(src).mkdir(parents=True)
                 except Exception as exc:
                     raise BackendError(f"error creating directory for host bind {bind.host}", exc)
             
