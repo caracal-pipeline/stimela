@@ -4,6 +4,7 @@ import os.path
 import yaml
 import re
 import keyword
+import pathlib
 from typing import *
 from collections import OrderedDict
 
@@ -281,7 +282,7 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
     if create_dirs:
         for name, value in validated.items():
             schema = schemas[name]
-            if schema.is_output and schema.mkdir:
+            if schema.is_output and (schema.mkdir or schema.mkdir_self):
                 if schema.is_file_type:
                     files = [URI(value)]
                 elif schema.is_file_list_type:
@@ -290,12 +291,11 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
                     continue
                 for uri in files:
                     if not uri.remote:
-                        if schema._dtype == Directory or schema._dtype == MS:
-                            dirname = uri.path
-                        else:
-                            dirname = os.path.dirname(uri.path)
-                        if dirname and not os.path.exists(dirname):
-                            os.makedirs(dirname, exist_ok=True)
+                        path = pathlib.Path(uri.path)
+                        if schema.mkdir:
+                            path.parent.mkdir(parents=True, exist_ok=True)
+                        if schema.mkdir_self and schema._dtype == Directory:
+                            path.mkdir(parents=True, exist_ok=True)
 
     # add in unresolved values
     validated.update(**unresolved)
