@@ -9,8 +9,8 @@ import stimela
 from shutil import which
 from dataclasses import dataclass
 from omegaconf import OmegaConf
-from typing import Dict, Any, Optional, List
-from scabha.basetypes import EmptyDictDefault, EmptyListDefault
+from typing import Dict, Any, Optional, Union
+from scabha.basetypes import EmptyDictDefault
 import datetime
 from stimela.utils.xrun_asyncio import xrun
 from stimela.exceptions import BackendError
@@ -26,7 +26,7 @@ class SingularityBackendOptions(object):
         target: Optional[str] = None    # container path: ==host by default
         mode: ReadWrite = "rw"
         mkdir: bool = False             # create host directory if it doesn't exist
-        conditional: str = "true"       # bind conditionally (will be formula-evaluated)
+        conditional: Union[bool, str] = True # bind conditionally (will be formula-evaluated)
 
     enable: bool = True
     image_dir: str = os.path.expanduser("~/.singularity")
@@ -283,10 +283,9 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     with ExitStack() as exit_stack: 
         # add extra binds
         for label, bind in backend.singularity.bind_dirs.items():
-            # a bit ugly, but converting back to container from an OmegaConf dict causes
-            # everything to be stringified
-            if bind.conditional in ("False", "None", "0"):
-                log.info(f"bind_dirs.{label}: skipping based on conditional=={bind.conditional}")
+            # skip if conditional is False
+            if not bind.conditional:
+                log.info(f"bind_dirs.{label}: skipping based on conditional == {bind.conditional}")
                 continue
 
             # expand ~ in paths
