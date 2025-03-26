@@ -129,7 +129,7 @@ def build(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBacke
             raise BackendError(f"invalid singularity image directory {backend.singularity.image_dir}")
     else:
         try:
-            os.mkdir(backend.singularity.image_dir)
+            pathlib.Path(backend.singularity.image_dir).mkdir(parents=True)
         except OSError as exc:
             raise BackendError(f"failed to create singularity image directory {backend.singularity.image_dir}: {exc}")
 
