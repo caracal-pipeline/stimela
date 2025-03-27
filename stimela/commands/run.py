@@ -61,7 +61,7 @@ def resolve_recipe_files(filename: str):
         resolved_filename  = os.path.join(mod_dir, fname)
     else:
         # if it doesn't look like a filename, return None
-        if not ext and "/" not in filename and not any(ch in filename for ch in "*?["):
+        if not ext and "/" not in filename:
             return None
         resolved_filename = filename
 

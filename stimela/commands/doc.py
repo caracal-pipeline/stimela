@@ -95,25 +95,25 @@ def doc(what: List[str] = [], do_list=False, implicit=False, obscure=False, all=
         log.error(f"Nothing to document")
         sys.exit(2)
 
-    recipes_to_document = set()
-    cabs_to_document = set()
+    recipes_to_document = []
+    cabs_to_document = []
 
     for item in names_to_document:
         recipe_names = fnmatch.filter(stimela.CONFIG.lib.recipes.keys(), item)
-        cab_names = fnmatch.filter(stimela.CONFIG.cabs.keys(), item)
+        cab_names = fnmatch.filter(sorted(stimela.CONFIG.cabs.keys()), item)
         if not recipe_names and not cab_names:
             log.error(f"'{item}' does not match any recipe or cab names. Try -l/--list")
             sys.exit(2)
-        recipes_to_document.update(recipe_names)
-        cabs_to_document.update(cab_names)
+        recipes_to_document += recipe_names
+        cabs_to_document += cab_names
 
     # if nothing was specified, and only one cab/only one recipe is defined, print that
     if not names_to_document:
         if len(top_level_recipes) == 1:
-            recipes_to_document.update(top_level_recipes)
+            recipes_to_document = top_level_recipes
             log.info("a single top-level recipe is defined, documenting it by default. Use -l to list all defined recipes/cabs")
         elif len(stimela.CONFIG.cabs) == 1 and not top_level_recipes:
-            cabs_to_document.update(stimela.CONFIG.cabs.keys())
+            cabs_to_document = list(stimela.CONFIG.cabs.keys())
 
     if recipes_to_document or cabs_to_document:
         for name in recipes_to_document:
@@ -145,7 +145,7 @@ def doc(what: List[str] = [], do_list=False, implicit=False, obscure=False, all=
         if stimela.CONFIG.cabs:
             subtree = top_tree.add("Cabs:")
             table = Table.grid("", "", padding=(0,2))
-            for name, cab in stimela.CONFIG.cabs.items():
+            for name, cab in sorted(stimela.CONFIG.cabs.items()):
                 table.add_row(f"[bold]{name}[/bold]", getattr(cab, 'info', ''))
             subtree.add(table)            
         
