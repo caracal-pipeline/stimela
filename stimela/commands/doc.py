@@ -17,7 +17,7 @@ from stimela.kitchen.cab import Cab
 from stimela.exceptions import RecipeValidationError, CabValidationError
 from stimela.task_stats import destroy_progress_bar
 
-from .run import load_recipe_files, resolve_recipe_file
+from .run import load_recipe_files, resolve_recipe_files
 
 @cli.command("doc",
     help="""
@@ -69,14 +69,14 @@ def doc(what: List[str] = [], do_list=False, implicit=False, obscure=False, all=
     errcode = None
     for item in what:
         try:
-            filename = resolve_recipe_file(item)
+            filenames = resolve_recipe_files(item)
         except FileNotFoundError as exc:
             log_exception(exc)
             errcode = 2
             continue
-        if filename:
-            files_to_load.append(filename)
-            log.info(f"will load recipe/config file {filename}")
+        if filenames is not None:
+            files_to_load += filenames
+            log.info(f"will load recipe/config file(s) {', '.join(filenames)}")
         else:
             names_to_document.append(item)
     
