@@ -1,23 +1,33 @@
 import subprocess
 import os
 import logging
+import pathlib
+from tempfile import TemporaryDirectory
+from contextlib import ExitStack
 from enum import Enum
 import stimela
 from shutil import which
 from dataclasses import dataclass
 from omegaconf import OmegaConf
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Union
 from scabha.basetypes import EmptyDictDefault
 import datetime
 from stimela.utils.xrun_asyncio import xrun
 from stimela.exceptions import BackendError
 from . import native
 
-ReadWriteMode = Enum("ReadWriteMode", "ro rw", module=__name__)
-
+ReadWrite = Enum("BindMode", "ro rw", module=__name__)
 
 @dataclass
 class SingularityBackendOptions(object):
+    @dataclass
+    class BindDir(object):
+        host: Optional[str] = None      # host path, default uses label, or else "empty" for tmpdir
+        target: Optional[str] = None    # container path: ==host by default
+        mode: ReadWrite = "rw"
+        mkdir: bool = False             # create host directory if it doesn't exist
+        conditional: Union[bool, str] = True # bind conditionally (will be formula-evaluated)
+
     enable: bool = True
     image_dir: str = os.path.expanduser("~/.singularity")
     auto_build: bool = True
@@ -25,15 +35,13 @@ class SingularityBackendOptions(object):
     executable: Optional[str] = None
     remote_only: bool = False      # if True, won't look for singularity on local system -- useful in combination with slurm wrapper
 
-    # optional extra bindings
-    bind_dirs: Dict[str, ReadWriteMode] = EmptyDictDefault()
-    env: Dict[str, str] = EmptyDictDefault()
-    # @dataclass
-    # class EmptyVolume(object):
-    #     name: str
-    #     mount: str
+    contain: bool = True           # if True, runs with --contain
+    containall: bool = False       # if True, runs with --containall
+    bind_tmp: bool = True          # if True, implicitly binds an empty /tmp directory
 
-    # tmp_dirs: List[EmptyVolume] = EmptyListDefault()
+    # optional extra bindings
+    bind_dirs: Dict[str, BindDir] = EmptyDictDefault()
+    env: Dict[str, str] = EmptyDictDefault()
     
 
 SingularityBackendSchema = OmegaConf.structured(SingularityBackendOptions)
@@ -89,7 +97,7 @@ def get_image_info(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.Sti
         simg_path = cab.image.path
         if not os.path.exists(simg_path):
             raise BackendError(f"image {simg_path} for cab '{cab.name}' doesn't exist")
-        return os.path.basename(simg_path), simg_path, False
+        return os.path.basename(simg_path), simg_path
 
     image_name = cab.flavour.get_image_name(cab, backend)
 
@@ -121,7 +129,7 @@ def build(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBacke
             raise BackendError(f"invalid singularity image directory {backend.singularity.image_dir}")
     else:
         try:
-            os.mkdir(backend.singularity.image_dir)
+            pathlib.Path(backend.singularity.image_dir).mkdir(parents=True)
         except OSError as exc:
             raise BackendError(f"failed to create singularity image directory {backend.singularity.image_dir}: {exc}")
 
@@ -218,7 +226,7 @@ def build(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBacke
         retcode = xrun(args[0], args[1:], shell=False, log=log,
                     return_errcode=True, command_name="(singularity build)", 
                     gentle_ctrl_c=True,
-                    log_command=True, 
+                    log_command=' '.join(args), 
                     log_result=True)
 
         if retcode:
@@ -259,63 +267,138 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     cwd = os.getcwd()
     args = [backend.singularity.executable or BINARY, 
             "exec", 
-            "--containall",
             "--pwd", cwd]
+    if backend.singularity.containall:
+        args.append("--containall")
+    elif backend.singularity.contain:
+        args.append("--contain")
     if backend.singularity.env:
         args += ["--env", ",".join([f"{k}={v}" for k, v in backend.singularity.env.items()])]
 
     # initial set of mounts has cwd as read-write
     mounts = {cwd: True}
-    # add extra binds
-    for path, rw in backend.singularity.bind_dirs.items():
-        path = os.path.expanduser(path)
-        mounts[path] = mounts.get(path, False) or (rw == ReadWriteMode.rw)
+    # dict of container paths to host paths
+    container_to_host_path = {}
 
-    # get extra required filesystem bindings
-    resolve_required_mounts(mounts, params, cab.inputs, cab.outputs)
+    with ExitStack() as exit_stack: 
+        # add extra binds
+        for label, bind in backend.singularity.bind_dirs.items():
+            # skip if conditional is False
+            if not bind.conditional:
+                log.info(f"bind_dirs.{label}: skipping based on conditional == {bind.conditional}")
+                continue
 
-    # sort mount paths before iterating -- this ensures that parent directories come first
-    # (singularity doesn't like it if you specify a bind of a subdir before a bind of a parent) 
-    for path, rw in sorted(mounts.items()):
-        args += ["--bind", f"{path}:{path}:{'rw' if rw else 'ro'}"]
+            # expand ~ in paths
+            src = os.path.expanduser(bind.host).rstrip("/")
+            dest = os.path.expanduser(bind.target or src).rstrip("/")
+            rw = bind.mode == ReadWrite.rw
 
-    args += [simg_path]
-    args += cab.flavour.get_arguments(cab, params, subst, check_executable=False)
-    log.debug(f"command line is {args}")
+            # handle binding of empty temp dirs
+            if bind.host == "empty":
+                if not bind.target:
+                    raise BackendError(f"bind_dirs.{label}: a target must be specified when host=empty")
+                tmpdir = TemporaryDirectory()
+                src = tmpdir.name
+                exit_stack.enter_context(tmpdir)
+                log.info(f"bind_dirs.{label}: using temporary directory {src}")
 
-    cabstat = cab.reset_status()
+            # resolve symlinks
+            if os.path.realpath(src) != src:
+                src = os.path.realpath(src)
+                log.info(f"bind_dirs.{label}: binding symlink target {src}")
+            
+            # make directory if needed
+            if bind.mkdir:
+                # I think files can be bound too, so only do this check for directories
+                if os.path.exists(src):
+                    if not os.path.isdir(src):
+                        raise BackendError(f"bind_dirs.{label}: host path is not a directory")
+                else:
+                    try:
+                        pathlib.Path(src).mkdir(parents=True)
+                    except Exception as exc:
+                        raise BackendError(f"bind_dirs.{label}: error creating directory {bind.host}", exc)
+                
+            # if already present in mounts, potentially upgrade to rw
+            mounts[src] = mounts.get(src, False) or rw
+            # if paths different, create a remapping
+            if src != dest:
+                if dest in container_to_host_path:
+                    if container_to_host_path[dest] != src:
+                        raise BackendError(f"bind_dirs.{label}: conflicting bind paths for {dest}")
+                else:
+                    container_to_host_path[dest] = src
 
-    command_name = f"{cab.flavour.command_name}"
+        # get extra required filesystem bindings from supplied parameters
+        resolve_required_mounts(mounts, params, cab.inputs, cab.outputs, remappings=container_to_host_path)
 
-    # run command
-    start_time = datetime.datetime.now()
-    def elapsed(since=None):
-        """Returns string representing elapsed time"""
-        return str(datetime.datetime.now() - (since or start_time)).split('.', 1)[0]
+        # redo mounts as a list of (container_path, source_path, rw)
+        source_to_containter_path = {src: dest for dest, src in container_to_host_path.items()}
+        # make list of mounts
+        mounts = [(source_to_containter_path.get(src, src), src, rw) for src, rw in mounts.items()]
+        # add implicit /tmp mount
+        if backend.singularity.bind_tmp:
+            for target, _, _ in mounts:
+                if target == "/tmp":
+                    log.info("/tmp directory already bound, not adding an explicit binding")
+                    break
+            else:
+                tmpdir = TemporaryDirectory()
+                exit_stack.enter_context(tmpdir)
+                mounts.append(("/tmp", tmpdir.name, True))
 
-    # log.info(f"argument lengths are {[len(a) for a in args]}")
+        # sort mount paths before iterating -- this ensures that parent directories come first
+        # (singularity doesn't like it if you specify a bind of a subdir before a bind of a parent) 
+        for dest, src, rw in sorted(mounts):
+            mode = 'rw' if rw else 'ro'
+            if src == dest:
+                log.info(f"binding {src} as {mode}")
+            else:
+                log.info(f"binding {src} to {dest} as {mode}")
+            args += ["--bind", f"{src}:{dest}:{mode}"]
 
-    if wrapper:
-        args = wrapper.wrap_run_command(args, fqname=fqname, log=log)
+        args += [simg_path]
+        log_args = args.copy()
 
-    retcode = xrun(args[0], args[1:], shell=False, log=log,
-                output_wrangler=cabstat.apply_wranglers,
-                return_errcode=True, command_name=command_name, 
-                gentle_ctrl_c=True,
-                log_command=True if cab.flavour.log_full_command else command_name, 
-                log_result=False)
+        args1, log_args1 = cab.flavour.get_arguments(cab, params, subst, check_executable=False)
+        args += args1
+        log_args += log_args1
 
-    # check if output marked it as a fail
-    if cabstat.success is False:
-        log.error(f"declaring '{command_name}' as failed based on its output")
+        cabstat = cab.reset_status()
 
-    # if retcode != 0 and not explicitly marked as success, mark as failed
-    if retcode and cabstat.success is not True:
-        cabstat.declare_failure(f"{command_name} returns error code {retcode} after {elapsed()}")
-    else:
-        log.info(f"{command_name} returns exit code {retcode} after {elapsed()}")
+        command_name = f"{cab.flavour.command_name}" or None
 
-    return cabstat
+        # run command
+        start_time = datetime.datetime.now()
+        def elapsed(since=None):
+            """Returns string representing elapsed time"""
+            return str(datetime.datetime.now() - (since or start_time)).split('.', 1)[0]
+
+        # log.info(f"argument lengths are {[len(a) for a in args]}")
+
+        if wrapper:
+            args, log_args = wrapper.wrap_run_command(args, log_args, fqname=fqname, log=log)
+
+        log.debug(f"command line is {' '.join(log_args)}")
+
+        retcode = xrun(args[0], args[1:], shell=False, log=log,
+                    output_wrangler=cabstat.apply_wranglers,
+                    return_errcode=True, command_name=command_name, 
+                    gentle_ctrl_c=True,
+                    log_command=' '.join(log_args), 
+                    log_result=False)
+
+        # check if output marked it as a fail
+        if cabstat.success is False:
+            log.error(f"declaring '{command_name}' as failed based on its output")
+
+        # if retcode != 0 and not explicitly marked as success, mark as failed
+        if retcode and cabstat.success is not True:
+            cabstat.declare_failure(f"{command_name} returns error code {retcode} after {elapsed()}")
+        else:
+            log.info(f"{command_name} returns exit code {retcode} after {elapsed()}")
+
+        return cabstat
 
 
 # class SingularityError(Exception):

@@ -44,8 +44,9 @@ def run(cab: Cab, params: Dict[str, Any], fqname: str,
 
     kube = backend.kube
 
-    args = cab.flavour.get_arguments(cab, params, subst, check_executable=False)
-    log.debug(f"command line is {args}")
+    args, log_args = cab.flavour.get_arguments(cab, params, subst, check_executable=False)
+
+    log.debug(f"command line is {' '.join(log_args)}")
 
     cabstat = cab.reset_status()
 

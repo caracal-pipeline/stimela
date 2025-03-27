@@ -29,7 +29,7 @@ class BinaryFlavour(_BaseFlavour):
             venv_args = f". {virtual_env}/bin/activate && "
             args = ["/bin/bash", "-c", venv_args + " ".join(shlex.quote(arg) for arg in args)]
 
-        return args
+        return args, args
     
     def get_image_name(self, cab: Cab, backend: 'stimela.backend.StimelaBackendOptions'):
         from stimela.backends import resolve_image_name

@@ -265,7 +265,6 @@ class Step:
                 self.backend or {}))
             runner.validate_backend_settings(backend_opts, log=log)
 
-
     def prevalidate(self, subst: Optional[SubstitutionNS]=None, root=False, backend=None):
         self.finalize(backend=backend)
         # apply dynamic schemas
@@ -387,7 +386,8 @@ class Step:
         # validate backend settings
         try:
             backend_opts = OmegaConf.merge(self.config.opts.backend, backend)
-            backend_opts = evaluate_and_substitute_object(backend_opts, subst, recursion_level=-1, location=[self.fqname, "backend"])
+            backend_opts = evaluate_and_substitute_object(backend_opts, subst, 
+                                                          recursion_level=-1, location=[self.fqname, "backend"])
             if not is_outer_step and backend_opts.verbose:
                 opts_yaml = OmegaConf.to_yaml(backend_opts)
                 log_rich_payload(self.log, "current backend settings are", opts_yaml, syntax="yaml") 
@@ -415,7 +415,8 @@ class Step:
             # evaluate the skip attribute (it can be a formula and/or a {}-substititon)
             skip = self._skip
             if self._skip is None and subst is not None:
-                skip = evaluate_and_substitute_object(self.skip, subst, location=[self.fqname, "skip"])
+                skip = evaluate_and_substitute_object(self.skip, subst, 
+                                                      location=[self.fqname, "skip"])
                 if skip is UNSET:  # skip: =IFSET(recipe.foo) will return UNSET
                     skip = False
                 self.log.debug(f"dynamic skip attribute evaluation returns {skip}")

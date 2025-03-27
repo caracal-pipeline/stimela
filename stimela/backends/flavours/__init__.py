@@ -14,9 +14,6 @@ class _BaseFlavour(object):
     A flavour class represents a particular kind of runnable task
     (binary, python callable, inline python code, etc.)
     """
-    # if true, full command line is logged, else just command name
-    log_full_command: bool = True
-
     def finalize(self, cab: "stimela.kitchen.cab.Cab"):
         """Finalizes flavour definition, given a cab"""
         self.command_name = cab.command.split()[0]
@@ -35,6 +32,11 @@ class _BaseFlavour(object):
             subst (Dict[str, Any]):  substitution namespace 
             virtual_env (Optional[str]): virtual environment to run in
             check_executable:        if True, cab may check for the executable to exist (but doesn't have to)
+
+        Returns:
+            Tuple[List, List]:       tuple of full_argument_list, abbreviated_argument_list
+                                     The full list is meant for execution, the abbreviated list is meant for
+                                     display and logging
         """
         pass
 

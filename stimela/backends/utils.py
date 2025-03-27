@@ -1,6 +1,6 @@
 import os
 
-from typing import Dict, List, Any, Dict
+from typing import Dict, List, Any, Dict, Tuple
 from stimela.kitchen.cab import Cab, Parameter
 from scabha.exceptions import SchemaError
 from stimela.exceptions import BackendError
@@ -12,10 +12,8 @@ def resolve_required_mounts(mounts: Dict[str, bool],
                             params: Dict[str, Any], 
                             inputs: Dict[str, Parameter], 
                             outputs: Dict[str, Parameter],
+                            remappings: Dict[str, str] = {}
                             ):
-
-    mkdirs = {}
-
     # helper function to accumulate list of target paths to be mounted
     def add_target(param_name, path, must_exist, readwrite):
         if not os.path.isdir(path):
@@ -26,7 +24,12 @@ def resolve_required_mounts(mounts: Dict[str, bool],
                 raise SchemaError(f"parameter '{param_name}': path '{path}' does not exist")
             path = os.path.dirname(path)
         path = path.rstrip("/")
-        mounts[path] = mounts.get(path) or readwrite
+        # check for remapping -- this can happen if bind_dirs already mounts this container path to a different 
+        # host path, in which case we have a conflict 
+        if path in remappings:
+            raise BackendError(f"{param_name}: {path} already bound to a different host path")
+        # insert into mounts (with identical target path if not already present, and possibly upgrading RO to RW)
+        mounts[path] = mounts.get(path, False) or readwrite
 
     # go through parameters and accumulate target paths
     for name, value in params.items():

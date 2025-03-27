@@ -10,8 +10,8 @@ from . import get_backend
 
 
 class EmptyBackendWrapper(object):
-    def wrap_run_command(self, args: List[str], fqname: Optional[str]=None, log: Optional[logging.Logger]=None) -> List[str]:
-        return args
+    def wrap_run_command(self, args: List[str], log_args: List[str], fqname: Optional[str]=None, log: Optional[logging.Logger]=None) -> List[str]:
+        return args, log_args
 
     def wrap_build_command(self, args: List[str], fqname: Optional[str]=None, log: Optional[logging.Logger]=None) -> List[str]:
         return args

@@ -41,7 +41,7 @@ class SlurmOptions(object):
                 raise BackendError(f"slurm.srun_path '{self.srun}' is not an executable")
             return self.srun
         
-    def _wrap(self, srun_opts: Dict[str, Any], args: List[str], fqname: Optional[str]=None) -> List[str]:
+    def _wrap(self, srun_opts: Dict[str, Any], args: List[str],  log_args: List[str], fqname: Optional[str]=None) -> List[str]:
         output_args = [self.get_executable()]
 
         # reverse fqname to make job name (more informative that way)
@@ -52,11 +52,10 @@ class SlurmOptions(object):
         for name, value in srun_opts.items():
             output_args += ["--" + name, value]
 
-        output_args += args
-        return output_args
+        return output_args + args, output_args + log_args
 
-    def wrap_run_command(self, args: List[str], fqname: Optional[str]=None, log: Optional[logging.Logger]=None) -> List[str]:
-        return self._wrap(self.srun_opts, args, fqname)        
+    def wrap_run_command(self, args: List[str], log_args: List[str], fqname: Optional[str]=None, log: Optional[logging.Logger]=None) -> List[str]:
+        return self._wrap(self.srun_opts, args, log_args, fqname)        
 
     def wrap_build_command(self, args: List[str], fqname: Optional[str]=None, log: Optional[logging.Logger]=None) -> List[str]:
         if self.build_local:

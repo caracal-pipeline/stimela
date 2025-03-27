@@ -37,7 +37,7 @@ Native backend settings
 
 The native backend has only a couple of settings::
 
-    backends:
+    backend:
         native:
             enable: true
             virtual_env: ~/venvs/my_venv
@@ -51,7 +51,7 @@ Singularity backend settings
 
 The Singularity backend has the following settings::
 
-    backends:
+    backend:
         singularity:
             enable: true
             image_dir: ~/.singularity
@@ -74,7 +74,7 @@ Slurm wrapper settings
 
 Slurm is a wrapper, not a backend per se. It can be used in combination with the native and Singularity backends to schedule steps as Slurm jobs (using ``srun``). Enabling it can be as simple as setting ``enable`` to true::
 
-    backends:
+    backend:
         slurm:
             enable: false
             srun_path:              # optional path to srun executable
