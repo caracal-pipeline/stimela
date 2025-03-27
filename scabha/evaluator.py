@@ -165,12 +165,6 @@ class FunctionHandler(ResultsHandler):
             return unsets[0]
         return callable(*eval_args)
 
-    def ERROR(self, evaluator, args):
-        if len(args) != 1:
-            raise FormulaError(f"{'.'.join(evaluator.location)}: ERROR() expects one argument, got {len(args)}")
-        cond = evaluator._evaluate_result(args[0], allow_unset=True)
-        raise FormulaError(f"ERROR: {cond}")
-
     def LIST(self, evaluator, args):
         def make_list(*x):
             return list(x)
@@ -212,24 +206,6 @@ class FunctionHandler(ResultsHandler):
         def is_num(x):
             return isinstance(x, (bool, int, float, complex)) 
         return self.evaluate_generic_callable(evaluator, "IS_NUM", is_num, args, min_args=1, max_args=1)
-    
-    def CASES(self, evaluator, args):
-        # set default case
-        if len(args)%2:
-            default_case = args[-1]
-            args = args[:-1]
-        else: 
-            default_case = None
-        # return first True case
-        for i in range(0, len(args), 2):
-            conditional, result = args[i:i+2]
-            cond = evaluator._evaluate_result(conditional, allow_unset=False)
-            if cond:
-                return evaluator._evaluate_result(result, allow_unset=True)
-        # return default
-        if default_case is None:
-            return UNSET("no match in CASES()")
-        return evaluator._evaluate_result(default_case, allow_unset=True)
 
     def IF(self, evaluator, args):
         if len(args) < 3 or len(args) > 4:
@@ -366,15 +342,11 @@ def construct_parser():
     # allow expression to be used recursively
     expr = Forward()
     
-    # functions -- get all all-uppercase members from FunctionHandler
-    anyseq_funcnames = {"GLOB", "EXISTS", "ERROR"}
-    all_funcnames = set(func for func in dir(FunctionHandler) 
-                        if callable(getattr(FunctionHandler, func)) and func.upper() == func)
-    all_funcnames -= anyseq_funcnames
-
-    functions = reduce(operator.or_, map(Keyword, all_funcnames))
+    # functions
+    functions = reduce(operator.or_, map(Keyword, ["IF", "IFSET", "GLOB", "EXISTS", "LIST", "GETITEM",
+        "BASENAME", "DIRNAME", "EXTENSION", "STRIPEXT", "MIN", "MAX", "IS_STR", "IS_NUM", "VALID", "RANGE", "NOSUBST", "SORT", "RSORT"]))
     # these functions take one argument, which could also be a sequence
-    anyseq_functions = reduce(operator.or_, map(Keyword, anyseq_funcnames))
+    anyseq_functions = reduce(operator.or_, map(Keyword, ["GLOB", "EXISTS"]))
 
     atomic_value = (boolean | UNSET | EMPTY | nested_field | string | number)
 
