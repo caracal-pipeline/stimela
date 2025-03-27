@@ -31,10 +31,12 @@ from stimela import task_stats
 import stimela.backends
 from scabha.configuratt.common import IMPLICIT_EXTENSIONS
 
-def resolve_recipe_files(filename: str):
+def resolve_recipe_files(filename: str, log: logging.Logger, use_manifest: bool = True):
     """
     Resolves a recipe file, which may be specified as (module)recipe.yml or module::recipe.yml, with
     the suffix being optional, and with wildcards allowed.
+
+    If use_manifest is specified, looks for optional MANIFEST.stimela file.
 
     Returns list of real paths if file resolved, or None if filename should not be treated as a recipe file.
 
@@ -54,24 +56,30 @@ def resolve_recipe_files(filename: str):
             mod = importlib.import_module(modulename)
         except ImportError as exc:
             raise FileNotFoundError(f"{filename} not found ({exc})")
-        mod_dir = os.path.dirname(mod.__file__)
-        # empty filename ("(module)/" or "module::") defaults to *
-        if not fname:
-            fname = "*"
-        resolved_filename  = os.path.join(mod_dir, fname)
+        resolved_filename = os.path.dirname(mod.__file__)
     else:
         # if it doesn't look like a filename, return None
-        if not ext and "/" not in filename:
+        if not ext and "/" not in filename and filename not in (".", ".."):
             return None
         resolved_filename = filename
 
-    # add extensions, if not supplied
-    if not ext:
-        # if name contains globs, search NAME.EXT, else search NAME and NAME.EXT
-        globs = [] if resolved_filename.endswith("*") else [resolved_filename]
-        globs += [resolved_filename + e for e in IMPLICIT_EXTENSIONS]
+    # resolved to directory? Look for manifest or assume "*"
+    if os.path.isdir(resolved_filename):
+        manifest_file = os.path.join(resolved_filename, "MANIFEST.stimela")
+        if use_manifest and os.path.isfile(manifest_file):
+            globs = [os.path.join(resolved_filename, g.strip()) for g in open(manifest_file, "rt").readlines()]
+            resolved_filename = manifest_file
+            log.info(f"loading manifest from {manifest_file}")
+        else:
+            globs = [os.path.join(resolved_filename, "*" + e) for e in IMPLICIT_EXTENSIONS]
     else:
-        globs = [resolved_filename]
+        # add extensions, if not supplied
+        if not ext:
+            # if name contains globs, search NAME.EXT, else search NAME and NAME.EXT
+            globs = [] if resolved_filename.endswith("*") else [resolved_filename]
+            globs += [resolved_filename + e for e in IMPLICIT_EXTENSIONS]
+        else:
+            globs = [resolved_filename]
 
     # apply globs and check for real files (i.e. don't match directories)
     filenames = itertools.chain(*[glob.glob(g) for g in globs])
@@ -262,7 +270,7 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
                 errcode = 2
         else:
             try:
-                filenames = resolve_recipe_files(pp)
+                filenames = resolve_recipe_files(pp, log=log)
             except FileNotFoundError as exc:
                 log_exception(exc)
                 errcode = 2

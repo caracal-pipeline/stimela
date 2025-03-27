@@ -69,7 +69,7 @@ def doc(what: List[str] = [], do_list=False, implicit=False, obscure=False, all=
     errcode = None
     for item in what:
         try:
-            filenames = resolve_recipe_files(item)
+            filenames = resolve_recipe_files(item, log=log)
         except FileNotFoundError as exc:
             log_exception(exc)
             errcode = 2
