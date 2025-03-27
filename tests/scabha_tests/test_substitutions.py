@@ -139,7 +139,13 @@ def test_formulas():
         u1 = '=SORT(current.u)',
         u2 = '=RSORT(current.u)',
         u3 = '=GETITEM(current.u, 1)',
-        u4 = '=current.u[previous.x]'
+        u4 = '=current.u[previous.x]',
+        v1 = '=CASES(previous.x == 0, deliberately.unset.thats.ok, previous.x == 1, 1)',
+        v2 = '=CASES(previous.x == 1, 2, previous.x == 2, 2)',
+        v3 = '=CASES(previous.x == 0, 0, previous.x == 2, 2, 3)',
+        v4 = '=CASES(previous.x == 0, 0, previous.x == 2, 2)',
+        v5 = '=ERROR(boom!)',
+        v6 = '=ERROR(boom!)',
     )
     ns._add_("current", current)
     
@@ -149,6 +155,7 @@ def test_formulas():
         results = evaltor.evaluate_dict(current, corresponding_ns=ns.current, raise_substitution_errors=False, verbose=True)
 
         r = results
+        print(r.keys())
 
         assert r['a'] == "a1"
         assert r['b'] == "=escaped"
@@ -170,6 +177,10 @@ def test_formulas():
         assert r['q'] == ["a1", "=escaped", 2, 0]
         assert r['r'] == False
         assert r['t'] == 'zz'
+        assert r['v1'] == 1
+        assert r['v2'] == 2
+        assert r['v3'] == 3
+        assert type(r['v4']) is UNSET
 
 if __name__ == "__main__":
     test_subst()
