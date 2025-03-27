@@ -195,7 +195,7 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                             process_include_directive(include_files, keyword, value, subpath=key if subpath is None else f"{subpath}/{key}")
                     else:
                         raise ConfigurattError(f"{errloc}: {keyword} contains invalid entry of type {type(directive)}")
-                    
+                
                 # helper function: load list of _include or _include_post files, returns accumulated DictConfig
                 def load_include_files(keyword):
                     # get corresponding _scrub or _scrub_post keyword
@@ -228,19 +228,41 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                             flags = {}
                             warn = optional = False
 
+                        # helper function -- finds given include file (including trying an implicit .yml or .yaml extension)
+                        # returns full name of file if found, else return None if include is optional, else 
+                        # adds fail record and raises exception.
+                        # If opt=True, this is stronger than optional (no warnings raised)
+                        def find_include_file(path: str, opt: bool = False):
+                            # if path already has an extension, only try the pathname itself
+                            if os.path.splitext(path)[1]:
+                                paths = [path]
+                            # else try the pathname itself, plus implicit extensions
+                            else:
+                                paths = [path] + [path + ext for ext in IMPLICIT_EXTENSIONS]
+                            # now try all of them and return a matching one if found
+                            for path in paths:
+                                if os.path.isfile(path):
+                                    return path
+                            # end of loop with no matching files? Raise error
+                            else:
+                                if opt:
+                                    return None
+                                elif optional:
+                                    dependencies.add_fail(FailRecord(path, pathname, warn=warn))
+                                    if warn:
+                                        print(f"Warning: unable to find optional include {path}")
+                                    return None
+                                raise ConfigurattError(f"{errloc}: {keyword} {path} does not exist")
+
                         # check for (location)filename.yaml or (location)/filename.yaml style
                         match = re.match(r"^\((.+)\)/?(.+)$", incl)
                         if match:
                             modulename, filename = match.groups()
                             if modulename.startswith("."):
                                 filename = os.path.join(os.path.dirname(pathname), modulename, filename)
-                                if not os.path.exists(filename):
-                                    if optional:
-                                        dependencies.add_fail(FailRecord(filename, pathname,warn=warn))
-                                        if warn:
-                                            print(f"Warning: unable to find optional include {incl} ({filename})")
-                                        continue
-                                    raise ConfigurattError(f"{errloc}: {keyword} {incl} does not exist")
+                                filename = find_include_file(filename)
+                                if filename is None:
+                                    continue
                             else:
                                 try:
                                     mod = importlib.import_module(modulename)
@@ -266,32 +288,23 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                                         raise ConfigurattError(f"{errloc}: {keyword} {incl}: can't resolve path for {modulename}, does it contain __init__.py?")
                                     path = path[0]
 
-                                filename = os.path.join(path, filename)
-                                if not os.path.exists(filename):
-                                    if optional:
-                                        dependencies.add_fail(FailRecord(incl, pathname, modulename=modulename, 
-                                                                         fname=filename, warn=warn))
-                                        if warn:
-                                            print(f"Warning: unable to find optional include {incl}")
-                                        continue
-                                    raise ConfigurattError(f"{errloc}: {keyword} {incl}: {filename} does not exist")
+                                filename = find_include_file(os.path.join(path, filename))
+                                if filename is None:
+                                    continue
                         # absolute path -- one candidate
                         elif os.path.isabs(incl):
-                            if not os.path.exists(incl):
-                                if optional:
-                                    dependencies.add_fail(FailRecord(incl, pathname, warn=warn))
-                                    if warn:
-                                        print(f"Warning: unable to find optional include {incl}")
-                                    continue
-                                raise ConfigurattError(f"{errloc}: {keyword} {incl} does not exist")
-                            filename = incl
+                            filename = find_include_file(incl)
+                            if filename is None:
+                                continue
                         # relative path -- scan PATH for candidates
                         else:
                             paths = ['.', os.path.dirname(pathname)] + PATH
                             candidates = [os.path.join(p, incl) for p in paths] 
                             for filename in candidates:
-                                if os.path.exists(filename):
+                                filename = find_include_file(filename, opt=True)
+                                if filename is not None:
                                     break
+                            # none found in candidates -- process error
                             else:
                                 if optional:
                                     dependencies.add_fail(FailRecord(incl, pathname, warn=warn))
