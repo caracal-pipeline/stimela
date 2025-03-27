@@ -92,7 +92,7 @@ def resolve_recipe_files(filename: str, log: logging.Logger, use_manifest: bool 
         if filename is resolved_filename:
             raise FileNotFoundError(f"{filename} doesn't match any YAML documents")
         else:
-            raise FileNotFoundError(f"{filename} resolves to {os.path.join(mod_dir, fname)}, which doesn't match any YAML documents")
+            raise FileNotFoundError(f"{filename} resolves to {resolved_filename}, which doesn't match any YAML documents")
 
 
 def load_recipe_files(filenames: List[str]):
