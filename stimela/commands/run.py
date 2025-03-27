@@ -29,8 +29,7 @@ from stimela.main import cli
 from stimela.kitchen.recipe import Recipe, Step, RecipeSchema, join_quote
 from stimela import task_stats
 import stimela.backends
-
-_yaml_extensions = (".yml", ".yaml")
+from scabha.configuratt.common import IMPLICIT_EXTENSIONS
 
 def resolve_recipe_files(filename: str):
     """
@@ -43,7 +42,7 @@ def resolve_recipe_files(filename: str):
     """
     ext = os.path.splitext(filename)[1].lower()
     # unrecognized extension -- treat as non-filename
-    if ext and ext not in _yaml_extensions:
+    if ext and ext not in IMPLICIT_EXTENSIONS:
         return None
 
     # check for (location)filename.yml or (location)/filename.yml style
@@ -70,7 +69,7 @@ def resolve_recipe_files(filename: str):
     if not ext:
         # if name contains globs, search NAME.EXT, else search NAME and NAME.EXT
         globs = [] if resolved_filename.endswith("*") else [resolved_filename]
-        globs += [resolved_filename + e for e in _yaml_extensions]
+        globs += [resolved_filename + e for e in IMPLICIT_EXTENSIONS]
     else:
         globs = [resolved_filename]
 
