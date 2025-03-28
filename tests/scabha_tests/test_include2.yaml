@@ -1,5 +1,5 @@
 x:
   y: a
   z: b
-  _include: test_include.yaml
+  _include: test_include
   

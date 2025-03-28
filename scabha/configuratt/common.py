@@ -13,6 +13,9 @@ PATH = ['.']
 # package version info stored with code dependencies
 PACKAGE_VERSION = None
 
+# extensions to look for implicitly, if not supplied
+IMPLICIT_EXTENSIONS = (".yml", ".yaml")
+
 
 # DictConfig doesn't support pop(), so here's a quick replacement
 def pop_conf(conf: DictConfig, key: str, default=None):

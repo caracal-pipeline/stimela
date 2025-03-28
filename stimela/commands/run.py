@@ -6,7 +6,9 @@ import yaml
 import sys
 import traceback
 import re
+import glob
 import importlib
+import itertools
 from datetime import datetime
 from typing import List, Optional, Tuple
 from collections import OrderedDict
@@ -27,53 +29,70 @@ from stimela.main import cli
 from stimela.kitchen.recipe import Recipe, Step, RecipeSchema, join_quote
 from stimela import task_stats
 import stimela.backends
+from scabha.configuratt.common import IMPLICIT_EXTENSIONS
 
-_yaml_extensions = {".yml", ".yaml", ".YML", ".YAML"}
-
-def resolve_recipe_file(filename: str):
+def resolve_recipe_files(filename: str, log: logging.Logger, use_manifest: bool = True):
     """
     Resolves a recipe file, which may be specified as (module)recipe.yml or module::recipe.yml, with
-    the suffix being optional.
+    the suffix being optional, and with wildcards allowed.
 
-    Returns real path if file resolved, or None if filename should not be treated as a recipe file.
+    If use_manifest is specified, looks for optional MANIFEST.stimela file.
 
-    Raises FileNotFoundError if filename is a recipe file that doesn't exist.
+    Returns list of real paths if file resolved, or None if filename should not be treated as a recipe file.
+
+    Raises FileNotFoundError if filename refers to a recipe file that doesn't exist.
     """
     ext = os.path.splitext(filename)[1].lower()
     # unrecognized extension -- treat as non-filename
-    if ext and ext not in _yaml_extensions:
+    if ext and ext not in IMPLICIT_EXTENSIONS:
         return None
 
     # check for (location)filename.yml or (location)/filename.yml style
-    match1 = re.fullmatch(r"^\((.+)\)/?(.+)$", filename)
-    match2 = re.fullmatch(r"^([\w.]+)::(.+)$", filename)
+    match1 = re.fullmatch(r"^\((.+)\)/?(.*)$", filename)
+    match2 = re.fullmatch(r"^([\w.]+)::(.*)$", filename)
     if match1 or match2:
         modulename, fname = (match1 or match2).groups()
         try:
             mod = importlib.import_module(modulename)
         except ImportError as exc:
             raise FileNotFoundError(f"{filename} not found ({exc})")
-        # get filename
-        fname = os.path.join(os.path.dirname(mod.__file__), fname)
-        if ext:
-            if os.path.exists(fname):
-                return fname
-            else:
-                raise FileNotFoundError(f"{filename} resolves to {fname}, which doesn't exist")
-        # else check for implicit extension
+        resolved_filename = os.path.dirname(mod.__file__)
+    else:
+        # if it doesn't look like a filename, return None
+        if not ext and "/" not in filename and filename not in (".", ".."):
+            return None
+        resolved_filename = filename
+
+    # resolved to directory? Look for manifest or assume "*"
+    if os.path.isdir(resolved_filename):
+        manifest_file = os.path.join(resolved_filename, "MANIFEST.stimela")
+        if use_manifest and os.path.isfile(manifest_file):
+            globs = [os.path.join(resolved_filename, g.strip()) for g in open(manifest_file, "rt").readlines()]
+            resolved_filename = manifest_file
+            log.info(f"loading manifest from {manifest_file}")
         else:
-            for ext in _yaml_extensions:
-                path = f"{fname}{ext}"
-                if os.path.exists(path):
-                    return path
-            else:
-                raise FileNotFoundError(f"{filename} resolves to {fname}, which doesn't match any YaML files")
-    # no match and no extension, treat as non-filename
-    if not ext:
-        return None
-    if os.path.exists(filename):
-        return filename
-    raise FileNotFoundError(f"{filename} doesn't exist")
+            globs = [os.path.join(resolved_filename, "*" + e) for e in IMPLICIT_EXTENSIONS]
+    else:
+        # add extensions, if not supplied
+        if not ext:
+            # if name contains globs, search NAME.EXT, else search NAME and NAME.EXT
+            globs = [] if resolved_filename.endswith("*") else [resolved_filename]
+            globs += [resolved_filename + e for e in IMPLICIT_EXTENSIONS]
+        else:
+            globs = [resolved_filename]
+
+    # apply globs and check for real files (i.e. don't match directories)
+    filenames = itertools.chain(*[glob.glob(g) for g in globs])
+    filenames = [f for f in filenames if os.path.isfile(f)]
+        
+    # return list or raise error
+    if filenames:
+        return filenames
+    else:
+        if filename is resolved_filename:
+            raise FileNotFoundError(f"{filename} doesn't match any YAML documents")
+        else:
+            raise FileNotFoundError(f"{filename} resolves to {resolved_filename}, which doesn't match any YAML documents")
 
 
 def load_recipe_files(filenames: List[str]):
@@ -251,14 +270,14 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
                 errcode = 2
         else:
             try:
-                filename = resolve_recipe_file(pp)
+                filenames = resolve_recipe_files(pp, log=log)
             except FileNotFoundError as exc:
                 log_exception(exc)
                 errcode = 2
                 continue
-            if filename:
-                files_to_load.append(filename)
-                log.info(f"will load recipe/config file {filename}")
+            if filenames is not None:
+                files_to_load += filenames
+                log.info(f"will load recipe/config file(s) {', '.join(filenames)}")
             elif recipe_or_cab is not None:
                 log_exception(f"multiple recipe/cab names given")
                 errcode = 2
