@@ -23,7 +23,7 @@ _parser = None
 # see https://stackoverflow.com/questions/43244861/pyparsing-infixnotation-optimization for a cleaner parser with functions
 
 def _not_operator(value):
-    return value is UNSET or type(value) is UNSET or not value
+    return value is UNSET or isinstance(value, Unresolved) or not value
 
 _UNARY_OPERATORS = {
     '+':    lambda x: +x,
@@ -81,7 +81,7 @@ class UnaryHandler(ResultsHandler):
     
     def evaluate(self, evaluator):
         arg = evaluator._evaluate_result(self.arg, allow_unset=self.allow_unset)
-        if type(arg) is UNSET:
+        if isinstance(arg, Unresolved):
             return arg
         return self._op(arg)
 
@@ -99,9 +99,9 @@ class BinaryHandler(ResultsHandler):
     def evaluate(self, evaluator):
         arg1, arg2 = evaluator._evaluate_result(self.arg1, allow_unset=self.allow_unset), \
                      evaluator._evaluate_result(self.arg2, allow_unset=self.allow_unset)
-        if type(arg1) is UNSET:
+        if isinstance(arg1, Unresolved):
             return arg1
-        if type(arg2) is UNSET:
+        if isinstance(arg2, Unresolved):
             return arg2
         return self._op(arg1, arg2)
 
@@ -132,9 +132,9 @@ class GetItemHandler(ResultsHandler):
     def evaluate(self, evaluator):
         base = evaluator._evaluate_result(self.base)
         index = evaluator._evaluate_result(self.index)
-        if type(base) is UNSET:
+        if isinstance(base, Unresolved):
             return base
-        if type(index) is UNSET:
+        if isinstance(index, Unresolved):
             return index
         return base[index]
 
@@ -160,10 +160,16 @@ class FunctionHandler(ResultsHandler):
             raise FormulaError(f"{'.'.join(evaluator.location)}: {name}() expects at most {max_args} argument(s)")
         eval_args = [evaluator._evaluate_result(arg) for arg in args]
         # if any argument is UNSET, return it as our result
-        unsets = [arg for arg in eval_args if type(arg) is UNSET]
+        unsets = [arg for arg in eval_args if isinstance(arg, Unresolved)]
         if unsets:
             return unsets[0]
         return callable(*eval_args)
+
+    def ERROR(self, evaluator, args):
+        if len(args) != 1:
+            raise FormulaError(f"{'.'.join(evaluator.location)}: ERROR() expects one argument, got {len(args)}")
+        cond = evaluator._evaluate_result(args[0], allow_unset=True)
+        raise FormulaError(f"ERROR: {cond}")
 
     def LIST(self, evaluator, args):
         def make_list(*x):
@@ -182,8 +188,15 @@ class FunctionHandler(ResultsHandler):
             result = evaluator._evaluate_result(args[0], allow_unset=True)
         except (TypeError, ValueError) as exc:
             return False
-        if type(result) is UNSET:
-            return False
+        if isinstance(result, Unresolved):
+            return False        
+        return result
+
+    def TRY(self, evaluator, args):
+        for arg in args:
+            result = evaluator._evaluate_result(arg, allow_unset=True)
+            if not isinstance(result, Unresolved):
+                return result
         return result
 
     def MIN(self, evaluator, args):
@@ -206,6 +219,24 @@ class FunctionHandler(ResultsHandler):
         def is_num(x):
             return isinstance(x, (bool, int, float, complex)) 
         return self.evaluate_generic_callable(evaluator, "IS_NUM", is_num, args, min_args=1, max_args=1)
+    
+    def CASES(self, evaluator, args):
+        # set default case
+        if len(args)%2:
+            default_case = args[-1]
+            args = args[:-1]
+        else: 
+            default_case = None
+        # return first True case
+        for i in range(0, len(args), 2):
+            conditional, result = args[i:i+2]
+            cond = evaluator._evaluate_result(conditional, allow_unset=False)
+            if cond:
+                return evaluator._evaluate_result(result, allow_unset=True)
+        # return default
+        if default_case is None:
+            return UNSET("no match in CASES()")
+        return evaluator._evaluate_result(default_case, allow_unset=True)
 
     def IF(self, evaluator, args):
         if len(args) < 3 or len(args) > 4:
@@ -214,7 +245,7 @@ class FunctionHandler(ResultsHandler):
         if_unset = args[3] if len(args) == 4 else UNSET("")
 
         cond = evaluator._evaluate_result(conditional, allow_unset=if_unset is not None)
-        if type(cond) is UNSET:
+        if isinstance(cond, Unresolved):
             if if_unset is None:
                 raise SubstitutionError(f"{'.'.join(evaluator.location)}: '{cond.name}' is not defined")
             result = if_unset
@@ -230,7 +261,7 @@ class FunctionHandler(ResultsHandler):
         lookup, if_set, if_unset = list(args) + [None]*(3 - len(args))
 
         value = evaluator._evaluate_result(lookup, allow_unset=True)
-        if type(value) is UNSET:
+        if isinstance(value, Unresolved):
             if is_missing(if_unset):
                 return UNSET
             else:
@@ -244,7 +275,7 @@ class FunctionHandler(ResultsHandler):
         if len(args) != 1:
             raise FormulaError(f"{'.'.join(evaluator.location)}: GLOB() expects 1 argument, got {len(args)}")
         pattern = evaluator._evaluate_result(args[0])
-        if type(pattern) is UNSET:
+        if isinstance(pattern, Unresolved):
             return pattern
         return sorted(glob.glob(pattern))
 
@@ -252,7 +283,7 @@ class FunctionHandler(ResultsHandler):
         if len(args) != 1:
             raise FormulaError(f"{'.'.join(evaluator.location)}: EXISTS() expects 1 argument, got {len(args)}")
         pattern = evaluator._evaluate_result(args[0])
-        if type(pattern) is UNSET:
+        if isinstance(pattern, Unresolved):
             return pattern
         return bool(glob.glob(pattern))
 
@@ -260,7 +291,7 @@ class FunctionHandler(ResultsHandler):
         if len(args) != 1:
             raise FormulaError(f"{'.'.join(evaluator.location)}: DIRNAME() expects 1 argument, got {len(args)}")
         path = evaluator._evaluate_result(args[0])
-        if type(path) is UNSET:
+        if isinstance(path, Unresolved):
             return path
         if not isinstance(path, str):
             raise FormulaError(f"DIRNAME() expects a string, got a {str(type(path))}") 
@@ -270,7 +301,7 @@ class FunctionHandler(ResultsHandler):
         if len(args) != 1:
             raise FormulaError(f"{'.'.join(evaluator.location)}: BASENAME() expects 1 argument, got {len(args)}")
         path = evaluator._evaluate_result(args[0])
-        if type(path) is UNSET:
+        if isinstance(path, Unresolved):
             return path
         if not isinstance(path, str):
             raise FormulaError(f"BASENAME() expects a string, got a {str(type(path))}") 
@@ -280,7 +311,7 @@ class FunctionHandler(ResultsHandler):
         if len(args) != 1:
             raise FormulaError(f"{'.'.join(evaluator.location)}: EXTENSION() expects 1 argument, got {len(args)}")
         path = evaluator._evaluate_result(args[0])
-        if type(path) is UNSET:
+        if isinstance(path, Unresolved):
             return path
         if not isinstance(path, str):
             raise FormulaError(f"EXTENSION() expects a string, got a {str(type(path))}") 
@@ -290,7 +321,7 @@ class FunctionHandler(ResultsHandler):
         if len(args) != 1:
             raise FormulaError(f"{'.'.join(evaluator.location)}: STRIPEXT() expects 1 argument, got {len(args)}")
         path = evaluator._evaluate_result(args[0])
-        if type(path) is UNSET:
+        if isinstance(path, Unresolved):
             return path
         if not isinstance(path, str):
             raise FormulaError(f"STRIPEXT() expects a string, got a {str(type(path))}") 
@@ -311,7 +342,7 @@ class FunctionHandler(ResultsHandler):
         if len(args) != 1:
             raise FormulaError(f"{'.'.join(evaluator.location)}: {funcname}() expects 1 argument, got {len(args)}")
         sortlist = evaluator._evaluate_result(args[0])
-        if type(sortlist) is UNSET:
+        if isinstance(sortlist, Unresolved):
             return sortlist
         if not isinstance(sortlist, (list, tuple)):
             raise FormulaError(f"{funcname}() expects a list, got a {str(type(sortlist))}") 
@@ -342,11 +373,15 @@ def construct_parser():
     # allow expression to be used recursively
     expr = Forward()
     
-    # functions
-    functions = reduce(operator.or_, map(Keyword, ["IF", "IFSET", "GLOB", "EXISTS", "LIST", "GETITEM",
-        "BASENAME", "DIRNAME", "EXTENSION", "STRIPEXT", "MIN", "MAX", "IS_STR", "IS_NUM", "VALID", "RANGE", "NOSUBST", "SORT", "RSORT"]))
+    # functions -- get all all-uppercase members from FunctionHandler
+    anyseq_funcnames = {"GLOB", "EXISTS", "ERROR"}
+    all_funcnames = set(func for func in dir(FunctionHandler) 
+                        if callable(getattr(FunctionHandler, func)) and func.upper() == func)
+    all_funcnames -= anyseq_funcnames
+
+    functions = reduce(operator.or_, map(Keyword, all_funcnames))
     # these functions take one argument, which could also be a sequence
-    anyseq_functions = reduce(operator.or_, map(Keyword, ["GLOB", "EXISTS"]))
+    anyseq_functions = reduce(operator.or_, map(Keyword, anyseq_funcnames))
 
     atomic_value = (boolean | UNSET | EMPTY | nested_field | string | number)
 
@@ -507,7 +542,7 @@ class Evaluator(object):
                     return UNSET("", [exc])
                 raise
 
-        if type(value) is UNSET and not allow_unset:
+        if isinstance(value, Unresolved) and not allow_unset:
             raise UnsetError(f"'{value.value}' undefined")
 
         return value

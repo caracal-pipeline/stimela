@@ -49,7 +49,7 @@ class UNSET(Unresolved):
     pass
 
 class Placeholder(Unresolved):
-    """Marks placeholder values that are guaranteed to resolve later, such as fot-loop iterants"""
+    """Marks placeholder values that are guaranteed to resolve later, such as for-loop iterants"""
     pass
 
 class SkippedOutput(Unresolved):
@@ -145,7 +145,7 @@ def get_filelikes(dtype, value, filelikes=None):
 
     filelikes = set() if filelikes is None else filelikes
 
-    if value is UNSET or type(value) is UNSET:
+    if value is UNSET or isinstance(value, Unresolved):
       return []
       
     origin = get_origin(dtype)
