@@ -305,7 +305,6 @@ def _await_pvc_termination(namespace, pvc: KubeBackendOptions.Volume, log: loggi
 
 def delete_pvcs(kube: KubeBackendOptions, pvc_names, log: logging.Logger, force=False, step=True, session=False, refresh=True):
     namespace, kube_api, _ = get_kube_api()
-    global terminating_pvcs
 
     if refresh:
         refresh_pvc_list(kube)
