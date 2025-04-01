@@ -16,10 +16,10 @@ Stimela is *workflow management* framework. The two basic elements of Stimela ar
    
   * a CASA task
      
-  A *cab definition* (see :ref:`cabdefs`) is a YaML document that tells Stimela how to invoke the task, and what its inputs and outputs are (this is collectively known as a *schema*). You can write your own cab definitions, and mix-and-match them with standard cabs shipped in stimela's companion ``cult-cargo`` package.
+  A *cab definition* (see :ref:`cabdefs`) is a YAML document that tells Stimela how to invoke the task, and what its inputs and outputs are (this is collectively known as a *schema*). You can write your own cab definitions, and mix-and-match them with standard cabs shipped in stimela's companion ``cult-cargo`` package.
 
   
-* **Recipes**: a recipe is a YaML document describing a workflow, in terms of a sequence of **steps**. Each step invokes a cab, or another recipe (a.k.a. nested recipe). Steps have *parameters* which are matched (*validated*) against the schema of the underlying cab. Stimela provides a number of powerful mechanisms to pass parameters between steps.
+* **Recipes**: a recipe is a YAML document describing a workflow, in terms of a sequence of **steps**. Each step invokes a cab, or another recipe (a.k.a. nested recipe). Steps have *parameters* which are matched (*validated*) against the schema of the underlying cab. Stimela provides a number of powerful mechanisms to pass parameters between steps.
   
   Recipes also have inputs and outputs, described by the recipe's *schema* (which is what allows them to be nested.)
 

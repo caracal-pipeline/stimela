@@ -22,7 +22,7 @@ The ``policies`` section can contain one or more of the following attributes (se
 
   * ``list`` to pass the list as multiple arguments, i.e. given a parameter named "option" with a value of [X, Y], this results in three command-line arguments: ``--option``, ``X``, ``Y`` (or two command-line arguments ``X`` and ``Y``, if a positional policy is set.)
 
-  * ``[]`` to use a YaML-formatted list, i.e. ``--option``, ``[X,Y]``.
+  * ``[]`` to use a YAML-formatted list, i.e. ``--option``, ``[X,Y]``.
 
   * ``repeat`` to repeat the option for every list element, i.e. ``--option``, ``X``, ``--option``, ``Y``.
 

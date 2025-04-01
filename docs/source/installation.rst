@@ -25,23 +25,18 @@ Installing from github
 
 Developers and bleeding-edge users may want to run stimela directly off the repository. In this case, install as follows::
 
-
     # create and activate virtualenv
-    ...
-    $ pip install poetry
-    $ gh repo clone caracal-pipeline/stimela
-    $ cd stimela
-    $ poetry install
-    $ cd ..
-    $ gh repo clone caracal-pipeline/cult-cargo
-    $ cd cult-cargo
-    $ poetry install
+    (venv) $ pip install -U pip
+    (venv) $ gh repo clone caracal-pipeline/stimela
+    (venv) $ pip install -e stimela
+    (venv) $ gh repo clone caracal-pipeline/cult-cargo
+    (venv) $ pip install -e cult-cargo
 
 
 Running stimela
 ===============
 
-The main function of stimela is to run workflows defined by :ref:`recipes <basics>`. Recipes come as YaML files. 
+The main function of stimela is to run workflows defined by :ref:`recipes <basics>`. Recipes come as YAML files. 
 You can ask stimela to run a recipe as follows::
 
   $ stimela run recipe.yml [recipe_name] [foo=x bar=y baz.qux=z]
@@ -54,7 +49,7 @@ If you want to run just a single cab, use::
 
   $ stimela run cultcargo::wsclean ms=my.ms prefix=test size=1024 scale=1asec
 
-This will load ``wsclean.yml`` from ``cult-cargo``, and invoke the ``wsclean`` cab defined within (because the document only defines one cab in this case -- otherwise an extra cab name argument would be needed), passing it the listed parameters. Use ``run -S`` to invoke the Singularity backend.
+This will load ``wsclean.yml`` from ``cult-cargo``, and invoke the ``wsclean`` cab defined within (because the document only defines one cab in this case -- otherwise an extra cab name argument would be needed), passing it the listed parameters. Use ``run -S`` to invoke the Apptainer/Singularity backend.
 
 
 Getting help
@@ -72,11 +67,11 @@ Recipes (and things called :ref:`cabs <cabdef>`) can come with their own embedde
 
     $ stimela doc cultcargo::wsclean
 
-To get a list of all the cabs defined in cultcargo, use::
+This will load ``wsclean.yml`` from the ``cultcargo`` package, and print help on the content. To get a list of all the cabs defined in cultcargo, use::
 
     $ stimela doc cultcargo::
 
-The trailing ``::`` tells stimela to load all the YAML documents in the specified package. A wildcard form will give similar results (but will not include any subdirectories that cultcargo may specify)::
+The trailing ``::`` tells stimela to load all the YAML documents in the specified package. A wildcard form will give similar results (but will not include any subdirectories that cultcargo may excplicitly specify, such as ``./casa``)::
 
     $ stimela doc cultcargo::*.yml
 

@@ -23,7 +23,7 @@ Variables are defined by providing an optional ``assign`` section within the rec
 
 Things to note from the above:
 
-* Variables do not have a fixed schema. Their types are set dynamically at time of assignment, following normal YaML syntax (in the case of constants). In the example above, ``foo``, ``bar.baz`` and ``bar.corge`` would be strings, while ``bar.qux`` is an integer. 
+* Variables do not have a fixed schema. Their types are set dynamically at time of assignment, following normal YAML syntax (in the case of constants). In the example above, ``foo``, ``bar.baz`` and ``bar.corge`` would be strings, while ``bar.qux`` is an integer. 
 * Variables can be nested into subsections, such as ``bar`` above. Using dot-syntax (``bar.corge``) is equivalent to putting a variable inside a subsection.
 * Variables are subject to :ref:`subst`, and can be used inside formulas and substitutions themselves, via the ``recipe`` namespace (this is, in fact, the primary *raison d'etre* of variables.)
 * Inputs may also be assigned to (here, we assign a value of "z" to the ``grault`` input). In this case, it has the same effect as specifying ``default: z`` in grault's schema. In fact using a default is the recommended practice, being more transparent -- default values are automatically documented when the user asks for help using ``stimela doc`` while variables assignments aren't -- but see :ref:`anatomy` for more appropriate examples. 

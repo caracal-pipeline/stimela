@@ -78,7 +78,7 @@ This illustrates a number of imporant points:
 
 Other cab properties that you may come across are:
 
-* a ``parameter_passing`` property determines how inputs are passed to the cab. The default is ``args``, i.e. they are mapped to command-line arguments using specified policies. (The rather exotic alternative is ``yaml``, which passes inputs as a YaML string via the first command-line parameter. This is not used anywhere at time of writing, but is retained for historical reasons.)
+* a ``parameter_passing`` property determines how inputs are passed to the cab. The default is ``args``, i.e. they are mapped to command-line arguments using specified policies. (The rather exotic alternative is ``yaml``, which passes inputs as a YAML string via the first command-line parameter. This is not used anywhere at time of writing, but is retained for historical reasons.)
 
 * a ``backend`` section allows you to specify a non-default backend for the cab, or to tweak backend options. See :ref:`backend_reference` for details.
 
@@ -217,7 +217,7 @@ The ``python-code`` flavour allows for snippets of Python code to be specified d
             outputs:
                 c: float
 
-Note how we use :ref:`abbreviated schemas<shorthand_schemas>` here for succinctness, and the ``": |"`` feature of YaML, which starts a multiple-line string, and uses indentaton to detect where the string ends.
+Note how we use :ref:`abbreviated schemas<shorthand_schemas>` here for succinctness, and the ``": |"`` feature of YAML, which starts a multiple-line string, and uses indentaton to detect where the string ends.
 
 The operation of the ``python-code`` flavour is quite intuitive. All inputs are converted into Python variables with the corresponding name, the Python code specified by ``command`` is invoked, and any outputs are collected from Python variables of the corresponding name. 
 
