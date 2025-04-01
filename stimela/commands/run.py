@@ -57,6 +57,8 @@ def resolve_recipe_files(filename: str, log: logging.Logger, use_manifest: bool 
         except ImportError as exc:
             raise FileNotFoundError(f"{filename} not found ({exc})")
         resolved_filename = os.path.dirname(mod.__file__)
+        if fname:
+            resolved_filename = os.path.join(resolved_filename, fname)
     else:
         # if it doesn't look like a filename, return None
         if not ext and "/" not in filename and filename not in (".", ".."):

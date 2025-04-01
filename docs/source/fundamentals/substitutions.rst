@@ -201,7 +201,7 @@ A related, but more basic, kind of substitution is invoked via the ``${}`` const
         x: 1
         y: ${vars.x}
  
-Note that this kind of substition happens on a much more basic level, when the YaML itself is loaded. We don't tend to employ it much 
+Note that this kind of substition happens on a much more basic level, when the YAML itself is loaded. We don't tend to employ it much 
 (if at all), since the ``_use`` and ``_include`` extensions (see next section) tend to be a lot more useful.
 
 

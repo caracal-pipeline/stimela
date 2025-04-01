@@ -4,12 +4,12 @@
 Modularity: use and include
 ###########################
 
-Stimela implements a couple of extensions to the YaML parser to support modularity. For example, the ``cult-cargo`` package (a companion to stimela) contains standard, curated cab definitions for common radio astronomy software packages. On top of that, you may want to provide your own collections of cabs, or use your colleagues's cab collection, or just split your recipe into a set of standard reusable modules.
+Stimela implements a couple of extensions to the YAML parser to support modularity. For example, the ``cult-cargo`` package (a companion to stimela) contains standard, curated cab definitions for common radio astronomy software packages. On top of that, you may want to provide your own collections of cabs, or use your colleagues's cab collection, or just split your recipe into a set of standard reusable modules.
 
 Includes
 --------
 
-The lynchpin to modularity is the special ``_include`` section. This gives a list of YaML files which are read in and merged at the point of invocation. For example, you may have your own set of custom cabs defined in ``my-cabs.yml``::
+The lynchpin to modularity is the special ``_include`` section. This gives a list of YAML files which are read in and merged at the point of invocation. For example, you may have your own set of custom cabs defined in ``my-cabs.yml``::
 
     cabs:
         foo:
@@ -50,6 +50,8 @@ Includes can be nested. In real life, your ``my-cabs.yml`` might actually look l
 
 Includes are a "merge"
 ^^^^^^^^^^^^^^^^^^^^^^
+.. _include_merge:
+
 
 Include works in the sense of a "merge" (or a "union") with prior content. Consider that in the example above, both ``my-cabs.yml`` and ``wsclean.yml`` will contain a ``cabs`` section with different content. The resulting ``cabs`` section available to stimela will contain subsections from both of the included files -- the two ``cabs`` sections will have been merged. What happens when the contents clash? The answer is that everything is merged. 
 
@@ -78,7 +80,7 @@ Equivalently, you can do the augmentation by providing a ``cabs: wsclean`` secti
 Pre- and post-includes
 ^^^^^^^^^^^^^^^^^^^^^^
 
-Since includes are a merge, the order of the merge is important. Included content comes first: anything listed in an ``_include`` section is loaded first (i.e. *pre-included*), after which the remaining content of the YaML file is merged in, and thus can augment whatever was pre-included. 
+Since includes are a merge, the order of the merge is important. Included content comes first: anything listed in an ``_include`` section is loaded first (i.e. *pre-included*), after which the remaining content of the YAML file is merged in, and thus can augment whatever was pre-included. 
 
 If you would like to include a file that augments your content after it's loaded, use an ``_include_post`` section::
 
@@ -95,9 +97,9 @@ If you would like to include a file that augments your content after it's loaded
     _include_post:
         - tweaks.yml
 
-Anything given in ``_include_post`` will be merged in *after* the YaML content (*post-included*), thus potentially augmenting the content.
+Anything given in ``_include_post`` will be merged in *after* the YAML content (*post-included*), thus potentially augmenting the content.
 
-Note that the actual order in which ``_include`` and ``_include_post`` sections appear in the YaML file is not important. The former is always processed first, then the rest of the YaML content is merged in, then the latter is post-included. We prefer to give both the include and post-include statements at the top of any given YaML file, for readability.
+Note that the actual order in which ``_include`` and ``_include_post`` sections appear in the YAML file is not important. The former is always processed first, then the rest of the YAML content is merged in, then the latter is post-included. We prefer to give both the include and post-include statements at the top of any given YAML file, for readability.
 
 Includes can appear inside sub-sections
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -161,7 +163,7 @@ Use: reusing content
 
 .. _use_statement:
 
-The special ``_use`` section is closely related to ``_include``, but instead of pulling in YaML files, it copies in previously defined sections. A typical use case for ``_use`` (excusing the pun) is "library" content. You'll want to use ``_use`` (excusing the pun) if you find yourself often repeating identical bits of YaML. For example, if your recipe contains multiple imaging steps where you invoke the imager with a largely the same set of parameters, you can avoid repetition like so::
+The special ``_use`` section is closely related to ``_include``, but instead of pulling in YAML files, it copies in previously defined sections. A typical use case for ``_use`` (excusing the pun) is "library" content. You'll want to use ``_use`` (excusing the pun) if you find yourself often repeating identical bits of YAML. For example, if your recipe contains multiple imaging steps where you invoke the imager with a largely the same set of parameters, you can avoid repetition like so::
 
     calibration-recipe:
         info: "a notional recipe for calibration & imaging"

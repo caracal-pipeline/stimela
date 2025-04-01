@@ -11,7 +11,7 @@ Stimela 2.0 is a fairly young package, so this section will be short and sweet. 
 Structuring recipes
 -------------------
 
-Stimela itself does not impose any particular structure on the recipe YaML, so one could, in principle, make it one big flat document containing everything: cab definitions, recipes, configuration, backend settings, etc.
+Stimela itself does not impose any particular structure on the recipe YAML, so one could, in principle, make it one big flat document containing everything: cab definitions, recipes, configuration, backend settings, etc.
 
 However, the ``_include`` and ``_use`` features can be used to promote a far more modular and structured approach, with separate documents for:
 

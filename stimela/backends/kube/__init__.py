@@ -258,10 +258,10 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     from . import run_kube
     return run_kube.run(cab=cab, params=params, fqname=fqname, backend=backend, log=log, subst=subst)
 
-_kube_client = _kube_config = _kube_context = _kube_namespace = None 
+_kube_config = _kube_context = _kube_namespace = None 
 
 def get_kube_api(context: Optional[str]=None):
-    global _kube_client, _kube_config, _kube_context, _kube_namespace
+    global _kube_config, _kube_context, _kube_namespace
 
     if _kube_config is None:
         _kube_config = True

@@ -1,8 +1,8 @@
 .. highlight: yml
 .. _backends:
 
-Backends
-========
+Backends and Images
+===================
 
 Stimela recipes may be executed on a variety of backends:
 
@@ -50,6 +50,41 @@ It is also possible to pre-build all the images that a given recipe needs. This 
 
 Stimela will then load the recipe, scan through all the steps, and issue build commands for the required images. It will skip any images that already exist (with the appropriate version). Use the ``-r`` option to do a fresh rebuild of all images.
 
+Running different images
+------------------------
+
+If alternative versions of an image are provided (as is the case for many packages shipped via cultcargo), one can tweak the cab definition to use a different image. The :ref:`include-and-merge semantics<include_merge>` of the ``_include`` statement make this easy::
+
+    _include:
+        - (cultcargo)wsclean.yml
+
+    cabs:
+        wsclean:
+            image:
+                version: 3.0.1-cc0.2.0
+
+To find available alternative versions, you may consult the package's `image manifest <https://github.com/caracal-pipeline/cult-cargo/blob/master/bundle-manifest.md>`_. Cultcargo uses a specific naming convention for image versions -- an underlying package version, followed by a bundle version suffix (``-cc0.2.0`` for cultcargo 0.2.0). The default image version is usually just the bundle version itself (e.g. ``cc0.2.0``); this usually corresponds to the most recent/stable version of the underlying package at the time of that specific cultcargo release.
+
+The full image section consists of ``repository``, ``name`` and ``version`` components, and these may be modified individually as needed. If you want to run an image from an alternative source, you may specify e.g::
+
+    cabs:
+        wsclean:
+            image:
+                registry: quay.io/myorg
+                name: myimage
+                version: latest
+
+This will use ``quay.io/myorg/myimage:latest`` to download the image.
+
+Finally, if you have built e.g. a local Apptainer/Singularity image, and want to run that instead, you may specify a path to it as follows::
+
+    cabs:
+        wsclean:
+            image:
+                path: /path/to/image.sif 
+
+The ``path`` setting then overrides all other ``image`` attributes.
+
 
 
 Tweaking backend settings, all the way down
@@ -63,7 +98,7 @@ Crucially, backend settings can be tweaked on a per-recipe, per-cab and per-step
 
 A typical use case (as well as a suggested best practice) for this would be as follows. Let's say you have a recipe defined in ``recipe.yml``. Ideally, this should not specify any backend settings at all -- a recipe file should define only the logical sequence of steps in the workflow, not the specific means of executing them. You are free to switch backends by simply specifying a command-line option to ``stimela run``. A typical user would run everything via the Singularity backend -- the most hassle-free route.
 
-Now, let's say you have a long workflow you've been running via Singularity, but you want to test it with a new experimental version of ``breizorro``, for which no Singularity image is yet provided. You've installed this version in a local virtual environment, and you want to switch this into your workflow. Stimela makes this pretty straightforward. Recall that ``stimela run`` can take multiple YaML files as arguments, merging them together in order. You can therefore create a file named, say, ``tweaks.yml``, containing::
+Now, let's say you have a long workflow you've been running via Singularity, but you want to test it with a new experimental version of ``breizorro``, for which no Singularity image is yet provided. You've installed this version in a local virtual environment, and you want to switch this into your workflow. Stimela makes this pretty straightforward. Recall that ``stimela run`` can take multiple YAML files as arguments, merging them together in order. You can therefore create a file named, say, ``tweaks.yml``, containing::
 
     opts:
         backend:

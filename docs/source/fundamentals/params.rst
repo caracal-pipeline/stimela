@@ -118,7 +118,7 @@ As intimated above, stimela tries to be fairly proactive (and protective of the 
 
 Validation is performed on mutiple levels. *Prevalidation* is done before running a recipe. This checks the recipe for self-consistency inasmuch as possible, i.e. that all required parameters (of the recipe itself, and of the constituent steps) are present, that parameter types match the schemas, etc. These checks are, by necessity, limited in scope -- some parameters (e.g. those that depend on the outputs of a step) may only become valid and available at runtime. This is where *runtime validation* steps in. Before running a step, stimela will do a final check, ensuring that all required inputs are present, all inputs match the schema, and all required named file outputs are supplied. After a step is executed, stimela will likewise check all outputs for validity.
 
-When checking parameters against a schema, type checking is enforced, but strings are (usually) sensibly parsed, YaML-style. For example, an ``int`` input will hapily accept the string ``"5"`` (but not ``"a"``), and a ``List[int]`` can be specified as ``"[0, 2]"``. 
+When checking parameters against a schema, type checking is enforced, but strings are (usually) sensibly parsed, YAML-style. For example, an ``int`` input will hapily accept the string ``"5"`` (but not ``"a"``), and a ``List[int]`` can be specified as ``"[0, 2]"``. 
 
 
 Parameter policies for cabs

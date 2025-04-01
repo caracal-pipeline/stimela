@@ -70,7 +70,7 @@ Recipes and configuration
 .. _config_loading_recipes:
 
 
-In practice, there's little difference between recipes and configuration files, since recipe files can include configuration tweaks (see :ref:`anatomy` for an example). However, when loading recipe YaML files via the ``run``, ``doc`` or ``build`` commands, Stimela takes one additional post-processing step. Any content corresponding to the top-level configuration sections listed above is merged into the configuration namespace as expected. However, any sections **not** listed above are treated as recipe definitions, and implicitly moved into ``lib.recipes``. Thus, a recipe file containing::
+In practice, there's little difference between recipes and configuration files, since recipe files can include configuration tweaks (see :ref:`anatomy` for an example). However, when loading recipe YAML files via the ``run``, ``doc`` or ``build`` commands, Stimela takes one additional post-processing step. Any content corresponding to the top-level configuration sections listed above is merged into the configuration namespace as expected. However, any sections **not** listed above are treated as recipe definitions, and implicitly moved into ``lib.recipes``. Thus, a recipe file containing::
 
     opts:
         backend:
