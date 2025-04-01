@@ -161,6 +161,7 @@ def refresh_pvc_list(kube: KubeBackendOptions):
 def resolve_volumes(kube: KubeBackendOptions, log: logging.Logger, step_token=None, refresh=True):
     namespace, kube_api, _ = get_kube_api()
     ExistsPolicy = KubeBackendOptions.Volume.ExistPolicy
+    global terminating_pvcs
 
     if refresh:
         refresh_pvc_list(kube)
@@ -281,6 +282,7 @@ def await_pvcs(namespace, pvc_names, log: logging.Logger):
         time.sleep(1)
 
 def _await_pvc_termination(namespace, pvc: KubeBackendOptions.Volume, log: logging.Logger):
+    global terminating_pvcs
     namespace, kube_api, _ = get_kube_api()
     time0 = time.time()
     while True:
@@ -305,6 +307,7 @@ def _await_pvc_termination(namespace, pvc: KubeBackendOptions.Volume, log: loggi
 
 def delete_pvcs(kube: KubeBackendOptions, pvc_names, log: logging.Logger, force=False, step=True, session=False, refresh=True):
     namespace, kube_api, _ = get_kube_api()
+    global terminating_pvcs
 
     if refresh:
         refresh_pvc_list(kube)
