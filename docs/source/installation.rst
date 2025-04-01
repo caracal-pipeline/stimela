@@ -46,7 +46,7 @@ You can ask stimela to run a recipe as follows::
 
   $ stimela run recipe.yml [recipe_name] [foo=x bar=y baz.qux=z]
 
-A ``recipe_name`` is only needed if the YaML file contains more than one recipe (one can also pass the ``-l/--last-recipe`` flag to select the *last* recipe in the file).
+A ``recipe_name`` is only needed if the YAML file contains more than one recipe (one can also pass the ``-l/--last-recipe`` flag to select the *last* recipe in the file). Note also that the ``.yml`` suffix is optional, and will be added implicitly if omitted.
 
 Arguments such as ``foo=x`` can be used to specify recipe parameters. An alternative form is ``-a/--assign foo x`` (useful because it allows shell tab-completion on values.)
 
@@ -54,7 +54,7 @@ If you want to run just a single cab, use::
 
   $ stimela run cultcargo::wsclean ms=my.ms prefix=test size=1024 scale=1asec
 
-This will invoke the ``wsclean`` cab from ``cult-cargo``, passing it the listed parameters. Use ``run -S`` to invoke the Singularity backend.
+This will load ``wsclean.yml`` from ``cult-cargo``, and invoke the ``wsclean`` cab defined within (because the document only defines one cab in this case -- otherwise an extra cab name argument would be needed), passing it the listed parameters. Use ``run -S`` to invoke the Singularity backend.
 
 
 Getting help
@@ -71,6 +71,16 @@ Recipes (and things called :ref:`cabs <cabdef>`) can come with their own embedde
 ...where ``anything`` can be a recipe name or a cab name (provided that cab is loaded by the recipe). To get help on a cab provided by cult-cargo without specifying a recipe, use e.g.::
 
     $ stimela doc cultcargo::wsclean
+
+To get a list of all the cabs defined in cultcargo, use::
+
+    $ stimela doc cultcargo::
+
+The trailing ``::`` tells stimela to load all the YAML documents in the specified package. A wildcard form will give similar results (but will not include any subdirectories that cultcargo may specify)::
+
+    $ stimela doc cultcargo::*.yml
+
+
 
 
 
