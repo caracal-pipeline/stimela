@@ -131,16 +131,19 @@ def _validate_list(text: str, element_type, schema, sep=",", brackets=True):
             return None
         else:
             return schema.default
-    if brackets:
-        if text == "[]":
-            return []
-        if text[0] != "[" or text[-1] != "]":
-            raise click.BadParameter(f"can't convert to '{schema.dtype}', missing '[]' brackets")
+
+    if text == "[]":
+        return []
+
+    if text[0] == "[" and text[-1] == "]":
         text = text[1:-1]
+    elif brackets:
+        raise click.BadParameter(f"can't convert to '{schema.dtype}', missing '[]' brackets")
+
     try:
         return list(element_type(x) for x in text.split(sep))
-    except ValueError:
-        raise click.BadParameter(f"can't convert to '{schema.dtype}'")
+    except ValueError as e:
+        raise click.BadParameter(f"can't convert to '{schema.dtype}'. Underlying exception was: {e}")
 
 def _validate_tuple(text: str, element_types, schema, sep=",", brackets=True):
     if not text:
@@ -148,19 +151,22 @@ def _validate_tuple(text: str, element_types, schema, sep=",", brackets=True):
             return None
         else:
             return schema.default
-    if brackets:
-        if text == "[]":
-            return []
-        if text[0] != "[" or text[-1] != "]":
-            raise click.BadParameter(f"can't convert to '{schema.dtype}', missing '[]' brackets")
+
+    if text == "[]":
+        return []
+
+    if text[0] == "[" and text[-1] == "]":
         text = text[1:-1]
+    elif brackets:
+        raise click.BadParameter(f"can't convert to '{schema.dtype}', missing '[]' brackets")
+
     elems = text.split(sep)
     if len(elems) != len(element_types):
         raise click.BadParameter(f"can't convert to '{schema.dtype}', tuple length mismatch")
     try:
         return tuple(element_type(x) for x, element_type in zip(elems, element_types))
-    except ValueError:
-        raise click.BadParameter(f"can't convert to '{schema.dtype}'")
+    except ValueError as e:
+        raise click.BadParameter(f"can't convert to '{schema.dtype}'. Underlying exception was: {e}")
 
 @dataclass
 class Schema(object):
@@ -182,7 +188,7 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
             See https://stimela.readthedocs.io/en/latest/reference/schema_ref.html
         default_policies: default policies applied to the schema, overrides the policies section
             if supplied. See ParameterPolicies in scabha/cargo.py, and
-            https://stimela.readthedocs.io/en/latest/reference/policies.html  
+            https://stimela.readthedocs.io/en/latest/reference/policies.html
 
     Example:
     =======
@@ -200,7 +206,7 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
         outputs:
         {}
 
-    The corresponding python code uses clickify_parameters as 
+    The corresponding python code uses clickify_parameters as
     a decorator:
         import click
 
@@ -294,6 +300,7 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
                         multiple = True
                         dtype = elem_type
                         metavar = schema.metavar or f"{elem_type.__name__}"
+
                         # multiple options have a click default of () not None
                         if 'default' not in kwargs:
                             kwargs['default'] = None
@@ -355,7 +362,7 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
                               metavar=metavar)
                 deco = click.argument(name, **kwargs)
             else:
-                kwargs.update(type=dtype, callback=validator, 
+                kwargs.update(type=dtype, callback=validator,
                               required=schema.required, multiple=multiple,
                               metavar=metavar, help=schema.info)
                 deco = click.option(*optnames, **kwargs)
