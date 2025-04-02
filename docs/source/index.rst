@@ -18,7 +18,6 @@ Stimela is a workflow management framework for creating portable and reproducibl
    fundamentals/fundamentals.rst
    reference/reference.rst
    authors
-   citation
    
 
 .. Indices and tables
