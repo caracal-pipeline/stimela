@@ -4,8 +4,6 @@
 Getting started
 ###############
 
-Please refer to our `reference paper <https://doi.org/10.1016/j.ascom.2025.100959>`_ for an overview of Stimela 2. Note that the 2.x framework is completely new, and very different from `Stimela 1.x ("Classic") <https://github.com/ratt-ru/Stimela-classic>`_. Throughout these documentation pages, we use "Stimela" to refer to Stimela version 2.x. We do not discuss Stimela Classic further.
-
 Stimela will run with Python 3.9 through 3.12. For containerization support, you'll also need `Singularity (Apptainer) <https://apptainer.org/>`_ installed. You can still run Stimela in "native" mode without Singularity. 
 
 If you plan to use the Slurm and Kubernetes backends, you'll also need the `Slurm scheduler <https://slurm.schedmd.com/>`_ and/or the `Python Kubernetes client <https://pypi.org/project/kubernetes/>`_.
