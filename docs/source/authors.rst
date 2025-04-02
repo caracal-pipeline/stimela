@@ -3,7 +3,7 @@
    :caption: Authors:
 
 
-Authors & Citations
+Authors & citations
 ===================
 
 Development leads
