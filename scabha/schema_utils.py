@@ -300,7 +300,6 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]],
                         multiple = True
                         dtype = elem_type
                         metavar = schema.metavar or f"{elem_type.__name__}"
-
                         # multiple options have a click default of () not None
                         if 'default' not in kwargs:
                             kwargs['default'] = None
