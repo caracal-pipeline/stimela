@@ -57,16 +57,40 @@ The Singularity backend has the following settings::
             image_dir: ~/.singularity
             auto_build: true
             rebuild: false
-            executable: path
+            executable: PATH
             remote_only: false
-            
+            contain: true
+            contain_all: false
+            bind_tmp: true
+            env:
+                VAR: VALUE
+            bind_dirs:
+                arbitrary_label:
+                    host: PATH
+                    target: PATH
+                    mode: rw
+                    mkdir: false
+                    conditional: ''
+
 The backend is enabled by default, if the ``singularity`` executable (or whatever is specified by the ``executable`` setting) is found in the path. Set ``enable`` to false to disable.
 
-Singularity works with local copies of application images (in SIF format) that can be built from Docker-format images served by a remote Docker registry. The ``image_dir`` setting determines where these SIF images are cached. If ``auto_build`` is set, Stimela will attempt to build any missing Singularity images on-demand. If ``rebuild`` is set, it will rebuild images anew even if they are already present. 
+Singularity works with local copies of application images (in SIF format) that can be built from Docker-format images served by a remote Docker registry. The ``image_dir`` setting determines where these SIF images are cached. If ``auto_build`` is set, Stimela will attempt to build any missing Singularity images on-demand. If ``rebuild`` is set, it will rebuild images anew even if they are already present. (Note that in a cluster environment, it may be useful to disable auto-build, and work with prebuilt images only. The ``stimela build`` command can be used to pre-build images.)
 
-Note that in a cluster environment, it may be useful to disable auto-build, and work with prebuilt images only. The ``stimela build`` command can be used to pre-build images.
+``remote_only`` tells Stimela to not bother checking for a local install of Singularity. This can be useful in combination with Slurm, if the login node (or whatever node Stimela is executed on) does not support Singularity, but the compute nodes on which jobs are scheduled do.
 
-Finally, ``remote_only`` tells Stimela to not bother checking for a local install of Singularity. This can be useful in combination with Slurm, if the login node (or whatever node Stimela is executed on) does not support Singularity, but the compute nodes on which jobs are scheduled do.
+Containers are normally run with the ``--contain`` flag (see Singularity documentation: this isolates the container from the host filesystem). This is the recommended setting. You may choose for more strict isolation by setting ``containall: true`` (which runs with the ``--containall`` flag), or disable isolation altogether via ``contain: false``. (The latter is not recommended, for the sake of repeatable workflows.) 
+
+The optional ``env`` subsection can be used to setup additional environment variables inside the container.
+
+Binding container directories
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+When ``contain`` or ``containall`` are in effect, the container does not see the host filesystem, except for directories that are explicitly bound by Stimela. By default, these are derived from the file- and directory-type inputs and outputs of the cab. If additional directories need to be mounted, this can be specified by adding entries to the ``bind_dirs`` subsection.
+
+Each entry in ``bind_dirs`` is a subsection with an arbitrary label, containing, as a minimum, a ``host`` path, and a ``target`` path (i.e. inside the container) if this needs to be different. A special case of ``host: empty`` refers to an empty temporary directory (in which case ``target`` is required). ``mode`` can be set to ``ro`` for a read-only bind. With ``mkdir: true``, Stimela will create a host directory if it doesn't exist. Finally, the bind can be made ``conditional`` using a :ref:`substitution or formula expression <subst>` that is evaluated when each step is run.
+
+With ``bind_tmp: true``, an empty temporary directory on the host is bound to ``/tmp`` inside the container. This is normally a sensible thing to do, so this is the default setting.
+
 
 Slurm wrapper settings
 ----------------------------
@@ -188,7 +212,7 @@ The Kubernetes backend can be pretty arcane to configure, and is still under act
 Bat country! Backend settings and substitutions
 -----------------------------------------------
 
-Backend settings are amenable to :ref:`substitutions and formula evaluations <subst>`, in a somewhat limited way. Only string-type settings support substitutions and formulas. (Note also that at image build time, only the ``info`` namespace is available.) 
+Backend settings are amenable to :ref:`substitutions and formula evaluations <subst>`, in a somewhat limited way. Only string-type settings support substitutions and formulas. (Note also that at image build time, only the ``self`` namespace is available.) 
 
 Like everything else in the Stimela config namespace, the global backend settings may be manipulated via :ref:`assign-sections <assign>`. For example::
 

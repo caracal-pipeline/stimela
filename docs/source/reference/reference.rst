@@ -7,7 +7,7 @@ Stimela reference
 
 .. toctree::
    :maxdepth: 3
-   :caption: stimela reference:
+   :caption: Stimela reference:
 
    backend_ref
    logfiles
