@@ -32,6 +32,8 @@ This will cause Stimela to read in ``my-cabs.yml``, and paste in the content as 
 
 The ()-form tells Stimela to look for ``wsclean.yml`` inside the Python package named ``cultcargo``, wherever that happens to reside. You will have presumably installed it via ``pip`` in the usual way, and you don't actually need to know where exactly it is installed, as Stimela will take care of finding it for you using the standard Python machinery. In the second case, Stimela will look for ``my-cabs.yml`` in the current directory, then in a few standard locations such as ``~/lib/stimela``. You can set the ``STIMELA_INCLUDE`` environment variable to specify a custom set of paths to look in.
 
+Note that the ``.yml`` suffix is optional, and will be added implicitly if missing.
+
 Includes can be nested
 ^^^^^^^^^^^^^^^^^^^^^^
 
