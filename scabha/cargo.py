@@ -131,9 +131,9 @@ class Parameter(object):
     aliases: Optional[List[str]] = ()
 
     # if true, create parent directories of file-type outputs if needed
-    mkdir: bool = True
-    # if true, create directory-type outputs themselves
-    mkdir_self: bool = False
+    mkdir_parent: bool = True
+    # if true, create empty directory for the output itself, if it doesn't exist
+    mkdir: bool = False
 
     # if True, and parameter is a path, access to its parent directory is required
     access_parent_dir: bool = False

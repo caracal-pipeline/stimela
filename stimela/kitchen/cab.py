@@ -248,7 +248,6 @@ class Cab(Cargo):
                 filtered_params[output_name] = params[name]
             elif self.get_schema_policy(schema, 'pass_missing_as_none'):
                 filtered_params[output_name] = None
-        print(params.keys(), filtered_params.keys())
         return filtered_params
 
 
