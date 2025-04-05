@@ -1227,7 +1227,8 @@ class Recipe(Cargo):
         if not backends.initialized:
             try:
                 backend_opts = OmegaConf.merge(stimela.CONFIG.opts.backend, backend)
-                backend_opts = evaluate_and_substitute_object(backend_opts, subst, recursion_level=-1, location=[self.fqname, "backend"])
+                backend_opts = evaluate_and_substitute_object(backend_opts, subst, 
+                                                              recursion_level=-1, location=[self.fqname, "backend"])
                 if getattr(backend_opts, 'verbose', 0):
                     opts_yaml = OmegaConf.to_yaml(backend_opts)
                     log_rich_payload(self.log, "initial backend settings are", opts_yaml, syntax="yaml") 

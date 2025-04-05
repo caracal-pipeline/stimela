@@ -5,7 +5,7 @@
 Substitutions and formulas
 ##########################
 
-Substitutions and formula evaluation are a key feature of stimela, which allow the inputs and outputs of steps and recipes to be linked with minimum fuss. Here's an idealized example showing off both features::
+Substitutions and formula evaluation are a key feature of Stimela, which allow the inputs and outputs of steps and recipes to be linked with minimum fuss. Here's an idealized example showing off both features::
 
     calibration-recipe:
         info: "a notional recipe for calibration & imaging"
@@ -74,7 +74,7 @@ Here is what happens next:
 
 * All the steps refer to the recipe's MS input via the ``=recipe.ms`` construct, which is the simplest kind of formula meaning "the value of the ``ms`` variable of the ``recipe`` namespace".
 
-* The first step makes an image and a model from the MS. The size of the image will be 2048 pixels (``=recipe.image-size * 2``). The output filenames, formed up via {}-substitutions, will be ``imfoo.image-1-02048.fits`` and ``imfoo.model-1.fits``. Note how this is based on the recipe's ``image-name`` parameter, the image size (``current.size`` refers to the ``size`` parameter of the current step), and the "1" suffix in the step's name ("image-1"), which is given by the ``info.suffix`` substitution (see below).
+* The first step makes an image and a model from the MS. The size of the image will be 2048 pixels (``=recipe.image-size * 2``). The output filenames, formed up via {}-substitutions, will be ``imfoo.image-1-02048.fits`` and ``imfoo.model-1.fits``. Note how this is based on the recipe's ``image-name`` parameter, the image size (``current.size`` refers to the ``size`` parameter of the current step), and the "1" suffix in the step's name ("image-1"), which is given by the ``self.suffix`` substitution (see below).
  
 * The second step predicts the model into the MODEL_DATA column of the MS. Note how ``previous.output.model`` refers to the ``output.model`` parameter of the previous step.
 
@@ -91,7 +91,7 @@ The invocation of ``recipe.ms`` above is an example of a namespace lookup. The *
 
 In the context of a step's parameter evaluation, the following namespaces are recognized:
 
-* ``recipe`` refers to parameters (and variables, see :ref:`recipe_variables`) of the containing recipe.
+* ``recipe`` refers to parameters of the containing recipe.
 
 * ``root`` refers to parameters and variables of the top-level recipe. Within the top-level recipe, this is the same as ``recipe``, but if a step contains a sub-recipe, this will be distinct inside the sub-recipe.
 
@@ -101,22 +101,21 @@ In the context of a step's parameter evaluation, the following namespaces are re
 
 * ``steps.name`` refers to parameters of a (necessarily preceding) step named ``name``. A particularly useful twist on this is given by wildcard matching. For example, ``steps.image-*.output.model`` will match the alphanumerically highest preceding step matching ``image-*``.  
 
-* ``info`` contains some information on the name of the current step, in particular:
+* ``self`` contains some information on the current step, in particular:
 
-  * ``info.label`` is the step label (e.g. "image-1", "calibrate" above);
+  * ``self.label`` is the step label (e.g. "image-1", "calibrate" above);
     
-  * ``info.label_parts`` is a list of the components of the step label, split at the dash character. For the two steps above, this would be ["image", "1"] and ["calibrate"];
+  * ``self.label_parts`` is a list of the components of the step label, split at the dash character. For the two steps above, this would be ["image", "1"] and ["calibrate"];
     
-  * ``info.suffix`` is the last component of the label, or an empty string if the label has a single component. For the two steps above this would be "1", and an empty string.
+  * ``self.suffix`` is the last component of the label, or an empty string if the label has a single component. For the two steps above this would be "1", and an empty string.
     
-  * ``info.fqname`` is the fully-qualified name of the step, e.g. ``calibration-recipe.image-1``.
+  * ``self.fqname`` is the fully-qualified name of the step, e.g. ``calibration-recipe.image-1``.
 
-  * ``info.taskname`` is similar to ``fqname``, but if the recipe is a for-loop, it will include a loop counter, i.e. ``top-recipe.0.sub-recipe.1.step``. Note
-  that this works to any level of nesting.
+  * ``self.taskname`` is similar to ``fqname``, but if the recipe is a for-loop, it will include a loop counter, i.e. ``top-recipe.0.sub-recipe.1.step``. Note that this works to any level of nesting.
 
-  The ``info`` namespace is particularly useful for forming up filenames.   
+  The ``self`` namespace is particularly useful for forming up filenames. (Note that ``self`` was formerly known as ``info`` in Stimela 2.0.x -- the old form still works, but is being deprecated.)
 
-* ``config`` refers to the top-level configuration namespace, which effectively contains everything known to stimela. For example, ``config.opts`` are options, ``config.cabs`` are cab definitions, etc.
+* ``config`` refers to the top-level configuration namespace, which effectively contains everything known to Stimela. For example, ``config.opts`` are options, ``config.cabs`` are cab definitions, etc.
 
 Formula evaluation
 ------------------
@@ -147,11 +146,15 @@ As we saw above, a parameter value starting with ``=`` invokes the formula parse
 
 * item lookup, e.g. ``current.foo[item]``. The item may be any valid expression.
 
-* built-in functions. The list of available functions is growing with every new stimela version; at time of writing the following are available: 
+* built-in functions. The list of available functions is growing with every new Stimela version; at time of writing the following are available: 
 
   * ``IF(`` *condition, if_true, if_false[, if_unset]* ``)`` evaluates the condition, and returns *if_true* or *if_false* depending on the outcome (which is evaluated in the Pythonic sense, i.e. a zero or an empty string is considered false). If *condition* is unset (i.e. is a namespace lookup where the final element is not found), returns *if_unset*, or throws an error if the latter is omitted.
 
   * ``IFSET(`` *namespace_lookup[, if_set,[, if_unset]]* ``)`` checks if the namespace lookup is valid (i.e. if the final element is found). If it is valid, returns *if_set* if given, or the value if the lookup if not. If it is not valid, returns *if_unset* if given, or ``UNSET`` if omitted.  
+
+  * ``CASES(`` *cond1, result1, cond2, result2, ...[default]* ``)`` evaluates each conditional in turn, and returns the first result corresponding to a true conditional. If none of the conditionals evaluate to true, returns the default, if supplied, else returns an unset/unresolved value.
+
+  * ``ERROR(`` *message* ``)`` emits an error message -- this can be useful within ``IF()`` or ``CASES()``.
 
   * ``GLOB(`` *pattern* ``)`` returns a list of filenames matching the given pattern. 
 

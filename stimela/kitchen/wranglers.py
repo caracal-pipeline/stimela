@@ -2,6 +2,7 @@ import re, logging, json, yaml
 from typing import Any, List, Dict, Optional, Union
 from omegaconf import ListConfig
 
+
 from scabha.cargo import ListOrString
 from stimela.exceptions import CabValidationError, StimelaCabOutputError, \
                     StimelaCabRuntimeError
@@ -114,7 +115,7 @@ class Replace(_BaseWrangler):
 
 class Highlight(_BaseWrangler):
     """
-    This wrangler will replace the matching pattern with the given string. Specified as REPLACE:replacement.
+    This wrangler will highlight the matching pattern using the given rich markup. Specified as REPLACE:replacement.
     Uses re.sub() internally, so look that up for more complex usage.
     """
     specifier = "HIGHLIGHT:(?P<style>.*)"

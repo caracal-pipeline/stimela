@@ -59,7 +59,7 @@ _task_stack = []
 
 def init_progress_bar(boring=False):
     global progress_console, progress_bar, progress_task
-    progress_console = rich.console.Console(file=sys.stdout, highlight=False)
+    progress_console = rich.console.Console(file=sys.stdout, highlight=False, emoji=False)
     progress_bar = rich.progress.Progress(
         rich.progress.SpinnerColumn(),
         "[yellow]{task.fields[elapsed_time]}[/yellow]",

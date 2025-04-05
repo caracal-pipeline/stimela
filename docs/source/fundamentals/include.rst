@@ -4,7 +4,7 @@
 Modularity: use and include
 ###########################
 
-Stimela implements a couple of extensions to the YAML parser to support modularity. For example, the ``cult-cargo`` package (a companion to stimela) contains standard, curated cab definitions for common radio astronomy software packages. On top of that, you may want to provide your own collections of cabs, or use your colleagues's cab collection, or just split your recipe into a set of standard reusable modules.
+Stimela implements a couple of extensions to the YAML parser to support modularity. For example, the ``cult-cargo`` package (a companion to Stimela) contains standard, curated cab definitions for common radio astronomy software packages. On top of that, you may want to provide your own collections of cabs, or use your colleagues's cab collection, or just split your recipe into a set of standard reusable modules.
 
 Includes
 --------
@@ -24,13 +24,15 @@ If you want to use these cabs in your recipe, you'll need to add this at the top
 
     _include: my-cabs.yml
 
-This will cause stimela to read in ``my-cabs.yml``, and paste in the content as if it was part of the recipe in the first place. Of course, you might want to use some ``cult-cargo`` cabs alongside your custom ones, in which case your include section will look something like::
+This will cause Stimela to read in ``my-cabs.yml``, and paste in the content as if it was part of the recipe in the first place. Of course, you might want to use some ``cult-cargo`` cabs alongside your custom ones, in which case your include section will look something like::
 
     _include: 
         - (cultcargo)wsclean.yml
         - my-cabs.yml
 
-The ()-form tells stimela to look for ``wsclean.yml`` inside the Python package named ``cultcargo``, wherever that happens to reside. You will have presumably installed it via ``pip`` in the usual way, and you don't actually need to know where exactly it is installed, as stimela will take care of finding it for you using the standard Python machinery. In the second case, stimela will look for ``my-cabs.yml`` in the current directory, then in a few standard locations such as ``~/lib/stimela``. You can set the ``STIMELA_INCLUDE`` environment variable to specify a custom set of paths to look in.
+The ()-form tells Stimela to look for ``wsclean.yml`` inside the Python package named ``cultcargo``, wherever that happens to reside. You will have presumably installed it via ``pip`` in the usual way, and you don't actually need to know where exactly it is installed, as Stimela will take care of finding it for you using the standard Python machinery. In the second case, Stimela will look for ``my-cabs.yml`` in the current directory, then in a few standard locations such as ``~/lib/stimela``. You can set the ``STIMELA_INCLUDE`` environment variable to specify a custom set of paths to look in.
+
+Note that the ``.yml`` suffix is optional, and will be added implicitly if missing.
 
 Includes can be nested
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -53,7 +55,7 @@ Includes are a "merge"
 .. _include_merge:
 
 
-Include works in the sense of a "merge" (or a "union") with prior content. Consider that in the example above, both ``my-cabs.yml`` and ``wsclean.yml`` will contain a ``cabs`` section with different content. The resulting ``cabs`` section available to stimela will contain subsections from both of the included files -- the two ``cabs`` sections will have been merged. What happens when the contents clash? The answer is that everything is merged. 
+Include works in the sense of a "merge" (or a "union") with prior content. Consider that in the example above, both ``my-cabs.yml`` and ``wsclean.yml`` will contain a ``cabs`` section with different content. The resulting ``cabs`` section available to Stimela will contain subsections from both of the included files -- the two ``cabs`` sections will have been merged. What happens when the contents clash? The answer is that everything is merged. 
 
 More strictly, subsequent content *augments* previously included content: section content is merged, while any "leaf" items are overwritten. This is a very powerful feature. For example, imagine that you want to try an unreleased version of WSClean, which you've built from the latest source under ``~/src/wsclean/build``. Furthermore, the ``cult-cargo`` definition of the ``wsclean`` cab doesn't know about a new parameter that is available in the new build, but it is something that you need to use. Also, you'd like to modify the default value of a standard parameter. You can simply augment the cult ``wsclean`` definition by putting this into ``my-cabs.yml``::
 
@@ -191,7 +193,7 @@ Here, the definition of the ``image-1`` step is copied over into ``image-2``, th
 
 Note that ``_use`` will accept either a single string, or a sequence of strings. In the latter case, the sequence is treated as multiple ections names, which are all merged together in the given order.
 
-An alternative way to modularize the above is to use the standard ``lib`` namespace of stimela. In particular, ``lib.steps`` is meant to contain reusable step definitions. You could recast the above in terms of a "standard" imager invocation, by incuding something like this in ``my-cabs.yml``::
+An alternative way to modularize the above is to use the standard ``lib`` namespace of Stimela. In particular, ``lib.steps`` is meant to contain reusable step definitions. You could recast the above in terms of a "standard" imager invocation, by incuding something like this in ``my-cabs.yml``::
 
     lib:
         steps:
@@ -270,7 +272,7 @@ The ``_use`` and ``_include`` features offer one a lot of rope, and even as the 
 
   * Tweaking things like cab definitions at the recipe level is simple and powerful, and can be necessary, but again, don't overuse it. 
 
-Deployed sensibly, ``_use`` and ``_include`` provide ways of specifying common settings in a single place. Following the "plurality of means to peel a feline" ethos, stimela provides other ways, such as :ref:`assign` and :ref:`aliases`. Again, we do no mean to 
+Deployed sensibly, ``_use`` and ``_include`` provide ways of specifying common settings in a single place. Following the "plurality of means to peel a feline" ethos, Stimela provides other ways, such as :ref:`assign` and :ref:`aliases`. Again, we do no mean to 
 suggest a single one, but rather leave it to experience to come up with :ref:`best_practices`. 
 
 As far as basic modularity goes, a sensible workflow that works well for one of the developers runs as follows:

@@ -6,7 +6,7 @@ Best practices
 
   "If you make up your own mind, you can only blame yourself."  *(George Best)*
 
-Stimela 2.0 is a fairly young package, so this section will be short and sweet. We hope to expand it as we (and you) gain more experience with the software.
+Stimela (2.x) is a fairly young package, so this section will be short and sweet. We hope to expand it as we (and you) gain more experience with the software.
 
 Structuring recipes
 -------------------

@@ -10,7 +10,7 @@
 import stimela
 from datetime import date
 
-author = 'Sphesihle Makhathini, Oleg Smirnov and RATT'
+author = 'Oleg Smirnov, Sphesihle Makhathini and RATT'
 project = 'stimela'
 copyright = f'{date.today().year}, {author}'
 

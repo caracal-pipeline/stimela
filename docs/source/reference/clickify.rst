@@ -6,7 +6,7 @@ Clickify parameters
 ===================
 
 
-For any given command-line tool, most of the information in the cab schema (i.e. argument names and types, help strings) directly mirrors that already provided to the tool's command-line parser. When wrapping a third-party package in a cab, this leads to an unavoidable duplication of effort (with all the attendant potential for inconsistencies) -- after all, the package developer has already implemented their own command-line interface (CLI) parser, and this CLI needs to be described to \stimela. Note, however, that the schema itself provides all the information that would be needed to construct a CLI in the first place. For newly-developed packages, this provides a substantial labour-saving opportunity. \stimela\ includes a utility function that can convert a schema into a CLI using the `click <https://click.palletsprojects.com>`_ package. For a notional example, consider this 
+For any given command-line tool, most of the information in the cab schema (i.e. argument names and types, help strings) directly mirrors that already provided to the tool's command-line parser. When wrapping a third-party package in a cab, this leads to an unavoidable duplication of effort (with all the attendant potential for inconsistencies) -- after all, the package developer has already implemented their own command-line interface (CLI) parser, and this CLI needs to be described to Stimela. Note, however, that the schema itself provides all the information that would be needed to construct a CLI in the first place. For newly-developed packages, this provides a substantial labour-saving opportunity. Stimela includes a utility function that can convert a schema into a CLI using the `click <https://click.palletsprojects.com>`_ package. For a notional example, consider this 
 ``hello_schema.yml`` file defining a simple schema with two inputs::
 
     inputs:
@@ -56,7 +56,7 @@ The resulting tool now has a fully-functional CLI:
     --help           Show this message and exit.
 
 
-To integrate the tool into stimela, all we need is a cab definition, which can directly include the schema file::
+To integrate the tool into Stimela, all we need is a cab definition, which can directly include the schema file::
 
     cabs:
         hello:
@@ -64,7 +64,7 @@ To integrate the tool into stimela, all we need is a cab definition, which can d
             command: hello.py
 
 
-This mechanism ensures that all inputs and outputs need only be defined by the developer once, in a single place -- and provides both a CLI and \stimela\ integration with no additional effort, while ensuring that these 
+This mechanism ensures that all inputs and outputs need only be defined by the developer once, in a single place -- and provides both a CLI and Stimela integration with no additional effort, while ensuring that these 
 are mutually consistent by construction. The `QuartiCal <https://quartical.readthedocs.io/en/latest/>`_, `pfb-imaging <https://github.com/ratt-ru/pfb-imaging>`_ and  `breizorro <https://github.com/ratt-ru/breizorro>`_ packages, for example, make extensive use of this.
 
 In the above example, ``clickify_parameters()``  is passed a filename to read the schema from. An alternative to this is to pass it a Dict containing ``inputs``, ``outputs`` and (optionally) ``policies`` sections (see :ref:`policies_reference`). One can also pass a second argument containing a Dict of policies that will override the policies in the first Dict. This is useful when you ship a package containing full cab definitions, and want to read the schemas directly from the latter. Here we combine it with click's subcommand feature:
