@@ -40,8 +40,8 @@ def dispatch_to_log(log, line, command_name, stream_name, output_wrangler, style
         line, severity = output_wrangler(escape(line), severity)
     else:
         line = escape(line)
-    # escape emojis. Wranglers can return FunkyMessages instead of strings, in which case the 
-    # escaping is aleady done
+    # escape emojis. Check that it's a str -- wranglers can return FunkyMessages instead of strings, in which case the 
+    # escaping is aleady done for us
     if type(line) is str:
         line = re.sub(r":(\w+):", r":[bold][/bold]\1:", line)
     # dispatch to log
