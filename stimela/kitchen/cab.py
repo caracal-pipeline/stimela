@@ -228,17 +228,27 @@ class Cab(Cargo):
 
     def filter_input_params(self, params: Dict[str, Any], apply_nom_de_guerre=True):
         """Filters dict of params, returning only those that should be passed to a cab
-        (i.e. inputs or named outputs, and not skipped)
+        (i.e. inputs or named outputs, and not skipped and not implicit)
         """
         filtered_params = OrderedDict()
         for name, schema in self.inputs_outputs.items():
+            # get skip setting
+            skip = self.get_schema_policy(schema, 'skip')
+            if skip is None and schema.implicit:
+                skip = self.get_schema_policy(schema, 'skip_implicits')
+            # skip if explicitly True
+            if skip:
+                continue
+            # skip non-named outputs, unless skip is explicitly False
+            if not (schema.is_input or schema.is_named_output) and skip is not False:
+                continue
+            # ok, definitely not skipping now
             output_name = (apply_nom_de_guerre and schema.nom_de_guerre) or name
-            if not self.get_schema_policy(schema, 'skip'):
-                if schema.is_input or schema.is_named_output:
-                    if name in params:
-                        filtered_params[output_name] = params[name]
-                    elif self.get_schema_policy(schema, 'pass_missing_as_none'):
-                        filtered_params[output_name] = None
+            if name in params:
+                filtered_params[output_name] = params[name]
+            elif self.get_schema_policy(schema, 'pass_missing_as_none'):
+                filtered_params[output_name] = None
+        print(params.keys(), filtered_params.keys())
         return filtered_params
 
 
@@ -259,8 +269,8 @@ class Cab(Cargo):
         """
 
         # collect parameters
-
-        value_dict = dict(**params)
+        # apply filtering logic here (removing it below)
+        value_dict = self.filter_input_params(params, apply_nom_de_guerre=False)
 
         if self.parameter_passing is ParameterPassingMechanism.yaml:
             return [yaml.safe_dump(value_dict)]
@@ -332,20 +342,16 @@ class Cab(Cargo):
         for name, schema in self.inputs_outputs.items():
             if schema.required and name not in value_dict:
                 raise CabValidationError(f"required parameter '{name}' is missing", log=self.log)
-            if schema.is_output and not schema.is_named_output:
-                continue
             if name in value_dict:
                 positional_first = get_policy(schema, 'positional_head') 
                 positional = get_policy(schema, 'positional') or positional_first
-                skip = get_policy(schema, 'skip') or (schema.implicit and get_policy(schema, 'skip_implicits', True))
                 if positional:
-                    if not skip:
-                        pargs = pos_args[0 if positional_first else 1]
-                        value = stringify_argument(name, value_dict[name], schema)
-                        if type(value) is list:
-                            pargs += value
-                        elif value is not None:
-                            pargs.append(value)
+                    pargs = pos_args[0 if positional_first else 1]
+                    value = stringify_argument(name, value_dict[name], schema)
+                    if type(value) is list:
+                        pargs += value
+                    elif value is not None:
+                        pargs.append(value)
                     value_dict.pop(name)
 
         args = []
@@ -355,14 +361,6 @@ class Cab(Cargo):
             if name not in self.inputs_outputs:
                 raise RuntimeError(f"unknown parameter '{name}'")
             schema = self.inputs_outputs[name]
-            if schema.is_output and not schema.is_named_output:
-                continue
-
-            # default behaviour for unset skip_implicits is True
-            skip_implicits = get_policy(schema, 'skip_implicits', True)
-
-            if get_policy(schema, 'skip') or (schema.implicit and skip_implicits):
-                continue
 
             key_value = get_policy(schema, 'key_value')
 
