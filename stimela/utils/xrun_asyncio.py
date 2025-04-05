@@ -4,6 +4,7 @@ import signal
 import datetime
 import asyncio
 import logging
+import re
 from rich.markup import escape
 
 from stimela import stimelogging, task_stats
@@ -37,6 +38,9 @@ def dispatch_to_log(log, line, command_name, stream_name, output_wrangler, style
     # feed through wrangler to adjust severity and content
     if output_wrangler is not None:
         line, severity = output_wrangler(escape(line), severity)
+    else:
+        line = escape(line)
+    line = re.sub(":(\w+):", r":[bold][/bold]\1:", line)
     if line is not None:
         if severity >= logging.ERROR:
             extra['prefix'] = stimelogging.FunkyMessage("[red]:warning: [/red]", "!")
