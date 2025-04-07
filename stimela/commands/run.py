@@ -42,10 +42,6 @@ def resolve_recipe_files(filename: str, log: logging.Logger, use_manifest: bool 
 
     Raises FileNotFoundError if filename refers to a recipe file that doesn't exist.
     """
-    ext = os.path.splitext(filename)[1].lower()
-    # unrecognized extension -- treat as non-filename
-    if ext and ext not in IMPLICIT_EXTENSIONS:
-        return None
 
     # check for (location)filename.yml or (location)/filename.yml style
     match1 = re.fullmatch(r"^\((.+)\)/?(.*)$", filename)
@@ -55,12 +51,25 @@ def resolve_recipe_files(filename: str, log: logging.Logger, use_manifest: bool 
         try:
             mod = importlib.import_module(modulename)
         except ImportError as exc:
-            raise FileNotFoundError(f"{filename} not found ({exc})")
-        resolved_filename = os.path.dirname(mod.__file__)
+            raise FileNotFoundError(f"{filename} not found (can't import {modulename}: {exc})")
+        # sort out module path
+        if mod.__file__:
+            resolved_filename = os.path.dirname(mod.__file__)
+        else:
+            try:
+                resolved_filename = mod.__path__[0]
+            except:
+                raise FileNotFoundError(f"{filename} not found ({modulename} is not a proper Python module)")
+        # append filename, if supplied
         if fname:
             resolved_filename = os.path.join(resolved_filename, fname)
+            ext = os.path.splitext(fname)[1].lower()
+        else:
+            ext = None
     else:
-        # if it doesn't look like a filename, return None
+        # else treat as filename, and check for extension
+        ext = os.path.splitext(os.path.basename(filename))[1].lower()
+        # no extension, and it doesn't look like a legit filename, return None
         if not ext and "/" not in filename and filename not in (".", ".."):
             return None
         resolved_filename = filename

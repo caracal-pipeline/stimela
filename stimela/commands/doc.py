@@ -78,6 +78,7 @@ def doc(what: List[str] = [], do_list=False, implicit=False, obscure=False, all=
             files_to_load += filenames
             log.info(f"will load recipe/config file(s) {', '.join(filenames)}")
         else:
+            log.info(f"treating '{item}' as a recipe or cab name")
             names_to_document.append(item)
     
     # load config and recipes from all given files
@@ -86,13 +87,17 @@ def doc(what: List[str] = [], do_list=False, implicit=False, obscure=False, all=
 
     destroy_progress_bar()
 
+    if not files_to_load:
+        log.error(f"No YAML documents were specified")
+        sys.exit(2)
+
     if errcode:
         sys.exit(errcode)
     
     log.info(f"loaded {len(stimela.CONFIG.cabs)} cab definition(s) and {len(stimela.CONFIG.lib.recipes)} recipe(s)")
 
     if not stimela.CONFIG.lib.recipes and not stimela.CONFIG.cabs:
-        log.error(f"Nothing to document")
+        log.error(f"Loaded YAML documents do not contain any cab definitions or recipes")
         sys.exit(2)
 
     recipes_to_document = []
