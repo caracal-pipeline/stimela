@@ -49,9 +49,14 @@ class ParameterPolicies(object):
     # prefix for non-positional arguments
     prefix: Optional[str] = None
 
-    # skip this parameter
+    # skip: does the parameter need to be passed as an argument to the underlying cargo
+    # If skip is left as None, apply default logic, namely:
+    # * inputs and named file-type outputs are not skipped (i.e. passed)
+    # * all other outputs are skipped (i.e. not passed)
+    # Set this to False or True to enforce (not) skipping rather
     skip: Optional[bool] = None
-    # if True, implicit parameters will be skipped
+    # Same thing, but overrides the skip setting for implicit input and outputs
+    # (if skip is not None, it takes priority, otherwise if I/O is implicit, this setting is applied)
     skip_implicits: Optional[bool] = None
 
     # if set, {}-substitutions on this paramater will not be done
@@ -126,9 +131,9 @@ class Parameter(object):
     aliases: Optional[List[str]] = ()
 
     # if true, create parent directories of file-type outputs if needed
-    mkdir: bool = True
-    # if true, create directory-type outputs themselves
-    mkdir_self: bool = False
+    mkdir_parent: bool = True
+    # if true, create empty directory for the output itself, if it doesn't exist
+    mkdir: bool = False
 
     # if True, and parameter is a path, access to its parent directory is required
     access_parent_dir: bool = False

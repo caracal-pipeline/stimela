@@ -4,6 +4,7 @@ import signal
 import datetime
 import asyncio
 import logging
+import re
 from rich.markup import escape
 
 from stimela import stimelogging, task_stats
@@ -37,13 +38,19 @@ def dispatch_to_log(log, line, command_name, stream_name, output_wrangler, style
     # feed through wrangler to adjust severity and content
     if output_wrangler is not None:
         line, severity = output_wrangler(escape(line), severity)
+    else:
+        line = escape(line)
+    # escape emojis. Check that it's a str -- wranglers can return FunkyMessages instead of strings, in which case the 
+    # escaping is aleady done for us
+    if type(line) is str:
+        line = re.sub(r":(\w+):", r":[bold][/bold]\1:", line)
+    # dispatch to log
     if line is not None:
         if severity >= logging.ERROR:
             extra['prefix'] = stimelogging.FunkyMessage("[red]:warning: [/red]", "!")
         if isinstance(line, stimelogging.FunkyMessage) and line.prefix:
             extra['prefix'] = line.prefix
         log.log(severity, line, extra=extra)
-
 
 
 def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, output_wrangler=None, shell=True, 

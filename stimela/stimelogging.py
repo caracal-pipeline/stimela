@@ -23,9 +23,11 @@ from . import task_stats
 
 class FunkyMessage(object):
     """Class representing a message with two versions: funky (with markup), and boring (no markup)"""
-    def __init__(self, funky, boring=None, prefix=None):
-        self.funky = funky
+    def __init__(self, funky, boring=None, prefix=None, escape_emojis=True):
         self.boring = boring if boring is not None else funky
+        if escape_emojis:
+            self.funky = re.sub(r":(\w+):", r":[bold][/bold]\1:", funky)
+        self.funky = funky
         self.prefix = prefix
     def __str__(self):
         return self.funky
