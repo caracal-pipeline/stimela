@@ -132,15 +132,21 @@ A number of attributes can be used to modify the behaviour of Stimela with respe
 
 * ``writable: true`` will mark an input as read/write, aka input/output (for example, think of a Measurement Set that is both read and written to by the underlying tool).
 
-* ``mkdir: true`` will tell Stimela to create the parent directory(ies) of an output, if it doesn't exist
-
-* ``access_parent_dir: true`` tells Stimela that the cargo needs to access the parent directory of the object (and write to it, if ``write_parent_dir: true`` is set). This is meant for the (not uncommon) scenario where tools want to create intermediate or scratch files in the same directory as their inputs -- Stimela needs to be aware of this, as its container-based :ref:`backends <backend_reference>` are pretty strict about allowing access to the underlying filesystem.
+* ``mkdir: true`` will tell Stimela to create directory-type outputs, if they doesn't exist. This is useful for parameters such as output directories (thus forcing an empty one to be created if needed), but not for e.g. measurement sets. It is false by default. **NB: prior to Stimela 2.1, this attribute had the meaning of creating both the output and its parent directories, and was true by default.**. 
 
 * ``must_exist`` changes the default file existence check logic. By default, input files **must** exist at the start of the run, while output files **don't** have to exist at the end of the run. This logic may be flipped by setting ``must_exist: false`` in the former case, and ``must_exist: true`` in the latter case.
 
 * ``skip_freshness_checks: true`` omit this parameter from ``skip_if_outputs: fresh`` logic (see :ref:`skips`.) For inputs, this implies omitting the file from the "most recent input" calculation. For outputs, this implies ignoring the freshness of the output.
 
-* ``remove_if_exists: true``: remove existing output file before running the cargo.
+An optional ``path_policies`` subsection (**NB: new as of Stimela 2.1**) can be used to specify additional path-related policies:
+
+* ``path_policies.mkdir_parent: false`` tells Stimela not to create parent directories if they don't exist. The default is true. **NB: in versions prior to 2.1, ``mkdir`` had the same effect.**
+
+* ``path_policies.access_parent: true`` tells Stimela that the cargo needs to access the parent directory of the object (and write to it, if ``path_policies.write_parent: true`` is set). This is meant for the (not uncommon) scenario where tools want to create intermediate or scratch files in the same directory as their inputs -- Stimela needs to be aware of this, as its container-based :ref:`backends <backend_reference>` are pretty strict about allowing access to the underlying filesystem. 
+
+* ``path_policies.remove_if_exists: true``: removes existing output file before running the cargo. Default is false.
+
+(Versions prior to Stimela 2.1 defined ``access_parent_dir``, ``write_parent_dir`` and ``remove_if_exists`` at the top level of the schema. This usage is still permitted, but now prints a future deprecation warning.)
 
 Attributed related to the command line
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
