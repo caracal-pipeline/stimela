@@ -70,7 +70,7 @@ def resolve_recipe_files(filename: str, log: logging.Logger, use_manifest: bool 
         # else treat as filename, and check for extension
         ext = os.path.splitext(os.path.basename(filename))[1].lower()
         # no extension, and it doesn't look like a legit filename, return None
-        if not ext and "/" not in filename and filename not in (".", ".."):
+        if ext not in IMPLICIT_EXTENSIONS and "/" not in filename and filename not in (".", ".."):
             return None
         resolved_filename = filename
 
