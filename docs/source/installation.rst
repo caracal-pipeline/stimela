@@ -1,11 +1,10 @@
 .. highlight: yml
 .. _installation:
 
-Installing and running Stimela
-##############################
+Getting started
+###############
 
-
-Stimela requires Python 3.7 or higher. For containerization support, you'll also need `Singularity (Apptainer) <https://apptainer.org/>`_ installed. You can still run stimela in "native" mode without Singularity. 
+Stimela will run with Python 3.9 through 3.12. For containerization support, you'll also need `Singularity (Apptainer) <https://apptainer.org/>`_ installed. You can still run Stimela in "native" mode without Singularity. 
 
 If you plan to use the Slurm and Kubernetes backends, you'll also need the `Slurm scheduler <https://slurm.schedmd.com/>`_ and/or the `Python Kubernetes client <https://pypi.org/project/kubernetes/>`_.
 
@@ -16,14 +15,14 @@ Stimela is available from PyPI, thus you can simply do (possibly, in a virtual e
     
     $ pip install stimela
 
-A companion package called ``cult-cargo`` contains standard, curated :ref:`cab definitions <basics>` for popular radio astronomy packages. It is technically independent of stimela, but for any practical radio work you'll probably want to install it::
+A companion package called ``cult-cargo`` contains standard, curated :ref:`cab definitions <basics>` for popular radio astronomy packages. It is technically independent of Stimela, but for any practical radio work you'll probably want to install it::
 
     $ pip install cult-cargo
 
 Installing from github
 ======================
 
-Developers and bleeding-edge users may want to run stimela directly off the repository. In this case, install as follows::
+Developers and bleeding-edge users may want to run Stimela directly off the repository. In this case, install as follows::
 
     # create and activate virtualenv
     (venv) $ pip install -U pip
@@ -33,11 +32,11 @@ Developers and bleeding-edge users may want to run stimela directly off the repo
     (venv) $ pip install -e cult-cargo
 
 
-Running stimela
+Running Stimela
 ===============
 
-The main function of stimela is to run workflows defined by :ref:`recipes <basics>`. Recipes come as YAML files. 
-You can ask stimela to run a recipe as follows::
+The main function of Stimela is to run workflows defined by :ref:`recipes <basics>`. Recipes come as YAML files. 
+You can ask Stimela to run a recipe as follows::
 
   $ stimela run recipe.yml [recipe_name] [foo=x bar=y baz.qux=z]
 
@@ -59,7 +58,7 @@ Use ``stimela --help`` to get overall help and a list of commands. To get help o
 
     $ stimela run --help
 
-Recipes (and things called :ref:`cabs <cabdef>`) can come with their own embedded documentation. You can access this by running::
+Recipes (and things called :ref:`cabs <cabdefs>`) can come with their own embedded documentation. You can access this by running::
 
     $ stimela doc recipe.yml [anything]
 
@@ -67,11 +66,13 @@ Recipes (and things called :ref:`cabs <cabdef>`) can come with their own embedde
 
     $ stimela doc cultcargo::wsclean
 
-This will load ``wsclean.yml`` from the ``cultcargo`` package, and print help on the content. To get a list of all the cabs defined in cultcargo, use::
+This will load ``wsclean.yml`` from the ``cultcargo`` package, and print help on the content. To get a list of all the cabs defined in cultcargo, use:
+
+.. code-block:: bash
 
     $ stimela doc cultcargo::
 
-The trailing ``::`` tells stimela to load all the YAML documents in the specified package. A wildcard form will give similar results (but will not include any subdirectories that cultcargo may excplicitly specify, such as ``./casa``)::
+The trailing ``::`` tells Stimela to load all the YAML documents in the specified package. A wildcard form will give similar results (but will not include any subdirectories that cultcargo may excplicitly specify, such as ``./casa``)::
 
     $ stimela doc cultcargo::*.yml
 
