@@ -23,6 +23,11 @@ class FormattedTraceback(object):
     def __init__(self, tb: TracebackType):
         self.lines = [l.rstrip() for l in traceback.format_tb(tb)]
 
+class StimelaPendingDeprecationWarning(PendingDeprecationWarning):
+    pass
+
+class StimelaDeprecationWarning(DeprecationWarning):
+    pass
 
 class ScabhaBaseException(Exception):
     def __init__(self, message: str, 

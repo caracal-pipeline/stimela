@@ -55,9 +55,11 @@ def resolve_required_mounts(mounts: Dict[str, bool],
             add_target(name, realpath, must_exist=must_exist, readwrite=readwrite)
             add_target(name, path, must_exist=must_exist, readwrite=readwrite)
             # check if parent directory access is required
-            if schema.access_parent_dir or schema.write_parent_dir:
-                add_target(name, os.path.dirname(path), must_exist=True, readwrite=schema.write_parent_dir)
-                add_target(name, os.path.dirname(realpath), must_exist=True, readwrite=schema.write_parent_dir)
+            if schema.path_policies.access_parent or schema.path_policies.write_parent:
+                add_target(name, os.path.dirname(path), must_exist=True, 
+                           readwrite=schema.path_policies.write_parent)
+                add_target(name, os.path.dirname(realpath), must_exist=True, 
+                           readwrite=schema.path_policies.write_parent)
     
     # now, for any mount that has a symlink in the path, add the symlink target to mounts
     for path, readwrite in list(mounts.items()):
@@ -138,7 +140,7 @@ def resolve_remote_mounts(params: Dict[str, Any],
         # parent directory must exist, in case of outputs
         elif name in outputs:
             must_exist_list.update([os.path.dirname(path) for path in checked_files])
-        if schema.remove_if_exists:
+        if schema.path_policies.remove_if_exists:
             remove_if_exists_list.update(checked_files)
 
     return must_exist_list, mkdir_list, remove_if_exists_list, active_mounts
