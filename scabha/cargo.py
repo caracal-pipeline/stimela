@@ -145,10 +145,10 @@ class Parameter(object):
     aliases: Optional[List[str]] = ()
 
     # if true, create empty directory for the output itself, if it doesn't exist
-    # will probably be deprecated in favour of mkdir_policies in the future
+    # will probably be deprecated in favour of path_policies.mkdir in the future
     mkdir: bool = False
     # additional policies related to path-type inputs and outputs 
-    path_policies: PathPolicies = PathPolicies()
+    path_policies: PathPolicies = EmptyClassDefault(PathPolicies)
 
     # these are deprecated in favour of path_policies
     remove_if_exists: Optional[bool] = None
@@ -157,6 +157,7 @@ class Parameter(object):
 
     # for file and dir-type parameters: if True, the file(s)/dir(s) must exist. If False, they can be missing.
     # if None, then the default logic applies: inputs must exist, and outputs don't
+    # May be deprecated in favour of path_policies.must_exist in the future
     must_exist: Optional[bool] = None
 
     # for file and dir-type parameters: if True, ignore them when making processing logic decisions based on file freshness
