@@ -282,7 +282,7 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
     if create_dirs:
         for name, value in validated.items():
             schema = schemas[name]
-            if schema.is_output and (schema.mkdir or schema.mkdir_self):
+            if schema.is_output and (schema.mkdir or schema.path_policies.mkdir_parent):
                 if schema.is_file_type:
                     files = [URI(value)]
                 elif schema.is_file_list_type:
@@ -292,10 +292,11 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
                 for uri in files:
                     if not uri.remote:
                         path = pathlib.Path(uri.path)
-                        if schema.mkdir:
-                            path.parent.mkdir(parents=True, exist_ok=True)
-                        if schema.mkdir_self and schema._dtype == Directory:
+                        # Directory-type outputs 
+                        if schema.mkdir and (schema._dtype == Directory or schema._dtype == List[Directory]):
                             path.mkdir(parents=True, exist_ok=True)
+                        elif schema.path_policies.mkdir_parent:
+                            path.parent.mkdir(parents=True, exist_ok=True)
 
     # add in unresolved values
     validated.update(**unresolved)

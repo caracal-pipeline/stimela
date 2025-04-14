@@ -595,7 +595,7 @@ class Step:
                 # check for outputs that need removal
                 if not backend_runner.is_remote_fs:
                     for name, schema in self.outputs.items():
-                        if name in params and schema.remove_if_exists and schema.is_file_type:
+                        if name in params and schema.path_policies.remove_if_exists and schema.is_file_type:
                             path = params[name]
                             if type(path) is str and os.path.exists(path):
                                 if os.path.isdir(path) and not os.path.islink(path):

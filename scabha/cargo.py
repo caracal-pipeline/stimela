@@ -1,4 +1,5 @@
 import dataclasses
+import warnings
 import re, importlib
 import traceback
 from collections import OrderedDict
@@ -11,7 +12,8 @@ import rich.markup
 from rich.table import Table
 from rich.markdown import Markdown
 
-from .exceptions import ParameterValidationError, DefinitionError, SchemaError, AssignmentError
+from .exceptions import ParameterValidationError, DefinitionError, SchemaError, AssignmentError, \
+                        StimelaDeprecationWarning, StimelaPendingDeprecationWarning
 from .validate import validate_parameters, Unresolved
 from .substitutions import SubstitutionNS
 
@@ -28,6 +30,8 @@ Conditional = Optional[str]
 # method (UNSET can't be used directly in an OmegeConf structured schema, hence
 # the need for this stopgap)
 _UNSET_DEFAULT = "<UNSET DEFAULT VALUE>"
+
+warnings.simplefilter("default", category=StimelaPendingDeprecationWarning)
 
 @dataclass
 class ParameterPolicies(object):
@@ -49,9 +53,14 @@ class ParameterPolicies(object):
     # prefix for non-positional arguments
     prefix: Optional[str] = None
 
-    # skip this parameter
+    # skip: does the parameter need to be passed as an argument to the underlying cargo
+    # If skip is left as None, apply default logic, namely:
+    # * inputs and named file-type outputs are not skipped (i.e. passed)
+    # * all other outputs are skipped (i.e. not passed)
+    # Set this to False or True to enforce (not) skipping rather
     skip: Optional[bool] = None
-    # if True, implicit parameters will be skipped
+    # Same thing, but overrides the skip setting for implicit input and outputs
+    # (if skip is not None, it takes priority, otherwise if I/O is implicit, this setting is applied)
     skip_implicits: Optional[bool] = None
 
     # if set, {}-substitutions on this paramater will not be done
@@ -87,7 +96,17 @@ class ParameterPolicies(object):
     # if not set, missing parameters are not passed at all
     pass_missing_as_none: Optional[bool] = None
 
-
+@dataclass 
+class PathPolicies(object):
+    """This class describes policies for paths"""
+    # if true, creates parent directories of output
+    mkdir_parent: bool = True
+    # if True, and parameter is a path, access to its parent directory is required
+    access_parent: bool = False
+    # if True, and parameter is a path, access to its parent directory is required in writable mode
+    write_parent: bool = False
+    # If True, and the output exists, remove before running
+    remove_if_exists: bool = False
 
 # This is used to classify parameters, for cosmetic and help purposes.
 # Usually set automatically based on whether a parameter is required, whether a default is provided, etc.
@@ -125,25 +144,24 @@ class Parameter(object):
     # list of aliases for this parameter (i.e. references to other parameters whose schemas/values this parameter shares)
     aliases: Optional[List[str]] = ()
 
-    # if true, create parent directories of file-type outputs if needed
-    mkdir: bool = True
-    # if true, create directory-type outputs themselves
-    mkdir_self: bool = False
+    # if true, create empty directory for the output itself, if it doesn't exist
+    # will probably be deprecated in favour of path_policies.mkdir in the future
+    mkdir: bool = False
+    # additional policies related to path-type inputs and outputs 
+    path_policies: PathPolicies = EmptyClassDefault(PathPolicies)
 
-    # if True, and parameter is a path, access to its parent directory is required
-    access_parent_dir: bool = False
-    # if True, and parameter is a path, access to its parent directory is required in writable mode
-    write_parent_dir: bool = False
+    # these are deprecated in favour of path_policies
+    remove_if_exists: Optional[bool] = None
+    access_parent_dir: Optional[bool] = None
+    write_parent_dir: Optional[bool] = None
 
     # for file and dir-type parameters: if True, the file(s)/dir(s) must exist. If False, they can be missing.
     # if None, then the default logic applies: inputs must exist, and outputs don't
+    # May be deprecated in favour of path_policies.must_exist in the future
     must_exist: Optional[bool] = None
 
     # for file and dir-type parameters: if True, ignore them when making processing logic decisions based on file freshness
     skip_freshness_checks: Optional[bool] = None
-
-    # For output File-type parameters. If True, and the output exists, remove before running
-    remove_if_exists: bool = False
 
     # if command-line option for underlying binary has a different name, specify it here
     nom_de_guerre: Optional[str] = None
@@ -169,8 +187,6 @@ class Parameter(object):
     # Useful when the tool constructs itw own default values.
     suppress_cli_default: bool = False
 
-
-
     def __post_init__(self):
         def natify(value):
             # convert OmegaConf lists and dicts to native types
@@ -183,6 +199,26 @@ class Parameter(object):
             return value
         self.default = natify(self.default)
         self.choices = natify(self.choices)
+
+        # check for deprecated settings
+        if self.remove_if_exists is not None:
+            warnings.warn(  # deprecated parameter definition
+                "the remove_if_exists parameter property will be deprecated "
+                "in favour of path_policies.remove_if_exists in a future release",
+                StimelaPendingDeprecationWarning, stacklevel=0)
+            self.path_policies.remove_if_exists = self.remove_if_exists
+        if self.access_parent_dir is not None:
+            warnings.warn(  # deprecated parameter definition
+                "the access_parent_dir parameter property will be deprecated "
+                "in favour of path_policies.access_parent in a future release",
+                StimelaPendingDeprecationWarning, stacklevel=0)
+            self.path_policies.access_parent = self.access_parent_dir
+        if self.write_parent_dir is not None:
+            warnings.warn(  # deprecated parameter definition
+                "the write_parent_dir parameter property will be deprecated "
+                "in favour of path_policies.write_parent in a future release",
+                StimelaPendingDeprecationWarning, stacklevel=0)
+            self.path_policies.write_parent = self.write_parent_dir
 
         # converts string dtype into proper type object
         # yes I know eval() is naughty but this is the best we can do for now
