@@ -70,6 +70,7 @@ are mutually consistent by construction. The `QuartiCal <https://quartical.readt
 In the above example, ``clickify_parameters()``  is passed a filename to read the schema from. An alternative to this is to pass it a Dict containing ``inputs``, ``outputs`` and (optionally) ``policies`` sections (see :ref:`policies_reference`). One can also pass a second argument containing a Dict of policies that will override the policies in the first Dict. This is useful when you ship a package containing full cab definitions, and want to read the schemas directly from the latter. Here we combine it with click's subcommand feature:
 
 .. code-block:: python
+
     import click
     from scabha.schema_utils import clickify_parameters
     from omegaconf import OmegaConf
