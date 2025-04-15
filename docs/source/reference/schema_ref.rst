@@ -132,7 +132,7 @@ A number of attributes can be used to modify the behaviour of Stimela with respe
 
 * ``writable: true`` will mark an input as read/write, aka both input and output (for example, think of a Measurement Set that is both read and written to by the underlying tool).
 
-* ``mkdir: true`` will tell Stimela to create directory-type outputs, if they doesn't exist. This is useful for parameters such as output directories (thus forcing an empty one to be created if needed), but not for e.g. measurement sets. It is false by default. **NB: prior to Stimela 2.1, this attribute had the meaning of creating both the output and its parent directories, and was true by default.**
+* ``mkdir: true`` will tell Stimela to create directory-type outputs, if they don't exist. This is useful for parameters such as output directories (thus forcing an empty one to be created if needed), but not for e.g. measurement sets. It is false by default. **NB: prior to Stimela 2.1, this attribute had the meaning of creating both the output and its parent directories, and was true by default.**
 
 * ``must_exist`` changes the default file existence check logic. By default, input files **must** exist at the start of the run, while output files **don't** have to exist at the end of the run. This logic may be flipped by setting ``must_exist: false`` in the former case, and ``must_exist: true`` in the latter case.
 
