@@ -140,7 +140,7 @@ A number of attributes can be used to modify the behaviour of Stimela with respe
 
 An optional ``path_policies`` subsection (**NB: new as of Stimela 2.1**) can be used to specify additional path-related policies:
 
-* ``path_policies.mkdir_parent: false`` tells Stimela not to create parent directories if they don't exist. The default is true. **NB: in versions prior to 2.1** the same was achieved via ``mkdir: true``; from 2.1 onwards, the logic for parent directories and the output directory itself is specifed separately via this option and ``mkdir``, respectively.
+* ``path_policies.mkdir_parent: false`` tells Stimela not to create parent directories if they don't exist. The default is true. **NB: in versions prior to 2.1** the same was achieved via ``mkdir: true``; from 2.1 onwards, the logic for parent directories and the output directory itself is specified separately via this option and ``mkdir``, respectively.
 
 * ``path_policies.access_parent: true`` tells Stimela that the cargo needs to access the parent directory of the object (and write to it, if ``path_policies.write_parent: true`` is set). This is meant for the (not uncommon) scenario where tools want to create intermediate or scratch files in the same directory as their inputs -- Stimela needs to be aware of this, as its container-based :ref:`backends <backend_reference>` are pretty strict about allowing access to the underlying filesystem. 
 
