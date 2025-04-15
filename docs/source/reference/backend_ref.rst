@@ -120,7 +120,7 @@ Kubernetes backend settings
 ----------------------------
 .. _kube_backend_reference:
 
-The Kubernetes backend can be pretty arcane to configure, and is still under active development at time of writing. The best reference for its options are the `comments in the source code <https://github.com/caracal-pipeline/stimela/blob/4344313b23cfca119e117fdf5d734334cc254bcf/stimela/backends/kube/__init__.py#L68>`_. Here are some settings from a working example::
+The Kubernetes backend can be pretty arcane to configure, and is still under active development at time of writing. The best reference for its options are the `comments in the K8s backend source code <https://github.com/caracal-pipeline/stimela/blob/4344313b23cfca119e117fdf5d734334cc254bcf/stimela/backends/kube/__init__.py#L68>`_. Here are some settings from a working example::
 
     opts:
         backend:
