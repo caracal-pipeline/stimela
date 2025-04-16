@@ -198,15 +198,14 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                 
                 # helper function: load list of _include or _include_post files, returns accumulated DictConfig
                 def load_include_files(keyword):
-                    # get corresponding _scrub or _scrub_post keyword
+                    # pop include directive, return if None
+                    include_directive = pop_conf(conf, keyword, None)
+                    if include_directive is None:
+                        return None
+                    # get corresponding _scrub or _scrub_post directive
                     scrub = pop_conf(conf, keyword.replace("include", "scrub"), None)
                     if isinstance(scrub, str):
                         scrub = [scrub]
-
-                    include_directive = pop_conf(conf, keyword, None)
-
-                    if include_directive is None:
-                        return None
 
                     include_files = []
                     process_include_directive(include_files, keyword, include_directive)

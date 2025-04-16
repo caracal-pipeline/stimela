@@ -119,23 +119,33 @@ class PythonCallableFlavour(_CallableFlavour):
                         ).decode('ascii')
 
         # form up command string
+        if stimela.VERBOSE:
+            msg1 = f"""print("## importing {py_module}.{py_function}")"""
+            msg2 = f"""print(f"## invoking callable {command}({{repr(_inputs)}}) (as click command) using external interpreter")"""
+            msg3 = f"""print(f"## invoking callable {command}({{repr(_inputs)}}) using external interpreter")"""
+            msg4 = f"""print("## return value is ", _result)"""
+        else:
+            msg1 = msg2 = msg3 = msg4 = ""
         code = f"""
 import sys, json, zlib, base64
 _inputs = json.loads(zlib.decompress(
                         base64.b64decode(sys.argv[1].encode("ascii"))
                     ).decode("ascii"))
 sys.path.append('.')
+{msg1}
 from {py_module} import {py_function}
 try:
     from click import Command
 except ImportError:
     Command = None
 if Command is not None and isinstance({py_function}, Command):
-    print("invoking callable {command}() (as click command) using external interpreter")
+    {msg2}
     {py_function} = {py_function}.callback
 else:
-    print("invoking callable {command}() using external interpreter")
+    {msg3}
+    pass
 _result = {py_function}(**_inputs)
+{msg4}
 {self._yield_output}
         """
 

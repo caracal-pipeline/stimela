@@ -397,16 +397,19 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
         except ScabhaBaseException as exc:
             log_exception(exc)
             sys.exit(1)
-        # check for missing parameters
+        # check for missing and unresolved parameters
         if not build and (outer_step.missing_params or outer_step.unresolved_params):
             missing = {}
             for name in outer_step.missing_params:
-                missing[name] = outer_step.inputs_outputs[name].info
+                schema = outer_step.inputs_outputs[name]
+                if schema.is_input or schema.is_named_output:
+                    missing[name] = schema.info
             # don't report unresolved implicits, since that's just a consequence of a missing input
             for name in outer_step.unresolved_params:
-                if not outer_step.inputs_outputs[name].implicit:
+                schema = outer_step.inputs_outputs[name]
+                if (schema.is_input or schema.is_named_output) and not outer_step.inputs_outputs[name].implicit:
                     missing[name] = outer_step.inputs_outputs[name].info
-            #
+            # print missing parameters and exit
             if missing:
                 log_exception(StepValidationError(f"cab '{cab_name}' is missing required parameter(s)", missing))
                 sys.exit(1)
