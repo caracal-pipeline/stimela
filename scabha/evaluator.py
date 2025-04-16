@@ -634,7 +634,7 @@ class Evaluator(object):
             
         # helper function
         def update(value, sloc):
-            if type(value) is Unresolved:
+            if isinstance(value, Unresolved):
                 return value, False
             subloc = sublocation + [sloc]
             if verbose: 
