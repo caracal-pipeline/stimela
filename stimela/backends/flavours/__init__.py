@@ -1,5 +1,6 @@
 import re
 from typing import Optional, Any, Union, Dict
+import logging
 from dataclasses import dataclass
 from dataclasses import dataclass
 from omegaconf import MISSING, OmegaConf, DictConfig
@@ -21,8 +22,9 @@ class _BaseFlavour(object):
     def get_arguments(self, cab: "stimela.kitchen.cab.Cab", 
                             params: Dict[str, Any], 
                             subst: Dict[str, Any],
-                            virtual_env: Optional[str]=None,
-                            check_executable: bool = True):
+                            virtual_env: Optional[str] = None,
+                            check_executable: bool = True,
+                            log: Optional[logging.Logger] = None):
         """Returns command line arguments for running this flavour of task, given
         a cab and a set of parameters. 
 
@@ -30,8 +32,10 @@ class _BaseFlavour(object):
             cab (Cab):               cab definition
             params (Dict[str, Any]): parameter dict
             subst (Dict[str, Any]):  substitution namespace 
-            virtual_env (Optional[str]): virtual environment to run in
-            check_executable:        if True, cab may check for the executable to exist (but doesn't have to)
+            virtual_env (Optional[str]): virtual environment to run in, or None
+            check_executable (bool):  if True, cab may check for the executable to exist (but doesn't have to)
+            log (Optional[Logger]):  optional logger
+
 
         Returns:
             Tuple[List, List]:       tuple of full_argument_list, abbreviated_argument_list

@@ -545,7 +545,7 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
         if outputs and outer_step.log.isEnabledFor(logging.DEBUG):
             outer_step.log.debug(f"run successful after {elapsed()}, outputs follow:")
             for name, value in outputs.items():
-                if name in recipe.outputs:
+                if name in outer_step.outputs:
                     outer_step.log.debug(f"  {name}: {value}")
         else:
             outer_step.log.info(f"run successful after {elapsed()}")

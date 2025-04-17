@@ -360,7 +360,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
         args += [simg_path]
         log_args = args.copy()
 
-        args1, log_args1 = cab.flavour.get_arguments(cab, params, subst, check_executable=False)
+        args1, log_args1 = cab.flavour.get_arguments(cab, params, subst, check_executable=False, log=log)
         args += args1
         log_args += log_args1
 
