@@ -31,8 +31,8 @@ def update_rlimits(rlimits: Dict[str, Any], log: logging.Logger):
 
 
 def build_command_line(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], subst: Optional[Dict[str, Any]] = None,
-                        virtual_env: Optional[str] = None):
-    return cab.flavour.get_arguments(cab, params, subst, virtual_env=virtual_env)
+                        virtual_env: Optional[str] = None, log: Optional[logging.Logger] = None):
+    return cab.flavour.get_arguments(cab, params, subst, virtual_env=virtual_env, log=log)
 
 
 def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
@@ -68,7 +68,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                 raise BackendSpecificationError(f"virtual environment {venv} doesn't exist")
             log.debug(f"virtual environment is {venv}")
 
-    args, log_args = build_command_line(cab, params, subst, virtual_env=venv)
+    args, log_args = build_command_line(cab, params, subst, virtual_env=venv, log=log)
 
     cabstat = cab.reset_status()
 

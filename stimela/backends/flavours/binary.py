@@ -1,4 +1,5 @@
 import shlex
+import logging
 from typing import Optional, Any, Union, Dict
 from dataclasses import dataclass
 
@@ -19,7 +20,7 @@ class BinaryFlavour(_BaseFlavour):
     kind: str = "binary"
 
     def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any], 
-                      virtual_env: Optional[str]=None, check_executable: bool = True):
+                      virtual_env: Optional[str]=None, check_executable: bool = True, log: Optional[logging.Logger] = None):
 
         # build command line from parameters
         args = cab.build_command_line(params, subst, virtual_env=virtual_env, check_executable=check_executable)

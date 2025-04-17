@@ -1,4 +1,4 @@
-import re, os.path, json, zlib, codecs, base64
+import re, os.path, json, zlib, codecs, base64, logging
 from typing import Optional, Any, Union, Dict
 from dataclasses import dataclass
 
@@ -31,6 +31,23 @@ def form_python_function_call(function: str, cab: Cab, params: Dict[str, Any]):
     for key, value in cab.filter_input_params(params).items():
         arguments.append(f"{key}={repr(value)}")
     return f"{function}({', '.join(arguments)})"
+
+
+def format_dict_as_function_call(func_name: Optional[str], d: Dict[str, Any], indent=4):
+    """formats dict as a function call"""
+    if func_name:
+        lines = [f"{func_name}("] 
+        comma = ","
+    else:
+        lines = []
+        comma = ''
+    pad = ' ' * indent
+    for k, v in d.items():
+        lines.append(f"{pad}{k}={repr(v)}{comma}")
+    # strip trailing comma
+    if func_name:
+        lines[-1] = lines[-1][:-1] + ")"
+    return lines
 
 
 def get_python_interpreter_args(cab: Cab, subst: Dict[str, Any], virtual_env: Optional[str]=None):
@@ -73,6 +90,10 @@ class PythonCallableFlavour(_CallableFlavour):
     interpreter_binary: str = "python"
     # Full command used to launch interpreter. {python} gets substituted for the interpreter path
     interpreter_command: str = "{python} -u"
+    # commands run prior to invoking function
+    pre_command: Optional[str] = None
+    # commands run post invoking function
+    post_command: Optional[str] = None
 
     def finalize(self, cab: Cab):
         super().finalize(cab)
@@ -97,7 +118,8 @@ class PythonCallableFlavour(_CallableFlavour):
         return resolve_image_name(backend, cab.image or CONFIG.images['default-python'])
 
     def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any],
-                      virtual_env: Optional[str]=None, check_executable: bool = True):
+                      virtual_env: Optional[str]=None, check_executable: bool = True,
+                      log: Optional[logging.Logger] = None):
         # substitute command and split into module/function
         with substitutions_from(subst, raise_errors=True) as context:
             try:
@@ -117,6 +139,12 @@ class PythonCallableFlavour(_CallableFlavour):
         params_string = base64.b64encode(
                             zlib.compress(json.dumps(pass_params).encode('ascii'), 2)
                         ).decode('ascii')
+        
+        # log invocation
+        if log:
+            log.info(f"preparing function call:", extra=dict(prefix="###", style="dim"))
+            for line in format_dict_as_function_call(cab.command, pass_params, indent=4):
+                log.info(f"    {line}", extra=dict(prefix="###", style="dim"))
 
         # form up command string
         if stimela.VERBOSE:
@@ -132,6 +160,7 @@ _inputs = json.loads(zlib.decompress(
                         base64.b64decode(sys.argv[1].encode("ascii"))
                     ).decode("ascii"))
 sys.path.append('.')
+{self.pre_command or 'pass'}
 {msg1}
 from {py_module} import {py_function}
 try:
@@ -147,6 +176,7 @@ else:
 _result = {py_function}(**_inputs)
 {msg4}
 {self._yield_output}
+{self.post_command or 'pass'}
         """
 
         args = get_python_interpreter_args(cab, subst, virtual_env=virtual_env)
@@ -172,6 +202,10 @@ class PythonCodeFlavour(_BaseFlavour):
     interpreter_binary: str = "python"
     # Full command used to launch interpreter. {python} gets substituted for the interpreter path
     interpreter_command: str = "{python} -u"
+    # commands run prior to invoking code
+    pre_command: Optional[str] = None
+    # commands run post invoking code
+    post_command: Optional[str] = None
 
     def finalize(self, cab: Cab):
         super().finalize(cab)
@@ -188,7 +222,8 @@ class PythonCodeFlavour(_BaseFlavour):
         return resolve_image_name(backend, cab.image or CONFIG.images['default-python'])
 
     def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any],
-                      virtual_env: Optional[str]=None, check_executable: bool = True):
+                      virtual_env: Optional[str]=None, check_executable: bool = True,
+                      log: Optional[logging.Logger] = None):
         # do substitutions on command, if necessary
         if self.subst:
             with substitutions_from(subst, raise_errors=True) as context:
@@ -202,13 +237,22 @@ class PythonCodeFlavour(_BaseFlavour):
         # only pass inputs and named outputs
         pass_params = cab.filter_input_params(params)
 
+        # log invocation
+        if log:
+            log.info(f"preparing python code invocation with arguments:", extra=dict(prefix="###", style="dim"))
+            for line in format_dict_as_function_call("", pass_params, indent=4):
+                log.info(f"{line}", extra=dict(prefix="###", style="dim"))
+
         # form up code to parse params from JSON string that will be given as sys.argv[1]
         params_arg = json.dumps(pass_params)
-        pre_command = "import json\n"
         inp_dict = self.input_dict or "_params"
+
         pre_command = f"""import sys, json
 {inp_dict} = json.loads(sys.argv[1])
 """
+        if self.pre_command:
+            pre_command += self.pre_command
+
         if self.input_vars:
             for name in pass_params:
                 var_name = name.replace("-", "_").replace(".", "__")
@@ -224,6 +268,9 @@ class PythonCodeFlavour(_BaseFlavour):
                 for name in pass_outputs:
                     var_name = name.replace("-", "_").replace(".", "__")
                     post_command += f"yield_output(**{{'{name}': {var_name}}})\n"
+        
+        if self.post_command:
+            post_command += self.post_command
 
         # form up interpreter invocation
         args = get_python_interpreter_args(cab, subst, virtual_env=virtual_env)

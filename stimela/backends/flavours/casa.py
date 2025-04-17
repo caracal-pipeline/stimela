@@ -1,21 +1,17 @@
 import re
-import os.path
-import json
+import logging
 from typing import Optional, Any, Union, Dict, List
 from dataclasses import dataclass
-import tempfile
 
 import stimela
 from scabha.basetypes import EmptyListDefault
 from scabha.exceptions import SubstitutionError
 from stimela.kitchen.cab import Cab
-from scabha.cab_utils import CAB_OUTPUT_PREFIX
 from stimela.kitchen import wranglers
 from scabha.substitutions import substitutions_from
 
-from . import _CallableFlavour, _BaseFlavour
-from .python_flavours import form_python_function_call
-
+from . import _CallableFlavour
+from .python_flavours import format_dict_as_function_call
 
 
 @dataclass
@@ -43,7 +39,9 @@ class CasaTaskFlavour(_CallableFlavour):
         return resolve_image_name(backend, cab.image or CONFIG.images['default-casa'])
 
     def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any], 
-                            virtual_env: Optional[str]=None, check_executable: bool = True):
+                            virtual_env: Optional[str]=None, 
+                            check_executable: bool = True,
+                            log: Optional[logging.Logger] = None):
 
         with substitutions_from(subst, raise_errors=True) as context:
             try:
@@ -73,7 +71,13 @@ class CasaTaskFlavour(_CallableFlavour):
 
         self.command_name = command
         pass_params = dict(cab.filter_input_params(params))
-        
+
+        # log invocation
+        if log:
+            log.info(f"preparing CASA task call:", extra=dict(prefix="###", style="dim"))
+            for line in format_dict_as_function_call(command, pass_params, indent=4):
+                log.info(f"    {line}", extra=dict(prefix="###", style="dim"))
+
         # parse the params direcly as python dictionary
         # no need to string conversion between strings/bytes/unicode
         # this works for both python 2.7 and 3.x
