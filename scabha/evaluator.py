@@ -757,7 +757,7 @@ class Evaluator(object):
                         if name in defaults and defaults[name] is not UNSET:
                             value = params_out[name] = defaults[name]
                             if corresponding_ns:
-                                corresponding_ns[name] = str(defaults[name])
+                                corresponding_ns[name] = defaults[name]
                             retry = True
                         else: 
                             del params_out[name]
