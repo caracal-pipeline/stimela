@@ -120,6 +120,8 @@ based on seeing certain patterns of text in the cab's console output (i.e. stdou
 very powerful way to wrangle (pun intended) information out of third-party packages, or even just to prettify 
 their console output. 
 
+.. _wranglers:
+
 Output wranglers
 ----------------
 
@@ -154,16 +156,17 @@ The optional ``management.environment`` section can be used to tell Stimela to s
 
 The ``management.cleanup`` section can be used to specify a list of filename patterns that need cleaning up after the cab has been run. Use this if the underlying tool generates some junk output files you don't want to keep (the cleanup feature is currently not implemented as of 2.0, but will be implemented in a future version).
 
+.. _cab_flavours:
+
 Cab flavours
 ************
-.. _cab_flavours:
 
 A cab can also correspond to a Python function or a CASA task. This is specified via the ``flavour`` attribute -- we saw an example of this just above with the ``casa.flagsummary`` cab. Its definition tells Stimela that the cab is implemented by invoking a CASA task underneath. Other flavours are ``python`` (for Python functions) and ``python-code`` (for inline Python code). The default flavour, corresponding to a binary command, is called ``binary``.
 
 Specifying flavour options
 --------------------------
 
-An alternative way to specify flavours is to make ``flavour`` a sub-section, and use its ``kind`` attribute to specify the flavour. This then allows for some flavour-related options to be specified::
+An alternative way to specify flavours is to make ``flavour`` a sub-section, and use its ``kind`` attribute to specify the flavour. This then allows for some flavour-specific options to be set::
 
     cabs:
         casa.flagman:
@@ -174,17 +177,16 @@ An alternative way to specify flavours is to make ``flavour`` a sub-section, and
                 path: /usr/local/bin/casa
                 opts: [--nologger]
 
-The above tells Stimela to use a non-default CASA intepreter, and to pass it specific extra options on the command line. 
+The above tells Stimela to use a non-default CASA intepreter, and to pass it specific extra options on the command line (see more detail below). 
 
 Note that the CASA path and option settings can also be defined globally via :ref:`Stimela configuration <options>`.
 
-Callable flavours
------------------
-.. _cab_flavours:
+Callable flavours: python calls and CASA tasks
+----------------------------------------------
 
-The ``casa-task`` and ``python`` flavours are very similar, in that they both invoke an external interpreter, and call a function within.  The ``command`` field of the cab then names a CASA task, or a Python callable (using the normal ``package.module.function`` Python naming). In the latter case, ``package.module`` will be imported using the normal Python mechanisms: this can refer to a standard Python module, or your own code (in which case it must be installed appropriately so the import statement can find it.)
+The ``casa-task`` and ``python`` flavours are very similar, in that they both invoke an external interpreter, and use it to call a function.  The ``command`` field of the cab then names a CASA task, or a Python callable (using the normal ``package.module.function`` Python naming). In the latter case, ``package.module`` will be imported using the normal Python mechanisms: this can refer to a standard Python module, or your own code (in which case it must be installed appropriately so the import statement can find it.)
 
-Arguments to the function or task are described using the normal can inputs/outputs schema; Stimela will convert these appropriately and invoke the function or task. The return value of the function can be treated as a cab output and propagated out to Stimela. Here is a notional example::
+Arguments to the function or task are described using the normal inputs/outputs schema; Stimela will convert these appropriately and invoke the function or task. The return value of the function can be treated as a cab output and propagated out to Stimela. Here is a notional example::
 
     cabs:
         get-load-avg:
@@ -196,7 +198,7 @@ Arguments to the function or task are described using the normal can inputs/outp
             outputs:
                 load: Tuple[float, float, float]
 
-The ``flavour.output`` option here _names_ an output ("load"), and the outputs schema decribes what data type to expect.
+The ``flavour.output`` option here specifies that the return value of the function in propagated out as the output named ``load``, while the outputs schema decribes what data type to expect.
 
 What if you would like to provide some Python code returning several outputs? This can be done by having your function return a ``dict``, setting the ``flavour.output_dict`` option to true, and providing an outputs schema. In this case, the returned dict is expected to contain a key for every output named in the schema. 
 
@@ -222,6 +224,40 @@ Note how we use :ref:`abbreviated schemas<shorthand_schemas>` here for succinctn
 The operation of the ``python-code`` flavour is quite intuitive. All inputs are converted into Python variables with the corresponding name, the Python code specified by ``command`` is invoked, and any outputs are collected from Python variables of the corresponding name. 
 
 A few flavour attributes can be used to tweak this behaviour. If you would prefer to pass the inputs in as a ``dict`` (keyed by input name), set ``input_dict: true``. If you define cab outputs but **don't** want them to be picked up from Python variables for some reason (perhaps because you're using output :ref:`wranglers` instead?), you can set ``output_vars: false``. Finally, unlike the other flavours, the ``command`` field is by default **not** subject to {}-substitution (as this usually adds nothing but hassle to inline code), but this can be changed by setting ``subst: true``.
+
+Additional flavour options
+--------------------------
+
+python and python-code
+^^^^^^^^^^^^^^^^^^^^^^
+
+The following additional options are available for both the ``python`` and ``python-code`` flavours:
+
+* ``flavour.interpreter_binary`` determines which Python interpreter binary to call, default is ``"python"``
+
+* ``flavour.interpreter_command`` determines how the interpreter command line is formed, default is ``"{python} -u"``. Note that this is not subject to Stimela's full {}-substitutions, but does recognize ``{python}``, and inserts ``interpreter_binary`` as set above.
+
+* ``flavour.pre_command`` adds optional Python code to be executed up front. This can be useful for housekeeping operations, such as disabling warnings, etc.::
+
+    flavour:
+        kind: python
+        pre_command: |
+            import warnings         
+            warnings.filterwarnings("ignore", category=SyntaxWarning)                
+
+* ``flavour.post_command`` adds optional Python code to be executed after the command.
+
+casa-task
+^^^^^^^^^
+
+The following additional options are available for the ``casa-task`` flavour. Note that default values for these may be specified via the :ref:`Stimela configuration <options>`, using the ``runtime.casa`` section -- if they are not set there, then the normal defaults indicated below apply.
+
+* ``flavour.path`` specifies a path to the CASA binary. Normal default is ``"casa"``.
+
+
+* ``flavour.opts`` specifies additional command-line options passed to the CASA binary, as a list of strings. Normal default is ``[--log2term, --nologger, --nologfile]``.
+
+* ``flavour.wrapper`` wraps the CASA binary invocation in a wrapper command. Normal default is ``"xvfb-run -a"``, which fakes a virtual X11 display for CASA.
 
 
 Bat country! Dynamic schemas

@@ -6,12 +6,12 @@ Cherry-picking steps; skips and tags
 
 
 Cherry-picking steps from the command line
-------------------------------------
+------------------------------------------
 
 The ``-s/--step`` option to ``stimela run`` allows one to selectively run part of the recipe. This option expects one or more step labels (comma-separated, or alternatively multiple ``--step`` options can be given), or a step *range* specified as ``start:end`` (or ``:end``, or ``start:``. Note that ``end`` is inclusive.) Only the specified step(s) are then run. 
 
 The 'skip' attribute
-------------------
+--------------------
 
 Recipe steps can have an optional ``skip`` attribute. This can be set to ``true`` (a.k.a. a hard-skip), or can employ :ref:`subst` for a *conditional skip* that is evaluated at runtime. If the formula or substitution of the conditional skip evaluates to non-zero (or a non-empty string), the step is skipped.
 

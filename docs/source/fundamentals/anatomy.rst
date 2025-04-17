@@ -174,9 +174,9 @@ Recipe steps
 
 We now get to the business end of the recipe. We won't go through all of its many steps here, but rather highlight some of the more interesting ones that illustrate various Stimela features.
 
-The ``flag-save`` `step <https://github.com/ratt-ru/parrot-stew-recipes/blob/d012edc41096a1f143c216c424e9ecf896a9a171/image-parrot.yml#L122>`_ is marked as always skipped (``skip: true``). Why so? This step captures the initial state of flags in the MS, and should only ever be run once per MS. The next step, ``flag-reset`` (not skipped!), resets the flags to the saved initial state. The idea here is, the very first time a user processes a particular MS, they should do an explicit ``stimela run -s flag-save`` to save the initial state. Subsequent re-runs of the same workflow can then start from a known set of flags.
+The `flag-save step <https://github.com/ratt-ru/parrot-stew-recipes/blob/d012edc41096a1f143c216c424e9ecf896a9a171/image-parrot.yml#L122>`_ is marked as always skipped (``skip: true``). Why so? This step captures the initial state of flags in the MS, and should only ever be run once per MS. The next step, ``flag-reset`` (not skipped!), resets the flags to the saved initial state. The idea here is, the very first time a user processes a particular MS, they should do an explicit ``stimela run -s flag-save`` to save the initial state. Subsequent re-runs of the same workflow can then start from a known set of flags.
 
-The ``image-1`` step `reuses <https://github.com/ratt-ru/parrot-stew-recipes/blob/d012edc41096a1f143c216c424e9ecf896a9a171/image-parrot.yml#L139>`_ a "template" step definition defined `elsewhere <https://github.com/ratt-ru/parrot-stew-recipes/blob/d012edc41096a1f143c216c424e9ecf896a9a171/parrot-cabs.yml#L454>`_, and augments it with some specific parameter settings::
+The `image-1 step reuses <https://github.com/ratt-ru/parrot-stew-recipes/blob/d012edc41096a1f143c216c424e9ecf896a9a171/image-parrot.yml#L139>`_ a "template" step definition defined `elsewhere <https://github.com/ratt-ru/parrot-stew-recipes/blob/d012edc41096a1f143c216c424e9ecf896a9a171/parrot-cabs.yml#L454>`_, and augments it with some specific parameter settings::
 
     image-1:
       info: "auto-masked deep I clean"
@@ -189,7 +189,7 @@ The ``image-1`` step `reuses <https://github.com/ratt-ru/parrot-stew-recipes/blo
 
 Given many repeated steps with lengthy yet similar parameter settings, this "template" pattern can reduce the recipe's complexity. You will see it recur in many of the subsequent steps.
 
-The ``mask-1`` `step <https://github.com/ratt-ru/parrot-stew-recipes/blob/d012edc41096a1f143c216c424e9ecf896a9a171/image-parrot.yml#L146>`_ invokes a sub-recipe::
+The `mask-1 step <https://github.com/ratt-ru/parrot-stew-recipes/blob/d012edc41096a1f143c216c424e9ecf896a9a171/image-parrot.yml#L146>`_ invokes a sub-recipe::
 
    mask-1:
       recipe: make_masks
