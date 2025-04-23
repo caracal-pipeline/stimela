@@ -682,7 +682,7 @@ class Evaluator(object):
                     except (AttributeError, SubstitutionError, ParserError, FormulaError) as err:
                         if raise_substitution_errors:
                             raise
-                        new_value = Unresolved(errors=[err])
+                        new_value = Unresolved(errors=[str(err)])
                     if verbose:
                         print(f"{name}: {value} -> {new_value}")
                     # UNSET return means delete or revert to default

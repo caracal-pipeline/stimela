@@ -277,8 +277,8 @@ class Step:
         # validate cab or recipe
         params = self.validated_params = self.cargo.prevalidate(params, subst, root=root)
         # add missing outputs
-        for name in self.cargo.outputs:
-            if name not in params:
+        for name, schema in self.cargo.outputs.items():
+            if name not in params and schema.required:
                 params[name] = UNSET(name)
         self.log.debug(f"{self.cargo.name}: {len(self.missing_params)} missing, "
                         f"{len(self.invalid_params)} invalid and "
