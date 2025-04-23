@@ -689,8 +689,8 @@ class Evaluator(object):
                     if new_value is UNSET:
                         if params_out is params:
                             params_out = params.copy()
-                        # if value is in defaults, try to evaluate that instead
-                        if name in defaults and defaults[name] is not UNSET:
+                        # if value is in defaults and is different, try to evaluate that instead
+                        if name in defaults and defaults[name] is not UNSET and defaults[name] != value:
                             value = params_out[name] = defaults[name]
                             if corresponding_ns:
                                 corresponding_ns[name] = str(defaults[name])
