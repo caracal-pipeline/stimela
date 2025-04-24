@@ -744,7 +744,7 @@ class Evaluator(object):
                     except (AttributeError, SubstitutionError, ParserError, FormulaError) as err:
                         if raise_substitution_errors:
                             raise
-                        new_value = Unresolved(errors=[err])
+                        new_value = Unresolved(errors=[str(err)])
                     if verbose:
                         print(f"{name}: {value} -> {new_value}")
                     # UNSET return means delete or revert to default
@@ -753,14 +753,15 @@ class Evaluator(object):
                             raise SubstitutionError(f"{'.'.join(self.location + sublocation)}: UNSET not allowed here")
                         if params_out is params:
                             params_out = params.copy()
-                        # if value is in defaults, try to evaluate that instead
-                        if name in defaults and defaults[name] is not UNSET:
+                        # if value is in defaults and is different, try to evaluate that instead
+                        if name in defaults and defaults[name] is not UNSET and defaults[name] != value:
                             value = params_out[name] = defaults[name]
                             if corresponding_ns:
                                 corresponding_ns[name] = defaults[name]
                             retry = True
                         else: 
-                            del params_out[name]
+                            if name in params_out:
+                                del params_out[name]
                             if corresponding_ns and name in corresponding_ns:
                                 del corresponding_ns[name]
                     elif new_value is not value and new_value != value:

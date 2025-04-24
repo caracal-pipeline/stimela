@@ -407,7 +407,7 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
             # don't report unresolved implicits, since that's just a consequence of a missing input
             for name in outer_step.unresolved_params:
                 schema = outer_step.inputs_outputs[name]
-                if (schema.is_input or schema.is_named_output) and not outer_step.inputs_outputs[name].implicit:
+                if (schema.is_input or schema.is_named_output) and not schema.implicit:
                     missing[name] = outer_step.inputs_outputs[name].info
             # print missing parameters and exit
             if missing:
