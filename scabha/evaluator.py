@@ -177,8 +177,8 @@ class FunctionHandler(ResultsHandler):
         return self.evaluate_generic_callable(evaluator, "LIST", make_list, args)
 
     def LEN(self, evaluator, args):
-        def make_len(*x):
-            return len(list(x))
+        def make_len(x):
+            return len(x)
         return self.evaluate_generic_callable(evaluator, "LEN", make_len, args)
 
     def RANGE(self, evaluator, args):
