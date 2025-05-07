@@ -378,7 +378,7 @@ def log_exception(*errors, severity="error", log=None):
             if not exc.logged:
                 do_log = exc.logged = True
             tree = Tree(exc_message(exc) if _boring else 
-                            f"[{colour}]:warning: {exc_message(exc)}[/{colour}]", 
+                            f"[{colour}]{exc_message(exc)}[/{colour}]", 
                         guide_style="" if _boring else "dim")
             trees.append(tree)
             if exc.nested:
@@ -386,7 +386,7 @@ def log_exception(*errors, severity="error", log=None):
                 has_nesting = True
         else:
             tree = Tree(exc_message(exc) if _boring else 
-                            f"[{colour}]:warning: {exc_message(exc)}[/{colour}]", 
+                            f"[{colour}]{exc_message(exc)}[/{colour}]", 
                         guide_style="" if _boring else "dim")
             trees.append(tree)
             do_log = True

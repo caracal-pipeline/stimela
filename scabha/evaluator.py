@@ -278,7 +278,7 @@ class FunctionHandler(ResultsHandler):
         if isinstance(pattern, Unresolved):
             return pattern
         return sorted(glob.glob(pattern))
-
+    
     def EXISTS(self, evaluator, args):
         if len(args) != 1:
             raise FormulaError(f"{'.'.join(evaluator.location)}: EXISTS() expects 1 argument, got {len(args)}")
@@ -385,7 +385,7 @@ def construct_parser():
 
     atomic_value = (boolean | UNSET | EMPTY | nested_field | string | number)
 
-    function_call_anyseq = Group(anyseq_functions + lparen + anyseq + rparen).setParseAction(FunctionHandler.pa)
+    function_call_anyseq = Group(anyseq_functions + lparen + (expr | anyseq) + rparen).setParseAction(FunctionHandler.pa)
     function_call = Group(functions + lparen + 
                     Opt(delimited_list(expr|SELF)) + 
                     rparen).setParseAction(FunctionHandler.pa)
