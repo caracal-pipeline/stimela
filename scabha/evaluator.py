@@ -278,7 +278,7 @@ class FunctionHandler(ResultsHandler):
         if isinstance(pattern, Unresolved):
             return pattern
         return sorted(glob.glob(pattern))
-    
+
     def EXISTS(self, evaluator, args):
         if len(args) != 1:
             raise FormulaError(f"{'.'.join(evaluator.location)}: EXISTS() expects 1 argument, got {len(args)}")
