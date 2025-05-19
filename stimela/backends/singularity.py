@@ -55,11 +55,11 @@ _rebuilt_images = set()
 
 
 class CustomTemporaryDirectory(object):
-
+    """Custom context manager for tempfile.mkdtemp()."""
     def __init__(self, clean_up=True):
         self.name = mkdtemp()
         self.clean_up = clean_up  # Workaround for < Python3.12
-    """Custom context manager for tempfile.mkdtemp()."""
+
     def __enter__(self):
         return self.name
 
