@@ -2,7 +2,8 @@ import subprocess
 import os
 import logging
 import pathlib
-from tempfile import TemporaryDirectory
+import shutil
+from tempfile import mkdtemp
 from contextlib import ExitStack
 from enum import Enum
 import stimela
@@ -38,6 +39,7 @@ class SingularityBackendOptions(object):
     contain: bool = True           # if True, runs with --contain
     containall: bool = False       # if True, runs with --containall
     bind_tmp: bool = True          # if True, implicitly binds an empty /tmp directory
+    clean_tmp: bool = True         # if False, temporary directories will not be cleaned up. Useful for debugging.
 
     # optional extra bindings
     bind_dirs: Dict[str, BindDir] = EmptyDictDefault()
@@ -50,6 +52,20 @@ STATUS = VERSION = BINARY = None
 
 # images rebuilt in this run
 _rebuilt_images = set()
+
+
+class CustomTemporaryDirectory(object):
+    """Custom context manager for tempfile.mkdtemp()."""
+    def __init__(self, clean_up=True):
+        self.name = mkdtemp()
+        self.clean_up = clean_up  # Workaround for < Python3.12
+
+    def __enter__(self):
+        return self.name
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if self.clean_up:
+            shutil.rmtree(self.name)
 
 
 def is_available(opts: Optional[SingularityBackendOptions] = None):
@@ -297,9 +313,8 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
             if bind.host == "empty":
                 if not bind.target:
                     raise BackendError(f"bind_dirs.{label}: a target must be specified when host=empty")
-                tmpdir = TemporaryDirectory()
-                src = tmpdir.name
-                exit_stack.enter_context(tmpdir)
+                tmpdir = CustomTemporaryDirectory(clean_up=backend.singularity.clean_tmp)
+                src = exit_stack.enter_context(tmpdir)
                 log.info(f"bind_dirs.{label}: using temporary directory {src}")
 
             # resolve symlinks
@@ -343,9 +358,9 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                     log.info("/tmp directory already bound, not adding an explicit binding")
                     break
             else:
-                tmpdir = TemporaryDirectory()
-                exit_stack.enter_context(tmpdir)
-                mounts.append(("/tmp", tmpdir.name, True))
+                tmpdir = CustomTemporaryDirectory(clean_up=backend.singularity.clean_tmp)
+                tmpdir_name = exit_stack.enter_context(tmpdir)
+                mounts.append(("/tmp", tmpdir_name, True))
 
         # sort mount paths before iterating -- this ensures that parent directories come first
         # (singularity doesn't like it if you specify a bind of a subdir before a bind of a parent) 
