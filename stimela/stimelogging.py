@@ -69,7 +69,7 @@ class StimelaConsoleHander(rich.logging.RichHandler):
     def emit(self, record):
         # NOTE(JSKenyon): If a message requires a custom console print,
         # forward all known arguments to the _console.print method.
-        if getattr(record, "custom_console_print", False) == True:
+        if getattr(record, "custom_console_print", False):
             self._console.print(
                 record.msg,
                 **{k: getattr(record, k) for k in CONSOLE_PRINT_OPTIONS if hasattr(record, k)}
