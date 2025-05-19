@@ -21,6 +21,24 @@ from warnings import warn
 
 from . import task_stats
 
+CONSOLE_PRINT_OPTIONS = [
+    "sep",
+    "end",
+    "style",
+    "justify",
+    "overflow",
+    "no_wrap",
+    "emoji",
+    "markup",
+    "highlight",
+    "width",
+    "height",
+    "crop",
+    "soft_wrap",
+    "new_line_start"
+]
+
+
 class FunkyMessage(object):
     """Class representing a message with two versions: funky (with markup), and boring (no markup)"""
     def __init__(self, funky, boring=None, prefix=None, escape_emojis=True):
@@ -49,6 +67,14 @@ class StimelaConsoleHander(rich.logging.RichHandler):
         self._console = console
 
     def emit(self, record):
+        # NOTE(JSKenyon): If a message requires a custom console print,
+        # forward all known arguments to the _console.print method.
+        if getattr(record, "custom_console_print", False) == True:
+            self._console.print(
+                record.msg,
+                **{k: getattr(record, k) for k in CONSOLE_PRINT_OPTIONS if hasattr(record, k)}
+            )
+            return
         try:
             rich.logging.RichHandler.emit(self, record)
         # backstop -- message should have been properly markup-escaped

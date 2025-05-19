@@ -81,11 +81,16 @@ def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, o
     log = log or stimela.logger()
 
     if log_command:
+        # NOTE(JSKenyon): These must be logged with soft wrapping to make
+        # copy pasting the output simple.
+        extras = dict(custom_console_print=True, style="dim", soft_wrap=True)
         if log_command is True:
-            log.info(f"running {command_line}", extra=dict(prefix="###", style="dim"))
+            log.info("---INVOKING---", extra=dict(**extras, justify="center"))
+            log.info(f"{command_line}\n", extra=extras)
         else:
-            log.info(f"running {log_command}", extra=dict(prefix="###", style="dim"))
-            log.debug(f"full command line is {command_line}", extra=dict(prefix="###", style="dim"))
+            log.info("---INVOKING---", extra=dict(**extras, justify="center"))
+            log.info(f"{log_command}\n", extra=extras)
+            log.debug(f"full command line is {command_line}", extra=extras)
 
     with task_stats.declare_subcommand(os.path.basename(command_name)) as command_context:
 
