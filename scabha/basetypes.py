@@ -10,6 +10,8 @@ from typeguard import (
     check_type, TypeCheckError, TypeCheckerCallable, TypeCheckMemo, checker_lookup_functions
 )
 from inspect import isclass
+import uritools
+from pathlib import Path
 
 
 def EmptyDictDefault():
@@ -59,26 +61,48 @@ class SkippedOutput(Unresolved):
 
 class URI(str):
     def __init__(self, value):
-        self.protocol, self.path, self.remote = URI.parse(value)
 
-    @staticmethod
-    def parse(value: str, expand_user=True):
-        """
-        Parses URI. If URI does not start with "protocol://", assumes "file://"
+        uri_components = uritools.urisplit(value)
+        self.scheme = uri_components.scheme or "file"  # Protocol.
+        self.authority = uri_components.authority
+        self.query = uri_components.query
+        self.fragment = uri_components.fragment
 
-        Returns tuple of (protocol, path, is_remote)
-
-        If expand_user is True, ~ in (file-protocol) paths will be expanded.
-        """
-        match = re.fullmatch(r'((\w+)://)(.*)', value)
-        if not match:
-            protocol, path, remote = "file", value, False
+        # NOTE(JSKenyon): We assume that remote URIs are properly formed and
+        # absolute i.e. we do not reason about relative paths for e.g. s3. The
+        # following attempts to express paths relative to the cwd but will
+        # prefer absolute paths when inputs are outside the cwd. This can be
+        # changed when stimela's minimum Python >= 3.12 by using the newly
+        # added `walk_up` option.
+        if self.scheme == "file":
+            cwd = Path.cwd().absolute()
+            abs_path = Path(uri_components.path).expanduser().resolve()
+            self.abs_path = str(abs_path)
+            try:
+                self.path = str(abs_path.relative_to(cwd))
+            except ValueError as e:
+                if "is not in the subpath" in str(e):
+                    self.path = self.abs_path
+                else:
+                    raise e
         else:
-            _, protocol, path = match.groups()
-            remote = protocol != "file"
-        if not remote and expand_user:
-            path = os.path.expanduser(path)
-        return protocol, path, remote
+            self.path = self.abs_path = uri_components.path
+
+        self.full_uri = uritools.uricompose(
+            scheme=self.scheme,
+            authority=self.authority,
+            path=self.abs_path,
+            query=self.query,
+            fragment=self.fragment
+        )
+
+        self.remote = self.scheme != "file"
+
+    def __str__(self):
+        return self.full_uri if self.remote else self.path
+
+    def __repr__(self):
+        return self.full_uri
 
 
 class File(URI):
