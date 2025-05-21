@@ -68,15 +68,30 @@ class URI(str):
         self.query = uri_components.query
         self.fragment = uri_components.fragment
 
+        # NOTE(JSKenyon): We assume that remote URIs are properly formed and
+        # absolute i.e. we do not reason about relative paths for e.g. s3. The
+        # following attempts to express paths relative to the cwd but will
+        # prefer absolute paths when inputs are outside the cwd. This can be
+        # changed when stimela's minimum Python >= 3.12 by using the newly
+        # added `walk_up` option.
         if self.scheme == "file":
-            self.path = str(Path(uri_components.path).expanduser().absolute())
+            cwd = Path.cwd().absolute()
+            abs_path = Path(uri_components.path).expanduser().resolve()
+            self.abs_path = str(abs_path)
+            try:
+                self.path = str(abs_path.relative_to(cwd))
+            except ValueError as e:
+                if "is not in the subpath" in str(e):
+                    self.path = self.abs_path
+                else:
+                    raise e
         else:
-            self.path = uri_components.path
+            self.path = self.abs_path = uri_components.path
 
         self.full_uri = uritools.uricompose(
             scheme=self.scheme,
             authority=self.authority,
-            path=self.path,
+            path=self.abs_path,
             query=self.query,
             fragment=self.fragment
         )
