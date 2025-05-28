@@ -1,0 +1,70 @@
+cabs:
+    echo:
+        command: echo
+        inputs:
+            args:
+                dtype: List[str]
+                required: true
+                policies:
+                    positional: true
+                    repeat: false
+    help:
+        command: sleep
+
+    sleep:
+        command: sleep
+        inputs:
+            seconds:
+                dtype: int
+                required: true
+                policies:
+                    positional: true
+
+opts:
+    log:
+        dir: test-logs/logs-{config.run.datetime}
+        nest: 3
+        symlink: logs
+
+
+loop_recipe:
+    name: "loop recipe"
+    info: 'test recipe that loops over two lists'
+
+    inputs:
+        index-list: List[int]
+        list-a: List[str]
+        list-b: List[str]
+
+
+    for_loop:
+        var: i
+        over: index-list
+        display_status: "{var}={value} {index1}/{total}"
+
+    steps:
+        echo:
+            cab: echo
+            params:
+                #args: [=recipe.x,=recipe.y]
+                args: =LIST(recipe.list-a[recipe.i],recipe.list-b[recipe.i])
+
+        slp1:
+            cab: sleep
+            params:
+                seconds: 2
+
+main_recipe:
+    name: "main recipe"
+
+    assign:
+        list-a: ['test', 'me', 'now']
+        list-b: ['x', 'y', 'z']
+
+    steps:
+        loop:
+            recipe: loop_recipe
+            params:
+                index-list: =RANGE(LEN(recipe.list-a))
+                list-a: =recipe.list-a
+                list-b: =recipe.list-b
