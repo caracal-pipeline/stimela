@@ -1,6 +1,8 @@
 _include: 
   - test_include.yaml
 
+basename: ${self:basename}
+
 foo:
   _include: (scabha_tests)test_include2.yaml
 
