@@ -124,7 +124,7 @@ class ConfigDependencies(object):
         for line in branches.decode().split("\n"):
             line = line.strip()
             if line.startswith("*"):
-                gitinfo.branch = line[1:].strip()
+                gitinfo.branch = line[1:].strip().replace("${", "\\${")
                 break
         # get description
         try:
