@@ -20,6 +20,8 @@ def test_includes():
     assert conf.x.y2.z1 == 1
     assert conf.relative.x.y == 'a'
 
+    assert conf.basename == "testconf.yaml"
+
     missing = configuratt.check_requirements(conf, [], strict=False)
     assert len(missing) == 2                   # 2 failed reqs
     assert 'yy' not in conf.requirements2.x    # this one was contingent, so section was deleted

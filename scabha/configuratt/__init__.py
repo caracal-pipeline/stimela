@@ -12,7 +12,6 @@ from .resolvers import resolve_config_refs
 from .cache import load_cache, save_cache
 from .common import *
 
-
 def load(path: str, use_sources: Optional[List[DictConfig]] = [], name: Optional[str]=None,
         location: Optional[str]=None,
         includes: bool=True, selfrefs: bool=True, include_path: str=None,
@@ -44,7 +43,26 @@ def load(path: str, use_sources: Optional[List[DictConfig]] = [], name: Optional
     conf, dependencies = load_cache((path,), verbose=verbose) if use_toplevel_cache else (None, None)
 
     if conf is None:
-        subconf = OmegaConf.load(path)
+        # create self:xxx resolver
+        self_namespace = dict(
+            path = path,
+            dirname = os.path.dirname(path),
+            basename = os.path.basename(path)
+        )
+        def self_namespace_resolver(arg):
+            if arg in self_namespace:
+                return self_namespace[arg]
+            raise KeyError(f"invalid '${{self:arg}}' substitution in {path}")
+        
+        OmegaConf.register_new_resolver('self', self_namespace_resolver)
+        try:
+            subconf = OmegaConf.load(path)
+            # force resolution of interpolations at this point (otherwise they happen lazily)
+            resolved = OmegaConf.to_container(subconf, resolve=True)
+            subconf = OmegaConf.create(resolved)
+        finally:
+            OmegaConf.clear_resolver('self')
+
         name = name or os.path.basename(path)
         dependencies = ConfigDependencies()
         dependencies.add(path)

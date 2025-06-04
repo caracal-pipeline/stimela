@@ -390,7 +390,7 @@ def construct_parser():
 
     atomic_value = (boolean | UNSET | EMPTY | nested_field | string | number)
 
-    function_call_anyseq = Group(anyseq_functions + lparen + anyseq + rparen).setParseAction(FunctionHandler.pa)
+    function_call_anyseq = Group(anyseq_functions + lparen + (expr | anyseq) + rparen).setParseAction(FunctionHandler.pa)
     function_call = Group(functions + lparen + 
                     Opt(delimited_list(expr|SELF)) + 
                     rparen).setParseAction(FunctionHandler.pa)
@@ -548,11 +548,27 @@ class Evaluator(object):
                 raise
 
         if isinstance(value, Unresolved) and not allow_unset:
-            raise UnsetError(f"'{value.value}' undefined")
+            raise UnsetError(f"'{value.value}' undefined", value.errors)
 
         return value
 
-    def evaluate(self, value, sublocation: List[str] = []):
+    def evaluate(self, value: Any, sublocation: List[str] = []) -> Any:
+        """evaluates a single value, which can be a string with a formula and/or substitutions
+
+        Args:
+            value (Any): value to be evaluated. If not a str, returned as is
+            sublocation (List[str]): location of value inside of nested container, as a list
+                    of strings. Defaults to []
+
+        Raises:
+            ParserError: error parsing formula
+            FormulaError: error evaluating formula
+            SubstitutionError: unresolved symbol in formula or {}-substitution
+
+        Returns:
+            Any: result of evaluation
+        """
+        
         if type(value) is not str:
             return value
 
@@ -582,16 +598,35 @@ class Evaluator(object):
             self.location = self.location[:loclen]
 
     def evaluate_object(self, obj: Any,
-                        sublocation = [],
+                        sublocation: List[str] = [],
                         raise_substitution_errors: bool = True, 
                         recursion_level: int = 1,
-                        verbose: bool = False):
+                        verbose: bool = False) -> Any:
+        """evaluates object, which can be a nested container, in which case string elements
+        are evaluated recursively. Evaluations are done in place.
+
+        Args:
+            obj (Any): object to evaluate
+            sublocation (List[str]): location of value inside of nested container, as a list
+                    of strings. Defaults to []
+            raise_substitution_errors (bool, optional): raise substitution errors, instead of returning
+                Unresolved values. Defaults to True.
+            recursion_level (int, optional): Limits recursion level into subcontainers. Defaults to 1,
+                which means recurse once.
+            verbose (bool, optional): Prints debug messages. Defaults to False.
+
+        Raises:
+            SubstitutionError: error in substitutions
+
+        Returns:
+            Any: object with evaluations
+        """
         # string? evaluate directly and return
         if type(obj) is str:
             try:
                 value = self.evaluate(obj, sublocation=sublocation)
-                if isinstance(value, Unresolved) and not self.allow_unresolved:
-                    raise SubstitutionError(f"{'.'.join(sublocation)}: unresolved substitution", [value])
+                if isinstance(value, Unresolved) and (raise_substitution_errors or not self.allow_unresolved):
+                    raise SubstitutionError(f"{'.'.join(sublocation)}: unresolved substitution", value.errors)
                 return value
             except AttributeError as err:
                 if raise_substitution_errors or not self.allow_unresolved:
@@ -604,7 +639,7 @@ class Evaluator(object):
             
         # helper function
         def update(value, sloc):
-            if type(value) is Unresolved:
+            if isinstance(value, Unresolved):
                 return value, False
             subloc = sublocation + [sloc]
             if verbose: 
@@ -669,11 +704,38 @@ class Evaluator(object):
                     defaults: Dict[str, Any] = {}, 
                     sublocation = [],
                     raise_substitution_errors: bool = True, 
+                    collapse_substitution_errors: bool = False,  # true for subcontainers
+                    subcontainer_type: typing.Optional[str] = None,
                     recursive: bool = True,
-                    verbose: bool = False):
+                    verbose: bool = False) -> Dict[str, Any]:
+        """evaluates dict of parameters, which can contain nested containers which can be evaluated recursively.
+        Returns new dict.
+
+        Args:
+            params (Dict[str, Any]): parameters to evaluate
+            corresponding_ns (Optional[Dict[str, Any]], optional): corresponding namespace, into which evluations
+                are propagated. Defaults to None.
+            defaults (Dict[str, Any], optional): dictionary of defaults; UNSET values are cause defaults to
+                be substituted in.
+            sublocation (list, optional): location inside of nested container, as a list
+                of strings. Defaults to []
+            raise_substitution_errors (bool, optional): raises substitution errors. Defaults to True.
+                if False, substitution errors are assigned to dict as Unresolved values.
+            collapse_substitution_errors (bool, optional): if True, a substituion error inside the dict
+                causes an Unresolved value to be returned instead of the dict. Defaults to False.
+            subcontainer_type (str): type of subcontainer being evaluated. Defaults to None. Must be set
+                if collapse_substitution_errors is True.
+            recursive (bool, optional): recurse into subcontainers. Defaults to True.
+            verbose (bool, optional): print debug messages. Defaults to False.
+
+        Returns:
+            Dict[str, Any]: _descopy of input dict with substitutions performed
+        """
+        if collapse_substitution_errors:
+            assert subcontainer_type is not None
         params_out = params
         for name, value in list(params.items()):
-            if type(value) is Unresolved:
+            if isinstance(value, Unresolved):
                 continue
             # 
             retry = True
@@ -687,21 +749,24 @@ class Evaluator(object):
                     except (AttributeError, SubstitutionError, ParserError, FormulaError) as err:
                         if raise_substitution_errors:
                             raise
-                        new_value = Unresolved(errors=[err])
+                        new_value = Unresolved(errors=[str(err)])
                     if verbose:
                         print(f"{name}: {value} -> {new_value}")
                     # UNSET return means delete or revert to default
                     if new_value is UNSET:
+                        if subcontainer_type:
+                            raise SubstitutionError(f"{'.'.join(self.location + sublocation)}: UNSET not allowed here")
                         if params_out is params:
                             params_out = params.copy()
-                        # if value is in defaults, try to evaluate that instead
-                        if name in defaults and defaults[name] is not UNSET:
+                        # if value is in defaults and is different, try to evaluate that instead
+                        if name in defaults and defaults[name] is not UNSET and defaults[name] != value:
                             value = params_out[name] = defaults[name]
                             if corresponding_ns:
-                                corresponding_ns[name] = str(defaults[name])
+                                corresponding_ns[name] = defaults[name]
                             retry = True
                         else: 
-                            del params_out[name]
+                            if name in params_out:
+                                del params_out[name]
                             if corresponding_ns and name in corresponding_ns:
                                 del corresponding_ns[name]
                     elif new_value is not value and new_value != value:
@@ -717,23 +782,40 @@ class Evaluator(object):
                         defaults,
                         sublocation=sublocation + [name],
                         raise_substitution_errors=raise_substitution_errors,
+                        collapse_substitution_errors=True, subcontainer_type="Dict",
                         recursive=True,
                         verbose=verbose
                     )
                     params_out[name] = value
+                    if corresponding_ns:
+                        corresponding_ns[name] = value
                 elif isinstance(value, (list, ListConfig)) and recursive:
-                    seq = [
-                            *self.evaluate_dict(
+                    # convert list to dict, and evaluate
+                    proxy_dict = self.evaluate_dict(
                                 {f"[{i}]": v for i, v in enumerate(value)},
                                 corresponding_ns,
                                 defaults,
                                 sublocation=sublocation + [name],
                                 raise_substitution_errors=raise_substitution_errors,
+                                collapse_substitution_errors=True, subcontainer_type="List",
                                 recursive=True,
                                 verbose=verbose
-                            ).values()
-                        ]
-                    params_out[name] = type(value)(seq)
+                            )
+                    if isinstance(proxy_dict, Unresolved):
+                        value = proxy_dict
+                    else:
+                        value = type(value)(list(proxy_dict.values()))
+                    params_out[name] = value
+                    if corresponding_ns:
+                        corresponding_ns[name] = value
+
+        if collapse_substitution_errors:
+            errors = []
+            for elem in params_out.values():
+                if isinstance(elem, Unresolved):
+                    errors += elem.errors
+            if errors:
+                return Unresolved(f"unresolved {subcontainer_type} elements", errors)
 
         return params_out
 

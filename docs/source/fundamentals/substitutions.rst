@@ -5,7 +5,15 @@
 Substitutions and formulas
 ##########################
 
-Substitutions and formula evaluation are a key feature of Stimela, which allow the inputs and outputs of steps and recipes to be linked with minimum fuss. Here's an idealized example showing off both features::
+The YAML files read by Stimela are subject to three types of substituton mechanisms:
+
+* At load time, the standard OmegaConf :ref:`variable interpolation<omegaconf_subst>` mechanism is invoked on all strings of the form ``${name}``. This can be used to substitute a previously defined value into another value. You can escape the interpolation by using ``\${name}``. This feature is not used often (though see :ref:`below<omegaconf_subst>`), but it's important to be aware of it in case you inadvertently trigger an interpolation by using ``${}``. 
+
+* At runtime, Stimela does {}-substitutions on parameter values (and some other items such as backend settings). {}-substitutions are invoked as ``{foo.bar}``. Use ``{{foo.bar}}`` if you need to insert curly braces without a substitution.
+
+* At runtime, Stimela does formula evaluations on parameter values (and backend settings etc.) that start with a ``=`` character. If you need to supply a literal string starting with an equals sign, use ``==`` to escape formula evaluation and insert a single equals sign.
+
+Substitutions and formula evaluations are a key feature of Stimela, which allow the inputs and outputs of steps and recipes to be linked with minimum fuss. Here's an idealized example showing off both features::
 
     calibration-recipe:
         info: "a notional recipe for calibration & imaging"
@@ -195,17 +203,27 @@ Formula evaluation errors
 
 From the list of functions above, it should be clear that some functions expect arguments of a specific type (e.g. the pathname manipulation functions expect a string argument), while others (e.g. ``IF()``) are completely permissive. Bear this in mind if you're confounded by a strange error during parameter validation. Stimela strives to give sensible and descriptive error messages, however, the formula engine is one area where the range of possible errors is so vast that the occasional opaque message will slip through.
 
+
+.. _omegaconf_subst:
+
 OmegaConf interpolations
 ------------------------
 
-A related, but more basic, kind of substitution is invoked via the ``${}`` construct. This invokes the `OmegaConf variable interpolation <https://omegaconf.readthedocs.io/en/usage.html#variable-interpolation>`_ mechanism::
+
+A related, but more basic, kind of substitution is invoked via the ``${}`` construct. This invokes the `OmegaConf variable interpolation <https://omegaconf.readthedocs.io/en/latest/structured_config.html#interpolations>`_ mechanism::
 
    vars:
         x: 1
         y: ${vars.x}
  
-Note that this kind of substition happens on a much more basic level, when the YAML itself is loaded. We don't tend to employ it much 
-(if at all), since the ``_use`` and ``_include`` extensions (see next section) tend to be a lot more useful.
+Note that this kind of substition happens on a much more basic level, when the YAML itself is loaded. We don't tend to employ it much, since the ``_use`` and ``_include`` extensions (see next section) tend to be a lot more rich and functional.
+
+There is one scenario where this interpolation is very useful, however. The construct ``${self:dirname}`` will interpolate to the directory of the YAML document where it appears. Similarly, ``${self:path}`` interpolates to the full path of the YAML document, and ``${self:basename}`` to its base filename. This is useful in cases where a recipe is shipped alongside some additional configuration or data files that it must reference. Since a recipe may be included from another recipe (residing in a different directory), it may be necessary for it to specify the proper path to its associated data files, which ``${self:dirname}`` allows for.
+
+
+
+
+
 
 
 

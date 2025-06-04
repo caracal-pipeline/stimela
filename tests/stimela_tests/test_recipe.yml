@@ -121,11 +121,11 @@ recipe:
       default: ['.', '..', '~']
     recipe-uri:
       dtype: URI
-      default: file://test_recipe.yml
+      default: file:test_recipe.yml  # Somewhat unusual - relative URI.
       must_exist: true
     recipe-uri-2:
       dtype: List[URI]
-      default: [file://test_recipe.yml, s3://some.s3.path]
+      default: [file:test_recipe.yml, s3://some.s3.path]
       must_exist: true
   outputs:
     output-dir:    

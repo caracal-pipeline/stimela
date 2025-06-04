@@ -21,6 +21,24 @@ from warnings import warn
 
 from . import task_stats
 
+CONSOLE_PRINT_OPTIONS = [
+    "sep",
+    "end",
+    "style",
+    "justify",
+    "overflow",
+    "no_wrap",
+    "emoji",
+    "markup",
+    "highlight",
+    "width",
+    "height",
+    "crop",
+    "soft_wrap",
+    "new_line_start"
+]
+
+
 class FunkyMessage(object):
     """Class representing a message with two versions: funky (with markup), and boring (no markup)"""
     def __init__(self, funky, boring=None, prefix=None, escape_emojis=True):
@@ -49,6 +67,14 @@ class StimelaConsoleHander(rich.logging.RichHandler):
         self._console = console
 
     def emit(self, record):
+        # NOTE(JSKenyon): If a message requires a custom console print,
+        # forward all known arguments to the _console.print method.
+        if getattr(record, "custom_console_print", False):
+            self._console.print(
+                record.msg,
+                **{k: getattr(record, k) for k in CONSOLE_PRINT_OPTIONS if hasattr(record, k)}
+            )
+            return
         try:
             rich.logging.RichHandler.emit(self, record)
         # backstop -- message should have been properly markup-escaped
@@ -378,7 +404,7 @@ def log_exception(*errors, severity="error", log=None):
             if not exc.logged:
                 do_log = exc.logged = True
             tree = Tree(exc_message(exc) if _boring else 
-                            f"[{colour}]:warning: {exc_message(exc)}[/{colour}]", 
+                            f"[{colour}]{exc_message(exc)}[/{colour}]", 
                         guide_style="" if _boring else "dim")
             trees.append(tree)
             if exc.nested:
@@ -386,7 +412,7 @@ def log_exception(*errors, severity="error", log=None):
                 has_nesting = True
         else:
             tree = Tree(exc_message(exc) if _boring else 
-                            f"[{colour}]:warning: {exc_message(exc)}[/{colour}]", 
+                            f"[{colour}]{exc_message(exc)}[/{colour}]", 
                         guide_style="" if _boring else "dim")
             trees.append(tree)
             do_log = True

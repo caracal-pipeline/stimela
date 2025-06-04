@@ -160,7 +160,7 @@ class SubstitutionNS(OrderedDict):
             if name in self:
                 value = super().get(name)
                 if context:
-                    if context.raise_errors and type(value) is Unresolved:
+                    if context.raise_errors and isinstance(value, Unresolved):
                         raise SubstitutionError(f"unresolved substitution for {name} ({value})")
                     if subst and not self._nosubst_:
                         # recursive=False will invoke substitution on strings, but will return containers as is
