@@ -176,6 +176,12 @@ class FunctionHandler(ResultsHandler):
             return list(x)
         return self.evaluate_generic_callable(evaluator, "LIST", make_list, args)
 
+    def LEN(self, evaluator, args):
+        def make_len(x):
+            return len(x)
+        return self.evaluate_generic_callable(evaluator, "LEN", make_len,
+                                              args, min_args=1, max_args=1)
+
     def RANGE(self, evaluator, args):
         def make_range(*x):
             return list(range(*x))
