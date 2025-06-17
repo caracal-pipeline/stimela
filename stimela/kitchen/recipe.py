@@ -143,7 +143,8 @@ class Recipe(Cargo):
         #             raise RecipeValidationError(f"'{location}.{assign_label}.{key}' clashes with an {io_label}")
 
     def update_assignments(self, subst: SubstitutionNS, whose = None, params: Dict[str, Any] = {}, 
-                            ignore_subst_errors: bool = False):
+                            ignore_subst_errors: bool = False,
+                            ignore_abo_errors: bool = False):
         """Updates variable assignments, using the recipe's (or a step's) 'assign' and 'assign_based_on' sections.
         Also updates the corresponding (recipe or step's) file logger.
 
@@ -218,6 +219,8 @@ class Recipe(Cargo):
                     value = None
             # nothing found? error then
             if value is None:
+                if ignore_abo_errors:
+                    continue
                 if basevar in self.inputs_outputs:
                     raise AssignmentError(f"{whose.fqname}.assign_based_on: a value for '{basevar}' was not supplied")
                 elif '.' in basevar:
@@ -226,6 +229,8 @@ class Recipe(Cargo):
                     raise AssignmentError(f"{whose.fqname}.assign_based_on: '{basevar}' is not a known variable")
             # look up list of assignments
             if value not in value_list:
+                if ignore_abo_errors:
+                    continue
                 if 'DEFAULT' not in value_list:
                     raise AssignmentError(f"{whose.fqname}.assign_based_on: neither the '{basevar}={value}' case nor a DEFAULT case is defined")
                 value = 'DEFAULT'
@@ -785,7 +790,7 @@ class Recipe(Cargo):
             subst_outer.current = subst.recipe
 
         # update assignments
-        self.update_assignments(subst, params=params, ignore_subst_errors=True)
+        self.update_assignments(subst, params=params, ignore_subst_errors=True, ignore_abo_errors=True)
         # this may have changed the file logger, so update
         stimelogging.update_file_logger(self.log, self.logopts, nesting=self.nesting, subst=subst, location=[self.fqname])
 
@@ -833,9 +838,9 @@ class Recipe(Cargo):
             for label, step in self.steps.items():
                 self._prep_step(label, step, subst)
                 # update assignments, since substitutions (info.fqname and such) may have changed
-                self.update_assignments(subst, params=params, ignore_subst_errors=True)
+                self.update_assignments(subst, params=params, ignore_subst_errors=True, ignore_abo_errors=True)
                 # update assignments based on step content
-                self.update_assignments(subst, whose=step, params=params, ignore_subst_errors=True)
+                self.update_assignments(subst, whose=step, params=params, ignore_subst_errors=True, ignore_abo_errors=True)
 
                 try:
                     step_params = step.prevalidate(subst)
@@ -846,7 +851,7 @@ class Recipe(Cargo):
                     errors.append(RecipeValidationError(f"step '{label}' failed prevalidation", exc, tb=True))
 
                 # revert to recipe-level assignments
-                self.update_assignments(subst, params=params, ignore_subst_errors=True)
+                self.update_assignments(subst, params=params, ignore_subst_errors=True, ignore_abo_errors=True)
                 subst.previous = subst.current
                 subst.steps[label] = subst.previous
 
