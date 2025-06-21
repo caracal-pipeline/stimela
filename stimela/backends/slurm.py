@@ -41,7 +41,8 @@ class SlurmOptions(object):
                 raise BackendError(f"slurm.srun_path '{self.srun}' is not an executable")
             return self.srun
         
-    def _wrap(self, srun_opts: Dict[str, Any], args: List[str],  log_args: List[str], fqname: Optional[str]=None) -> List[str]:
+    def _wrap(self, srun_opts: Dict[str, Any], args: List[str],  log_args: List[str], 
+                ephem_binds: Dict[str, str] = {}, fqname: Optional[str]=None) -> List[str]:
         output_args = [self.get_executable()]
 
         # reverse fqname to make job name (more informative that way)
@@ -52,15 +53,24 @@ class SlurmOptions(object):
         for name, value in srun_opts.items():
             output_args += ["--" + name, value]
 
+        # use wrapper script if ephemeral bindings are required
+        if ephem_binds:
+            output_args.append(os.path.join(os.path.dirname(__file__), 'slurm_runner.sh'))
+            for name, basedir in ephem_binds.items():
+                output_args.append(f"{basedir}::{name}") 
+            output_args.append("--")
+
         return output_args + args, output_args + log_args
 
-    def wrap_run_command(self, args: List[str], log_args: List[str], fqname: Optional[str]=None, log: Optional[logging.Logger]=None) -> List[str]:
-        return self._wrap(self.srun_opts, args, log_args, fqname)        
+    def wrap_run_command(self, args: List[str], log_args: List[str], 
+                            ephem_binds: Dict[str, str] = {}, fqname: Optional[str]=None, log: Optional[logging.Logger]=None) -> List[str]:
+        return self._wrap(self.srun_opts, args, log_args, ephem_binds=ephem_binds, fqname=fqname)        
 
     def wrap_build_command(self, args: List[str], fqname: Optional[str]=None, log: Optional[logging.Logger]=None) -> List[str]:
         if self.build_local:
             return args
-        return self._wrap(self.srun_opts_build if self.srun_opts_build is not None else self.srun_opts, args, fqname)        
+        return self._wrap(self.srun_opts_build if self.srun_opts_build is not None else self.srun_opts, args, 
+            log_args=args, fqname=fqname)        
     
     def validate(self, log: logging.Logger):
         pass
