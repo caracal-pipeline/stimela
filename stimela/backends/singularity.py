@@ -40,7 +40,6 @@ class SingularityBackendOptions(object):
     containall: bool = False       # if True, runs with --containall
     bind_tmp: bool = True          # if True, implicitly binds an empty /tmp directory
     clean_tmp: bool = True         # if False, temporary directories will not be cleaned up. Useful for debugging.
-    bind_logdir: bool = True       # if False, the current stimela logdir will not be bound
 
     # optional extra bindings
     bind_dirs: Dict[str, BindDir] = EmptyDictDefault()
@@ -344,18 +343,6 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                         raise BackendError(f"bind_dirs.{label}: conflicting bind paths for {dest}")
                 else:
                     container_to_host_path[dest] = src
-
-        if backend.singularity.bind_logdir:
-            if not isinstance(log, logging.Logger):
-                raise ValueError("Cannot bind log directory without a valid logger.")
-
-            file_handler = next((h for h in log.handlers if isinstance(h, logging.FileHandler)), None)
-
-            if file_handler is None:
-                logging.warning("No file handler has been configured - bind_logdir will be ignored.")
-            else:
-                log_dir = file_handler.get_logfile_dir()
-                mounts[log_dir] = True  # Needs to be writable.
 
         # get extra required filesystem bindings from supplied parameters
         resolve_required_mounts(mounts, params, cab.inputs, cab.outputs, remappings=container_to_host_path)

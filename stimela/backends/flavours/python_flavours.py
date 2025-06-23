@@ -155,33 +155,24 @@ class PythonCallableFlavour(_CallableFlavour):
         else:
             msg1 = msg2 = msg3 = msg4 = ""
 
-        if py_module == "casatasks" and isinstance(log, logging.Logger):
+        if py_module == "casatasks":
 
-            file_handler = next((h for h in log.handlers if isinstance(h, logging.FileHandler)), None)
-
-            if file_handler is None:
-                log.warning("No file handler has been configured - casa logs will not be moved.")
-            else:
-                log_dir = file_handler.get_logfile_dir()
-
-                logging_prologue = f"""
-import casaconfig
-import shutil
+            logging_prologue = f"""
+from casatasks import casalog
 from pathlib import Path
-casaconfig.get_config()
-casalog_path = Path(casaconfig.config.logfile)
-stimlog_path = Path('{log_dir}/casatask.log')
+casalog_path = Path(casalog.logfile())
+casalog.showconsole(onconsole=True)
 """
 
-                logging_epilogue = f"""
+            logging_epilogue = f"""
 try:
-    shutil.move(casalog_path, stimlog_path)
+    casalog_path.unlink(missing_ok=True)
 except FileNotFoundError:
     pass
 """
 
-                self.pre_command = (self.pre_command or "") + logging_prologue
-                self.post_command = (self.post_command or "") + logging_epilogue
+            self.pre_command = (self.pre_command or "") + logging_prologue
+            self.post_command = (self.post_command or "") + logging_epilogue
 
         code = f"""
 import sys, json, zlib, base64
