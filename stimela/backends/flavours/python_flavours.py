@@ -36,7 +36,7 @@ def form_python_function_call(function: str, cab: Cab, params: Dict[str, Any]):
 def format_dict_as_function_call(func_name: Optional[str], d: Dict[str, Any], indent=4):
     """formats dict as a function call"""
     if func_name:
-        lines = [f"{func_name}("] 
+        lines = [f"{func_name}("]
         comma = ","
     else:
         lines = []
@@ -86,7 +86,7 @@ class PythonCallableFlavour(_CallableFlavour):
     expected to be in the form of [package.]module.function
     """
     kind: str = "python"
-    # name of python binary to use  
+    # name of python binary to use
     interpreter_binary: str = "python"
     # Full command used to launch interpreter. {python} gets substituted for the interpreter path
     interpreter_command: str = "{python} -u"
@@ -139,7 +139,7 @@ class PythonCallableFlavour(_CallableFlavour):
         params_string = base64.b64encode(
                             zlib.compress(json.dumps(pass_params).encode('ascii'), 2)
                         ).decode('ascii')
-        
+
         # log invocation
         if log:
             log.info(f"preparing function call:", extra=dict(prefix="###", style="dim"))
@@ -154,6 +154,35 @@ class PythonCallableFlavour(_CallableFlavour):
             msg4 = f"""print("## return value is ", _result)"""
         else:
             msg1 = msg2 = msg3 = msg4 = ""
+
+        if py_module == "casatasks" and isinstance(log, logging.Logger):
+
+            file_handler = next((h for h in log.handlers if isinstance(h, logging.FileHandler)), None)
+
+            if file_handler is None:
+                log.warning("No file handler has been configured - casa logs will not be moved.")
+            else:
+                log_dir = file_handler.get_logfile_dir()
+
+                logging_prologue = f"""
+import casaconfig
+import shutil
+from pathlib import Path
+casaconfig.get_config()
+casalog_path = Path(casaconfig.config.logfile)
+stimlog_path = Path('{log_dir}/casatask.log')
+"""
+
+                logging_epilogue = f"""
+try:
+    shutil.move(casalog_path, stimlog_path)
+except FileNotFoundError:
+    pass
+"""
+
+                self.pre_command = (self.pre_command or "") + logging_prologue
+                self.post_command = (self.post_command or "") + logging_epilogue
+
         code = f"""
 import sys, json, zlib, base64
 _inputs = json.loads(zlib.decompress(
@@ -198,7 +227,7 @@ class PythonCodeFlavour(_BaseFlavour):
     output_vars: bool = True
     # if True, command will have {}-substitutions done on it
     subst: bool = False
-    # name of python binary to use  
+    # name of python binary to use
     interpreter_binary: str = "python"
     # Full command used to launch interpreter. {python} gets substituted for the interpreter path
     interpreter_command: str = "{python} -u"
@@ -268,7 +297,7 @@ class PythonCodeFlavour(_BaseFlavour):
                 for name in pass_outputs:
                     var_name = name.replace("-", "_").replace(".", "__")
                     post_command += f"yield_output(**{{'{name}': {var_name}}})\n"
-        
+
         if self.post_command:
             post_command += self.post_command
 
