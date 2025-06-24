@@ -73,13 +73,11 @@ cabs:
     flavour:
       kind: python
       pre_commands:
-        pre-1: |
-          print("Pre-command 1...")
+        pre-1: print("Pre-command 1...")
         pre-2: |
           print("Pre-command 2...")
       post_commands:
-        post-1: |
-          print("Post-command 1...")
+        post-1: print("Post-command 1...")
         post-2: |
           print("Post-command 2...")
     inputs:
