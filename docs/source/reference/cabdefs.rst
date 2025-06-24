@@ -237,7 +237,7 @@ The following additional options are available for both the ``python`` and ``pyt
 
 * ``flavour.interpreter_command`` determines how the interpreter command line is formed, default is ``"{python} -u"``. Note that this is not subject to Stimela's full {}-substitutions, but does recognize ``{python}``, and inserts ``interpreter_binary`` as set above.
 
-* ``flavour.pre_commands`` adds optional Python code to be executed up front. This can be useful for housekeeping operations, such as disabling warnings, etc. Multiple commands can be specified and will be run in order.::
+* ``flavour.pre_commands`` adds optional Python code to be executed up front. This can be useful for housekeeping operations, such as disabling warnings, etc. Multiple commands can be specified as mappings from arbitrary command names (labels) to code strings and will be executed in order.::
 
     flavour:
         kind: python

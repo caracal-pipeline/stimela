@@ -157,10 +157,10 @@ class PythonCallableFlavour(_CallableFlavour):
 
         pre_command_str = ""
         if self.pre_commands:
-            pre_command_str += "".join(self.pre_commands.values())
+            pre_command_str += "\n".join(self.pre_commands.values())
         post_command_str = ""
         if self.post_commands:
-            post_command_str += "".join(self.post_commands.values())
+            post_command_str += "\n".join(self.post_commands.values())
 
         code = f"""
 import sys, json, zlib, base64
@@ -260,7 +260,7 @@ import sys, json
 {inp_dict} = json.loads(sys.argv[1])
 """
         if self.pre_commands:
-            pre_command_str += "".join(self.pre_commands.values())
+            pre_command_str += "\n".join(self.pre_commands.values())
 
         if self.input_vars:
             for name in pass_params:
@@ -279,7 +279,7 @@ import sys, json
                     post_command_str += f"yield_output(**{{'{name}': {var_name}}})\n"
         
         if self.post_commands:
-            post_command_str += "".join(self.post_commands.values())
+            post_command_str += "\n".join(self.post_commands.values())
 
         # form up interpreter invocation
         args = get_python_interpreter_args(cab, subst, virtual_env=virtual_env)
