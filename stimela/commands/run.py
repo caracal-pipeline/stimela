@@ -265,10 +265,9 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
         else:
             return yaml.safe_load(value)
 
-    # Load parameter files using benedict and flatten into a dotsting-value dict.
+    # Load parameter files using benedict and flatten into a dotstring-value dict.
     for pf in parameter_file:
         pf_dict = benedict.from_yaml(pf, keypath_separator=">>").flatten(separator=".")
-    
         for key, value in pf_dict.items():
             try:
                 params[key] = value
