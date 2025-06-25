@@ -1,0 +1,8 @@
+stringy: "A string!"
+listy:
+  - "A"
+  - "list"
+  - "!"
+
+echo-inputs:
+  extra: unicorn

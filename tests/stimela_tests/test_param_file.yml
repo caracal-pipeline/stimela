@@ -1,0 +1,29 @@
+cabs:
+  echo:
+    flavour: python-code
+    command: |
+      for arg in args:
+        print(f"{arg}")
+      print(f"Found a {extra}!")
+    inputs:
+      args:
+        dtype: List[Any]
+      extra:
+        dtype: str
+        default: gremlin
+
+test-param-file:
+  
+  inputs:
+    stringy:
+      dtype: str
+    listy:
+      dtype: List[str]
+  
+  steps:
+    echo-inputs:
+      cab: echo
+      params:
+        args:
+          - =recipe.stringy
+          - =recipe.listy
