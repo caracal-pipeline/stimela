@@ -231,7 +231,8 @@ def load_recipe_files(filenames: List[str]):
 @click.option("-dc", "--dump-config", is_flag=True,
                 help="""Dump the equivalent stimela config to a file""")
 @click.option("-pf", "--parameter-file", metavar="filename.yml", multiple=True,
-              help="""use the specified parameter file to augment the """)
+              help="""Use parameter values from the sepcified parameter file. These have lower precedence than
+              PARAM=VALUE specified on the CLI.""")
 @click.argument("parameters", nargs=-1, metavar="filename.yml ... [recipe or cab name] [PARAM=VALUE] ...", required=True)
 def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = False, last_recipe: bool = False, profile: Optional[int] = None,
     assign: List[Tuple[str, str]] = [],
