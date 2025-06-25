@@ -13,13 +13,12 @@ cabs:
         default: gremlin
 
 test-param-file:
-  
   inputs:
     stringy:
       dtype: str
     listy:
       dtype: List[str]
-  
+
   steps:
     echo-inputs:
       cab: echo
