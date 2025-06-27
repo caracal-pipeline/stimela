@@ -25,7 +25,7 @@ from .step import Step
 from stimela import task_stats 
 from stimela import backends
 from stimela.backends import StimelaBackendSchema
-from stimela.kitchen.utils import keys_from_sel_string
+from stimela.kitchen.utils import keys_from_sel_string, FlowRestrictor
 
 
 class DeferredAlias(Unresolved):
@@ -340,36 +340,14 @@ class Recipe(Cargo):
             self.log.warning(f"will skip step '{label}'")
             step.skip = step._skip = True
 
-    def restrict_steps(
-        self,
-        tags: List[str] = [],
-        skip_tags: List[str] = [],
-        step_ranges: List[str] = [],
-        skip_ranges: List[str] = [],
-        enable_steps: List[str] = []
-    ):
+    def restrict_steps(self, flow_restrictor: FlowRestrictor):
         try:
-            # extract subsets of tags and step specifications that refer to sub-recipes
-            # this will map name -> (tags, skip_tags, step_ranges, enable_steps). Name is None for the parent recipe.
-            subrecipe_entries = OrderedDict()
-            def process_specifier_list(specs: List[str], num=0):
-                for spec in specs:
-                    if '.' in spec:
-                        subrecipe, spec = spec.split('.', 1)
-                        if subrecipe not in self.steps or not isinstance(self.steps[subrecipe].cargo, Recipe):
-                            raise StepSelectionError(f"'{subrecipe}' (in '{subrecipe}.{spec}') does not refer to a valid subrecipe")
-                    else:
-                        subrecipe = None
-                    entry = subrecipe_entries.setdefault(subrecipe, ([],[],[],[],[]))
-                    entry[num].append(spec)
-            # this builds up all the entries given on the command-line
-            for num, options in enumerate((tags, skip_tags, step_ranges, skip_ranges, enable_steps)):
-                process_specifier_list(options, num)
-
             self.log.info(f"selecting recipe steps for (sub)recipe: [bold green]{self.name}[/bold green]")
 
-            # process our own entries - the parent recipe has None key.
-            tags, skip_tags, step_ranges, skip_ranges, enable_steps = subrecipe_entries.get(None, ([],[],[],[],[]))
+            # Determine and apply the restrictions at the current recipe level.
+            restrictions = flow_restrictor.get_restrictions(self.fqname)
+            # Convenience - restrictions is a named tuple with these fields.
+            tags, skip_tags, step_ranges, skip_ranges, enable_steps = restrictions
 
             # Check that all specified tags (if any), exist.
             known_tags = set.union(*([v.tags for v in self.steps.values()] or [set()]))
@@ -431,7 +409,7 @@ class Recipe(Cargo):
                 if name in self.steps:
                     self.enable_step(name)  # config file may have skip=True, but we force-enable here
                 else:
-                    raise StepSelectionError(f"'{name}' does not refer to a valid step")
+                    raise StepSelectionError(f"'{name}' does not refer to a valid step in {self.fqname}")
 
             if not active_steps:
                 self.log.info("no steps have been selected for execution")
@@ -447,7 +425,7 @@ class Recipe(Cargo):
                 # see how many steps are actually going to run
                 scheduled_steps = [label for label, step in self.steps.items() if not step._skip]
                 # report scheduled steps to log if (a) they're a subset or (b) any selection options were passed
-                if len(scheduled_steps) != len(self.steps) or None in subrecipe_entries:
+                if len(scheduled_steps) != len(self.steps) or any(restrictions):
                     self.log.info(f"the following recipe steps have been selected for execution:")
                     self.log.info(f"    [bold green]{' '.join(scheduled_steps)}[/bold green]")
 
@@ -455,8 +433,7 @@ class Recipe(Cargo):
                 # we still need to recurse in to make sure it applies its tags,
                 for label, step in self.steps.items():
                     if label in active_steps and isinstance(step.cargo, Recipe):
-                        options = subrecipe_entries.get(label, ([],[],[],[],[]))
-                        step.cargo.restrict_steps(*options)
+                        step.cargo.restrict_steps(flow_restrictor)
 
                 return len(scheduled_steps)
         except StepSelectionError as exc:
