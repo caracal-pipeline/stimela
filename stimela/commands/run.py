@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import List, Optional, Tuple
 from collections import OrderedDict
 from omegaconf.omegaconf import OmegaConf, OmegaConfBaseException
+from benedict import benedict
 
 
 import stimela
@@ -466,6 +467,8 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
             selection_options = []
             for opts in (tags, skip_tags, step_ranges, skip_ranges, enable_steps):
                 selection_options.append(set(itertools.chain(*(opt.split(",") for opt in opts))))
+
+            selection_options = [benedict.fromkeys(sorted(so)) for so in selection_options]
 
             try:
                 if not recipe.restrict_steps(*selection_options):
