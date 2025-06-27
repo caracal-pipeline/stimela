@@ -375,7 +375,7 @@ class Recipe(Cargo):
             # NOTE: Single step slices (e.g last_step:) will also trigger this behaviour and may be
             # worth raising a warning over.
             cherry_picked_steps = set.union(*([sel for sel in selected_steps if len(sel) == 1] or [set()]))
-            enable_steps.extend(list(cherry_picked_steps))
+            enable_steps = enable_steps.union(cherry_picked_steps)
 
             selected_steps = set.union(*(selected_steps or [set()]))
             skipped_steps = set.union(*(skipped_steps or [set()]))
@@ -386,7 +386,7 @@ class Recipe(Cargo):
                 self.log.info(f"the following step(s) are marked as never run: ({', '.join(never_steps)})")
             if tag_selected_steps:
                 self.log.info(f"the following step(s) have been selected by tag: ({', '.join(tag_selected_steps)})")
-            if tag_selected_steps:
+            if tag_skipped_steps:
                 self.log.info(f"the following step(s) have been skipped by tag: ({', '.join(tag_skipped_steps)})")
             if selected_steps:
                 self.log.info(f"the following step(s) have been explicitly selected: ({', '.join(selected_steps)})")

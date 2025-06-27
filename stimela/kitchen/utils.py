@@ -71,11 +71,17 @@ class FlowRestrictor(object):
         self.skip_ranges = benedictify(process_commas(skip_ranges))
         self.enable_steps = benedictify(process_commas(enable_steps))
 
-    def get_restriction(self, fqname: str, field: str):
-        """Given fqname, return the applicable restrictions from field."""
+    def get_active_tags(
+        self,
+        fqname: str,
+        field: str
+    ):
+        """Given fqname, return the applicable tags from field."""
+
+        if "tags" not in field:
+            raise ValueError(f"Cannot get tags from field {field}.")
 
         current_restrictions = getattr(self, field)
-
         # This implies that we are not at the outermost level. The
         # components of fqname after the first period will match the keys in
         # current_restrictions.
@@ -84,10 +90,50 @@ class FlowRestrictor(object):
             # A missing key implies no restrictions.
             current_restrictions = current_restrictions.get(key, {})
 
+        tags = [k for k, v in current_restrictions.items() if v is None]
+
+        return set(tags)
+
+    def get_active_steps(
+        self,
+        fqname: str,
+        field: str,
+        tag_field: bool = False
+    ):
+        """Given fqname, return the applicable restrictions from field."""
+
+        current_restrictions = getattr(self, field)
+        # This implies that we are not at the outermost level. The
+        # components of fqname after the first period will match the keys in
+        # current_restrictions.
+        if "." in fqname:
+            key = fqname.split(".", 1)[1]
+            # A missing key implies no restrictions.
+            current_restrictions = current_restrictions.get(key, {})
+
+        if tag_field:
+            steps = [k for k, v in current_restrictions.items() if v is not None]
+        else:
+            steps = list(current_restrictions.keys())
+
         # NOTE(JSKenyon): We do not check for validity at this level as we may
         # have unusual keys in the dictionary.
-        return list(current_restrictions.keys())
+        return set(steps)
 
     def get_restrictions(self, fqname: str):
         """Given fqname, return applicable restrictions from all fields."""
-        return self.Restrictions(*[self.get_restriction(fqname, f) for f in self.Restrictions._fields])
+        active_tags = self.get_active_tags(fqname, "tags")
+        implied_steps = self.get_active_steps(fqname, "tags", tag_field=True)
+        active_skip_tags = self.get_active_tags(fqname, "skip_tags")
+
+        active_step_ranges = self.get_active_steps(fqname, "step_ranges")
+        active_skip_ranges = self.get_active_steps(fqname, "skip_ranges")
+        active_enable_steps = self.get_active_steps(fqname, "enable_steps")
+
+        return self.Restrictions(
+            tags=active_tags,
+            skip_tags=active_skip_tags,
+            step_ranges=active_step_ranges.union(implied_steps),
+            skip_ranges=active_skip_ranges,
+            enable_steps=active_enable_steps
+        )
