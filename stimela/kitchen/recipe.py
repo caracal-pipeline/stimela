@@ -25,7 +25,7 @@ from .step import Step
 from stimela import task_stats 
 from stimela import backends
 from stimela.backends import StimelaBackendSchema
-from stimela.kitchen.utils import keys_from_sel_string
+from stimela.kitchen.utils import keys_from_sel_string, FlowRestrictor
 
 
 class DeferredAlias(Unresolved):
@@ -340,38 +340,13 @@ class Recipe(Cargo):
             self.log.warning(f"will skip step '{label}'")
             step.skip = step._skip = True
 
-    def restrict_steps(
-        self,
-        tags: List[str] = [],
-        skip_tags: List[str] = [],
-        step_ranges: List[str] = [],
-        skip_ranges: List[str] = [],
-        enable_steps: List[str] = []
-    ):
+    def restrict_steps(self, flow_restrictor: FlowRestrictor):
         try:
-            def query_step_control(step_control: Dict):
-
-                current_step_control = step_control
-
-                # This implies that we are not at the outermost level. The
-                # components of self.fqname after the first period will match
-                # the keys in step_control.
-                if "." in self.fqname:
-                    key = self.fqname.split(".", 1)[1]
-                    # A missing key implies no restrictions.
-                    current_step_control = current_step_control.get(key, {})
-
-                # NOTE: We do not check for validity at this level as we may
-                # have unusual keys in the dictionary.
-                return list(current_step_control.keys())
-
-            options = (tags, skip_tags, step_ranges, skip_ranges, enable_steps)
-
-            restrictions = tuple([query_step_control(o) for o in options])
-
             self.log.info(f"selecting recipe steps for (sub)recipe: [bold green]{self.name}[/bold green]")
 
-            # process our own entries - the parent recipe has None key.
+            # Determine and apply the restrictions at the current recipe level.
+            restrictions = flow_restrictor.get_restrictions(self.fqname)
+            # Convenience - restrictions is a named tuple with these fields.
             tags, skip_tags, step_ranges, skip_ranges, enable_steps = restrictions
 
             # Check that all specified tags (if any), exist.
@@ -458,7 +433,7 @@ class Recipe(Cargo):
                 # we still need to recurse in to make sure it applies its tags,
                 for label, step in self.steps.items():
                     if label in active_steps and isinstance(step.cargo, Recipe):
-                        step.cargo.restrict_steps(*options)
+                        step.cargo.restrict_steps(flow_restrictor)
 
                 return len(scheduled_steps)
         except StepSelectionError as exc:

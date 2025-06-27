@@ -13,7 +13,6 @@ from datetime import datetime
 from typing import List, Optional, Tuple
 from collections import OrderedDict
 from omegaconf.omegaconf import OmegaConf, OmegaConfBaseException
-from benedict import benedict
 
 
 import stimela
@@ -28,6 +27,7 @@ from stimela import logger, log_exception
 from stimela.exceptions import RecipeValidationError, StimelaRuntimeError, StepSelectionError, StepValidationError
 from stimela.main import cli
 from stimela.kitchen.recipe import Recipe, Step, RecipeSchema, join_quote
+from stimela.kitchen.utils import FlowRestrictor
 from stimela import task_stats
 import stimela.backends
 from scabha.configuratt.common import IMPLICIT_EXTENSIONS
@@ -464,14 +464,18 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
 
         # select recipe substeps based on command line, and exit if nothing to run
         if not build_skips:
-            selection_options = []
-            for opts in (tags, skip_tags, step_ranges, skip_ranges, enable_steps):
-                selection_options.append(set(itertools.chain(*(opt.split(",") for opt in opts))))
-
-            selection_options = [benedict.fromkeys(sorted(so)) for so in selection_options]
+            # Construct an instance of the FlowRestrictor class to manage
+            # which steps will actually be run.
+            flow_restrictor = FlowRestrictor(
+                tags=tags,
+                skip_tags=skip_tags,
+                step_ranges=step_ranges,
+                skip_ranges=skip_ranges,
+                enable_steps=enable_steps
+            )
 
             try:
-                if not recipe.restrict_steps(*selection_options):
+                if not recipe.restrict_steps(flow_restrictor):
                     sys.exit(0)
             except StepSelectionError as exc:
                 log_exception(exc)
