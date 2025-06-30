@@ -132,9 +132,12 @@ class FlowRestrictor(object):
     def get_restrictions(self, fqname: str):
         """Given fqname, return applicable restrictions from all fields."""
         active_tags = self.get_active_tags(fqname, "tags")
+        active_skip_tags = self.get_active_tags(fqname, "skip_tags")
+
+        # NOTE(JSKenyon): This is important - specifying tags implies the
+        # selection of one or more parent steps/recipes.
         implied_steps = self.get_active_steps(fqname, "tags", tag_field=True)
         implied_steps |= self.get_active_steps(fqname, "always_tags", tag_field=True)
-        active_skip_tags = self.get_active_tags(fqname, "skip_tags")
 
         active_step_ranges = self.get_active_steps(fqname, "step_ranges")
         active_skip_ranges = self.get_active_steps(fqname, "skip_ranges")

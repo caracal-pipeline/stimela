@@ -464,15 +464,19 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
 
         # select recipe substeps based on command line, and exit if nothing to run
         if not build_skips:
+            # For the sake of simplicity, all subrecipes not tagged as "never"
+            # are run as though the user had specified "always". The root
+            # recipe name is removed from the output to be consistent with
+            # CLI behaviour i.e. users don't include the base recipe when
+            # specifying tags/steps.
+            always_tags = get_always_tags(recipe, strip_root=True)
             # Construct an instance of the FlowRestrictor class to manage
             # which steps will actually be run.
-            always_tags = get_always_tags(recipe, strip_root=True)
-
             flow_restrictor = FlowRestrictor(
                 tags=tags,
                 skip_tags=skip_tags,
                 always_tags=always_tags,
-                never_tags=[],#tag_manager.never_tags,
+                never_tags=[],  # Future-proofing; unusued.
                 step_ranges=step_ranges,
                 skip_ranges=skip_ranges,
                 enable_steps=enable_steps
