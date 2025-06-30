@@ -347,7 +347,13 @@ class Recipe(Cargo):
             # Determine and apply the restrictions at the current recipe level.
             restrictions = flow_restrictor.get_restrictions(self.fqname)
             # Convenience - restrictions is a named tuple with these fields.
-            tags, skip_tags, step_ranges, skip_ranges, enable_steps = restrictions
+            tags = restrictions.tags
+            skip_tags = restrictions.skip_tags
+            always_tags = restrictions.always_tags
+            never_tags = restrictions.never_tags
+            step_ranges = restrictions.step_ranges
+            skip_ranges = restrictions.skip_ranges
+            enable_steps = restrictions.enable_steps
 
             # Check that all specified tags (if any), exist.
             known_tags = set.union(*([v.tags for v in self.steps.values()] or [set()]))
@@ -396,7 +402,10 @@ class Recipe(Cargo):
                 self.log.info(f"the following step(s) have been cherry-picked: ({', '.join(cherry_picked_steps)})")
 
             # Build up the active steps according to option priority.
-            active_steps = (tag_selected_steps | selected_steps) or set(self.steps.keys())
+            if flow_restrictor.has_selections:
+                active_steps = (tag_selected_steps | selected_steps)
+            else:
+                active_steps = set(self.steps.keys())
             active_steps |= always_steps
             active_steps -= tag_skipped_steps
             active_steps -= never_steps - tag_selected_steps

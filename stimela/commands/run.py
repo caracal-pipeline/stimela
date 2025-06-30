@@ -27,7 +27,7 @@ from stimela import logger, log_exception
 from stimela.exceptions import RecipeValidationError, StimelaRuntimeError, StepSelectionError, StepValidationError
 from stimela.main import cli
 from stimela.kitchen.recipe import Recipe, Step, RecipeSchema, join_quote
-from stimela.kitchen.utils import FlowRestrictor
+from stimela.kitchen.utils import FlowRestrictor, get_always_tags
 from stimela import task_stats
 import stimela.backends
 from scabha.configuratt.common import IMPLICIT_EXTENSIONS
@@ -466,9 +466,13 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
         if not build_skips:
             # Construct an instance of the FlowRestrictor class to manage
             # which steps will actually be run.
+            always_tags = get_always_tags(recipe, strip_root=True)
+
             flow_restrictor = FlowRestrictor(
                 tags=tags,
                 skip_tags=skip_tags,
+                always_tags=always_tags,
+                never_tags=[],#tag_manager.never_tags,
                 step_ranges=step_ranges,
                 skip_ranges=skip_ranges,
                 enable_steps=enable_steps
