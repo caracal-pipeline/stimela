@@ -44,8 +44,6 @@ class FlowRestrictor(object):
         [
             "tags",
             "skip_tags",
-            "always_tags",
-            "never_tags",
             "step_ranges",
             "skip_ranges",
             "enable_steps"
@@ -135,10 +133,8 @@ class FlowRestrictor(object):
         """Given fqname, return applicable restrictions from all fields."""
         active_tags = self.get_active_tags(fqname, "tags")
         implied_steps = self.get_active_steps(fqname, "tags", tag_field=True)
-        active_skip_tags = self.get_active_tags(fqname, "skip_tags")
-        active_always_tags = self.get_active_tags(fqname, "always_tags")
         implied_steps |= self.get_active_steps(fqname, "always_tags", tag_field=True)
-        active_never_tags = self.get_active_tags(fqname, "never_tags")
+        active_skip_tags = self.get_active_tags(fqname, "skip_tags")
 
         active_step_ranges = self.get_active_steps(fqname, "step_ranges")
         active_skip_ranges = self.get_active_steps(fqname, "skip_ranges")
@@ -147,68 +143,10 @@ class FlowRestrictor(object):
         return self.Restrictions(
             tags=active_tags,
             skip_tags=active_skip_tags,
-            always_tags=active_always_tags,
-            never_tags=active_never_tags,
             step_ranges=active_step_ranges.union(implied_steps),
             skip_ranges=active_skip_ranges,
             enable_steps=active_enable_steps
         )
-
-
-class TagManager(object):
-
-    def __init__(self, recipe, keep_outermost=True):
-        """
-        Given a recipe object, recurse through all subrecipes to construct a
-        tag manager. The purpose of the manager is to provide a global
-        representation of the tags in a given recipe (and its subrecipes),
-        so that it is easier to reason about which steps are implied by the
-        tags.
-        """
-        self.tag_graph = self.build_tag_graph(recipe)
-        self.tag_graph.keypath_separator = ">>"
-        self.tag_graph = self.tag_graph if keep_outermost else self.tag_graph[recipe.fqname]
-        self.flat_tag_graph = self.tag_graph.flatten('.')
-
-    @staticmethod
-    def build_tag_graph(recipe, tag_graph=None):
-
-        from stimela.kitchen.recipe import Recipe  # TODO: working around circular import - ew.
-
-        tag_graph = tag_graph or benedict(keypath_separator=".")
-
-        for step_name, step in recipe.steps.items():
-            tags = getattr(step, "tags", [])
-            for tag in tags:
-                tag_graph[".".join((recipe.fqname, step_name, tag))] = None
-
-            if isinstance(step.cargo, Recipe):
-                tag_graph = TagManager.build_tag_graph(step.cargo, tag_graph=tag_graph)
-
-        return tag_graph
-
-    # @property
-    # def always_tags(self):
-    #     return [k for k in self.flat_tag_graph.keys() if k.rsplit('.', 1)[-1] == "always"]
-
-    def generate_always_tags(self, recipe, always_tags=None):
-
-        from stimela.kitchen.recipe import Recipe  # TODO: working around circular import - ew.
-
-        always_tags = always_tags or [f"{recipe.fqname}.always"]
-
-        for step_name, step in recipe.steps.items():
-            if isinstance(step.cargo, Recipe):
-                if "never" in step.tags:  # A never on a parent overides an always on a child.
-                    continue
-                always_tags.extend([".".join((recipe.fqname, step_name, "always"))])
-                always_tags = self.generate_always_tags(step.cargo, always_tags=always_tags)
-
-        return always_tags
-
-    @property
-    def never_tags(self):
-        return [k for k in self.flat_tag_graph.keys() if k.rsplit('.', 1)[-1] == "never"]
 
 
 def get_always_tags(recipe, strip_root=False):

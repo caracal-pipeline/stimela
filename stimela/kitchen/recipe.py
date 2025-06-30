@@ -349,8 +349,6 @@ class Recipe(Cargo):
             # Convenience - restrictions is a named tuple with these fields.
             tags = restrictions.tags
             skip_tags = restrictions.skip_tags
-            always_tags = restrictions.always_tags
-            never_tags = restrictions.never_tags
             step_ranges = restrictions.step_ranges
             skip_ranges = restrictions.skip_ranges
             enable_steps = restrictions.enable_steps
