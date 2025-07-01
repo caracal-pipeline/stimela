@@ -1,11 +1,11 @@
 from itertools import chain
 from benedict import benedict
 from collections import namedtuple
+import networkx as nx
 
 from stimela import log_exception, stimelogging
 from stimela.stimelogging import log_rich_payload
 from stimela.exceptions import *
-
 
 def keys_from_sel_string(dictionary: Dict[str, str], sel_string: str):
     """Select keys from a dictionary based on a slice string."""
@@ -150,6 +150,112 @@ class FlowRestrictor(object):
             skip_ranges=active_skip_ranges,
             enable_steps=active_enable_steps
         )
+
+    def apply_tags(self, graph):
+        """Given a graph, apply all the tags."""
+
+        for tag in self.tags.keypaths():
+            if "." not in tag:
+                step_name, tag = graph.name, tag
+            else:
+                step_name, tag = tag.rsplit(".", 1)
+                step_name = f"{graph.name}.{step_name}"
+            for node_name in graph.adj[step_name].keys():
+                node = graph.nodes[node_name]
+                if tag in node['tags']:
+                    node['enabled'] = True
+                    for ancestor in nx.ancestors(graph, node_name):
+                        graph.nodes[ancestor]["enabled"] = True
+
+    def apply_skip_tags(self, graph):
+        """Given a graph, apply all the skip tags."""
+
+        for tag in self.skip_tags.keypaths():
+            if "." not in tag:
+                step_name, tag = graph.name, tag
+            else:
+                step_name, tag = tag.rsplit(".", 1)
+                step_name = f"{graph.name}.{step_name}"
+            for node_name in graph.adj[step_name].keys():
+                node = graph.nodes[node_name]
+                if tag in node["tags"]:
+                    node["enabled"] = False
+                    for descendant in nx.descendants(graph, node_name):
+                        graph.nodes[descendant]["enabled"] = False
+
+    def apply_always_tags(self, graph):
+
+        for node_name in graph.nodes:
+            node = graph.nodes[node_name]
+            if "always" in node.get("tags", tuple()):
+                node["enabled"] = True
+                for ancestor in nx.ancestors(graph, node_name):
+                    graph.nodes[ancestor]["enabled"] = True
+
+    def apply_never_tags(self, graph):
+
+        # EDGE CASES:
+        # 1. Never on parent, always on child - never takes precedence.
+        # 2. Always on child 
+
+        for node_name in graph.nodes:
+            node = graph.nodes[node_name]
+            if "never" in node.get("tags", tuple()):
+                node["enabled"] = False
+                for descendant in nx.descendants(graph, node_name):
+                    graph.nodes[descendant]["enabled"] = False
+
+    def apply_step_ranges(self, graph):
+
+        for step_range in self.step_ranges.keypaths():
+            if "." not in step_range:
+                step_name, step_range = graph.name, step_range
+            else:
+                step_name, step_range = step_range.rsplit(".", 1)
+                step_name = f"{graph.name}.{step_name}"
+
+            if ":" in step_range:
+                start, stop = step_range.split(":")
+            else:
+                start = stop = step_range
+
+            start = f"{step_name}.{start}"
+            stop = f"{step_name}.{stop}" 
+
+            adjacent_node_names = list(graph.adj[step_name].keys())
+
+            start_ind = adjacent_node_names.index(start)
+            stop_ind = adjacent_node_names.index(stop) + 1
+
+            for node_name in adjacent_node_names[start_ind: stop_ind]:
+                node = graph.nodes[node_name]
+                node["enabled"] = True
+
+    def apply_skip_ranges(self, graph):
+
+        for step_range in self.skip_ranges.keypaths():
+            if "." not in step_range:
+                step_name, step_range = graph.name, step_range
+            else:
+                step_name, step_range = step_range.rsplit(".", 1)
+                step_name = f"{graph.name}.{step_name}"
+
+            if ":" in step_range:
+                start, stop = step_range.split(":")
+            else:
+                start = stop = step_range
+
+            start = f"{step_name}.{start}"
+            stop = f"{step_name}.{stop}" 
+
+            adjacent_node_names = list(graph.adj[step_name].keys())
+
+            start_ind = adjacent_node_names.index(start)
+            stop_ind = adjacent_node_names.index(stop) + 1
+
+            for node_name in adjacent_node_names[start_ind: stop_ind]:
+                node = graph.nodes[node_name]
+                node["enabled"] = False
 
 
 def get_always_tags(recipe, strip_root=False):

@@ -464,6 +464,7 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
 
         # select recipe substeps based on command line, and exit if nothing to run
         if not build_skips:
+            graph = recipe.to_dag()  # Convert to directed acyclic graph.
             # For the sake of simplicity, all subrecipes not tagged as "never"
             # are run as though the user had specified "always". The root
             # recipe name is removed from the output to be consistent with
@@ -483,7 +484,7 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
             )
 
             try:
-                if not recipe.restrict_steps(flow_restrictor):
+                if not recipe.restrict_steps(flow_restrictor, graph):
                     sys.exit(0)
             except StepSelectionError as exc:
                 log_exception(exc)

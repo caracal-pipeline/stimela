@@ -6,6 +6,8 @@ from omegaconf.errors import OmegaConfBaseException
 from collections import OrderedDict
 from collections.abc import Mapping
 import rich.table
+import networkx as nx
+
 
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
@@ -340,9 +342,32 @@ class Recipe(Cargo):
             self.log.warning(f"will skip step '{label}'")
             step.skip = step._skip = True
 
-    def restrict_steps(self, flow_restrictor: FlowRestrictor):
+    def restrict_steps(
+        self,
+        flow_restrictor: FlowRestrictor,
+        graph: nx.DiGraph
+    ) -> int:
         try:
             self.log.info(f"selecting recipe steps for (sub)recipe: [bold green]{self.name}[/bold green]")
+
+            import time
+            t0 = time.time()
+            # THINGS TO FIX:
+            # 1. Correctly enabling/disabling subrecipes based on tags. 
+            #   - leave nodes in ambiguous state, then finalize?
+            # Start off by enabling always steps.
+            flow_restrictor.apply_always_tags(graph)
+            # Then disable all never steps; never trumps always.
+            flow_restrictor.apply_never_tags(graph)
+            # Turn on all tagged steps.
+            flow_restrictor.apply_tags(graph)
+            # Turn of skip tagged steps.
+            flow_restrictor.apply_skip_tags(graph)
+            # Turn on selected steps.
+            flow_restrictor.apply_step_ranges(graph)
+            # Turn off skipped steps.
+            flow_restrictor.apply_skip_ranges(graph)
+            print("PRINTING THE TIME!!", time.time() - t0)
 
             # Determine and apply the restrictions at the current recipe level.
             restrictions = flow_restrictor.get_restrictions(self.fqname)
@@ -440,7 +465,7 @@ class Recipe(Cargo):
                 # we still need to recurse in to make sure it applies its tags,
                 for label, step in self.steps.items():
                     if label in active_steps and isinstance(step.cargo, Recipe):
-                        step.cargo.restrict_steps(flow_restrictor)
+                        step.cargo.restrict_steps(flow_restrictor, graph)
 
                 return len(scheduled_steps)
         except StepSelectionError as exc:
@@ -1303,6 +1328,50 @@ class Recipe(Cargo):
             steps = subst.steps
             subst.update(subst_copy)
             subst.current.steps = steps
+
+    def to_dag(
+        self,
+        graph: Optional[nx.DiGraph] = None,
+        connect_to: Optional[str] = None
+    ) -> nx.DiGraph:
+        """Converts a stimela recipe into a simple directed acyclic graph.
+
+        Uses networkx to convert a (possibly) nested recipe into a directed
+        acyclic graph where node are recipes steps, and each step has its tags
+        stored as node attributes. The output of this function can be used to
+        reason about overall flow control.
+
+        Args:
+            graph:
+                Parent graph. Implementation detail for recursion.
+            connect_to:
+                Parent node to connect children to. Implentation detail for
+                recursion.
+
+        Returns:
+            A networkx.DiGraph representing the recipe.
+        """
+
+        graph = graph or nx.DiGraph(name=self.fqname)
+        
+        if connect_to is None:  # Implies outermost level.
+            graph.add_node(self.fqname)
+            connect_to = self.fqname
+
+        for step_name, step in self.steps.items():
+            tags = tuple(getattr(step, "tags", []))
+
+            # Use verbose keys as we cannot guarantee uniqueness between
+            # subrecipes.
+            node_name = ".".join((self.fqname, step_name))
+            graph.add_node(node_name, tags=tags)
+            graph.add_edge(connect_to, node_name)
+
+            if isinstance(step.cargo, Recipe):
+                graph = step.cargo.to_dag(graph=graph, connect_to=node_name)
+
+        return graph    
+
 
 StepSchema = OmegaConf.structured(Step)
 RecipeSchema = OmegaConf.structured(Recipe)
