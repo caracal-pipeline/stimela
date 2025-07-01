@@ -350,8 +350,6 @@ class Recipe(Cargo):
         try:
             self.log.info(f"selecting recipe steps for (sub)recipe: [bold green]{self.name}[/bold green]")
 
-            import time
-            t0 = time.time()
             # THINGS TO FIX:
             # 1. Correctly enabling/disabling subrecipes based on tags. 
             #   - leave nodes in ambiguous state, then finalize?
@@ -367,7 +365,6 @@ class Recipe(Cargo):
             flow_restrictor.apply_step_ranges(graph)
             # Turn off skipped steps.
             flow_restrictor.apply_skip_ranges(graph)
-            print("PRINTING THE TIME!!", time.time() - t0)
 
             # Determine and apply the restrictions at the current recipe level.
             restrictions = flow_restrictor.get_restrictions(self.fqname)
