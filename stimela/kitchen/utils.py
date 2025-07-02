@@ -295,10 +295,10 @@ class FlowRestrictor(object):
 
         nodes = graph.nodes
 
-        explicit_nodes = nx.get_node_attributes(graph, "explicit", False)
-        enabled_nodes = nx.get_node_attributes(graph, "enabled", False)
+        x_nodes = nx.get_node_attributes(graph, "explicit", False)
+        e_nodes = nx.get_node_attributes(graph, "enabled", False)
 
-        ee_nodes = {k for k in explicit_nodes.keys() if (explicit_nodes[k] and enabled_nodes[k])}
+        xe_nodes = {k for k in x_nodes.keys() if (x_nodes[k] and e_nodes[k])}
 
         # First off, traverse the graph and resolve skips i.e. disables.
         for node_name, node in nodes.items():
@@ -308,7 +308,7 @@ class FlowRestrictor(object):
                 descendants = nx.descendants(graph, node_name)
 
                 # If this node has been explicitly disabled...
-                if any([d in ee_nodes for d in descendants]):
+                if any([d in xe_nodes for d in descendants]):
                     # ...ignore it if is descendents are explicitly enabled.
                     del node["enabled"]
                 else:
@@ -318,7 +318,7 @@ class FlowRestrictor(object):
 
         # If no nodes were explicitly selected, assume that we are running
         # the full recipe, possibly with skips.
-        if not ee_nodes:
+        if not xe_nodes:
             for node_name, node in nodes.items():
                 node["enabled"] = node.get("enabled", True)
             return
@@ -336,7 +336,7 @@ class FlowRestrictor(object):
                 descendants = nx.descendants(graph, node_name)
 
                 # ...and has explicitly enabled decsendents, continue.
-                if any([d in ee_nodes for d in descendants]):
+                if any([d in xe_nodes for d in descendants]):
                     continue
 
                 # ...and has no explicitly enabled descenents, enable them.
