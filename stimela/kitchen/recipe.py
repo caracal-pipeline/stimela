@@ -350,21 +350,7 @@ class Recipe(Cargo):
         try:
             self.log.info(f"selecting recipe steps for (sub)recipe: [bold green]{self.name}[/bold green]")
 
-            # THINGS TO FIX:
-            # 1. Correctly enabling/disabling subrecipes based on tags. 
-            #   - leave nodes in ambiguous state, then finalize?
-            # Start off by enabling always steps.
-            flow_restrictor.apply_always_tags(graph)
-            # Then disable all never steps; never trumps always.
-            flow_restrictor.apply_never_tags(graph)
-            # Turn on all tagged steps.
-            flow_restrictor.apply_tags(graph)
-            # Turn of skip tagged steps.
-            flow_restrictor.apply_skip_tags(graph)
-            # Turn on selected steps.
-            flow_restrictor.apply_step_ranges(graph)
-            # Turn off skipped steps.
-            flow_restrictor.apply_skip_ranges(graph)
+            flow_restrictor.applicator(graph)  # TODO: Switch to using this.
 
             # Determine and apply the restrictions at the current recipe level.
             restrictions = flow_restrictor.get_restrictions(self.fqname)

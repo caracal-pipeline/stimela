@@ -1,6 +1,7 @@
 from itertools import chain
 from benedict import benedict
 from collections import namedtuple
+from copy import deepcopy
 import networkx as nx
 
 from stimela import log_exception, stimelogging
@@ -164,8 +165,9 @@ class FlowRestrictor(object):
                 node = graph.nodes[node_name]
                 if tag in node['tags']:
                     node['enabled'] = True
-                    for ancestor in nx.ancestors(graph, node_name):
-                        graph.nodes[ancestor]["enabled"] = True
+                    node['explicit'] = True
+                    # for ancestor in nx.ancestors(graph, node_name):
+                    #     graph.nodes[ancestor]["enabled"] = True
 
     def apply_skip_tags(self, graph):
         """Given a graph, apply all the skip tags."""
@@ -180,30 +182,28 @@ class FlowRestrictor(object):
                 node = graph.nodes[node_name]
                 if tag in node["tags"]:
                     node["enabled"] = False
-                    for descendant in nx.descendants(graph, node_name):
-                        graph.nodes[descendant]["enabled"] = False
+                    # for descendant in nx.descendants(graph, node_name):
+                    #     graph.nodes[descendant]["enabled"] = False
 
     def apply_always_tags(self, graph):
 
-        for node_name in graph.nodes:
-            node = graph.nodes[node_name]
+        for node_name, node in graph.nodes.items():
             if "always" in node.get("tags", tuple()):
                 node["enabled"] = True
-                for ancestor in nx.ancestors(graph, node_name):
-                    graph.nodes[ancestor]["enabled"] = True
+                # for ancestor in nx.ancestors(graph, node_name):
+                #     graph.nodes[ancestor]["enabled"] = True
 
     def apply_never_tags(self, graph):
 
         # EDGE CASES:
         # 1. Never on parent, always on child - never takes precedence.
-        # 2. Always on child 
+        # 2. Always on child
 
-        for node_name in graph.nodes:
-            node = graph.nodes[node_name]
+        for node_name, node in graph.nodes.items():
             if "never" in node.get("tags", tuple()):
                 node["enabled"] = False
-                for descendant in nx.descendants(graph, node_name):
-                    graph.nodes[descendant]["enabled"] = False
+                # for descendant in nx.descendants(graph, node_name):
+                #     graph.nodes[descendant]["enabled"] = False
 
     def apply_step_ranges(self, graph):
 
@@ -220,7 +220,9 @@ class FlowRestrictor(object):
                 start = stop = step_range
 
             start = f"{step_name}.{start}"
-            stop = f"{step_name}.{stop}" 
+            stop = f"{step_name}.{stop}"
+
+            force = start == stop
 
             adjacent_node_names = list(graph.adj[step_name].keys())
 
@@ -229,7 +231,11 @@ class FlowRestrictor(object):
 
             for node_name in adjacent_node_names[start_ind: stop_ind]:
                 node = graph.nodes[node_name]
+                node["explicit"] = True
                 node["enabled"] = True
+                if force:
+                    node["force_enable"] = True
+
 
     def apply_skip_ranges(self, graph):
 
@@ -246,7 +252,7 @@ class FlowRestrictor(object):
                 start = stop = step_range
 
             start = f"{step_name}.{start}"
-            stop = f"{step_name}.{stop}" 
+            stop = f"{step_name}.{stop}"
 
             adjacent_node_names = list(graph.adj[step_name].keys())
 
@@ -257,6 +263,115 @@ class FlowRestrictor(object):
                 node = graph.nodes[node_name]
                 node["enabled"] = False
 
+    def apply_enabled_steps(self, graph):
+
+        for enable_step in self.enable_steps.keypaths():
+            if "." not in enable_step:
+                step_name, enable_step = graph.name, enable_step
+            else:
+                step_name, enable_step = enable_step.rsplit(".", 1)
+                step_name = f"{graph.name}.{step_name}"
+
+            if ":" in enable_step:
+                start, stop = enable_step.split(":")
+            else:
+                start = stop = enable_step
+
+            start = f"{step_name}.{start}"
+            stop = f"{step_name}.{stop}"
+
+            adjacent_node_names = list(graph.adj[step_name].keys())
+
+            start_ind = adjacent_node_names.index(start)
+            stop_ind = adjacent_node_names.index(stop) + 1
+
+            for node_name in adjacent_node_names[start_ind: stop_ind]:
+                node = graph.nodes[node_name]
+                node["enabled"] = True
+                node["explicit"] = True
+                node["force_enable"] = True
+
+    def finalize(self, graph):
+
+        nodes = graph.nodes
+
+        explicit_nodes = nx.get_node_attributes(graph, "explicit", False)
+        enabled_nodes = nx.get_node_attributes(graph, "enabled", False)
+
+        ee_nodes = {k for k in explicit_nodes.keys() if (explicit_nodes[k] and enabled_nodes[k])}
+
+        # First off, traverse the graph and resolve skips i.e. disables.
+        for node_name, node in nodes.items():
+
+            # This node has been turned off explicitly.
+            if not node.get("enabled", True):
+                descendants = nx.descendants(graph, node_name)
+
+                # If this node has been explicitly disabled...
+                if any([d in ee_nodes for d in descendants]):
+                    # ...ignore it if is descendents are explicitly enabled.
+                    del node["enabled"]
+                else:
+                    # ...disable all descendents.
+                    for des_name in descendants:
+                        nodes[des_name]["enabled"] = False
+
+        # If no nodes were explicitly selected, assume that we are running
+        # the full recipe, possibly with skips.
+        if not ee_nodes:
+            for node_name, node in nodes.items():
+                node["enabled"] = node.get("enabled", True)
+            return
+
+        # Do a second traversal, this time resolving enables i.e. selections.
+        for node_name, node in nodes.items():
+            # If a step is enabled...
+            if node.get("enabled", False):
+                # ...enable all of its ancestors.
+                for ancestor in nx.ancestors(graph, node_name):
+                    ancestor_node = nodes[ancestor]
+                    ancestor_node["enabled"] = True
+
+                # ...check if any descendent is explicitly enabled.
+                descendants = nx.descendants(graph, node_name)
+
+                # ...and has explicitly enabled decsendents, continue.
+                if any([d in ee_nodes for d in descendants]):
+                    continue
+
+                # ...and has no explicitly enabled descenents, enable them.
+                for descendant in descendants:
+                    des_node = nodes[descendant]
+                    des_node["enabled"] = des_node.get("enabled", True)
+
+    def applicator(self, graph):
+
+        # Start off by enabling always steps.
+        self.apply_always_tags(graph)
+        # Then disable all never steps; never trumps always.
+        self.apply_never_tags(graph)
+        # Turn on all tagged steps.
+        self.apply_tags(graph)
+        # Turn of skip tagged steps.
+        self.apply_skip_tags(graph)
+        # Turn on selected steps.
+        self.apply_step_ranges(graph)
+        # Turn off skipped steps.
+        self.apply_skip_ranges(graph)
+        # Turn on enabled steps.
+        self.apply_enabled_steps(graph)
+        # Having applied all of the above, figure out the steps to run.
+        self.finalize(graph)
+
+        _active_steps = [k for k, v in nx.get_node_attributes(graph, "enabled", False).items() if v]
+
+        # NOTE: The actual enabling and disabling of steps will need to
+        # remain recursive as each recipe has to call enable_step itself.
+        # This means that we should move the graph manipulation to a
+        # separate function which is then the input to the recursive
+        # component.
+
+        import ipdb; ipdb.set_trace()
 
 def get_always_tags(recipe, strip_root=False):
 
