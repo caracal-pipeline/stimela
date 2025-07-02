@@ -306,18 +306,18 @@ class FlowRestrictor(object):
             # This node has been turned off explicitly.
             if not node.get("enabled", True):
                 descendants = nx.descendants(graph, node_name)
-
-                # If this node has been explicitly disabled...
                 if any([d in xe_nodes for d in descendants]):
-                    # ...ignore it if is descendents are explicitly enabled.
+                    # Explicitly enabled descendents ignore parent disables.
                     del node["enabled"]
                 else:
-                    # ...disable all descendents.
+                    # Disable all descendents.
                     for des_name in descendants:
                         nodes[des_name]["enabled"] = False
 
         # If no nodes were explicitly selected, assume that we are running
-        # the full recipe, possibly with skips.
+        # the full recipe, possibly with skips. TODO: This may be slightly
+        # flawed if we have tags on subrecipes as then we have xe_nodes, but
+        # that doesn't preclude enabling other steps.
         if not xe_nodes:
             for node_name, node in nodes.items():
                 node["enabled"] = node.get("enabled", True)
@@ -325,21 +325,19 @@ class FlowRestrictor(object):
 
         # Do a second traversal, this time resolving enables i.e. selections.
         for node_name, node in nodes.items():
-            # If a step is enabled...
             if node.get("enabled", False):
-                # ...enable all of its ancestors.
+                # Enable all of this node's ancestors.
                 for ancestor in nx.ancestors(graph, node_name):
                     ancestor_node = nodes[ancestor]
                     ancestor_node["enabled"] = True
 
-                # ...check if any descendent is explicitly enabled.
+                # Check if any descendant of the current node is explicitly
+                # enabled and continue if so.
                 descendants = nx.descendants(graph, node_name)
-
-                # ...and has explicitly enabled decsendents, continue.
                 if any([d in xe_nodes for d in descendants]):
                     continue
 
-                # ...and has no explicitly enabled descenents, enable them.
+                # Otherwise, enable all descendants.
                 for descendant in descendants:
                     des_node = nodes[descendant]
                     des_node["enabled"] = des_node.get("enabled", True)
