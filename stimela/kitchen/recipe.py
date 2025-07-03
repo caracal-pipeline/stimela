@@ -1315,7 +1315,7 @@ class Recipe(Cargo):
     def to_dag(
         self,
         graph: Optional[nx.DiGraph] = None,
-        connect_to: Optional[str] = None
+        parent: Optional[str] = None
     ) -> nx.DiGraph:
         """Converts a stimela recipe into a simple directed acyclic graph.
 
@@ -1327,7 +1327,7 @@ class Recipe(Cargo):
         Args:
             graph:
                 Parent graph. Implementation detail for recursion.
-            connect_to:
+            parent:
                 Parent node to connect children to. Implentation detail for
                 recursion.
 
@@ -1335,11 +1335,12 @@ class Recipe(Cargo):
             A networkx.DiGraph representing the recipe.
         """
 
-        graph = graph or nx.DiGraph(name=self.fqname)
-        
-        if connect_to is None:  # Implies outermost level.
-            graph.add_node(self.fqname)
-            connect_to = self.fqname
+        # Here, root is a just a graph attribute we set for convenience.
+        graph = graph or nx.DiGraph(root=self.fqname)
+
+        if parent is None:  # Implies outermost level.
+            graph.add_node(self.fqname)  # Add the recipe as a root node.
+            parent = self.fqname
 
         for step_name, step in self.steps.items():
             tags = tuple(getattr(step, "tags", []))
@@ -1348,10 +1349,10 @@ class Recipe(Cargo):
             # subrecipes.
             node_name = ".".join((self.fqname, step_name))
             graph.add_node(node_name, tags=tags)
-            graph.add_edge(connect_to, node_name)
+            graph.add_edge(parent, node_name)
 
             if isinstance(step.cargo, Recipe):
-                graph = step.cargo.to_dag(graph=graph, connect_to=node_name)
+                graph = step.cargo.to_dag(graph=graph, parent=node_name)
 
         return graph    
 

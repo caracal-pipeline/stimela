@@ -86,10 +86,10 @@ class FlowRestrictor(object):
 
         for tag in self.tags.keypaths():
             if "." not in tag:
-                step_name, tag = graph.name, tag
+                step_name, tag = graph.graph['root'], tag
             else:
                 step_name, tag = tag.rsplit(".", 1)
-                step_name = f"{graph.name}.{step_name}"
+                step_name = f"{graph.graph['root']}.{step_name}"
             for node_name in graph.adj[step_name].keys():
                 node = graph.nodes[node_name]
                 if tag in node['tags']:
@@ -101,10 +101,10 @@ class FlowRestrictor(object):
 
         for tag in self.skip_tags.keypaths():
             if "." not in tag:
-                step_name, tag = graph.name, tag
+                step_name, tag = graph.graph['root'], tag
             else:
                 step_name, tag = tag.rsplit(".", 1)
-                step_name = f"{graph.name}.{step_name}"
+                step_name = f"{graph.graph['root']}.{step_name}"
             for node_name in graph.adj[step_name].keys():
                 node = graph.nodes[node_name]
                 if tag in node["tags"]:
@@ -126,10 +126,10 @@ class FlowRestrictor(object):
 
         for step_range in self.step_ranges.keypaths():
             if "." not in step_range:
-                step_name, step_range = graph.name, step_range
+                step_name, step_range = graph.graph['root'], step_range
             else:
                 step_name, step_range = step_range.rsplit(".", 1)
-                step_name = f"{graph.name}.{step_name}"
+                step_name = f"{graph.graph['root']}.{step_name}"
 
             if ":" in step_range:
                 start, stop = step_range.split(":")
@@ -158,10 +158,10 @@ class FlowRestrictor(object):
 
         for step_range in self.skip_ranges.keypaths():
             if "." not in step_range:
-                step_name, step_range = graph.name, step_range
+                step_name, step_range = graph.graph['root'], step_range
             else:
                 step_name, step_range = step_range.rsplit(".", 1)
-                step_name = f"{graph.name}.{step_name}"
+                step_name = f"{graph.graph['root']}.{step_name}"
 
             if ":" in step_range:
                 start, stop = step_range.split(":")
@@ -184,10 +184,10 @@ class FlowRestrictor(object):
 
         for enable_step in self.enable_steps.keypaths():
             if "." not in enable_step:
-                step_name, enable_step = graph.name, enable_step
+                step_name, enable_step = graph.graph['root'], enable_step
             else:
                 step_name, enable_step = enable_step.rsplit(".", 1)
-                step_name = f"{graph.name}.{step_name}"
+                step_name = f"{graph.graph['root']}.{step_name}"
 
             if ":" in enable_step:
                 start, stop = enable_step.split(":")
