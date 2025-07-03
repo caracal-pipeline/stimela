@@ -81,77 +81,6 @@ class FlowRestrictor(object):
         # case where recipes are nested.
         self.has_selections = any([self.step_ranges, self.tags])
 
-    def get_active_tags(
-        self,
-        fqname: str,
-        field: str
-    ):
-        """Given fqname, return the applicable tags from field."""
-
-        if "tags" not in field:
-            raise ValueError(f"Cannot get tags from field {field}.")
-
-        current_restrictions = getattr(self, field)
-        # This implies that we are not at the outermost level. The
-        # components of fqname after the first period will match the keys in
-        # current_restrictions.
-        if "." in fqname:
-            key = fqname.split(".", 1)[1]
-            # A missing key implies no restrictions.
-            current_restrictions = current_restrictions.get(key, {})
-
-        tags = [k for k, v in current_restrictions.items() if v is None]
-
-        return set(tags)
-
-    def get_active_steps(
-        self,
-        fqname: str,
-        field: str,
-        tag_field: bool = False
-    ):
-        """Given fqname, return the applicable restrictions from field."""
-
-        current_restrictions = getattr(self, field)
-        # This implies that we are not at the outermost level. The
-        # components of fqname after the first period will match the keys in
-        # current_restrictions.
-        if "." in fqname:
-            key = fqname.split(".", 1)[1]
-            # A missing key implies no restrictions.
-            current_restrictions = current_restrictions.get(key, {})
-
-        if tag_field:
-            steps = [k for k, v in current_restrictions.items() if v is not None]
-        else:
-            steps = list(current_restrictions.keys())
-
-        # NOTE(JSKenyon): We do not check for validity at this level as we may
-        # have unusual keys in the dictionary.
-        return set(steps)
-
-    def get_restrictions(self, fqname: str):
-        """Given fqname, return applicable restrictions from all fields."""
-        active_tags = self.get_active_tags(fqname, "tags")
-        active_skip_tags = self.get_active_tags(fqname, "skip_tags")
-
-        # NOTE(JSKenyon): This is important - specifying tags implies the
-        # selection of one or more parent steps/recipes.
-        implied_steps = self.get_active_steps(fqname, "tags", tag_field=True)
-        implied_steps |= self.get_active_steps(fqname, "always_tags", tag_field=True)
-
-        active_step_ranges = self.get_active_steps(fqname, "step_ranges")
-        active_skip_ranges = self.get_active_steps(fqname, "skip_ranges")
-        active_enable_steps = self.get_active_steps(fqname, "enable_steps")
-
-        return self.Restrictions(
-            tags=active_tags,
-            skip_tags=active_skip_tags,
-            step_ranges=active_step_ranges.union(implied_steps),
-            skip_ranges=active_skip_ranges,
-            enable_steps=active_enable_steps
-        )
-
     def apply_tags(self, graph):
         """Given a graph, apply all the tags."""
 
@@ -166,8 +95,6 @@ class FlowRestrictor(object):
                 if tag in node['tags']:
                     node['enabled'] = True
                     node['explicit'] = True
-                    # for ancestor in nx.ancestors(graph, node_name):
-                    #     graph.nodes[ancestor]["enabled"] = True
 
     def apply_skip_tags(self, graph):
         """Given a graph, apply all the skip tags."""
@@ -182,28 +109,18 @@ class FlowRestrictor(object):
                 node = graph.nodes[node_name]
                 if tag in node["tags"]:
                     node["enabled"] = False
-                    # for descendant in nx.descendants(graph, node_name):
-                    #     graph.nodes[descendant]["enabled"] = False
 
     def apply_always_tags(self, graph):
 
-        for node_name, node in graph.nodes.items():
+        for node in graph.nodes.values():
             if "always" in node.get("tags", tuple()):
                 node["enabled"] = True
-                # for ancestor in nx.ancestors(graph, node_name):
-                #     graph.nodes[ancestor]["enabled"] = True
 
     def apply_never_tags(self, graph):
 
-        # EDGE CASES:
-        # 1. Never on parent, always on child - never takes precedence.
-        # 2. Always on child
-
-        for node_name, node in graph.nodes.items():
+        for node in graph.nodes.values():
             if "never" in node.get("tags", tuple()):
                 node["enabled"] = False
-                # for descendant in nx.descendants(graph, node_name):
-                #     graph.nodes[descendant]["enabled"] = False
 
     def apply_step_ranges(self, graph):
 
