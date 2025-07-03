@@ -1,12 +1,6 @@
 from itertools import chain
-from typing import Optional
-from benedict import benedict
-from collections import namedtuple
+from typing import Optional, List
 import networkx as nx
-
-from stimela import log_exception, stimelogging
-from stimela.stimelogging import log_rich_payload
-from stimela.exceptions import *
 
 
 def apply_tags(graph, tags):
@@ -192,11 +186,6 @@ def graph_to_constraints(
     skip_ranges = reformat_opts(skip_ranges, prepend=root)
     enable_steps = reformat_opts(enable_steps, prepend=root)
 
-    # This status implies that all steps barring those which are explicitly
-    # selected via a tag or a step range should be disabled. Needed for the
-    # case where recipes are nested.
-    # self.has_selections = any([self.step_ranges, self.tags])
-
     # NOTE(JSKenyon): There is a slight dependence on order here for steps
     # which are affected by more than one of the following operations. Once
     # the tests are fleshed out, revisit this to ensure it behaves as expected.
@@ -217,14 +206,6 @@ def graph_to_constraints(
     apply_enabled_steps(graph, enable_steps)
     # Having applied all of the above, figure out the steps to run.
     finalize(graph)
-
-    active_steps = [k for k, v in nx.get_node_attributes(graph, "enabled", False).items() if v]
-
-    # NOTE: The actual enabling and disabling of steps will need to
-    # remain recursive as each recipe has to call enable_step itself.
-    # This means that we should move the graph manipulation to a
-    # separate function which is then the input to the recursive
-    # component.
 
     return RunConstraints(graph)
 
