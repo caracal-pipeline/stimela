@@ -12,12 +12,8 @@ from stimela.exceptions import *
 def apply_tags(graph, tags):
     """Given a graph, apply all the tags."""
 
-    for tag in tags.keypaths():
-        if "." not in tag:
-            step_name, tag = graph.graph['root'], tag
-        else:
-            step_name, tag = tag.rsplit(".", 1)
-            step_name = f"{graph.graph['root']}.{step_name}"
+    for tag in tags:
+        step_name, tag = tag.rsplit(".", 1)
         for node_name in graph.adj[step_name].keys():
             node = graph.nodes[node_name]
             if tag in node['tags']:
@@ -27,12 +23,8 @@ def apply_tags(graph, tags):
 def apply_skip_tags(graph, skip_tags):
     """Given a graph, apply all the skip tags."""
 
-    for tag in skip_tags.keypaths():
-        if "." not in tag:
-            step_name, tag = graph.graph['root'], tag
-        else:
-            step_name, tag = tag.rsplit(".", 1)
-            step_name = f"{graph.graph['root']}.{step_name}"
+    for tag in skip_tags:
+        step_name, tag = tag.rsplit(".", 1)
         for node_name in graph.adj[step_name].keys():
             node = graph.nodes[node_name]
             if tag in node["tags"]:
@@ -52,12 +44,8 @@ def apply_never_tags(graph):
 
 def apply_step_ranges(graph, step_ranges):
 
-    for step_range in step_ranges.keypaths():
-        if "." not in step_range:
-            step_name, step_range = graph.graph['root'], step_range
-        else:
-            step_name, step_range = step_range.rsplit(".", 1)
-            step_name = f"{graph.graph['root']}.{step_name}"
+    for step_range in step_ranges:
+        step_name, step_range = step_range.rsplit(".", 1)
 
         if ":" in step_range:
             start, stop = step_range.split(":")
@@ -84,12 +72,8 @@ def apply_step_ranges(graph, step_ranges):
 
 def apply_skip_ranges(graph, skip_ranges):
 
-    for step_range in skip_ranges.keypaths():
-        if "." not in step_range:
-            step_name, step_range = graph.graph['root'], step_range
-        else:
-            step_name, step_range = step_range.rsplit(".", 1)
-            step_name = f"{graph.graph['root']}.{step_name}"
+    for step_range in skip_ranges:
+        step_name, step_range = step_range.rsplit(".", 1)
 
         if ":" in step_range:
             start, stop = step_range.split(":")
@@ -110,12 +94,8 @@ def apply_skip_ranges(graph, skip_ranges):
 
 def apply_enabled_steps(graph, enable_steps):
 
-    for enable_step in enable_steps.keypaths():
-        if "." not in enable_step:
-            step_name, enable_step = graph.graph['root'], enable_step
-        else:
-            step_name, enable_step = enable_step.rsplit(".", 1)
-            step_name = f"{graph.graph['root']}.{step_name}"
+    for enable_step in enable_steps:
+        step_name, enable_step = enable_step.rsplit(".", 1)
 
         if ":" in enable_step:
             start, stop = enable_step.split(":")
@@ -187,12 +167,11 @@ def finalize(graph):
                 des_node = nodes[descendant]
                 des_node["enabled"] = des_node.get("enabled", True)
 
-def process_commas(opts: List[str]):
-    return set(chain(*(opt.split(",") for opt in opts)))
+def reformat_opts(opts: List[str], prepend: Optional[str] = None):
+    """Given a list of option strings, reformat them appropriately."""
+    opts = set(chain(*(opt.split(",") for opt in opts)))
+    return {f"{prepend}.{o}" for o in opts} if prepend else opts
 
-def benedictify(opts: List[str], root: Optional[str] = None):
-    bdict = benedict.fromkeys(sorted(opts))
-    return benedict({root: bdict}) if root and bdict else bdict 
 
 def graph_to_constraints(
     graph: nx.DiGraph,
@@ -204,21 +183,19 @@ def graph_to_constraints(
 ):
 
     root = graph.graph.get("root", None)
-    root = None  # NOTE: To keep things working for now - remove.
 
     # Convert the tags and steps into benedicts, the keypaths of which will
     # correspond to the node names in graph. Include root if set.
-    tags = benedictify(process_commas(tags), root=root)
-    skip_tags = benedictify(process_commas(skip_tags), root=root)
-    step_ranges = benedictify(process_commas(step_ranges), root=root)
-    skip_ranges = benedictify(process_commas(skip_ranges), root=root)
-    enable_steps = benedictify(process_commas(enable_steps), root=root)
+    tags = reformat_opts(tags, prepend=root)
+    skip_tags = reformat_opts(skip_tags, prepend=root)
+    step_ranges = reformat_opts(step_ranges, prepend=root)
+    skip_ranges = reformat_opts(skip_ranges, prepend=root)
+    enable_steps = reformat_opts(enable_steps, prepend=root)
 
     # This status implies that all steps barring those which are explicitly
     # selected via a tag or a step range should be disabled. Needed for the
     # case where recipes are nested.
     # self.has_selections = any([self.step_ranges, self.tags])
-
 
     # Start off by enabling always steps.
     apply_always_tags(graph)
@@ -231,13 +208,13 @@ def graph_to_constraints(
     # Turn on selected steps.
     apply_step_ranges(graph, step_ranges)
     # Turn off skipped steps.
-    apply_skip_ranges(graph, skip_tags)
+    apply_skip_ranges(graph, skip_ranges)
     # Turn on enabled steps.
     apply_enabled_steps(graph, enable_steps)
     # Having applied all of the above, figure out the steps to run.
     finalize(graph)
 
-    _active_steps = [k for k, v in nx.get_node_attributes(graph, "enabled", False).items() if v]
+    active_steps = [k for k, v in nx.get_node_attributes(graph, "enabled", False).items() if v]
 
     # NOTE: The actual enabling and disabling of steps will need to
     # remain recursive as each recipe has to call enable_step itself.
