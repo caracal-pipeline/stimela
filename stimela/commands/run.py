@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import List, Optional, Tuple
 from collections import OrderedDict
 from omegaconf.omegaconf import OmegaConf, OmegaConfBaseException
+from benedict import benedict
 
 
 import stimela
@@ -230,6 +231,9 @@ def load_recipe_files(filenames: List[str]):
                 help="""Enables the slurm backend wrapper (shortcut for -C backend.slurm.enable=True)""")
 @click.option("-dc", "--dump-config", is_flag=True,
                 help="""Dump the equivalent stimela config to a file""")
+@click.option("-pf", "--parameter-file", metavar="filename.yml", multiple=True,
+              help="""Use parameter values from the sepcified parameter file. These have lower precedence than
+              PARAM=VALUE specified on the CLI.""")
 @click.argument("parameters", nargs=-1, metavar="filename.yml ... [recipe or cab name] [PARAM=VALUE] ...", required=True)
 def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = False, last_recipe: bool = False, profile: Optional[int] = None,
     assign: List[Tuple[str, str]] = [],
@@ -242,7 +246,9 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
     enable_native=False,
     enable_singularity=False,
     enable_kube=False,
-    enable_slurm=False):
+    enable_slurm=False,
+    parameter_file: List[str] = []
+):
 
     log = logger()
     params = OrderedDict()
@@ -260,6 +266,16 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
             return UNSET
         else:
             return yaml.safe_load(value)
+
+    # Load parameter files using benedict and flatten into a dotstring-value dict.
+    for pf in parameter_file:
+        pf_dict = benedict.from_yaml(pf, keypath_separator=">>").flatten(separator=".")
+        for key, value in pf_dict.items():
+            try:
+                params[key] = value
+            except Exception as exc:
+                log_exception(f"error parsing {key} {value} in parameter file {pf}", exc)
+                errcode = 2
 
     # parse assign values as YaML
     for key, value in assign:
