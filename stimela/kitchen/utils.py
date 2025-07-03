@@ -106,8 +106,6 @@ def apply_enabled_steps(graph, enable_steps):
 
         for node_name in adjacent_node_names[start_ind: stop_ind]:
             node = graph.nodes[node_name]
-            node["enabled"] = True
-            node["explicit"] = True
             node["force_enable"] = True
 
 def finalize(graph):
