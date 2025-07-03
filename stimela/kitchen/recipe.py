@@ -348,23 +348,12 @@ class Recipe(Cargo):
         try:
             self.log.info(f"selecting recipe steps for (sub)recipe: [bold green]{self.name}[/bold green]")
 
-            flow_restrictor.applicator(graph)  # TODO: Switch to using this.
-
-            # Determine and apply the restrictions at the current recipe level.
-            restrictions = flow_restrictor.get_restrictions(self.fqname)
-            # Convenience - restrictions is a named tuple with these fields.
-            tags = restrictions.tags
-            skip_tags = restrictions.skip_tags
-            step_ranges = restrictions.step_ranges
-            skip_ranges = restrictions.skip_ranges
-            enable_steps = restrictions.enable_steps
-
             # Check that all specified tags (if any), exist.
-            known_tags = set.union(*([v.tags for v in self.steps.values()] or [set()]))
-            unknown_tags = (set(tags) | set(skip_tags)) - known_tags
-            if unknown_tags:
-                unknown_tags = "', '".join(unknown_tags)
-                raise StepSelectionError(f"Unknown tag(s) '{unknown_tags}'")
+            # known_tags = set.union(*([v.tags for v in self.steps.values()] or [set()]))
+            # unknown_tags = (set(tags) | set(skip_tags)) - known_tags
+            # if unknown_tags:
+            #     unknown_tags = "', '".join(unknown_tags)
+            #     raise StepSelectionError(f"Unknown tag(s) '{unknown_tags}'")
 
             # We have to handle the following functionality:
             #   - user specifies specific tag(s) to run
@@ -374,81 +363,78 @@ class Recipe(Cargo):
             #   - ensure steps tagged with always run unless explicitly skipped
             #   - individually specified steps to run must be force enabled
 
-            always_steps = {k for k, v in self.steps.items() if "always" in v.tags}
-            never_steps = {k for k, v in self.steps.items() if "never" in v.tags}
-            tag_selected_steps = {k for k, v in self.steps.items() for t in tags if t in v.tags}
-            tag_skipped_steps = {k for k, v in self.steps.items() for t in skip_tags if t in v.tags}
-            selected_steps = [keys_from_sel_string(self.steps, sel_string) for sel_string in step_ranges]
-            skipped_steps = [keys_from_sel_string(self.steps, sel_string) for sel_string in skip_ranges]
+            # always_steps = {k for k, v in self.steps.items() if "always" in v.tags}
+            # never_steps = {k for k, v in self.steps.items() if "never" in v.tags}
+            # tag_selected_steps = {k for k, v in self.steps.items() for t in tags if t in v.tags}
+            # tag_skipped_steps = {k for k, v in self.steps.items() for t in skip_tags if t in v.tags}
+            # selected_steps = [keys_from_sel_string(self.steps, sel_string) for sel_string in step_ranges]
+            # skipped_steps = [keys_from_sel_string(self.steps, sel_string) for sel_string in skip_ranges]
 
             # Steps which are singled out are special (cherry-picked). They MUST be enabled and run.
             # NOTE: Single step slices (e.g last_step:) will also trigger this behaviour and may be
             # worth raising a warning over.
-            cherry_picked_steps = set.union(*([sel for sel in selected_steps if len(sel) == 1] or [set()]))
-            enable_steps = enable_steps.union(cherry_picked_steps)
+            # cherry_picked_steps = set.union(*([sel for sel in selected_steps if len(sel) == 1] or [set()]))
+            enabled_steps = constraints.get_enabled_steps(self.fqname)
+            disabled_steps = constraints.get_disabled_steps(self.fqname)
+            forced_steps = constraints.get_forced_steps(self.fqname)
 
-            selected_steps = set.union(*(selected_steps or [set()]))
-            skipped_steps = set.union(*(skipped_steps or [set()]))
+            # selected_steps = set.union(*(selected_steps or [set()]))
+            # skipped_steps = set.union(*(skipped_steps or [set()]))
 
-            if always_steps:
-                self.log.info(f"the following step(s) are marked as always run: ({', '.join(always_steps)})")
-            if never_steps:
-                self.log.info(f"the following step(s) are marked as never run: ({', '.join(never_steps)})")
-            if tag_selected_steps:
-                self.log.info(f"the following step(s) have been selected by tag: ({', '.join(tag_selected_steps)})")
-            if tag_skipped_steps:
-                self.log.info(f"the following step(s) have been skipped by tag: ({', '.join(tag_skipped_steps)})")
-            if selected_steps:
-                self.log.info(f"the following step(s) have been explicitly selected: ({', '.join(selected_steps)})")
-            if skipped_steps:
-                self.log.info(f"the following step(s) have been explicitly skipped: ({', '.join(skipped_steps)})")
-            if cherry_picked_steps:
-                self.log.info(f"the following step(s) have been cherry-picked: ({', '.join(cherry_picked_steps)})")
+            # if always_steps:
+            #     self.log.info(f"the following step(s) are marked as always run: ({', '.join(always_steps)})")
+            # if never_steps:
+            #     self.log.info(f"the following step(s) are marked as never run: ({', '.join(never_steps)})")
+            # if tag_selected_steps:
+            #     self.log.info(f"the following step(s) have been selected by tag: ({', '.join(tag_selected_steps)})")
+            # if tag_skipped_steps:
+            #     self.log.info(f"the following step(s) have been skipped by tag: ({', '.join(tag_skipped_steps)})")
+            # if selected_steps:
+            #     self.log.info(f"the following step(s) have been explicitly selected: ({', '.join(selected_steps)})")
+            # if skipped_steps:
+            #     self.log.info(f"the following step(s) have been explicitly skipped: ({', '.join(skipped_steps)})")
+            # if cherry_picked_steps:
+            #     self.log.info(f"the following step(s) have been cherry-picked: ({', '.join(cherry_picked_steps)})")
 
             # Build up the active steps according to option priority.
-            if flow_restrictor.has_selections:
-                active_steps = (tag_selected_steps | selected_steps)
-            else:
-                active_steps = set(self.steps.keys())
-            active_steps |= always_steps
-            active_steps -= tag_skipped_steps
-            active_steps -= never_steps - tag_selected_steps
-            active_steps -= skipped_steps
-            active_steps |= cherry_picked_steps
+            # if flow_restrictor.has_selections:
+            #     active_steps = (tag_selected_steps | selected_steps)
+            # else:
+            #     active_steps = set(self.steps.keys())
+            # active_steps |= always_steps
+            # active_steps -= tag_skipped_steps
+            # active_steps -= never_steps - tag_selected_steps
+            # active_steps -= skipped_steps
+            # active_steps |= cherry_picked_steps
 
             # Enable steps explicitly enabled by the user as well as those
             # implicitly enabled by cherry-picking above.
-            for name in enable_steps:
-                if name in self.steps:
-                    self.enable_step(name)  # config file may have skip=True, but we force-enable here
-                else:
-                    raise StepSelectionError(f"'{name}' does not refer to a valid step in {self.fqname}")
+            for name in forced_steps:
+                self.enable_step(name)  # config file may have skip=True, but we force-enable here
 
-            if not active_steps:
+            if not enabled_steps:
                 self.log.info("no steps have been selected for execution")
                 return 0
             else:
-                if len(active_steps) != len(self.steps):
-                    # apply skip flags 
-                    for label, step in self.steps.items():
-                        if label not in active_steps:
-                            step.skip = step._skip = True
+                for step_name in disabled_steps:
+                    step = self.steps[step_name]
+                    step.skip = step._skip = True    # apply skip flags
                             # remove auto-aliases associated with skipped steps
 
                 # see how many steps are actually going to run
-                scheduled_steps = [label for label, step in self.steps.items() if not step._skip]
+                # scheduled_steps = [label for label, step in self.steps.items() if not step._skip]
                 # report scheduled steps to log if (a) they're a subset or (b) any selection options were passed
-                if len(scheduled_steps) != len(self.steps) or any(restrictions):
-                    self.log.info(f"the following recipe steps have been selected for execution:")
-                    self.log.info(f"    [bold green]{' '.join(scheduled_steps)}[/bold green]")
+                # if len(scheduled_steps) != len(self.steps) or any(restrictions):
+                self.log.info(f"the following recipe steps have been selected for execution:")
+                self.log.info(f"    [bold green]{' '.join(sorted(enabled_steps))}[/bold green]")
 
                 # now recurse into sub-recipes. If nothing was specified for a sub-recipe,
                 # we still need to recurse in to make sure it applies its tags,
-                for label, step in self.steps.items():
-                    if label in active_steps and isinstance(step.cargo, Recipe):
-                        step.cargo.restrict_steps(flow_restrictor, graph)
+                for step in self.steps.values():
+                    if isinstance(step.cargo, Recipe):
+                        step.cargo.restrict_steps(constraints)
 
-                return len(scheduled_steps)
+                return len(enabled_steps)
         except StepSelectionError as exc:
             log_exception(exc, log=self.log)
             raise exc

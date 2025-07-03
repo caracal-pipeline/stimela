@@ -226,4 +226,36 @@ def graph_to_constraints(
     # separate function which is then the input to the recursive
     # component.
 
-    import ipdb; ipdb.set_trace()
+    return RunConstraints(graph)
+
+
+class RunConstraints:
+
+    def __init__(self, graph):
+
+        self.graph = graph
+
+        enable_states = nx.get_node_attributes(graph, "enabled", False)
+        self.enabled_nodes = [k for k, v in enable_states.items() if v]
+        self.disabled_nodes = [k for k, v in enable_states.items() if not v]
+
+        force_states = nx.get_node_attributes(graph, "force_enable")
+        self.forced_nodes = [k for k in force_states.keys()]
+
+    def get_enabled_steps(self, fqname):
+        return {
+            k.lstrip(f"{fqname}.") for k in self.graph.adj[fqname].keys()
+            if k in self.enabled_nodes
+        }
+
+    def get_disabled_steps(self, fqname):
+        return {
+            k.lstrip(f"{fqname}.") for k in self.graph.adj[fqname].keys()
+            if k in self.disabled_nodes
+        }
+
+    def get_forced_steps(self, fqname):
+        return {
+            k.lstrip(f"{fqname}.") for k in self.graph.adj[fqname].keys()
+            if k in self.forced_nodes
+        }
