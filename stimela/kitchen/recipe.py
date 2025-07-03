@@ -27,7 +27,6 @@ from .step import Step
 from stimela import task_stats 
 from stimela import backends
 from stimela.backends import StimelaBackendSchema
-from stimela.kitchen.utils import keys_from_sel_string, FlowRestrictor
 
 
 class DeferredAlias(Unresolved):
@@ -344,8 +343,7 @@ class Recipe(Cargo):
 
     def restrict_steps(
         self,
-        flow_restrictor: FlowRestrictor,
-        graph: nx.DiGraph
+        constraints,
     ) -> int:
         try:
             self.log.info(f"selecting recipe steps for (sub)recipe: [bold green]{self.name}[/bold green]")
