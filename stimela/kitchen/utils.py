@@ -197,6 +197,10 @@ def graph_to_constraints(
     # case where recipes are nested.
     # self.has_selections = any([self.step_ranges, self.tags])
 
+    # NOTE(JSKenyon): There is a slight dependence on order here for steps
+    # which are affected by more than one of the following operations. Once
+    # the tests are fleshed out, revisit this to ensure it behaves as expected.
+
     # Start off by enabling always steps.
     apply_always_tags(graph)
     # Then disable all never steps; never trumps always.
