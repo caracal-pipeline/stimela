@@ -2,27 +2,40 @@ from itertools import chain
 from typing import Optional, List
 import networkx as nx
 
+from stimela.exceptions import StepSelectionError
 
 def apply_tags(graph, tags):
     """Given a graph, apply all the tags."""
 
     for tag in tags:
+        success = False
         step_name, tag = tag.rsplit(".", 1)
         for node_name in graph.adj[step_name].keys():
             node = graph.nodes[node_name]
             if tag in node['tags']:
                 node['enabled'] = True
                 node['explicit'] = True
+                success = True
+        if not success:
+            raise StepSelectionError(
+                f"'{tag}' is not a valid tag of '{step_name}'."
+            )
 
 def apply_skip_tags(graph, skip_tags):
     """Given a graph, apply all the skip tags."""
 
     for tag in skip_tags:
+        success = False
         step_name, tag = tag.rsplit(".", 1)
         for node_name in graph.adj[step_name].keys():
             node = graph.nodes[node_name]
             if tag in node["tags"]:
                 node["enabled"] = False
+                success = True
+        if not success:
+            raise StepSelectionError(
+                f"'{tag}' is not a valid tag of '{step_name}'."
+            )
 
 def apply_always_tags(graph):
 
@@ -51,7 +64,12 @@ def apply_step_ranges(graph, step_ranges):
 
         force = start == stop
 
-        adjacent_node_names = list(graph.adj[step_name].keys())
+        adjacent_node_names = list(graph.neighbors(step_name))
+
+        if not (start in adjacent_node_names and stop in adjacent_node_names):
+            raise StepSelectionError(
+                f"Step/steps '{step_range}' not in '{step_name}'."
+            )
 
         start_ind = adjacent_node_names.index(start)
         stop_ind = adjacent_node_names.index(stop) + 1
@@ -77,7 +95,12 @@ def apply_skip_ranges(graph, skip_ranges):
         start = f"{step_name}.{start}"
         stop = f"{step_name}.{stop}"
 
-        adjacent_node_names = list(graph.adj[step_name].keys())
+        adjacent_node_names = list(graph.neighbors(step_name))
+
+        if not (start in adjacent_node_names and stop in adjacent_node_names):
+            raise StepSelectionError(
+                f"Step/steps '{step_range}' not in '{step_name}'."
+            )
 
         start_ind = adjacent_node_names.index(start)
         stop_ind = adjacent_node_names.index(stop) + 1
@@ -99,7 +122,12 @@ def apply_enabled_steps(graph, enable_steps):
         start = f"{step_name}.{start}"
         stop = f"{step_name}.{stop}"
 
-        adjacent_node_names = list(graph.adj[step_name].keys())
+        adjacent_node_names = list(graph.neighbors(step_name))
+
+        if not (start in adjacent_node_names and stop in adjacent_node_names):
+            raise StepSelectionError(
+                f"Step/steps '{enable_step}' not in '{step_name}'."
+            )
 
         start_ind = adjacent_node_names.index(start)
         stop_ind = adjacent_node_names.index(stop) + 1
