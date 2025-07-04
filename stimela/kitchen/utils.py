@@ -65,7 +65,8 @@ def apply_step_ranges(graph, step_ranges):
         else:                           # Single step.
             start = stop = step_range
 
-        start = f"{step_name}.{start}" if start else node_names[0]
+        # Unbounded below/above ranges use the first/last non-root node.
+        start = f"{step_name}.{start}" if start else node_names[1]
         stop = f"{step_name}.{stop}" if stop else node_names[-1]
 
         if not (start in node_names and stop in node_names):
@@ -84,28 +85,33 @@ def apply_step_ranges(graph, step_ranges):
 
 def apply_skip_ranges(graph, skip_ranges):
 
-    for step_range in skip_ranges:
-        step_name, step_range = step_range.rsplit(".", 1)
+    node_names = list(graph.nodes.keys())
 
-        if ":" in step_range:
-            start, stop = step_range.split(":")
-        else:
-            start = stop = step_range
+    for skip_range in skip_ranges:
+        step_name, skip_range = skip_range.rsplit(".", 1)
 
-        start = f"{step_name}.{start}"
-        stop = f"{step_name}.{stop}"
+        if skip_range.startswith(":"):  # Unbounded below.
+            start, stop = skip_range.rsplit(":")
+        elif skip_range.endswith(":"):  # Unbounded above.
+            start, stop = skip_range.split(":")
+        elif ":" in skip_range:         # Bounded above and below.
+            start, stop = skip_range.split(":")
+        else:                           # Single step.
+            start = stop = skip_range
 
-        adjacent_node_names = list(graph.neighbors(step_name))
+        # Unbounded below/above ranges use the first/last non-root node.
+        start = f"{step_name}.{start}" if start else node_names[1]
+        stop = f"{step_name}.{stop}" if stop else node_names[-1]
 
-        if not (start in adjacent_node_names and stop in adjacent_node_names):
+        if not (start in node_names and stop in node_names):
             raise StepSelectionError(
-                f"Step/steps '{step_range}' not in '{step_name}'."
+                f"Step/steps '{skip_range}' not in '{step_name}'."
             )
 
-        start_ind = adjacent_node_names.index(start)
-        stop_ind = adjacent_node_names.index(stop) + 1
+        start_ind = node_names.index(start)
+        stop_ind = node_names.index(stop) + 1
 
-        for node_name in adjacent_node_names[start_ind: stop_ind]:
+        for node_name in node_names[start_ind: stop_ind]:
             node = graph.nodes[node_name]
             node["enabled"] = False
 
