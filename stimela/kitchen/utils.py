@@ -65,11 +65,6 @@ def apply_step_ranges(graph, step_ranges):
         else:                           # Single step.
             start = stop = step_range
 
-        if ":" in step_range:
-            start, stop = step_range.split(":")
-        else:
-            start = stop = step_range
-
         start = f"{step_name}.{start}" if start else node_names[0]
         stop = f"{step_name}.{stop}" if stop else node_names[-1]
 
