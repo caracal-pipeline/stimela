@@ -1,5 +1,5 @@
 from itertools import chain
-from typing import Optional, List
+from typing import Optional, List, Tuple
 import networkx as nx
 
 from stimela.exceptions import StepSelectionError
@@ -195,22 +195,23 @@ def reformat_opts(opts: List[str], prepend: Optional[str] = None):
 
 def graph_to_constraints(
     graph: nx.DiGraph,
-    tags: List[str] = [],
-    skip_tags: List[str] = [],
-    step_ranges: List[str] = [],
-    skip_ranges: List[str] = [],
-    enable_steps: List[str] = []
+    tags: Tuple[str] = (),
+    skip_tags: Tuple[str] = (),
+    step_ranges: Tuple[str] = (),
+    skip_ranges: Tuple[str] = (),
+    enable_steps: Tuple[str] = ()
 ):
 
     root = graph.graph.get("root", None)
 
-    # Convert the tags and steps into benedicts, the keypaths of which will
-    # correspond to the node names in graph. Include root if set.
+    # Special case - individually specified steps should ignore skip fields.
+    implicit_enables = tuple([s for s in step_ranges if ":" not in s])
+    # Unpack commas, prepend graph root and convert to sets.
     tags = reformat_opts(tags, prepend=root)
     skip_tags = reformat_opts(skip_tags, prepend=root)
     step_ranges = reformat_opts(step_ranges, prepend=root)
     skip_ranges = reformat_opts(skip_ranges, prepend=root)
-    enable_steps = reformat_opts(enable_steps, prepend=root)
+    enable_steps = reformat_opts(enable_steps + implicit_enables, prepend=root)
 
     # NOTE(JSKenyon): There is a slight dependence on order here for steps
     # which are affected by more than one of the following operations. Once
