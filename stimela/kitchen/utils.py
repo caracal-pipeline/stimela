@@ -1,33 +1,280 @@
-from stimela import log_exception, stimelogging
-from stimela.stimelogging import log_rich_payload
-from stimela.exceptions import *
+from itertools import chain
+from typing import Optional, List, Tuple
+import networkx as nx
+
+from stimela.exceptions import StepSelectionError
+
+def apply_tags(graph, tags):
+    """Given a graph, apply all the tags."""
+
+    for tag in tags:
+        success = False
+        step_name, tag = tag.rsplit(".", 1)
+        for node_name in graph.adj[step_name].keys():
+            node = graph.nodes[node_name]
+            if tag in node['tags']:
+                node['enabled'] = True
+                node['explicit'] = True
+                success = True
+        if not success:
+            raise StepSelectionError(
+                f"'{tag}' is not a valid tag of '{step_name}'."
+            )
+
+def apply_skip_tags(graph, skip_tags):
+    """Given a graph, apply all the skip tags."""
+
+    for tag in skip_tags:
+        success = False
+        step_name, tag = tag.rsplit(".", 1)
+        for node_name in graph.adj[step_name].keys():
+            node = graph.nodes[node_name]
+            if tag in node["tags"]:
+                node["enabled"] = False
+                success = True
+        if not success:
+            raise StepSelectionError(
+                f"'{tag}' is not a valid tag of '{step_name}'."
+            )
+
+def apply_always_tags(graph):
+
+    for node in graph.nodes.values():
+        if "always" in node.get("tags", tuple()):
+            node["enabled"] = True
+
+def apply_never_tags(graph):
+
+    for node in graph.nodes.values():
+        if "never" in node.get("tags", tuple()):
+            node["enabled"] = False
+
+def apply_step_ranges(graph, step_ranges):
+
+    node_names = list(graph.nodes.keys())
+
+    for step_range in step_ranges:
+        step_name, step_range = step_range.rsplit(".", 1)
+
+        if step_range.startswith(":"):  # Unbounded below.
+            start, stop = step_range.rsplit(":")
+        elif step_range.endswith(":"):  # Unbounded above.
+            start, stop = step_range.split(":")
+        elif ":" in step_range:         # Bounded above and below.
+            start, stop = step_range.split(":")
+        else:                           # Single step.
+            start = stop = step_range
+
+        # Unbounded below/above ranges use the first/last non-root node.
+        start = f"{step_name}.{start}" if start else node_names[1]
+        stop = f"{step_name}.{stop}" if stop else node_names[-1]
+
+        if not (start in node_names and stop in node_names):
+            raise StepSelectionError(
+                f"Step/steps '{step_range}' not in '{step_name}'."
+            )
+
+        start_ind = node_names.index(start)
+        stop_ind = node_names.index(stop) + 1
+
+        for node_name in node_names[start_ind: stop_ind]:
+            node = graph.nodes[node_name]
+            node["explicit"] = True
+            node["enabled"] = True
 
 
-def keys_from_sel_string(dictionary: Dict[str, str], sel_string: str):
-    """Select keys from a dictionary based on a slice string."""
+def apply_skip_ranges(graph, skip_ranges):
 
-    keys = list(dictionary.keys())    
+    node_names = list(graph.nodes.keys())
 
-    if ':' in sel_string:
-        begin, end = sel_string.split(':', 1)
-        if begin:
-            try:
-                first = keys.index(begin)
-            except ValueError as exc:
-                raise StepSelectionError(f"no such step: '{begin}' (in '{sel_string}')")
-        else:
-            first = 0
-        if end:
-            try:
-                last = keys.index(end)
-            except ValueError as exc:
-                raise StepSelectionError(f"no such step: '{end}' (in '{sel_string}')")
-        else:
-            last = len(keys) - 1
-        selected_keys = set(keys[first: last + 1])
-    else:
-        if sel_string not in keys:
-            raise StepSelectionError(f"no such step: '{sel_string}'")
-        selected_keys = set([sel_string])
+    for skip_range in skip_ranges:
+        step_name, skip_range = skip_range.rsplit(".", 1)
 
-    return selected_keys
+        if skip_range.startswith(":"):  # Unbounded below.
+            start, stop = skip_range.rsplit(":")
+        elif skip_range.endswith(":"):  # Unbounded above.
+            start, stop = skip_range.split(":")
+        elif ":" in skip_range:         # Bounded above and below.
+            start, stop = skip_range.split(":")
+        else:                           # Single step.
+            start = stop = skip_range
+
+        # Unbounded below/above ranges use the first/last non-root node.
+        start = f"{step_name}.{start}" if start else node_names[1]
+        stop = f"{step_name}.{stop}" if stop else node_names[-1]
+
+        if not (start in node_names and stop in node_names):
+            raise StepSelectionError(
+                f"Step/steps '{skip_range}' not in '{step_name}'."
+            )
+
+        start_ind = node_names.index(start)
+        stop_ind = node_names.index(stop) + 1
+
+        for node_name in node_names[start_ind: stop_ind]:
+            node = graph.nodes[node_name]
+            node["enabled"] = False
+
+def apply_enabled_steps(graph, enable_steps):
+
+    node_names = list(graph.nodes.keys())
+
+    for enable_step in enable_steps:
+        step_name, enable_step = enable_step.rsplit(".", 1)
+
+        if enable_step.startswith(":"):  # Unbounded below.
+            start, stop = enable_step.rsplit(":")
+        elif enable_step.endswith(":"):  # Unbounded above.
+            start, stop = enable_step.split(":")
+        elif ":" in enable_step:         # Bounded above and below.
+            start, stop = enable_step.split(":")
+        else:                           # Single step.
+            start = stop = enable_step
+
+        # Unbounded below/above ranges use the first/last non-root node.
+        start = f"{step_name}.{start}" if start else node_names[1]
+        stop = f"{step_name}.{stop}" if stop else node_names[-1]
+
+        if not (start in node_names and stop in node_names):
+            raise StepSelectionError(
+                f"Step/steps '{enable_step}' not in '{step_name}'."
+            )
+
+        start_ind = node_names.index(start)
+        stop_ind = node_names.index(stop) + 1
+
+        for node_name in node_names[start_ind: stop_ind]:
+            node = graph.nodes[node_name]
+            node["force_enable"] = True
+
+def finalize(graph):
+
+    nodes = graph.nodes
+
+    x_nodes = nx.get_node_attributes(graph, "explicit", False)
+    e_nodes = nx.get_node_attributes(graph, "enabled", False)
+
+    xe_nodes = {k for k in x_nodes.keys() if (x_nodes[k] and e_nodes[k])}
+
+    # First off, traverse the graph and resolve skips i.e. disables.
+    for node_name, node in nodes.items():
+
+        # This node has been turned off explicitly.
+        if not node.get("enabled", True):
+            descendants = nx.descendants(graph, node_name)
+            if any([d in xe_nodes for d in descendants]):
+                # Explicitly enabled descendents ignore parent disables.
+                del node["enabled"]
+            else:
+                # Disable all descendents.
+                for des_name in descendants:
+                    nodes[des_name]["enabled"] = False
+
+    # If no nodes were explicitly selected, assume that we are running
+    # the full recipe, possibly with skips. TODO: This may be slightly
+    # flawed if we have tags on subrecipes as then we have xe_nodes, but
+    # that doesn't preclude enabling other steps.
+    if not xe_nodes:
+        for node_name, node in nodes.items():
+            node["enabled"] = node.get("enabled", True)
+        return
+
+    # Do a second traversal, this time resolving enables i.e. selections.
+    for node_name, node in nodes.items():
+        if node.get("enabled", False):
+            # Enable all of this node's ancestors.
+            for ancestor in nx.ancestors(graph, node_name):
+                ancestor_node = nodes[ancestor]
+                ancestor_node["enabled"] = True
+
+            # Check if any descendant of the current node is explicitly
+            # enabled and continue if so.
+            descendants = nx.descendants(graph, node_name)
+            if any([d in xe_nodes for d in descendants]):
+                continue
+
+            # Otherwise, enable all descendants.
+            for descendant in descendants:
+                des_node = nodes[descendant]
+                des_node["enabled"] = des_node.get("enabled", True)
+
+def reformat_opts(opts: List[str], prepend: Optional[str] = None):
+    """Given a list of option strings, reformat them appropriately."""
+    opts = set(chain(*(opt.split(",") for opt in opts)))
+    return {f"{prepend}.{o}" for o in opts} if prepend else opts
+
+
+def graph_to_constraints(
+    graph: nx.DiGraph,
+    tags: Tuple[str] = (),
+    skip_tags: Tuple[str] = (),
+    step_ranges: Tuple[str] = (),
+    skip_ranges: Tuple[str] = (),
+    enable_steps: Tuple[str] = ()
+):
+
+    root = graph.graph.get("root", None)
+
+    # Special case - individually specified steps should ignore skip fields.
+    implicit_enables = tuple([s for s in step_ranges if ":" not in s])
+    # Unpack commas, prepend graph root and convert to sets.
+    tags = reformat_opts(tags, prepend=root)
+    skip_tags = reformat_opts(skip_tags, prepend=root)
+    step_ranges = reformat_opts(step_ranges, prepend=root)
+    skip_ranges = reformat_opts(skip_ranges, prepend=root)
+    enable_steps = reformat_opts(enable_steps + implicit_enables, prepend=root)
+
+    # NOTE(JSKenyon): There is a slight dependence on order here for steps
+    # which are affected by more than one of the following operations. Once
+    # the tests are fleshed out, revisit this to ensure it behaves as expected.
+
+    # Start off by enabling always steps.
+    apply_always_tags(graph)
+    # Then disable all never steps; never trumps always.
+    apply_never_tags(graph)
+    # Turn on all tagged steps.
+    apply_tags(graph, tags)
+    # Turn of skip tagged steps.
+    apply_skip_tags(graph, skip_tags)
+    # Turn on selected steps.
+    apply_step_ranges(graph, step_ranges)
+    # Turn off skipped steps.
+    apply_skip_ranges(graph, skip_ranges)
+    # Turn on enabled steps.
+    apply_enabled_steps(graph, enable_steps)
+    # Having applied all of the above, figure out the steps to run.
+    finalize(graph)
+
+    return RunConstraints(graph)
+
+
+class RunConstraints:
+
+    def __init__(self, graph):
+
+        self.graph = graph
+
+        enable_states = nx.get_node_attributes(graph, "enabled", False)
+        self.enabled_nodes = [k for k, v in enable_states.items() if v]
+        self.disabled_nodes = [k for k, v in enable_states.items() if not v]
+
+        force_states = nx.get_node_attributes(graph, "force_enable")
+        self.forced_nodes = [k for k in force_states.keys()]
+
+    def get_enabled_steps(self, fqname):
+        return {
+            k.lstrip(f"{fqname}.") for k in self.graph.adj[fqname].keys()
+            if k in self.enabled_nodes
+        }
+
+    def get_disabled_steps(self, fqname):
+        return {
+            k.lstrip(f"{fqname}.") for k in self.graph.adj[fqname].keys()
+            if k in self.disabled_nodes
+        }
+
+    def get_forced_steps(self, fqname):
+        return {
+            k.lstrip(f"{fqname}.") for k in self.graph.adj[fqname].keys()
+            if k in self.forced_nodes
+        }
