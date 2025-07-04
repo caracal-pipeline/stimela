@@ -51,6 +51,8 @@ def apply_never_tags(graph):
 
 def apply_step_ranges(graph, step_ranges):
 
+    node_names = list(graph.nodes.keys())
+
     for step_range in step_ranges:
         step_name, step_range = step_range.rsplit(".", 1)
 
@@ -60,19 +62,17 @@ def apply_step_ranges(graph, step_ranges):
             start = stop = step_range
 
         start = f"{step_name}.{start}"
-        stop = f"{step_name}.{stop}"
+        stop = f"{step_name}.{stop}" if stop else node_names[-1]
 
-        adjacent_node_names = list(graph.neighbors(step_name))
-
-        if not (start in adjacent_node_names and stop in adjacent_node_names):
+        if not (start in node_names and stop in node_names):
             raise StepSelectionError(
                 f"Step/steps '{step_range}' not in '{step_name}'."
             )
 
-        start_ind = adjacent_node_names.index(start)
-        stop_ind = adjacent_node_names.index(stop) + 1
+        start_ind = node_names.index(start)
+        stop_ind = node_names.index(stop) + 1
 
-        for node_name in adjacent_node_names[start_ind: stop_ind]:
+        for node_name in node_names[start_ind: stop_ind]:
             node = graph.nodes[node_name]
             node["explicit"] = True
             node["enabled"] = True
