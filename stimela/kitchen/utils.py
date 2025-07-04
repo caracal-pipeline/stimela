@@ -117,28 +117,33 @@ def apply_skip_ranges(graph, skip_ranges):
 
 def apply_enabled_steps(graph, enable_steps):
 
+    node_names = list(graph.nodes.keys())
+
     for enable_step in enable_steps:
         step_name, enable_step = enable_step.rsplit(".", 1)
 
-        if ":" in enable_step:
+        if enable_step.startswith(":"):  # Unbounded below.
+            start, stop = enable_step.rsplit(":")
+        elif enable_step.endswith(":"):  # Unbounded above.
             start, stop = enable_step.split(":")
-        else:
+        elif ":" in enable_step:         # Bounded above and below.
+            start, stop = enable_step.split(":")
+        else:                           # Single step.
             start = stop = enable_step
 
-        start = f"{step_name}.{start}"
-        stop = f"{step_name}.{stop}"
+        # Unbounded below/above ranges use the first/last non-root node.
+        start = f"{step_name}.{start}" if start else node_names[1]
+        stop = f"{step_name}.{stop}" if stop else node_names[-1]
 
-        adjacent_node_names = list(graph.neighbors(step_name))
-
-        if not (start in adjacent_node_names and stop in adjacent_node_names):
+        if not (start in node_names and stop in node_names):
             raise StepSelectionError(
                 f"Step/steps '{enable_step}' not in '{step_name}'."
             )
 
-        start_ind = adjacent_node_names.index(start)
-        stop_ind = adjacent_node_names.index(stop) + 1
+        start_ind = node_names.index(start)
+        stop_ind = node_names.index(stop) + 1
 
-        for node_name in adjacent_node_names[start_ind: stop_ind]:
+        for node_name in node_names[start_ind: stop_ind]:
             node = graph.nodes[node_name]
             node["force_enable"] = True
 
