@@ -56,12 +56,21 @@ def apply_step_ranges(graph, step_ranges):
     for step_range in step_ranges:
         step_name, step_range = step_range.rsplit(".", 1)
 
+        if step_range.startswith(":"):  # Unbounded below.
+            start, stop = step_range.rsplit(":")
+        elif step_range.endswith(":"):  # Unbounded above.
+            start, stop = step_range.split(":")
+        elif ":" in step_range:         # Bounded above and below.
+            start, stop = step_range.split(":")
+        else:                           # Single step.
+            start = stop = step_range
+
         if ":" in step_range:
             start, stop = step_range.split(":")
         else:
             start = stop = step_range
 
-        start = f"{step_name}.{start}"
+        start = f"{step_name}.{start}" if start else node_names[0]
         stop = f"{step_name}.{stop}" if stop else node_names[-1]
 
         if not (start in node_names and stop in node_names):
