@@ -62,8 +62,6 @@ def apply_step_ranges(graph, step_ranges):
         start = f"{step_name}.{start}"
         stop = f"{step_name}.{stop}"
 
-        force = start == stop
-
         adjacent_node_names = list(graph.neighbors(step_name))
 
         if not (start in adjacent_node_names and stop in adjacent_node_names):
@@ -78,8 +76,6 @@ def apply_step_ranges(graph, step_ranges):
             node = graph.nodes[node_name]
             node["explicit"] = True
             node["enabled"] = True
-            if force:
-                node["force_enable"] = True
 
 
 def apply_skip_ranges(graph, skip_ranges):
