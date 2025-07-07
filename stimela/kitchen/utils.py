@@ -118,51 +118,73 @@ def apply_never_tags(graph: nx.DiGraph):
         if "never" in node.get("tags", tuple()):
             node['status'] = node.get("status", set()) | {"weakly_disabled"}
 
-def apply_step_ranges(graph, step_ranges):
+def apply_step_inclusions(
+    graph: nx.DiGraph,
+    step_inclusions: Set[str]
+):
+    """Update the status attrributes on a graph based on step inclusions.
 
+    Adds 'enabled' or 'weakly_enabled' to the 'status' attribute of each graph
+    node selected by the step inclusions. Both half unbounded and bounded
+    ranges add 'weakly_enabled' while inclusions of a single step apply
+    'enabled' (as well as imply ignore_skips - see PLACEHOLDER). If 'status'
+    has not been set, it is assumed to be an empty set.
+
+    Args:
+        graph:
+            The graph object on which to update the 'status' attribute.
+        step_inclusions:
+            The steps which should be included when the recipe the graph
+            represents is run. These will be of the form {recipe}.{step},
+            {recipe}.{subrecipe}.{step} etc. Additionally, ranges are specified
+            using {recipe}.{first_step}:{last_step}. Either the first or
+            last step can be omitted to indicate a half-unbounded range.
+
+    Raises:
+        StepSelectionError: If the steps did not appear in the graph.
+    """
     node_names = list(graph.nodes.keys())
 
-    for step_range in step_ranges:
-        step_name, step_range = step_range.rsplit(".", 1)
+    for step_inclusion in step_inclusions:
+        step_name, inclusion_str = step_inclusion.rsplit(".", 1)
 
-        if step_range.startswith(":"):
+        if inclusion_str.startswith(":"):
             case = "unbounded_below"
-            start, stop = step_range.rsplit(":")
-        elif step_range.endswith(":"):
+            start, stop = inclusion_str.rsplit(":")
+        elif inclusion_str.endswith(":"):
             case = "unbounded_above"
-            start, stop = step_range.split(":")
-        elif ":" in step_range:
+            start, stop = inclusion_str.split(":")
+        elif ":" in inclusion_str:
             case = "bounded"
-            start, stop = step_range.split(":")
+            start, stop = inclusion_str.split(":")
         else:
             case = "single_step"
-            start = stop = step_range
+            start = stop = inclusion_str
 
         # Unbounded below/above ranges use the first/last non-root node.
-        # Problem case:
-        #   - This will capture the parent node in the :step case as the nodes
-        #     are handed in insertion order.
+        # For now, this relies on nodes_names preserving insertion order.
+        # NOTE(JSKenyon): This requires us to add special handling for the
+        # unbounded_below case as the following logic will incorrecly enable
+        # parent nodes.
         start = f"{step_name}.{start}" if start else node_names[1]
         stop = f"{step_name}.{stop}" if stop else node_names[-1]
 
-        status = "enabled" if start == stop else "weakly_enabled"
+        status = "enabled" if case == "single_step" else "weakly_enabled"
 
         if not (start in node_names and stop in node_names):
             raise StepSelectionError(
-                f"Step/steps '{step_range}' not in '{step_name}'."
+                f"Step/steps '{inclusion_str}' not in '{step_name}'."
             )
 
         start_ind = node_names.index(start)
         stop_ind = node_names.index(stop) + 1
 
-        if case == "unbounded_below":
+        if case == "unbounded_below":  # Special case - see previous note.
             exclusions = nx.ancestors(graph, stop)
         else:
             exclusions = set()
 
-        selected_nodes = [
-            nn for nn in node_names[start_ind:stop_ind] if nn not in exclusions
-        ]
+        selected_nodes = set(node_names[start_ind:stop_ind]) - exclusions
 
         for node_name in selected_nodes:
             node = graph.nodes[node_name]
@@ -390,7 +412,7 @@ def graph_to_constraints(
     graph: nx.DiGraph,
     tags: Tuple[str] = (),
     skip_tags: Tuple[str] = (),
-    step_ranges: Tuple[str] = (),
+    step_inclusions: Tuple[str] = (),
     skip_ranges: Tuple[str] = (),
     enable_steps: Tuple[str] = ()
 ):
@@ -398,18 +420,18 @@ def graph_to_constraints(
     root = graph.graph.get("root", None)
 
     # Special case - individually specified steps should ignore skip fields.
-    implicit_enables = tuple([s for s in step_ranges if ":" not in s])
+    implicit_enables = tuple([s for s in step_inclusions if ":" not in s])
     # Unpack commas, prepend graph root and convert to sets.
     tags = reformat_opts(tags, prepend=root)
     skip_tags = reformat_opts(skip_tags, prepend=root)
-    step_ranges = reformat_opts(step_ranges, prepend=root)
+    step_inclusions = reformat_opts(step_inclusions, prepend=root)
     skip_ranges = reformat_opts(skip_ranges, prepend=root)
     enable_steps = reformat_opts(enable_steps + implicit_enables, prepend=root)
 
     # NOTE(JSKenyon): There is a slight dependence on order here for steps
     # which are affected by more than one of the following operations. Once
     # the tests are fleshed out, revisit this to ensure it behaves as expected.
-    default_status = "weakly_disbled" if any([tags, step_ranges]) else "weakly_enabled"
+    default_status = "weakly_disbled" if any([tags, step_inclusions]) else "weakly_enabled"
 
     # Start off by enabling always steps.
     apply_always_tags(graph)
@@ -420,7 +442,7 @@ def graph_to_constraints(
     # Turn of skip tagged steps.
     apply_skip_tags(graph, skip_tags)
     # Turn on selected steps.
-    apply_step_ranges(graph, step_ranges)
+    apply_step_inclusions(graph, step_inclusions)
     # Turn off skipped steps.
     apply_skip_ranges(graph, skip_ranges)
     # Turn on enabled steps.

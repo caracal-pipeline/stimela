@@ -486,7 +486,7 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
                 graph,
                 tags=tags,
                 skip_tags=skip_tags,
-                step_ranges=step_ranges,
+                step_inclusions=step_ranges,
                 skip_ranges=skip_ranges,
                 enable_steps=enable_steps
             )
