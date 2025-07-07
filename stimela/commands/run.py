@@ -484,8 +484,8 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
 
             constraints = graph_to_constraints(
                 graph,
-                tags=tags,
-                skip_tags=skip_tags,
+                tag_inclusions=tags,
+                tag_exclusions=skip_tags,
                 step_inclusions=step_ranges,
                 step_exclusions=skip_ranges,
                 step_unskips=enable_steps

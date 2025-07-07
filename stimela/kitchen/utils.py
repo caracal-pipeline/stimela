@@ -11,9 +11,9 @@ STATUS_HEIRARCHY = (
     "weakly_enabled"
 )
 
-def apply_tags(
+def apply_tag_inclusions(
     graph: nx.DiGraph,
-    tags: Set[str]
+    tag_inclusions: Set[str]
 ):
     """Given a graph, apply the 'enabled' status to steps associated with tags.
 
@@ -24,7 +24,7 @@ def apply_tags(
     Args:
         graph:
             The graph object on which to update the 'status' attribute.
-        tags:
+        tag_inclusions:
             The tags which need to be associated with the 'enabled' state.
             Tags are of the form '{recipe}.{tag}',
             '{recipe}.{subrecipe}.{tag}' etc.
@@ -32,7 +32,7 @@ def apply_tags(
     Raises:
         StepSelectionError: If the tags did not apply to any recipe steps.
     """
-    for tag in tags:
+    for tag in tag_inclusions:
         successful = False
         step_name, tag = tag.rsplit(".", 1)
         for node_name in graph.successors(step_name):
@@ -45,9 +45,9 @@ def apply_tags(
                 f"'{tag}' is not a valid tag of '{step_name}'."
             )
 
-def apply_skip_tags(
+def apply_tag_exclusions(
     graph: nx.DiGraph,
-    skip_tags: Set[str]
+    tag_exclusions: Set[str]
 ):
     """Given a graph, apply the 'disabled' status to steps associated with tags.
 
@@ -58,7 +58,7 @@ def apply_skip_tags(
     Args:
         graph:
             The graph object on which to update the 'status' attribute.
-        tags:
+        tag_exclusions:
             The tags which need to be associated with the 'disabled' state.
             Tags are of the form '{recipe}.{tag}',
             '{recipe}.{subrecipe}.{tag}' etc.
@@ -66,7 +66,7 @@ def apply_skip_tags(
     Raises:
         StepSelectionError: If the tags did not apply to any recipe steps.
     """
-    for tag in skip_tags:
+    for tag in tag_exclusions:
         successful = False
         step_name, tag = tag.rsplit(".", 1)
         for node_name in graph.successors(step_name):
@@ -445,8 +445,8 @@ def reformat_opts(opts: List[str], prepend: Optional[str] = None):
 
 def graph_to_constraints(
     graph: nx.DiGraph,
-    tags: Tuple[str] = (),
-    skip_tags: Tuple[str] = (),
+    tag_inclusions: Tuple[str] = (),
+    tag_exclusions: Tuple[str] = (),
     step_inclusions: Tuple[str] = (),
     step_exclusions: Tuple[str] = (),
     step_unskips: Tuple[str] = ()
@@ -457,8 +457,8 @@ def graph_to_constraints(
     # Special case - individually specified steps should ignore skip fields.
     implicit_unskips = tuple([s for s in step_inclusions if ":" not in s])
     # Unpack commas, prepend graph root and convert to sets.
-    tags = reformat_opts(tags, prepend=root)
-    skip_tags = reformat_opts(skip_tags, prepend=root)
+    tag_inclusions = reformat_opts(tag_inclusions, prepend=root)
+    tag_exclusions = reformat_opts(tag_exclusions, prepend=root)
     step_inclusions = reformat_opts(step_inclusions, prepend=root)
     step_exclusions = reformat_opts(step_exclusions, prepend=root)
     step_unskips = reformat_opts(step_unskips + implicit_unskips, prepend=root)
@@ -466,16 +466,16 @@ def graph_to_constraints(
     # NOTE(JSKenyon): There is a slight dependence on order here for steps
     # which are affected by more than one of the following operations. Once
     # the tests are fleshed out, revisit this to ensure it behaves as expected.
-    default_status = "weakly_disbled" if any([tags, step_inclusions]) else "weakly_enabled"
+    default_status = "weakly_disbled" if any([tag_inclusions, step_inclusions]) else "weakly_enabled"
 
     # Start off by enabling always steps.
     apply_always_tags(graph)
     # Then disable all never steps; never trumps always.
     apply_never_tags(graph)
     # Turn on all tagged steps.
-    apply_tags(graph, tags)
-    # Turn of skip tagged steps.
-    apply_skip_tags(graph, skip_tags)
+    apply_tag_inclusions(graph, tag_inclusions)
+    # Turn off skip tagged steps.
+    apply_tag_exclusions(graph, tag_exclusions)
     # Turn on selected steps.
     apply_step_inclusions(graph, step_inclusions)
     # Turn off skipped steps.
