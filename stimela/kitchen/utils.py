@@ -26,7 +26,7 @@ def apply_tags(
     graph: nx.DiGraph,
     tags: Set[str]
 ):
-    """Given a graph, apply the enabled status to steps associated with tags.
+    """Given a graph, apply the 'enabled' status to steps associated with tags.
 
     Adds 'enabled' to the 'status' attribute of each graph node associated
     with the specified tags. If 'status' has not been set, it is assumed to be
@@ -56,18 +56,36 @@ def apply_tags(
                 f"'{tag}' is not a valid tag of '{step_name}'."
             )
 
-def apply_skip_tags(graph, skip_tags):
-    """Given a graph, apply all the skip tags."""
+def apply_skip_tags(
+    graph: nx.DiGraph,
+    skip_tags: Set[str]
+):
+    """Given a graph, apply the 'disabled' status to steps associated with tags.
 
+    Adds 'disabled' to the 'status' attribute of each graph node associated
+    with the specified tags. If 'status' has not been set, it is assumed to be
+    an empty set.
+
+    Args:
+        graph:
+            The graph object on which to update the 'status' attribute.
+        tags:
+            The tags which need to be associated with the 'disabled' state.
+            Tags are of the form '{recipe}.{tag}',
+            '{recipe}.{subrecipe}.{tag}' etc.
+
+    Raises:
+        StepSelectionError: If the tags did not apply to any recipe steps.
+    """
     for tag in skip_tags:
-        success = False
+        successful = False
         step_name, tag = tag.rsplit(".", 1)
         for node_name in graph.adj[step_name].keys():
             node = graph.nodes[node_name]
             if tag in node["tags"]:
                 node['status'] = node.get("status", set()) | {"disabled"}
-                success = True
-        if not success:
+                successful = True
+        if not successful:
             raise StepSelectionError(
                 f"'{tag}' is not a valid tag of '{step_name}'."
             )
