@@ -90,14 +90,30 @@ def apply_skip_tags(
                 f"'{tag}' is not a valid tag of '{step_name}'."
             )
 
-def apply_always_tags(graph):
+def apply_always_tags(graph: nx.DiGraph):
+    """Apply the 'weakly_enabled' status to graph nodes tagged with 'always'.
 
+    Apply the special 'always' tag by updating the status attribute of
+    associated steps with the 'weakly_enabled' status.
+
+    Args:
+        graph:
+            The graph object on which to update the 'status' attribute.
+    """
     for node in graph.nodes.values():
         if "always" in node.get("tags", tuple()):
             node['status'] = node.get("status", set()) | {"weakly_enabled"}
 
-def apply_never_tags(graph):
+def apply_never_tags(graph: nx.DiGraph):
+    """Apply the 'weakly_disabled' status to graph nodes tagged with 'never'.
 
+    Apply the special 'never' tag by updating the status attribute of
+    associated steps with the 'weakly_disabled' status.
+
+    Args:
+        graph:
+            The graph object on which to update the 'status' attribute.
+    """
     for node in graph.nodes.values():
         if "never" in node.get("tags", tuple()):
             node['status'] = node.get("status", set()) | {"weakly_disabled"}
