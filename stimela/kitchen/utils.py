@@ -4,6 +4,24 @@ import networkx as nx
 
 from stimela.exceptions import StepSelectionError
 
+STATUS_HEIRARCHY = (
+    "disabled",
+    "enabled",
+    "weakly_disabled",
+    "weakly_enabled"
+)
+
+ENABLES = (
+    "enabled",
+    "weakly_enabled"
+)
+
+DISABLES = (
+    "disabled",
+    "weakly_disabled"
+)
+
+
 def apply_tags(graph, tags):
     """Given a graph, apply all the tags."""
 
@@ -13,8 +31,7 @@ def apply_tags(graph, tags):
         for node_name in graph.adj[step_name].keys():
             node = graph.nodes[node_name]
             if tag in node['tags']:
-                node['enabled'] = True
-                node['explicit'] = True
+                node['status'] = node.get("status", set()) | {"enabled"}
                 success = True
         if not success:
             raise StepSelectionError(
@@ -30,7 +47,7 @@ def apply_skip_tags(graph, skip_tags):
         for node_name in graph.adj[step_name].keys():
             node = graph.nodes[node_name]
             if tag in node["tags"]:
-                node["enabled"] = False
+                node['status'] = node.get("status", set()) | {"disabled"}
                 success = True
         if not success:
             raise StepSelectionError(
@@ -41,13 +58,13 @@ def apply_always_tags(graph):
 
     for node in graph.nodes.values():
         if "always" in node.get("tags", tuple()):
-            node["enabled"] = True
+            node['status'] = node.get("status", set()) | {"weakly_enabled"}
 
 def apply_never_tags(graph):
 
     for node in graph.nodes.values():
         if "never" in node.get("tags", tuple()):
-            node["enabled"] = False
+            node['status'] = node.get("status", set()) | {"weakly_disabled"}
 
 def apply_step_ranges(graph, step_ranges):
 
@@ -69,6 +86,8 @@ def apply_step_ranges(graph, step_ranges):
         start = f"{step_name}.{start}" if start else node_names[1]
         stop = f"{step_name}.{stop}" if stop else node_names[-1]
 
+        status = "enabled" if start == stop else "weakly_enabled"
+
         if not (start in node_names and stop in node_names):
             raise StepSelectionError(
                 f"Step/steps '{step_range}' not in '{step_name}'."
@@ -79,9 +98,7 @@ def apply_step_ranges(graph, step_ranges):
 
         for node_name in node_names[start_ind: stop_ind]:
             node = graph.nodes[node_name]
-            node["explicit"] = True
-            node["enabled"] = True
-
+            node['status'] = node.get("status", set()) | {status}
 
 def apply_skip_ranges(graph, skip_ranges):
 
@@ -103,6 +120,8 @@ def apply_skip_ranges(graph, skip_ranges):
         start = f"{step_name}.{start}" if start else node_names[1]
         stop = f"{step_name}.{stop}" if stop else node_names[-1]
 
+        status = "disabled" if start == stop else "weakly_disabled"
+
         if not (start in node_names and stop in node_names):
             raise StepSelectionError(
                 f"Step/steps '{skip_range}' not in '{step_name}'."
@@ -113,7 +132,7 @@ def apply_skip_ranges(graph, skip_ranges):
 
         for node_name in node_names[start_ind: stop_ind]:
             node = graph.nodes[node_name]
-            node["enabled"] = False
+            node['status'] = node.get("status", set()) | {status}
 
 def apply_enabled_steps(graph, enable_steps):
 
@@ -145,58 +164,117 @@ def apply_enabled_steps(graph, enable_steps):
 
         for node_name in node_names[start_ind: stop_ind]:
             node = graph.nodes[node_name]
-            node["force_enable"] = True
+            node['force_enable'] = True #node.get("status", set()) | {"force_enabled"}
 
-def finalize(graph):
+def finalize(graph, default_status):
 
     nodes = graph.nodes
+    root = graph.graph["root"]  # Outermost recipe name.
 
-    x_nodes = nx.get_node_attributes(graph, "explicit", False)
-    e_nodes = nx.get_node_attributes(graph, "enabled", False)
+    # First off, traverse the graph and resolve the statuses on each node.
+    for node_name, node in nodes.items():
+        status = node.get("status", None)
+        if status:
+            # Resolve to the highest priority of the set statuses.
+            node["status"] = next(s for s in STATUS_HEIRARCHY if s in status)
 
-    xe_nodes = {k for k in x_nodes.keys() if (x_nodes[k] and e_nodes[k])}
+    # Apply default status to all nodes which do not yet have one.
+    # for node_name, node in nodes.items():
+    #     node["status"] = node.get("status", default_status)
 
-    # First off, traverse the graph and resolve skips i.e. disables.
+    # disabled_nodes = [k for k, v in graph.nodes(data=True) if v.get('status', None) == 'disabled']
+    # enabled_nodes = [k for k,v in nx.get_node_attributes(graph, "status").items() if v == "enabled"]
+
+    # At this point all nodes have their status and we can begin the resolution
+    # process. This needs to be done according the the heirarchy and the strong
+    # states need to be propagated first.
     for node_name, node in nodes.items():
 
-        # This node has been turned off explicitly.
-        if not node.get("enabled", True):
-            descendants = nx.descendants(graph, node_name)
-            if any([d in xe_nodes for d in descendants]):
-                # Explicitly enabled descendents ignore parent disables.
-                del node["enabled"]
-            else:
-                # Disable all descendents.
-                for des_name in descendants:
-                    nodes[des_name]["enabled"] = False
+        status = node.get("status", None)
 
-    # If no nodes were explicitly selected, assume that we are running
-    # the full recipe, possibly with skips. TODO: This may be slightly
-    # flawed if we have tags on subrecipes as then we have xe_nodes, but
-    # that doesn't preclude enabling other steps.
-    if not xe_nodes:
-        for node_name, node in nodes.items():
-            node["enabled"] = node.get("enabled", True)
-        return
+        # Disabled nodes propagate to their descendants.
+        if status == "disabled":
+            for des_name in nx.descendants(graph, node_name):
+                graph.nodes[des_name]["status"] = "disabled"
 
-    # Do a second traversal, this time resolving enables i.e. selections.
+        # Enabled nodes propagate to their ancestors.
+        elif status == "enabled":
+            dependencies = nx.shortest_path(graph.reverse(), node_name, root)
+            for anc_name in dependencies[1:]:
+                anc_node = graph.nodes[anc_name]
+                if anc_node.get("status", None) == "enabled":
+                    break  # Stop checking.
+                anc_node["status"] = "implicitly_enabled"
+
+    # After this first loop of resolution, all nodes on disabled branches will
+    # have been set to disabled, and and enabled nodes and their necessary
+    # ancestors will have been set to enabled. This is important - after the
+    # first round of resolution the following two cases can be ignored:
+    #   - any node below a disabled node will be disabled.
+    #   - any node preceding an enabled node will be enabled.
+    # The next step is to figure out the states of all the remaining
+    # weakly/disabled enabled nodes.
+
     for node_name, node in nodes.items():
-        if node.get("enabled", False):
-            # Enable all of this node's ancestors.
-            for ancestor in nx.ancestors(graph, node_name):
-                ancestor_node = nodes[ancestor]
-                ancestor_node["enabled"] = True
 
-            # Check if any descendant of the current node is explicitly
-            # enabled and continue if so.
-            descendants = nx.descendants(graph, node_name)
-            if any([d in xe_nodes for d in descendants]):
-                continue
+        status = node.get("status", None)
+        # Weakly disabled nodes propagate to their descendents.
+        # Problem cases:
+        #   - deselect by range will weakly disable weakly enabled.
+        if status == "weakly_disabled":
+            for des_name in nx.descendants(graph, node_name):
+                graph.nodes[des_name]["status"] = "weakly_disabled"
 
-            # Otherwise, enable all descendants.
-            for descendant in descendants:
-                des_node = nodes[descendant]
-                des_node["enabled"] = des_node.get("enabled", True)
+        # Weakly enabled nodes propagate to their ancestors.
+        # Problem cases:
+        #   - 
+        elif status == "weakly_enabled":
+            dependencies = nx.shortest_path(graph.reverse(), node_name, root)
+            for anc_name in dependencies[1:]:
+                anc_node = graph.nodes[anc_name]
+                if anc_node.get("status", None) in ("enabled", "weakly_enabled"):
+                    break
+                else:
+                    anc_node["status"] = "implicitly_enabled"
+
+        # This final case is the toughest to resolve as it has some subcases.
+        # A node which has no status should either be:
+        #   - set to weakly enabled if the graph is unconstrained
+        #   - set to weakly disabled in the graph is constrained
+        #   - set to weakly enabled if it is the child of an explictly enabled
+        #     node and lacks explicitly enabled siblings 
+
+        # This node has no status at present, inherit from parent or, failing
+        # that, use the default value. The latter case applies to the root.
+        # Inherited statuses will be weakened.
+        elif status is None:  # This shhould be toop down i.e. only need parent, not ancestors.
+            dependencies = nx.shortest_path(graph.reverse(), node_name, root)
+            for anc_name in dependencies[1:]:
+                anc_node = graph.nodes[anc_name]
+                anc_status = anc_node.get("status", None)
+
+                if anc_status in ("enabled", "weakly_enabled"):
+                    node["status"] = "weakly_enabled"
+                    break
+                elif anc_status == "implicitly_enabled":
+                    node["status"] = "weakly_disabled"
+                    break
+                else:
+                    node["status"] = default_status
+                    break
+            # parents = list(graph.reverse().neighbors(node_name))
+            # if parents:
+            #     parent_status = graph.nodes[parents[0]]["status"]
+            #     if "enable" in parent_status:
+            #         node["status"] = "weakly_enabled"
+            #     else:
+            #         node["status"] = "weakly_disabled"
+            # else:
+            # node["status"] = default_status
+
+    for node_name, node in nodes.items():
+        node["enabled"] = node["status"] in ("weakly_enabled", "implicitly_enabled", "enabled")
+
 
 def reformat_opts(opts: List[str], prepend: Optional[str] = None):
     """Given a list of option strings, reformat them appropriately."""
@@ -227,6 +305,7 @@ def graph_to_constraints(
     # NOTE(JSKenyon): There is a slight dependence on order here for steps
     # which are affected by more than one of the following operations. Once
     # the tests are fleshed out, revisit this to ensure it behaves as expected.
+    default_status = "weakly_disbled" if any([tags, step_ranges]) else "weakly_enabled"
 
     # Start off by enabling always steps.
     apply_always_tags(graph)
@@ -243,7 +322,7 @@ def graph_to_constraints(
     # Turn on enabled steps.
     apply_enabled_steps(graph, enable_steps)
     # Having applied all of the above, figure out the steps to run.
-    finalize(graph)
+    finalize(graph, default_status=default_status)
 
     return RunConstraints(graph)
 
