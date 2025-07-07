@@ -1,5 +1,5 @@
 from itertools import chain
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Set
 import networkx as nx
 
 from stimela.exceptions import StepSelectionError
@@ -22,18 +22,36 @@ DISABLES = (
 )
 
 
-def apply_tags(graph, tags):
-    """Given a graph, apply all the tags."""
+def apply_tags(
+    graph: nx.DiGraph,
+    tags: Set[str]
+):
+    """Given a graph, apply the enabled status to steps associated with tags.
 
+    Adds 'enabled' to the 'status' attribute of each graph node associated
+    with the specified tags. If 'status' has not been set, it is assumed to be
+    an empty set.
+
+    Args:
+        graph:
+            The graph object on which to update the 'status' attribute.
+        tags:
+            The tags which need to be associated with the 'enabled' state.
+            Tags are of the form '{recipe}.{tag}',
+            '{recipe}.{subrecipe}.{tag}' etc.
+
+    Raises:
+        StepSelectionError: If the tags did not apply to any recipe steps.
+    """
     for tag in tags:
-        success = False
+        successful = False
         step_name, tag = tag.rsplit(".", 1)
         for node_name in graph.adj[step_name].keys():
             node = graph.nodes[node_name]
             if tag in node['tags']:
                 node['status'] = node.get("status", set()) | {"enabled"}
-                success = True
-        if not success:
+                successful = True
+        if not successful:
             raise StepSelectionError(
                 f"'{tag}' is not a valid tag of '{step_name}'."
             )
