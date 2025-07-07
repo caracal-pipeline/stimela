@@ -488,7 +488,7 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
                 skip_tags=skip_tags,
                 step_inclusions=step_ranges,
                 step_exclusions=skip_ranges,
-                enable_steps=enable_steps
+                step_unskips=enable_steps
             )
 
             try:
