@@ -425,3 +425,84 @@ def test_skip_by_unbounded_step_range_case_d(base_command):
     }
 
     validate_run(output, run_steps)
+
+def test_unskip_steps_case_a(base_command):
+    """Unskip step of recipe."""
+    retcode, output = run(f"{base_command} -e s5")
+    assert retcode == 0
+    print(output)
+    run_steps = {
+        "s1",
+        "s2.t1-always",
+        "s2.t3",
+        "s2.t4-foo-bar",
+        "s2.t5-bar",
+        "s4.t1-always",
+        "s4.t3",
+        "s4.t4-foo-bar",
+        "s4.t5-bar",
+        "s5"
+    }
+
+    validate_run(output, run_steps)
+
+def test_unskip_steps_case_b(base_command):
+    """Unskip step of subrecipe."""
+    retcode, output = run(f"{base_command} -e s4.t6-skip")
+    assert retcode == 0
+    print(output)
+    run_steps = {
+        "s1",
+        "s2.t1-always",
+        "s2.t3",
+        "s2.t4-foo-bar",
+        "s2.t5-bar",
+        "s4.t1-always",
+        "s4.t3",
+        "s4.t4-foo-bar",
+        "s4.t5-bar",
+        "s4.t6-skip"
+    }
+
+    validate_run(output, run_steps)
+
+def test_unskip_steps_case_c(base_command):
+    """Unskip steps of subrecipes with no upper bound."""
+    retcode, output = run(f"{base_command} -e s2.t6-skip:")
+    assert retcode == 0
+    print(output)
+    run_steps = {
+        "s1",
+        "s2.t1-always",
+        "s2.t3",
+        "s2.t4-foo-bar",
+        "s2.t5-bar",
+        "s2.t6-skip",
+        "s4.t1-always",
+        "s4.t3",
+        "s4.t4-foo-bar",
+        "s4.t5-bar",
+        "s4.t6-skip"
+    }
+
+    validate_run(output, run_steps)
+
+def test_unskip_steps_case_d(base_command):
+    """Unskip steps of subrecipes with no lower bound."""
+    retcode, output = run(f"{base_command} -e s3.:t3")
+    assert retcode == 0
+    print(output)
+    run_steps = {
+        "s1",
+        "s2.t1-always",
+        "s2.t3",
+        "s2.t4-foo-bar",
+        "s2.t5-bar",
+        "s2.t6-skip",
+        "s4.t1-always",
+        "s4.t3",
+        "s4.t4-foo-bar",
+        "s4.t5-bar"
+    }
+
+    validate_run(output, run_steps)

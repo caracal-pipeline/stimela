@@ -51,3 +51,6 @@ recipe:
     s4:
       recipe: subrecipe
       tags: [foo]
+    s5:
+      cab: echo
+      skip: true
