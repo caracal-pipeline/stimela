@@ -301,7 +301,7 @@ def finalize(graph, default_status):
         # Inherited statuses will be weakened.
         if status is None:  # This should be top down i.e. only need parent, not ancestors.
             dependencies = nx.shortest_path(graph.reverse(), node_name, root)
-            for anc_name in dependencies[1:]:
+            for anc_name in dependencies[1:] or [node_name]:  # Handle root case.
                 anc_node = graph.nodes[anc_name]
                 anc_status = anc_node.get("status", None)
 
