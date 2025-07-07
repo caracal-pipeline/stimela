@@ -285,17 +285,21 @@ def finalize(graph, default_status):
                 else:
                     anc_node["status"] = "implicitly_enabled"
 
-        # This final case is the toughest to resolve as it has some subcases.
-        # A node which has no status should either be:
-        #   - set to weakly enabled if the graph is unconstrained
-        #   - set to weakly disabled in the graph is constrained
-        #   - set to weakly enabled if it is the child of an explictly enabled
-        #     node and lacks explicitly enabled siblings
+    # This final case is the toughest to resolve as it has some subcases.
+    # A node which has no status should either be:
+    #   - set to weakly enabled if the graph is unconstrained
+    #   - set to weakly disabled in the graph is constrained
+    #   - set to weakly enabled if it is the child of an explictly enabled
+    #     node and lacks explicitly enabled siblings
+
+    for node_name, node in nodes.items():
+
+        status = node.get("status", None)
 
         # This node has no status at present, inherit from parent or, failing
         # that, use the default value. The latter case applies to the root.
         # Inherited statuses will be weakened.
-        elif status is None:  # This shhould be toop down i.e. only need parent, not ancestors.
+        if status is None:  # This should be top down i.e. only need parent, not ancestors.
             dependencies = nx.shortest_path(graph.reverse(), node_name, root)
             for anc_name in dependencies[1:]:
                 anc_node = graph.nodes[anc_name]
