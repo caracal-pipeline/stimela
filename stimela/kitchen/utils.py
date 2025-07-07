@@ -305,7 +305,7 @@ def finalize(graph, default_status):
                     node["status"] = "weakly_enabled"
                     break
                 elif anc_status == "implicitly_enabled":
-                    node["status"] = "weakly_disabled"
+                    node["status"] = default_status #"weakly_disabled"
                     break
                 else:
                     node["status"] = default_status
