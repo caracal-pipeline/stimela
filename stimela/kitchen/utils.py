@@ -452,9 +452,12 @@ def graph_to_constraints(
     step_unskips: Tuple[str] = ()
 ):
 
-    root = graph.graph.get("root", None)
+    try:
+        root = graph.graph["root"]
+    except KeyError:
+        raise KeyError("Graph attribute 'root' must be set.")
 
-    # Special case - individually specified steps should ignore skip fields.
+    # Special case - individually specified steps should ignore skips.
     implicit_unskips = tuple([s for s in step_inclusions if ":" not in s])
     # Unpack commas, prepend graph root and convert to sets.
     tag_inclusions = reformat_opts(tag_inclusions, prepend=root)
@@ -463,25 +466,21 @@ def graph_to_constraints(
     step_exclusions = reformat_opts(step_exclusions, prepend=root)
     step_unskips = reformat_opts(step_unskips + implicit_unskips, prepend=root)
 
-    # NOTE(JSKenyon): There is a slight dependence on order here for steps
-    # which are affected by more than one of the following operations. Once
-    # the tests are fleshed out, revisit this to ensure it behaves as expected.
-    default_status = "weakly_disbled" if any([tag_inclusions, step_inclusions]) else "weakly_enabled"
+    # If there are tag/step inclusions, assume nodes are disabled by default.
+    if any([tag_inclusions, step_inclusions]):
+        default_status = "weakly_disbled"
+    else:
+        default_status = "weakly_enabled"
 
-    # Start off by enabling always steps.
+    # NOTE(JSKenyon): The order of the following should no longer matter.
     apply_always_tags(graph)
-    # Then disable all never steps; never trumps always.
     apply_never_tags(graph)
-    # Turn on all tagged steps.
     apply_tag_inclusions(graph, tag_inclusions)
-    # Turn off skip tagged steps.
     apply_tag_exclusions(graph, tag_exclusions)
-    # Turn on selected steps.
     apply_step_inclusions(graph, step_inclusions)
-    # Turn off skipped steps.
     apply_step_exclusions(graph, step_exclusions)
-    # Turn on enabled steps.
     apply_step_unskips(graph, step_unskips)
+
     # Having applied all of the above, figure out the steps to run.
     finalize(graph, default_status=default_status)
 
