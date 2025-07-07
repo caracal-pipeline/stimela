@@ -46,7 +46,7 @@ def apply_tags(
     for tag in tags:
         successful = False
         step_name, tag = tag.rsplit(".", 1)
-        for node_name in graph.adj[step_name].keys():
+        for node_name in graph.successors(step_name):
             node = graph.nodes[node_name]
             if tag in node['tags']:
                 node['status'] = node.get("status", set()) | {"enabled"}
@@ -80,7 +80,7 @@ def apply_skip_tags(
     for tag in skip_tags:
         successful = False
         step_name, tag = tag.rsplit(".", 1)
-        for node_name in graph.adj[step_name].keys():
+        for node_name in graph.successors(step_name):
             node = graph.nodes[node_name]
             if tag in node["tags"]:
                 node['status'] = node.get("status", set()) | {"disabled"}
