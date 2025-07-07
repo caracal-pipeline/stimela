@@ -4,7 +4,7 @@ import networkx as nx
 
 from stimela.exceptions import StepSelectionError
 
-STATUS_HEIRARCHY = (
+STATUS_HIERARCHY = (
     "disabled",
     "enabled",
     "weakly_disabled",
@@ -333,25 +333,21 @@ def finalize(graph, default_status):
         status = node.get("status", None)
         if status:
             # Resolve to the highest priority of the set statuses.
-            node["status"] = next(s for s in STATUS_HEIRARCHY if s in status)
-
-    # Apply default status to all nodes which do not yet have one.
-    # for node_name, node in nodes.items():
-    #     node["status"] = node.get("status", default_status)
+            node["status"] = next(s for s in STATUS_HIERARCHY if s in status)
 
     # disabled_nodes = [k for k, v in graph.nodes(data=True) if v.get('status', None) == 'disabled']
     # enabled_nodes = [k for k,v in nx.get_node_attributes(graph, "status").items() if v == "enabled"]
 
     # At this point all nodes have their status and we can begin the resolution
-    # process. This needs to be done according the the heirarchy and the strong
+    # process. This needs to be done according the the hierarchy and the strong
     # states need to be propagated first.
     for node_name, node in nodes.items():
 
         status = node.get("status", None)
 
-        # Disabled nodes propagate to their descendants.
+        # Disabled nodes propagate to their successors.
         if status == "disabled":
-            for des_name in nx.descendants(graph, node_name):
+            for des_name in graph.successors(node_name):
                 graph.nodes[des_name]["status"] = "disabled"
 
         # Enabled nodes propagate to their ancestors.
