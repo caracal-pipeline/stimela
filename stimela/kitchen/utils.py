@@ -73,16 +73,23 @@ def apply_step_ranges(graph, step_ranges):
     for step_range in step_ranges:
         step_name, step_range = step_range.rsplit(".", 1)
 
-        if step_range.startswith(":"):  # Unbounded below.
+        if step_range.startswith(":"):
+            case = "unbounded_below"
             start, stop = step_range.rsplit(":")
-        elif step_range.endswith(":"):  # Unbounded above.
+        elif step_range.endswith(":"):
+            case = "unbounded_above"
             start, stop = step_range.split(":")
-        elif ":" in step_range:         # Bounded above and below.
+        elif ":" in step_range:
+            case = "bounded"
             start, stop = step_range.split(":")
-        else:                           # Single step.
+        else:
+            case = "single_step"
             start = stop = step_range
 
         # Unbounded below/above ranges use the first/last non-root node.
+        # Problem case:
+        #   - This will capture the parent node in the :step case as the nodes
+        #     are handed in insertion order.
         start = f"{step_name}.{start}" if start else node_names[1]
         stop = f"{step_name}.{stop}" if stop else node_names[-1]
 
@@ -96,7 +103,16 @@ def apply_step_ranges(graph, step_ranges):
         start_ind = node_names.index(start)
         stop_ind = node_names.index(stop) + 1
 
-        for node_name in node_names[start_ind: stop_ind]:
+        if case == "unbounded_below":
+            exclusions = nx.ancestors(graph, stop)
+        else:
+            exclusions = set()
+
+        selected_nodes = [
+            nn for nn in node_names[start_ind:stop_ind] if nn not in exclusions
+        ]
+
+        for node_name in selected_nodes:
             node = graph.nodes[node_name]
             node['status'] = node.get("status", set()) | {status}
 
@@ -107,16 +123,23 @@ def apply_skip_ranges(graph, skip_ranges):
     for skip_range in skip_ranges:
         step_name, skip_range = skip_range.rsplit(".", 1)
 
-        if skip_range.startswith(":"):  # Unbounded below.
+        if skip_range.startswith(":"):
+            case = "unbounded_below"
             start, stop = skip_range.rsplit(":")
-        elif skip_range.endswith(":"):  # Unbounded above.
+        elif skip_range.endswith(":"):
+            case = "unbounded_above"
             start, stop = skip_range.split(":")
-        elif ":" in skip_range:         # Bounded above and below.
+        elif ":" in skip_range:
+            case = "bounded"
             start, stop = skip_range.split(":")
-        else:                           # Single step.
+        else:
+            case = "single_step"
             start = stop = skip_range
 
         # Unbounded below/above ranges use the first/last non-root node.
+        # Problem case:
+        #   - This will capture the parent node in the :step case as the nodes
+        #     are handed in insertion order.
         start = f"{step_name}.{start}" if start else node_names[1]
         stop = f"{step_name}.{stop}" if stop else node_names[-1]
 
@@ -130,7 +153,16 @@ def apply_skip_ranges(graph, skip_ranges):
         start_ind = node_names.index(start)
         stop_ind = node_names.index(stop) + 1
 
-        for node_name in node_names[start_ind: stop_ind]:
+        if case == "unbounded_below":
+            exclusions = nx.ancestors(graph, stop)
+        else:
+            exclusions = set()
+
+        selected_nodes = [
+            nn for nn in node_names[start_ind:stop_ind] if nn not in exclusions
+        ]
+
+        for node_name in selected_nodes:
             node = graph.nodes[node_name]
             node['status'] = node.get("status", set()) | {status}
 
@@ -141,16 +173,23 @@ def apply_enabled_steps(graph, enable_steps):
     for enable_step in enable_steps:
         step_name, enable_step = enable_step.rsplit(".", 1)
 
-        if enable_step.startswith(":"):  # Unbounded below.
+        if enable_step.startswith(":"):
+            case = "unbounded_below"
             start, stop = enable_step.rsplit(":")
-        elif enable_step.endswith(":"):  # Unbounded above.
+        elif enable_step.endswith(":"):
+            case = "unbounded_above"
             start, stop = enable_step.split(":")
-        elif ":" in enable_step:         # Bounded above and below.
+        elif ":" in enable_step:
+            case = "bounded"
             start, stop = enable_step.split(":")
-        else:                           # Single step.
+        else:
+            case = "single_step"
             start = stop = enable_step
 
         # Unbounded below/above ranges use the first/last non-root node.
+        # Problem case:
+        #   - This will capture the parent node in the :step case as the nodes
+        #     are handed in insertion order.
         start = f"{step_name}.{start}" if start else node_names[1]
         stop = f"{step_name}.{stop}" if stop else node_names[-1]
 
@@ -162,9 +201,18 @@ def apply_enabled_steps(graph, enable_steps):
         start_ind = node_names.index(start)
         stop_ind = node_names.index(stop) + 1
 
-        for node_name in node_names[start_ind: stop_ind]:
+        if case == "unbounded_below":
+            exclusions = nx.ancestors(graph, stop)
+        else:
+            exclusions = set()
+
+        selected_nodes = [
+            nn for nn in node_names[start_ind:stop_ind] if nn not in exclusions
+        ]
+
+        for node_name in selected_nodes:
             node = graph.nodes[node_name]
-            node['force_enable'] = True #node.get("status", set()) | {"force_enabled"}
+            node['force_enable'] = True
 
 def finalize(graph, default_status):
 
@@ -227,7 +275,7 @@ def finalize(graph, default_status):
 
         # Weakly enabled nodes propagate to their ancestors.
         # Problem cases:
-        #   - 
+        #   -
         elif status == "weakly_enabled":
             dependencies = nx.shortest_path(graph.reverse(), node_name, root)
             for anc_name in dependencies[1:]:
@@ -242,7 +290,7 @@ def finalize(graph, default_status):
         #   - set to weakly enabled if the graph is unconstrained
         #   - set to weakly disabled in the graph is constrained
         #   - set to weakly enabled if it is the child of an explictly enabled
-        #     node and lacks explicitly enabled siblings 
+        #     node and lacks explicitly enabled siblings
 
         # This node has no status at present, inherit from parent or, failing
         # that, use the default value. The latter case applies to the root.
