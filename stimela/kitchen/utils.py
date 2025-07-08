@@ -490,11 +490,11 @@ class RunConstraints:
 
         self.graph = graph
 
-        enable_states = nx.get_node_attributes(graph, "enabled", False)
+        enable_states = nx.get_node_attributes(graph, "enabled")
         self.enabled_nodes = [k for k, v in enable_states.items() if v]
         self.disabled_nodes = [k for k, v in enable_states.items() if not v]
 
-        unskipped_states = nx.get_node_attributes(graph, "unskip", False)
+        unskipped_states = nx.get_node_attributes(graph, "unskip")
         self.unskipped_nodes = [k for k, v in unskipped_states.items() if v]
 
     def get_enabled_steps(self, fqname):
