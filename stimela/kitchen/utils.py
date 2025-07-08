@@ -328,45 +328,35 @@ def finalize(graph, default_status):
     nodes = graph.nodes
     root = graph.graph["root"]  # Outermost recipe name.
 
-    # First off, traverse the graph and resolve the statuses on each node.
-    for node_name, node in nodes.items():
-        status = node.get("status", None)
-        if status:
-            # Resolve to the highest priority of the set statuses.
-            node["status"] = next(s for s in STATUS_HIERARCHY if s in status)
+    # Firstly, traverse the graph and resolve the statuses on each node. This
+    # resolution is based on the hierarchy defined by STATUS_HIERARCHY.
+    for node_name, status in nx.get_node_attributes(graph, "status").items():
+        resolved_status = next(s for s in STATUS_HIERARCHY if s in status)
+        graph.nodes[node_name]["status"] = resolved_status
 
-    # disabled_nodes = [k for k, v in graph.nodes(data=True) if v.get('status', None) == 'disabled']
-    # enabled_nodes = [k for k,v in nx.get_node_attributes(graph, "status").items() if v == "enabled"]
-
-    # At this point all nodes have their status and we can begin the resolution
-    # process. This needs to be done according the the hierarchy and the strong
-    # states need to be propagated first.
-    for node_name, node in nodes.items():
-
-        status = node.get("status", None)
-
-        # Disabled nodes propagate to their successors.
+    # At this point all nodes which had a status field will have been resolved
+    # to the state of highest priority. The next step is to propagate the two
+    # stronger statuses:
+    #   - 'disabled': This state is propagated to successors/descendents
+    #     ensuring that those subgraphs will not be run.
+    #   - 'enabled': This state propagates the 'implicitly_enabled' state to
+    #     its ancestors, starting from the enabled node.
+    for node_name, status in nx.get_node_attributes(graph, "status").items():
         if status == "disabled":
             for des_name in graph.successors(node_name):
                 graph.nodes[des_name]["status"] = "disabled"
-
-        # Enabled nodes propagate to their ancestors.
         elif status == "enabled":
-            dependencies = nx.shortest_path(graph.reverse(), node_name, root)
-            for anc_name in dependencies[1:]:
-                anc_node = graph.nodes[anc_name]
-                if anc_node.get("status", None) == "enabled":
-                    break  # Stop checking.
-                anc_node["status"] = "implicitly_enabled"
+            # Ancestors in reverse order. Slice excludes current node.
+            ancestors = nx.shortest_path(graph.reverse(), node_name, root)[1:]
+            for ancestor in ancestors:
+                ancestor_node = graph.nodes[ancestor]
+                if ancestor_node.get("status", None) == "enabled":
+                    break  # Stop checking if an ancestor was enabled.
+                ancestor_node["status"] = "implicitly_enabled"
 
-    # After this first loop of resolution, all nodes on disabled branches will
-    # have been set to disabled, and and enabled nodes and their necessary
-    # ancestors will have been set to enabled. This is important - after the
-    # first round of resolution the following two cases can be ignored:
-    #   - any node below a disabled node will be disabled.
-    #   - any node preceding an enabled node will be enabled.
     # The next step is to figure out the states of all the remaining
-    # weakly/disabled enabled nodes.
+    # weakly_disabled/weakly_enabled nodes. This happens in a separate
+    # traversal to ensure that all the stronger states are corretly handled.
 
     for node_name, node in nodes.items():
 
