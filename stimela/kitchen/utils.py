@@ -323,8 +323,34 @@ def apply_step_unskips(
             node = graph.nodes[node_name]
             node['unskip'] = True
 
-def finalize(graph, default_status):
+def resolve_states(
+    graph: nx.DiGraph,
+    default_status: str = "weakly_enabled"
+):
+    """Given a graph with statuses, resolve them into a boolean enable flag.
 
+    This function is resposible for the potentially complicated resolution
+    of the various statuses which have been applied to the graph. Performs
+    the following steps:
+        - replace the status on each node with its highest priority status.
+        - propagate the 'enabled' and 'disabled' statuses.
+        - propagate the 'weakly_enabled' and 'weakly_disabled' statuses.
+        - determine the status of stateless nodes.
+    Currently, this function is likely suboptimal as it requires serveral
+    traversals of the graph. Typical stimela recipes are unlikely to include
+    thousands of nodes so code readability is currently a higher priority.
+
+    Args:
+        graph:
+            The graph object to which the resolved statuses will be applied.
+        default_status:
+            The status to set on nodes which otherwise have no status. The
+            default only applies to nodes which have an 'implicitly_enabled'
+            parent.
+
+    Raises:
+        ValueError: If a status falls though the resolution logic.
+    """
     root = graph.graph["root"]  # Outermost recipe name.
 
     # Firstly, traverse the graph and resolve the statuses on each node. This
@@ -456,7 +482,7 @@ def graph_to_constraints(
     apply_step_unskips(graph, step_unskips)
 
     # Having applied all of the above, figure out the steps to run.
-    finalize(graph, default_status=default_status)
+    resolve_states(graph, default_status=default_status)
 
     return RunConstraints(graph)
 
