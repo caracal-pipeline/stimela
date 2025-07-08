@@ -341,44 +341,40 @@ def finalize(graph, default_status):
     #     ensuring that those subgraphs will not be run.
     #   - 'enabled': This state propagates the 'implicitly_enabled' state to
     #     its ancestors, starting from the enabled node.
-    for node_name, status in nx.get_node_attributes(graph, "status").items():
+    for node_name, node in graph.nodes.items():
+        status = node.get("status", None)
         if status == "disabled":
-            for des_name in graph.successors(node_name):
-                graph.nodes[des_name]["status"] = "disabled"
+            for successor in graph.successors(node_name):
+                graph.nodes[successor]["status"] = "disabled"
         elif status == "enabled":
             # Ancestors in reverse order. Slice excludes current node.
             ancestors = nx.shortest_path(graph.reverse(), node_name, root)[1:]
             for ancestor in ancestors:
                 ancestor_node = graph.nodes[ancestor]
-                if ancestor_node.get("status", None) == "enabled":
+                ancestor_status = ancestor_node.get("status", None)
+                if ancestor_status == "enabled":
                     break  # Stop checking if an ancestor was enabled.
                 ancestor_node["status"] = "implicitly_enabled"
 
-    # The next step is to figure out the states of all the remaining
-    # weakly_disabled/weakly_enabled nodes. This happens in a separate
-    # traversal to ensure that all the stronger states are corretly handled.
-
-    for node_name, node in nodes.items():
-
+    # The next step is to propagate the two weaker statuses:
+    #   - 'weakly_disabled': This state is propagated to successors/descendents
+    #     ensuring that those subgraphs will not be run.
+    #   - 'weakly_enabled': This state propagates the 'implicitly_enabled'
+    #     state to its ancestors, starting from the weakly_enabled node.
+    for node_name, node in graph.nodes.items():
         status = node.get("status", None)
-        # Weakly disabled nodes propagate to their descendents.
-        # Problem cases:
-        #   - deselect by range will weakly disable weakly enabled.
         if status == "weakly_disabled":
-            for des_name in nx.descendants(graph, node_name):
-                graph.nodes[des_name]["status"] = "weakly_disabled"
-
-        # Weakly enabled nodes propagate to their ancestors.
-        # Problem cases:
-        #   -
+            for successor in graph.successors(node_name):
+                graph.nodes[successor]["status"] = "weakly_disabled"        
         elif status == "weakly_enabled":
-            dependencies = nx.shortest_path(graph.reverse(), node_name, root)
-            for anc_name in dependencies[1:]:
-                anc_node = graph.nodes[anc_name]
-                if anc_node.get("status", None) in ("enabled", "weakly_enabled"):
-                    break
-                else:
-                    anc_node["status"] = "implicitly_enabled"
+            # Ancestors in reverse order. Slice excludes current node.
+            ancestors = nx.shortest_path(graph.reverse(), node_name, root)[1:]
+            for ancestor in ancestors:
+                ancestor_node = graph.nodes[ancestor]
+                ancestor_status = ancestor_node.get("status", None)
+                if ancestor_status in ("enabled", "weakly_enabled"):
+                    break  # Stop checking if an ancestor was enabled.
+                ancestor_node["status"] = "implicitly_enabled"
 
     # This final case is the toughest to resolve as it has some subcases.
     # A node which has no status should either be:
