@@ -325,7 +325,6 @@ def apply_step_unskips(
 
 def finalize(graph, default_status):
 
-    nodes = graph.nodes
     root = graph.graph["root"]  # Outermost recipe name.
 
     # Firstly, traverse the graph and resolve the statuses on each node. This
@@ -387,12 +386,15 @@ def finalize(graph, default_status):
     #   - 'implicitly_enabled': The descendants of this node should be set
     #     to the deault status i.e. `weakly_enabled` if the graph has no
     #     step/tag inclusions, otherwise `weakly_disabled`.
-    for node_name, node in nodes.items():
+    # We first ensure that the root node has a status set to ensure it doesn't
+    # trigger the subsequent reasoning about parent nodes.
+    root_node = graph.nodes[root]
+    root_node["status"] = root_node.get("status", default_status)
+    for node_name, node in graph.nodes.items():
         status = node.get("status", None)
         if status is None:
-            # There should only be a single parent as we are dealing with a
-            # tree. The or handles the root node, which has no parent.
-            parent = list(graph.predecessors(node_name))[0] or [node_name]
+            # There should only be a single parent as the graph is a tree.
+            parent = list(graph.predecessors(node_name))[0]
             parent_node = graph.nodes[parent]
             parent_status = parent_node.get("status")  # Must be present.
 
@@ -401,11 +403,11 @@ def finalize(graph, default_status):
             elif parent_status == "implicitly_enabled":
                 node["status"] = default_status
             else:
-                # This should never happen so raise an error.
+                # This should never happen so we raise an error.
                 raise ValueError("Unexpected node status in graph resolution.")
 
-    # Finally, simplify all enabled states into a new boolean enabled status.
-    for node_name, node in nodes.items():
+    # Finally, simplify all enabled states into a boolean enabled status.
+    for node_name, node in graph.nodes.items():
         node["enabled"] = "enabled" in node["status"]  # All enabled states.
 
 
