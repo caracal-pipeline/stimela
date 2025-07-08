@@ -360,15 +360,16 @@ def render_profiling_summary(stats: TaskStatsDatum, max_depth, unroll_loops=Fals
     table_avg.add_column("R GB", justify="right")
     table_avg.add_column("W GB", justify="right")
 
-    for name, (elapsed, sum, peak) in stats.items():
-        if name and len(name) <= max_depth:
+    for name_tuple, (elapsed, sum, peak) in stats.items():
+        if name_tuple and len(name_tuple) <= max_depth:
             # skip loop iterations, if not unrolling loops 
-            if not unroll_loops and any(n.endswith("]") for n in name):
+            if not unroll_loops and any(n.endswith("]") for n in name_tuple):
                 continue
             secs, mins, hours = elapsed % 60, int(elapsed // 60) % 60, int(elapsed // 3600)
             tstr = f"{hours:d}:{mins:02d}:{secs:04.1f}"
             avg = sum.averaged()
-            avg_row = [".".join(name), tstr]
+            indentation_level = len(name_tuple) - 1
+            avg_row = ["  " * indentation_level + name_tuple[-1], tstr]
             peak_row = avg_row.copy()
             for f, label in _printed_stats.items():
                 if f in available_stats:
