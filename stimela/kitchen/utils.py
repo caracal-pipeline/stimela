@@ -497,8 +497,8 @@ class RunConstraints:
         self.enabled_nodes = [k for k, v in enable_states.items() if v]
         self.disabled_nodes = [k for k, v in enable_states.items() if not v]
 
-        force_states = nx.get_node_attributes(graph, "unskip")
-        self.forced_nodes = [k for k in force_states.keys()]
+        unskipped_states = nx.get_node_attributes(graph, "unskip", False)
+        self.unskipped_nodes = [k for k, v in unskipped_states.items() if v]
 
     def get_enabled_steps(self, fqname):
         return {
@@ -512,8 +512,8 @@ class RunConstraints:
             if k in self.disabled_nodes
         }
 
-    def get_forced_steps(self, fqname):
+    def get_unskipped_steps(self, fqname):
         return {
             k.lstrip(f"{fqname}.") for k in self.graph.adj[fqname].keys()
-            if k in self.forced_nodes
+            if k in self.unskipped_nodes
         }
