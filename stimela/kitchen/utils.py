@@ -409,9 +409,9 @@ def resolve_states(
     #   - 'enabled' or 'weakly_enabled': The descendants of this node should
     #     should be 'weakly_enabled' as their parent is in a non-implicit
     #     enabled state.
-    #   - 'implicitly_enabled': The descendants of this node should be set
-    #     to the deault status i.e. `weakly_enabled` if the graph has no
-    #     step/tag inclusions, otherwise `weakly_disabled`.
+    #   - neither 'enabled' nor 'weakly_enabled': The descendants of this node
+    #     should be set to the default status i.e. 'weakly_enabled' if the
+    #     graph has no step/tag inclusions, otherwise 'weakly_disabled'.
     # We first ensure that the root node has a status set to ensure it doesn't
     # trigger the subsequent reasoning about parent nodes.
     root_node = graph.nodes[root]
@@ -426,11 +426,8 @@ def resolve_states(
 
             if parent_status in ("enabled", "weakly_enabled"):
                 node["status"] = "weakly_enabled"
-            elif parent_status == "implicitly_enabled":
-                node["status"] = default_status
             else:
-                # This should never happen so we raise an error.
-                raise ValueError("Unexpected node status in graph resolution.")
+                node["status"] = default_status
 
     # Finally, simplify all enabled states into a boolean enabled status.
     for node_name, node in graph.nodes.items():
@@ -502,18 +499,18 @@ class RunConstraints:
 
     def get_enabled_steps(self, fqname):
         return {
-            k.lstrip(f"{fqname}.") for k in self.graph.adj[fqname].keys()
+            k[len(fqname) + 1:] for k in self.graph.adj[fqname].keys()
             if k in self.enabled_nodes
         }
 
     def get_disabled_steps(self, fqname):
         return {
-            k.lstrip(f"{fqname}.") for k in self.graph.adj[fqname].keys()
+            k[len(fqname) + 1:] for k in self.graph.adj[fqname].keys()
             if k in self.disabled_nodes
         }
 
     def get_unskipped_steps(self, fqname):
         return {
-            k.lstrip(f"{fqname}.") for k in self.graph.adj[fqname].keys()
+            k[len(fqname) + 1:] for k in self.graph.adj[fqname].keys()
             if k in self.unskipped_nodes
         }
