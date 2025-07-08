@@ -69,8 +69,8 @@ class SlurmOptions(object):
     def wrap_build_command(self, args: List[str], fqname: Optional[str]=None, log: Optional[logging.Logger]=None) -> List[str]:
         if self.build_local:
             return args
-        return self._wrap(self.srun_opts_build if self.srun_opts_build is not None else self.srun_opts, args, 
-            log_args=args, fqname=fqname)        
+        return self._wrap(self.srun_opts_build if self.srun_opts_build is not None else self.srun_opts, args,
+                          log_args=args, fqname=fqname)
     
     def validate(self, log: logging.Logger):
         pass

@@ -91,9 +91,9 @@ class PythonCallableFlavour(_CallableFlavour):
     # Full command used to launch interpreter. {python} gets substituted for the interpreter path
     interpreter_command: str = "{python} -u"
     # commands run prior to invoking function
-    pre_command: Optional[str] = None
+    pre_commands: Optional[Dict[str, str]] = None
     # commands run post invoking function
-    post_command: Optional[str] = None
+    post_commands: Optional[Dict[str, str]] = None
 
     def finalize(self, cab: Cab):
         super().finalize(cab)
@@ -154,13 +154,21 @@ class PythonCallableFlavour(_CallableFlavour):
             msg4 = f"""print("## return value is ", _result)"""
         else:
             msg1 = msg2 = msg3 = msg4 = ""
+
+        pre_command_str = ""
+        if self.pre_commands:
+            pre_command_str += "\n".join(self.pre_commands.values())
+        post_command_str = ""
+        if self.post_commands:
+            post_command_str += "\n".join(self.post_commands.values())
+
         code = f"""
 import sys, json, zlib, base64
 _inputs = json.loads(zlib.decompress(
                         base64.b64decode(sys.argv[1].encode("ascii"))
                     ).decode("ascii"))
 sys.path.append('.')
-{self.pre_command or 'pass'}
+{pre_command_str}
 {msg1}
 from {py_module} import {py_function}
 try:
@@ -176,7 +184,7 @@ else:
 _result = {py_function}(**_inputs)
 {msg4}
 {self._yield_output}
-{self.post_command or 'pass'}
+{post_command_str}
         """
 
         args = get_python_interpreter_args(cab, subst, virtual_env=virtual_env)
@@ -203,9 +211,9 @@ class PythonCodeFlavour(_BaseFlavour):
     # Full command used to launch interpreter. {python} gets substituted for the interpreter path
     interpreter_command: str = "{python} -u"
     # commands run prior to invoking code
-    pre_command: Optional[str] = None
+    pre_commands: Optional[Dict[str, str]] = None
     # commands run post invoking code
-    post_command: Optional[str] = None
+    post_commands: Optional[Dict[str, str]] = None
 
     def finalize(self, cab: Cab):
         super().finalize(cab)
@@ -247,31 +255,32 @@ class PythonCodeFlavour(_BaseFlavour):
         params_arg = json.dumps(pass_params)
         inp_dict = self.input_dict or "_params"
 
-        pre_command = f"""import sys, json
+        pre_command_str = f"""
+import sys, json
 {inp_dict} = json.loads(sys.argv[1])
 """
-        if self.pre_command:
-            pre_command += self.pre_command
+        if self.pre_commands:
+            pre_command_str += "\n".join(self.pre_commands.values())
 
         if self.input_vars:
             for name in pass_params:
                 var_name = name.replace("-", "_").replace(".", "__")
-                pre_command += f"""{var_name} = {inp_dict}["{name}"]\n"""
+                pre_command_str += f"""{var_name} = {inp_dict}["{name}"]\n"""
 
         # form up code to print outputs in JSON
-        post_command = ""
+        post_command_str = ""
         pass_outputs = [name for name, schema in cab.outputs.items()
                         if not schema.is_named_output and not schema.implicit]
         if pass_outputs:
-            post_command += "from scabha.cab_utils import yield_output\n"
+            post_command_str += "from scabha.cab_utils import yield_output\n"
             if self.output_vars:
                 for name in pass_outputs:
                     var_name = name.replace("-", "_").replace(".", "__")
-                    post_command += f"yield_output(**{{'{name}': {var_name}}})\n"
+                    post_command_str += f"yield_output(**{{'{name}': {var_name}}})\n"
         
-        if self.post_command:
-            post_command += self.post_command
+        if self.post_commands:
+            post_command_str += "\n".join(self.post_commands.values())
 
         # form up interpreter invocation
         args = get_python_interpreter_args(cab, subst, virtual_env=virtual_env)
-        return args + ["-c", pre_command + command + post_command, params_arg], args + ["-c", "..."]
+        return args + ["-c", pre_command_str + command + post_command_str, params_arg], args + ["-c", "..."]
