@@ -365,7 +365,7 @@ def finalize(graph, default_status):
         status = node.get("status", None)
         if status == "weakly_disabled":
             for successor in graph.successors(node_name):
-                graph.nodes[successor]["status"] = "weakly_disabled"        
+                graph.nodes[successor]["status"] = "weakly_disabled"
         elif status == "weakly_enabled":
             # Ancestors in reverse order. Slice excludes current node.
             ancestors = nx.shortest_path(graph.reverse(), node_name, root)[1:]
@@ -376,47 +376,37 @@ def finalize(graph, default_status):
                     break  # Stop checking if an ancestor was enabled.
                 ancestor_node["status"] = "implicitly_enabled"
 
-    # This final case is the toughest to resolve as it has some subcases.
-    # A node which has no status should either be:
-    #   - set to weakly enabled if the graph is unconstrained
-    #   - set to weakly disabled in the graph is constrained
-    #   - set to weakly enabled if it is the child of an explictly enabled
-    #     node and lacks explicitly enabled siblings
-
+    # The final step in the resolution is to set the status on nodes which
+    # have no status. There is no need to consider the 'disabled' or
+    # 'weakly_disabled' states as they will have been propagated in the
+    # previous steps. There are two cases based on whether the node's parent
+    # is:
+    #   - 'enabled' or 'weakly_enabled': The descendants of this node should
+    #     should be 'weakly_enabled' as their parent is in a non-implicit
+    #     enabled state.
+    #   - 'implicitly_enabled': The descendants of this node should be set
+    #     to the deault status i.e. `weakly_enabled` if the graph has no
+    #     step/tag inclusions, otherwise `weakly_disabled`.
     for node_name, node in nodes.items():
-
         status = node.get("status", None)
+        if status is None:
+            # There should only be a single parent as we are dealing with a
+            # tree. The or handles the root node, which has no parent.
+            parent = list(graph.predecessors(node_name))[0] or [node_name]
+            parent_node = graph.nodes[parent]
+            parent_status = parent_node.get("status")  # Must be present.
 
-        # This node has no status at present, inherit from parent or, failing
-        # that, use the default value. The latter case applies to the root.
-        # Inherited statuses will be weakened.
-        if status is None:  # This should be top down i.e. only need parent, not ancestors.
-            dependencies = nx.shortest_path(graph.reverse(), node_name, root)
-            for anc_name in dependencies[1:] or [node_name]:  # Handle root case.
-                anc_node = graph.nodes[anc_name]
-                anc_status = anc_node.get("status", None)
+            if parent_status in ("enabled", "weakly_enabled"):
+                node["status"] = "weakly_enabled"
+            elif parent_status == "implicitly_enabled":
+                node["status"] = default_status
+            else:
+                # This should never happen so raise an error.
+                raise ValueError("Unexpected node status in graph resolution.")
 
-                if anc_status in ("enabled", "weakly_enabled"):
-                    node["status"] = "weakly_enabled"
-                    break
-                elif anc_status == "implicitly_enabled":
-                    node["status"] = default_status #"weakly_disabled"
-                    break
-                else:
-                    node["status"] = default_status
-                    break
-            # parents = list(graph.reverse().neighbors(node_name))
-            # if parents:
-            #     parent_status = graph.nodes[parents[0]]["status"]
-            #     if "enable" in parent_status:
-            #         node["status"] = "weakly_enabled"
-            #     else:
-            #         node["status"] = "weakly_disabled"
-            # else:
-            # node["status"] = default_status
-
+    # Finally, simplify all enabled states into a new boolean enabled status.
     for node_name, node in nodes.items():
-        node["enabled"] = node["status"] in ("weakly_enabled", "implicitly_enabled", "enabled")
+        node["enabled"] = "enabled" in node["status"]  # All enabled states.
 
 
 def reformat_opts(opts: List[str], prepend: Optional[str] = None):
