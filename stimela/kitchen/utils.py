@@ -487,8 +487,24 @@ def graph_to_constraints(
 
 
 class RunConstraints:
+    """Simple class used for querying the state of steps in a given recipe.
 
-    def __init__(self, graph):
+    This simple class wraps an underlying networkx.DiGraph object which
+    represents the state of each step in a given recipe and its subrecipes.
+
+    Attributes:
+        graph:
+            A networkx.DiGraph representing a stimela recipe.
+        enabled_nodes:
+            Nodes of the underlying graph which have the enabled state.
+        disabled_nodes:
+            Nodes of the underlying graph which have the disabled state.
+        unskipped_nodes:
+            Nodes of the underlying graph which have the unskipped state.
+    """
+
+    def __init__(self, graph: nx.DiGraph):
+        """Initialises an instance from a networkx.DiGraph."""
 
         self.graph = graph
 
@@ -500,18 +516,21 @@ class RunConstraints:
         self.unskipped_nodes = [k for k, v in unskipped_states.items() if v]
 
     def get_enabled_steps(self, fqname):
+        """Returns a tuple of enabled steps."""
         return tuple(
             k[len(fqname) + 1:] for k in self.graph.adj[fqname].keys()
             if k in self.enabled_nodes
         )
 
     def get_disabled_steps(self, fqname):
+        """Returns a tuple of disabled steps."""
         return tuple(
             k[len(fqname) + 1:] for k in self.graph.adj[fqname].keys()
             if k in self.disabled_nodes
         )
 
     def get_unskipped_steps(self, fqname):
+        """Returns a tuple of unskipped steps."""
         return tuple(
             k[len(fqname) + 1:] for k in self.graph.adj[fqname].keys()
             if k in self.unskipped_nodes
