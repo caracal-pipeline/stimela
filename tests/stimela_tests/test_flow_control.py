@@ -43,6 +43,10 @@ ALL_STEPS = {
     "s5"
 }
 
+@pytest.fixture(autouse=True)
+def change_test_dir(request, monkeypatch):
+    monkeypatch.chdir(request.fspath.dirname)
+
 @pytest.fixture
 def base_command():
     return "stimela -b native run test_subrecipes.yml recipe"
