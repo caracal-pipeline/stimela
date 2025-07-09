@@ -500,19 +500,19 @@ class RunConstraints:
         self.unskipped_nodes = [k for k, v in unskipped_states.items() if v]
 
     def get_enabled_steps(self, fqname):
-        return {
+        return tuple(
             k[len(fqname) + 1:] for k in self.graph.adj[fqname].keys()
             if k in self.enabled_nodes
-        }
+        )
 
     def get_disabled_steps(self, fqname):
-        return {
+        return tuple(
             k[len(fqname) + 1:] for k in self.graph.adj[fqname].keys()
             if k in self.disabled_nodes
-        }
+        )
 
     def get_unskipped_steps(self, fqname):
-        return {
+        return tuple(
             k[len(fqname) + 1:] for k in self.graph.adj[fqname].keys()
             if k in self.unskipped_nodes
-        }
+        )

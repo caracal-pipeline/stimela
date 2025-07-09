@@ -346,57 +346,66 @@ class Recipe(Cargo):
         self,
         constraints: RunConstraints,
     ) -> int:
-        try:
-            self.log.info(f"selecting recipe steps for (sub)recipe: [bold green]{self.name}[/bold green]")
+        """Apply the state of a RunConstraints object to the current recipe.
 
-            enabled_steps = constraints.get_enabled_steps(self.fqname)
-            disabled_steps = constraints.get_disabled_steps(self.fqname)
-            unskipped_steps = constraints.get_unskipped_steps(self.fqname)
+        Given a RunConstraints object, query it for enabled, disabled and
+        unskipped steps at the current recipe level before recursing into
+        subrecipes. After this method is run, all the skip attributes of
+        the recipe steps should be correctly set.
 
-            # TODO(JSKenyon): Restore some version of this logging.
-            # if always_steps:
-            #     self.log.info(f"the following step(s) are marked as always run: ({', '.join(always_steps)})")
-            # if never_steps:
-            #     self.log.info(f"the following step(s) are marked as never run: ({', '.join(never_steps)})")
-            # if tag_selected_steps:
-            #     self.log.info(f"the following step(s) have been selected by tag: ({', '.join(tag_selected_steps)})")
-            # if tag_skipped_steps:
-            #     self.log.info(f"the following step(s) have been skipped by tag: ({', '.join(tag_skipped_steps)})")
-            # if selected_steps:
-            #     self.log.info(f"the following step(s) have been explicitly selected: ({', '.join(selected_steps)})")
-            # if skipped_steps:
-            #     self.log.info(f"the following step(s) have been explicitly skipped: ({', '.join(skipped_steps)})")
-            # if cherry_picked_steps:
-            #     self.log.info(f"the following step(s) have been cherry-picked: ({', '.join(cherry_picked_steps)})")
+        Args:
+            constraints:
+                A RunConstraints object which can be queried for the state
+                of various recipe steps (graph nodes).
 
-            # Make the recipe aware of the unskipped steps i.e. steps which
-            # have skip fields in the recipe but which should be run regardless.
-            # This does not guarantee that the step is enabled (selected).
-            for step_name in unskipped_steps:
-                self.unskip_step(step_name)
+        Returns:
+            An integer count of the enabled steps.
+        """
 
-            # Apply the skip flags to disabled steps.
-            for step_name in disabled_steps:
-                step = self.steps[step_name]
-                step.skip = step._skip = True
+        self.log.info(
+            f"selecting recipe steps for (sub)recipe: "
+            f"[bold green]{self.name}[/bold green]"
+        )
 
-            if not enabled_steps:
-                self.log.info("no steps have been selected for execution")
-                return 0
+        enabled_steps = constraints.get_enabled_steps(self.fqname)
+        disabled_steps = constraints.get_disabled_steps(self.fqname)
+        unskipped_steps = constraints.get_unskipped_steps(self.fqname)
 
-            # Log the steps which have been selected to run.
-            self.log.info(f"the following recipe steps have been selected for execution:")
-            self.log.info(f"    [bold green]{' '.join(sorted(enabled_steps))}[/bold green]")
+        # Make the recipe aware of the unskipped steps i.e. steps which
+        # have skip fields in the recipe but which should be run regardless.
+        # This does not guarantee that the step is enabled (selected).
+        for step_name in unskipped_steps:
+            self.unskip_step(step_name)
 
-            # Recurse into subrecipes, applying the constraints.
-            for step in self.steps.values():
-                if isinstance(step.cargo, Recipe):
-                    step.cargo.restrict_steps(constraints)
+        # Apply the skip flags to disabled steps.
+        for step_name in disabled_steps:
+            step = self.steps[step_name]
+            step.skip = step._skip = True
 
-            return len(enabled_steps)
-        except StepSelectionError as exc:
-            log_exception(exc, log=self.log)
-            raise exc
+        if not enabled_steps:
+            self.log.info("no steps have been selected for execution")
+            return 0
+
+        # Log the steps which have been selected to run.
+        msg = ' '.join(enabled_steps)
+        self.log.info(f"the following recipe steps have been enabled:")
+        self.log.info(f"    [bold green]{msg}[/bold green]")
+
+        if disabled_steps:
+            msg = ' '.join(disabled_steps)
+            self.log.info(f"the following recipe steps have been disabled:")
+            self.log.info(f"    [bold grey50]{msg}[/bold grey50]")
+        if unskipped_steps:
+            msg = ' '.join(unskipped_steps)
+            self.log.info(f"the following recipe steps have been unskipped:")
+            self.log.info(f"    [bold cyan]{msg}[/bold cyan]")
+
+        # Recurse into subrecipes, applying the constraints.
+        for step in self.steps.values():
+            if isinstance(step.cargo, Recipe):
+                step.cargo.restrict_steps(constraints)
+
+        return len(enabled_steps)
 
 
     def add_step(self, step: Step, label: str = None):
