@@ -46,12 +46,13 @@ for arg in "$@"; do
   args+=("$a")
 done
 
-echo "names: ${names[@]}"
-echo "fsdict: ${!fsdict[@]}"
-echo "command: $command"
-for arg in "${args[@]}"; do
-  echo "argument: $arg"
-done
+## uncomment for debugging
+# echo "names: ${names[@]}"
+# echo "fsdict: ${!fsdict[@]}"
+# echo "command: $command"
+# for arg in "${args[@]}"; do
+#   echo "argument: $arg"
+# done
 
 clean_fs() {
   for fs in "${fsdict[@]}"; do
@@ -60,7 +61,8 @@ clean_fs() {
       rm -fr $fs
     fi
   done
-  echo "Tmpfs cleanup complete"
+  ## uncomment for debugging
+  # echo "Tmpfs cleanup complete"
 }
 
 # Cleanup function to be called on script exit or interruption
