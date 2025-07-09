@@ -402,10 +402,11 @@ def resolve_states(
                 ancestor_node["status"] = "implicitly_enabled"
 
     # The final step in the resolution is to set the status on nodes which
-    # have no status. There is no need to consider the 'disabled' or
-    # 'weakly_disabled' states as they will have been propagated in the
-    # previous steps. There are two cases based on whether the node's parent
-    # is:
+    # have no status and ensure that existing statuses propagate through
+    # implicitly enabled nodes correctly. There is no need to consider the
+    # 'disabled' or 'weakly_disabled' states as they will have been propagated
+    # in the previous steps. There are two cases based on whether the node's
+    # parent is:
     #   - 'enabled' or 'weakly_enabled': The descendants of this node should
     #     should be 'weakly_enabled' as their parent is in a non-implicit
     #     enabled state.
@@ -418,7 +419,7 @@ def resolve_states(
     root_node["status"] = root_node.get("status", default_status)
     for node_name, node in graph.nodes.items():
         status = node.get("status", None)
-        if status is None:
+        if status in (None, "implicitly_enabled") and node_name != root:
             # There should only be a single parent as the graph is a tree.
             parent = list(graph.predecessors(node_name))[0]
             parent_node = graph.nodes[parent]
@@ -427,7 +428,8 @@ def resolve_states(
             if parent_status in ("enabled", "weakly_enabled"):
                 node["status"] = "weakly_enabled"
             else:
-                node["status"] = default_status
+                # Do not alter 'implicitly_enabled' nodes in this case.
+                node["status"] = status or default_status
 
     # Finally, simplify all enabled states into a boolean enabled status.
     for node_name, node in graph.nodes.items():

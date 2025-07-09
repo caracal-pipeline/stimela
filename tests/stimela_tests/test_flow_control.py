@@ -4,24 +4,43 @@ from .test_recipe import change_test_dir, run, verify_output
 # TODO(JSKenyon): This should be made programmatic at some point.
 ALL_STEPS = {
     "s1",
+    "s2",
     "s2.t1-always",
     "s2.t2-never-foo",
     "s2.t3",
     "s2.t4-foo-bar",
     "s2.t5-bar",
     "s2.t6-skip",
+    "s2.t7",
+    "s2.t7.ssr-1-always",
+    "s2.t7.ssr-2-never",
+    "s2.t7.ssr-3-foo",
+    "s2.t7.ssr-4-skip",
+    "s3",
     "s3.t1-always",
     "s3.t2-never-foo",
     "s3.t3",
     "s3.t4-foo-bar",
     "s3.t5-bar",
-    "s3.t6-skip"
+    "s3.t6-skip",
+    "s3.t7",
+    "s3.t7.ssr-1-always",
+    "s3.t7.ssr-2-never",
+    "s3.t7.ssr-3-foo",
+    "s3.t7.ssr-4-skip",
+    "s4",
     "s4.t1-always",
     "s4.t2-never-foo",
     "s4.t3",
     "s4.t4-foo-bar",
     "s4.t5-bar",
-    "s4.t6-skip"
+    "s4.t6-skip",
+    "s4.t7",
+    "s4.t7.ssr-1-always",
+    "s4.t7.ssr-2-never",
+    "s4.t7.ssr-3-foo",
+    "s4.t7.ssr-4-skip",
+    "s5"
 }
 
 @pytest.fixture
@@ -60,14 +79,22 @@ def test_no_cli_options(base_command):
     print(output)
     run_steps = {
         "s1",
+        "s2",
         "s2.t1-always",
         "s2.t3",
         "s2.t4-foo-bar",
         "s2.t5-bar",
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s2.t7.ssr-3-foo",
+        "s4",
         "s4.t1-always",
         "s4.t3",
         "s4.t4-foo-bar",
-        "s4.t5-bar"
+        "s4.t5-bar",
+        "s4.t7",
+        "s4.t7.ssr-1-always",
+        "s4.t7.ssr-3-foo"
     }
 
     validate_run(output, run_steps)
@@ -80,15 +107,26 @@ def test_select_by_tag_case_a(base_command):
     print(output)
     run_steps = {
         "s1",
+        "s2",
         "s2.t1-always",
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s3",
         "s3.t1-always",
         "s3.t3",
         "s3.t4-foo-bar",
         "s3.t5-bar",
+        "s3.t7",
+        "s3.t7.ssr-1-always",
+        "s3.t7.ssr-3-foo",
+        "s4",
         "s4.t1-always",
         "s4.t3",
         "s4.t4-foo-bar",
         "s4.t5-bar",
+        "s4.t7",
+        "s4.t7.ssr-1-always",
+        "s4.t7.ssr-3-foo",
     }
 
     validate_run(output, run_steps)
@@ -100,10 +138,16 @@ def test_select_by_tag_case_b(base_command):
     print(output)
     run_steps = {
         "s1",
+        "s2",
         "s2.t1-always",
         "s2.t4-foo-bar",
         "s2.t5-bar",
-        "s4.t1-always"
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s4",
+        "s4.t1-always",
+        "s4.t7",
+        "s4.t7.ssr-1-always"
     }
 
     validate_run(output, run_steps)
@@ -115,10 +159,16 @@ def test_select_by_tag_case_c(base_command):
     print(output)
     run_steps = {
         "s1",
+        "s2",
         "s2.t1-always",
         "s2.t2-never-foo",
         "s2.t4-foo-bar",
-        "s4.t1-always"
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s4",
+        "s4.t1-always",
+        "s4.t7",
+        "s4.t7.ssr-1-always"
     }
 
     validate_run(output, run_steps)
@@ -130,10 +180,14 @@ def test_skip_by_tag_case_a(base_command):
     print(output)
     run_steps = {
         "s1",
+        "s2",
         "s2.t1-always",
         "s2.t3",
         "s2.t4-foo-bar",
-        "s2.t5-bar"
+        "s2.t5-bar",
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s2.t7.ssr-3-foo"
     }
 
     validate_run(output, run_steps)
@@ -145,12 +199,20 @@ def test_skip_by_tag_case_b(base_command):
     print(output)
     run_steps = {
         "s1",
+        "s2",
         "s2.t1-always",
         "s2.t3",
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s2.t7.ssr-3-foo",
+        "s4",
         "s4.t1-always",
         "s4.t3",
         "s4.t4-foo-bar",
-        "s4.t5-bar"
+        "s4.t5-bar",
+        "s4.t7",
+        "s4.t7.ssr-1-always",
+        "s4.t7.ssr-3-foo"
     }
 
     validate_run(output, run_steps)
@@ -162,12 +224,22 @@ def test_select_by_step_case_a(base_command):
     print(output)
     run_steps = {
         "s1",
+        "s2",
         "s2.t1-always",
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s3",
         "s3.t1-always",
         "s3.t3",
         "s3.t4-foo-bar",
         "s3.t5-bar",
-        "s4.t1-always"
+        "s3.t7",
+        "s3.t7.ssr-1-always",
+        "s3.t7.ssr-3-foo",
+        "s4",
+        "s4.t1-always",
+        "s4.t7",
+        "s4.t7.ssr-1-always"
     }
 
     validate_run(output, run_steps)
@@ -179,10 +251,19 @@ def test_select_by_step_case_b(base_command):
     print(output)
     run_steps = {
         "s1",
+        "s2",
         "s2.t1-always",
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s3",
         "s3.t1-always",
         "s3.t3",
-        "s4.t1-always"
+        "s3.t7",
+        "s3.t7.ssr-1-always",
+        "s4",
+        "s4.t1-always",
+        "s4.t7",
+        "s4.t7.ssr-1-always"
     }
 
     validate_run(output, run_steps)
@@ -194,10 +275,19 @@ def test_select_by_step_case_c(base_command):
     print(output)
     run_steps = {
         "s1",
+        "s2",
         "s2.t1-always",
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s3",
         "s3.t1-always",
         "s3.t6-skip",
-        "s4.t1-always"
+        "s3.t7",
+        "s3.t7.ssr-1-always",
+        "s4",
+        "s4.t1-always",
+        "s4.t7",
+        "s4.t7.ssr-1-always",
     }
 
     validate_run(output, run_steps)
@@ -209,15 +299,18 @@ def test_select_by_step_range_case_a(base_command):
     print(output)
     run_steps = {
         "s1",
+        "s2",
         "s2.t1-always",
         "s2.t3",
         "s2.t4-foo-bar",
         "s2.t5-bar",
-        # "s3.t1-always",   # s3 is marked as never - what should happen?
-        # "s3.t3",
-        # "s3.t4-foo-bar",
-        # "s3.t5-bar",
-        # "s4.t1-always"
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s2.t7.ssr-3-foo",
+        "s4",
+        "s4.t1-always",
+        "s4.t7",
+        "s4.t7.ssr-1-always"
     }
 
     validate_run(output, run_steps)
@@ -229,11 +322,17 @@ def test_select_by_step_range_case_b(base_command):
     print(output)
     run_steps = {
         "s1",
+        "s2",
         "s2.t1-always",
         "s2.t3",
         "s2.t4-foo-bar",
         "s2.t5-bar",
-        "s4.t1-always"
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s4",
+        "s4.t1-always",
+        "s4.t7",
+        "s4.t7.ssr-1-always"
     }
 
     validate_run(output, run_steps)
@@ -245,15 +344,18 @@ def test_select_by_unbounded_step_range_case_a(base_command):
     print(output)
     run_steps = {
         "s1",
+        "s2",
         "s2.t1-always",
-        # "s3.t1-always",  # Again, s3 is never.
-        # "s3.t3",
-        # "s3.t4-foo-bar",
-        # "s3.t5-bar",
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s4",
         "s4.t1-always",
         "s4.t3",
         "s4.t4-foo-bar",
-        "s4.t5-bar"
+        "s4.t5-bar",
+        "s4.t7",
+        "s4.t7.ssr-1-always",
+        "s4.t7.ssr-3-foo"
     }
 
     validate_run(output, run_steps)
@@ -265,11 +367,18 @@ def test_select_by_unbounded_step_range_case_b(base_command):
     print(output)
     run_steps = {
         "s1",
+        "s2",
         "s2.t1-always",
         "s2.t3",
         "s2.t4-foo-bar",
         "s2.t5-bar",
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s2.t7.ssr-3-foo",
+        "s4",
         "s4.t1-always",
+        "s4.t7",
+        "s4.t7.ssr-1-always",
     }
 
     validate_run(output, run_steps)
@@ -281,13 +390,18 @@ def test_select_by_unbounded_step_range_case_c(base_command):
     print(output)
     run_steps = {
         "s1",
+        "s2",
         "s2.t1-always",
-        # "s3.t1-always",  # s3 is never.
-        # "s3.t5-bar",
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s4",
         "s4.t1-always",
         "s4.t3",
         "s4.t4-foo-bar",
-        "s4.t5-bar"
+        "s4.t5-bar",
+        "s4.t7",
+        "s4.t7.ssr-1-always",
+        "s4.t7.ssr-3-foo"
     }
 
     validate_run(output, run_steps)
@@ -299,10 +413,16 @@ def test_select_by_unbounded_step_range_case_d(base_command):
     print(output)
     run_steps = {
         "s1",
+        "s2",
         "s2.t1-always",
         "s2.t3",
         "s2.t4-foo-bar",
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s4",
         "s4.t1-always",
+        "s4.t7",
+        "s4.t7.ssr-1-always",
     }
 
     validate_run(output, run_steps)
@@ -315,10 +435,14 @@ def test_skip_by_step_case_a(base_command):
     print(output)
     run_steps = {
         "s1",
+        "s4",
         "s4.t1-always",
         "s4.t3",
         "s4.t4-foo-bar",
-        "s4.t5-bar"
+        "s4.t5-bar",
+        "s4.t7",
+        "s4.t7.ssr-1-always",
+        "s4.t7.ssr-3-foo"
     }
 
     validate_run(output, run_steps)
@@ -330,13 +454,21 @@ def test_skip_by_step_case_b(base_command):
     print(output)
     run_steps = {
         "s1",
+        "s2",
         "s2.t1-always",
         "s2.t4-foo-bar",
         "s2.t5-bar",
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s2.t7.ssr-3-foo",
+        "s4",
         "s4.t1-always",
         "s4.t3",
         "s4.t4-foo-bar",
-        "s4.t5-bar"
+        "s4.t5-bar",
+        "s4.t7",
+        "s4.t7.ssr-1-always",
+        "s4.t7.ssr-3-foo"
     }
 
     validate_run(output, run_steps)
@@ -347,10 +479,14 @@ def test_skip_by_step_range_case_a(base_command):
     assert retcode == 0
     print(output)
     run_steps = {
+        "s4",
         "s4.t1-always",
         "s4.t3",
         "s4.t4-foo-bar",
-        "s4.t5-bar"
+        "s4.t5-bar",
+        "s4.t7",
+        "s4.t7.ssr-1-always",
+        "s4.t7.ssr-3-foo"
     }
 
     validate_run(output, run_steps)
@@ -362,12 +498,20 @@ def test_skip_by_step_range_case_b(base_command):
     print(output)
     run_steps = {
         "s1",
+        "s2",
         "s2.t1-always",
         "s2.t5-bar",
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s2.t7.ssr-3-foo",
         "s4.t1-always",
+        "s4",
         "s4.t3",
         "s4.t4-foo-bar",
-        "s4.t5-bar"
+        "s4.t5-bar",
+        "s4.t7",
+        "s4.t7.ssr-1-always",
+        "s4.t7.ssr-3-foo"
     }
 
     validate_run(output, run_steps)
@@ -389,10 +533,14 @@ def test_skip_by_unbounded_step_range_case_b(base_command):
     assert retcode == 0
     print(output)
     run_steps = {
+        "s4",
         "s4.t1-always",
         "s4.t3",
         "s4.t4-foo-bar",
-        "s4.t5-bar"
+        "s4.t5-bar",
+        "s4.t7",
+        "s4.t7.ssr-1-always",
+        "s4.t7.ssr-3-foo"
     }
 
     validate_run(output, run_steps)
@@ -404,6 +552,7 @@ def test_skip_by_unbounded_step_range_case_c(base_command):
     print(output)
     run_steps = {
         "s1",
+        "s2",
         "s2.t1-always",
         "s2.t3"
     }
@@ -416,12 +565,20 @@ def test_skip_by_unbounded_step_range_case_d(base_command):
     assert retcode == 0
     print(output)
     run_steps = {
+        "s2",
         "s2.t4-foo-bar",
         "s2.t5-bar",
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s2.t7.ssr-3-foo",
+        "s4",
         "s4.t1-always",
         "s4.t3",
         "s4.t4-foo-bar",
-        "s4.t5-bar"
+        "s4.t5-bar",
+        "s4.t7",
+        "s4.t7.ssr-1-always",
+        "s4.t7.ssr-3-foo"
     }
 
     validate_run(output, run_steps)
@@ -433,14 +590,22 @@ def test_unskip_steps_case_a(base_command):
     print(output)
     run_steps = {
         "s1",
+        "s2",
         "s2.t1-always",
         "s2.t3",
         "s2.t4-foo-bar",
         "s2.t5-bar",
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s2.t7.ssr-3-foo",
+        "s4",
         "s4.t1-always",
         "s4.t3",
         "s4.t4-foo-bar",
         "s4.t5-bar",
+        "s4.t7",
+        "s4.t7.ssr-1-always",
+        "s4.t7.ssr-3-foo",
         "s5"
     }
 
@@ -453,15 +618,23 @@ def test_unskip_steps_case_b(base_command):
     print(output)
     run_steps = {
         "s1",
+        "s2",
         "s2.t1-always",
         "s2.t3",
         "s2.t4-foo-bar",
         "s2.t5-bar",
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s2.t7.ssr-3-foo",
+        "s4",
         "s4.t1-always",
         "s4.t3",
         "s4.t4-foo-bar",
         "s4.t5-bar",
-        "s4.t6-skip"
+        "s4.t6-skip",
+        "s4.t7",
+        "s4.t7.ssr-1-always",
+        "s4.t7.ssr-3-foo"
     }
 
     validate_run(output, run_steps)
@@ -473,16 +646,27 @@ def test_unskip_steps_case_c(base_command):
     print(output)
     run_steps = {
         "s1",
+        "s2",
         "s2.t1-always",
         "s2.t3",
         "s2.t4-foo-bar",
         "s2.t5-bar",
         "s2.t6-skip",
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s2.t7.ssr-3-foo",
+        "s2.t7.ssr-4-skip",
+        "s4",
         "s4.t1-always",
         "s4.t3",
         "s4.t4-foo-bar",
         "s4.t5-bar",
-        "s4.t6-skip"
+        "s4.t6-skip",
+        "s4.t7",
+        "s4.t7.ssr-1-always",
+        "s4.t7.ssr-3-foo",
+        "s4.t7.ssr-4-skip",
+        "s5"
     }
 
     validate_run(output, run_steps)
@@ -494,15 +678,24 @@ def test_unskip_steps_case_d(base_command):
     print(output)
     run_steps = {
         "s1",
+        "s2",
         "s2.t1-always",
         "s2.t3",
         "s2.t4-foo-bar",
         "s2.t5-bar",
         "s2.t6-skip",
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s2.t7.ssr-3-foo",
+        "s2.t7.ssr-4-skip",
+        "s4",
         "s4.t1-always",
         "s4.t3",
         "s4.t4-foo-bar",
-        "s4.t5-bar"
+        "s4.t5-bar",
+        "s4.t7",
+        "s4.t7.ssr-1-always",
+        "s4.t7.ssr-3-foo",
     }
 
     validate_run(output, run_steps)
