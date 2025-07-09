@@ -8,14 +8,6 @@ from stimela.exceptions import BackendError
 
 from . import get_backend
 
-
-class EmptyBackendWrapper(object):
-    def wrap_run_command(self, args: List[str], log_args: List[str], fqname: Optional[str]=None, log: Optional[logging.Logger]=None) -> List[str]:
-        return args, log_args
-
-    def wrap_build_command(self, args: List[str], fqname: Optional[str]=None, log: Optional[logging.Logger]=None) -> List[str]:
-        return args
-
 @dataclass
 class BackendRunner(object):
     opts: StimelaBackendOptions
@@ -73,7 +65,7 @@ def validate_backend_settings(backend_opts: Dict[str, Any], log: logging.Logger)
         wrapper = backend_opts.slurm
     # otherwise use empty wrapper
     else:
-        wrapper = EmptyBackendWrapper()
+        wrapper = None
 
     return BackendRunner(opts=backend_opts, is_remote=is_remote, is_remote_fs=is_remote_fs, 
                         backend=backend, backend_name=backend_name,
