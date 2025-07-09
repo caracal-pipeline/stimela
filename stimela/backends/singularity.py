@@ -46,7 +46,7 @@ class SingularityBackendOptions(object):
     # extra environment variable settings
     env: Dict[str, str] = EmptyDictDefault()
 
-    # ephemeral storage settings, e.g. {tmp -> /tmp, ram: /dev/shm}
+    # ephemeral storage settings, e.g. {tmp: /tmp, ram: /dev/shm}
     ephemeral: Dict[str, str] = EmptyDictDefault()
 
 
