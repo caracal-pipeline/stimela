@@ -71,6 +71,8 @@ The Singularity backend has the following settings::
                     mode: rw
                     mkdir: false
                     conditional: ''
+            ephemeral:
+                class: /target/path
 
 The backend is enabled by default, if the ``singularity`` executable (or whatever is specified by the ``executable`` setting) is found in the path. Set ``enable`` to false to disable.
 
@@ -87,9 +89,20 @@ Binding container directories
 
 When ``contain`` or ``containall`` are in effect, the container does not see the host filesystem, except for directories that are explicitly bound by Stimela. By default, these are derived from the file- and directory-type inputs and outputs of the cab. If additional directories need to be mounted, this can be specified by adding entries to the ``bind_dirs`` subsection.
 
-Each entry in ``bind_dirs`` is a subsection with an arbitrary label, containing, as a minimum, a ``host`` path, and a ``target`` path (i.e. inside the container) if this needs to be different. A special case of ``host: empty`` refers to an empty temporary directory (in which case ``target`` is required). ``mode`` can be set to ``ro`` for a read-only bind. With ``mkdir: true``, Stimela will create a host directory if it doesn't exist. Finally, the bind can be made ``conditional`` using a :ref:`substitution or formula expression <subst>` that is evaluated when each step is run.
+Each entry in ``bind_dirs`` is a subsection with an arbitrary label, containing, as a minimum, a ``host`` path and a ``target`` path (i.e. path seen inside the container) if this needs to be different from the host. Additional options include ``mode``, which can be set to ``ro`` for a read-only bind. With ``mkdir: true``, Stimela will create a host directory if it doesn't exist. Finally, the bind can be made ``conditional`` using a :ref:`substitution or formula expression <subst>` that is evaluated when each step is run.
 
-With ``bind_tmp: true``, an empty temporary directory on the host is bound to ``/tmp`` inside the container. This is normally a sensible thing to do, so this is the default setting.
+Stimela can also bind temporary ("ephemeral") storage inside the container. This is useful for binding directories such as ``/tmp`` (which otherwise provide a very limited volume filesystem inside the container, causing applications which write a lot of data to ``/tmp`` to fail), or ``~/.casa`` for isolating CASA tasks from the local environment. Ephemeral binds are specified by setting the host path as ``host: ephemeral:tmp``, where the value after the colon (``tmp``) selects the *ephemeral storage class*. Stimela then takes care of creating unique temporary directories for the ephemeral binds (in a location on the host determined by the storage class), and cleaning them up after the job is finished.
+
+By default, only a ``tmp`` storage class is defined, which creates temporary directories under ``/tmp`` on the host. Additional 
+storage classes can be configured via an optional ``ephemeral`` section in the backend settings, e.g.::
+
+    ephemeral:
+        tmp: /tmp
+        ram: /dev/shm
+
+This defines two storage classes, ``tmp`` using the ``/tmp`` filesystem, and ``ram`` using ``/dev/shm`` (thus essentially a RAM disk). For backwards compatibility, ``host: empty`` is currently recognized as an alias for ``host: emphemeral:tmp``
+
+Finally, ``/tmp`` inside the container is bound to ephemeral storage of class ``tmp`` by default, since this a sensible mode of operation in most circumstances. This can be disabled by setting ``bind_tmp: false``. Alternatively, one may set ``bind_tmp`` to a string value to use a different storage class for ``/tmp``. 
 
 
 Slurm wrapper settings

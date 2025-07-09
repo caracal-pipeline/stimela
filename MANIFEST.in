@@ -3,6 +3,7 @@ include README.rst
 include CHANGES.md
 include Dockerfile
 include stimela/stimela.conf
+include stimela/backends/slurm_runner.sh
 
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]

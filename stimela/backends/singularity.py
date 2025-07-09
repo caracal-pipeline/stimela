@@ -23,7 +23,7 @@ ReadWrite = Enum("BindMode", "ro rw", module=__name__)
 class SingularityBackendOptions(object):
     @dataclass
     class BindDir(object):
-        host: Optional[str] = None      # host path, default uses label, or else "empty" for tmpdir
+        host: Optional[str] = None      # host path, default uses label, or else "empty" for tmpdir or "shm" for shm tmpdir
         target: Optional[str] = None    # container path: ==host by default
         mode: ReadWrite = "rw"
         mkdir: bool = False             # create host directory if it doesn't exist
@@ -34,17 +34,21 @@ class SingularityBackendOptions(object):
     auto_build: bool = True
     rebuild: bool = False
     executable: Optional[str] = None
-    remote_only: bool = False      # if True, won't look for singularity on local system -- useful in combination with slurm wrapper
+    remote_only: bool = False         # if True, won't look for singularity on local system -- useful in combination with slurm wrapper
 
-    contain: bool = True           # if True, runs with --contain
-    containall: bool = False       # if True, runs with --containall
-    bind_tmp: bool = True          # if True, implicitly binds an empty /tmp directory
-    clean_tmp: bool = True         # if False, temporary directories will not be cleaned up. Useful for debugging.
+    contain: bool = True              # if True, runs with --contain
+    containall: bool = False          # if True, runs with --containall
+    bind_tmp: Union[bool, str] = True # binds /tmp to "tmp" class if True. If string, uses specified ephemeral storage class (e.g. "ram")
+    clean_tmp: bool = True            # if False, temporary directories will not be cleaned up. Useful for debugging.
 
     # optional extra bindings
     bind_dirs: Dict[str, BindDir] = EmptyDictDefault()
+    # extra environment variable settings
     env: Dict[str, str] = EmptyDictDefault()
-    
+
+    # ephemeral storage settings, e.g. {tmp: /tmp, ram: /dev/shm}
+    ephemeral: Dict[str, str] = EmptyDictDefault()
+
 
 SingularityBackendSchema = OmegaConf.structured(SingularityBackendOptions)
 
@@ -56,8 +60,8 @@ _rebuilt_images = set()
 
 class CustomTemporaryDirectory(object):
     """Custom context manager for tempfile.mkdtemp()."""
-    def __init__(self, clean_up=True):
-        self.name = mkdtemp()
+    def __init__(self, clean_up=True, dir=None):
+        self.name = mkdtemp(dir=dir)
         self.clean_up = clean_up  # Workaround for < Python3.12
 
     def __enter__(self):
@@ -234,15 +238,15 @@ def build(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBacke
     if not cached_image_exists:
         log.info(f"(re)building image {simg_path}")
 
-        args = [BINARY, "build", simg_path, f"docker://{image_name}"]
+        args = log_args = [BINARY, "build", simg_path, f"docker://{image_name}"]
 
         if wrapper:
-            args = wrapper.wrap_build_command(args, log=log)
+            args, log_args = wrapper.wrap_build_command(args, log=log)
 
         retcode = xrun(args[0], args[1:], shell=False, log=log,
                     return_errcode=True, command_name="(singularity build)", 
                     gentle_ctrl_c=True,
-                    log_command=' '.join(args), 
+                    log_command=' '.join(log_args), 
                     log_result=True)
 
         if retcode:
@@ -296,6 +300,12 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     # dict of container paths to host paths
     container_to_host_path = {}
 
+    # get dict of ephemeral base directories
+    ephem_classes = backend.singularity.ephemeral
+    if not ephem_classes:
+        ephem_classes["tmp"] = "/tmp"
+    ephem_binds = {}
+
     with ExitStack() as exit_stack: 
         # add extra binds
         for label, bind in backend.singularity.bind_dirs.items():
@@ -309,48 +319,74 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
             dest = os.path.expanduser(bind.target or src).rstrip("/")
             rw = bind.mode == ReadWrite.rw
 
-            # handle binding of empty temp dirs
+            # handle binding of ephemeral dirs
             if bind.host == "empty":
+                if "tmp" not in ephem_classes:
+                    raise BackendError(f"bind_dirs.{label}: deprecated 'host: empty' setting requires that a 'tmp' ephemeral storage class be defined")
+                bind.host = "ephemeral:tmp"
+            ephem_class = bind.host.startswith("ephemeral:")
+            if ephem_class or bind.host == "ephemeral":
                 if not bind.target:
-                    raise BackendError(f"bind_dirs.{label}: a target must be specified when host=empty")
-                tmpdir = CustomTemporaryDirectory(clean_up=backend.singularity.clean_tmp)
-                src = exit_stack.enter_context(tmpdir)
-                log.info(f"bind_dirs.{label}: using temporary directory {src}")
-
-            # resolve symlinks
-            if os.path.realpath(src) != src:
-                src = os.path.realpath(src)
-                log.info(f"bind_dirs.{label}: binding symlink target {src}")
-            
-            # make directory if needed
-            if bind.mkdir:
-                # I think files can be bound too, so only do this check for directories
-                if os.path.exists(src):
-                    if not os.path.isdir(src):
-                        raise BackendError(f"bind_dirs.{label}: host path is not a directory")
+                    raise BackendError(f"bind_dirs.{label}: a target must be specified when host=ephemeral")
+                target = os.path.expanduser(bind.target)
+                # parse storage class specification, if given
+                if ephem_class:
+                    ephem_class = bind.host.split(':', 1)[1]
+                    if ephem_class not in ephem_classes:
+                        raise BackendError(f"bind_dirs.{label}: class '{ephem_class}' not present in 'singularity.ephemeral' section")
+                    else:
+                        ephem_target = ephem_classes[ephem_class]
                 else:
-                    try:
-                        pathlib.Path(src).mkdir(parents=True)
-                    except Exception as exc:
-                        raise BackendError(f"bind_dirs.{label}: error creating directory {bind.host}", exc)
+                    ephem_class, ephem_target = list(ephem_classes.items())[0]
+                # create temporary directory, or else stash ephem binding for the wrapper
+                if wrapper:
+                    src = f"EPH{len(ephem_binds)}"
+                    ephem_binds[src] = ephem_target
+                    src = f"::{src}::"
+                else:
+                    tmpdir = CustomTemporaryDirectory(clean_up=backend.singularity.clean_tmp, dir=ephem_target)
+                    src = exit_stack.enter_context(tmpdir)
+                    log.info(f"bind_dirs.{label}: using temporary directory {src}")
+                container_to_host_path[target] = src
+                mounts[src] = rw
+            # else real binding
+            else:
+                # resolve symlinks
+                if os.path.exists(src) and os.path.realpath(src) != src:
+                    src = os.path.realpath(src)
+                    log.info(f"bind_dirs.{label}: binding symlink target {src}")
                 
-            # if already present in mounts, potentially upgrade to rw
-            mounts[src] = mounts.get(src, False) or rw
-            # if paths different, create a remapping
-            if src != dest:
-                if dest in container_to_host_path:
-                    if container_to_host_path[dest] != src:
-                        raise BackendError(f"bind_dirs.{label}: conflicting bind paths for {dest}")
-                else:
-                    container_to_host_path[dest] = src
+                # make directory if needed
+                if bind.mkdir:
+                    # I think files can be bound too, so only do this check for directories
+                    if os.path.exists(src):
+                        if not os.path.isdir(src):
+                            raise BackendError(f"bind_dirs.{label}: host path is not a directory")
+                    else:
+                        try:
+                            pathlib.Path(src).mkdir(parents=True)
+                        except Exception as exc:
+                            raise BackendError(f"bind_dirs.{label}: error creating directory {bind.host}", exc)
+                elif not os.path.exists(src):
+                    raise BackendError(f"bind_dirs.{label}: host path '{src}' does not exist")
+                
+                # if already present in mounts, potentially upgrade to rw
+                mounts[src] = mounts.get(src, False) or rw
+                # if paths different, create a remapping
+                if src != dest:
+                    if dest in container_to_host_path:
+                        if container_to_host_path[dest] != src:
+                            raise BackendError(f"bind_dirs.{label}: conflicting bind paths for {dest}")
+                    else:
+                        container_to_host_path[dest] = src
 
         # get extra required filesystem bindings from supplied parameters
         resolve_required_mounts(mounts, params, cab.inputs, cab.outputs, remappings=container_to_host_path)
 
         # redo mounts as a list of (container_path, source_path, rw)
-        source_to_containter_path = {src: dest for dest, src in container_to_host_path.items()}
+        source_to_container_path = {src: dest for dest, src in container_to_host_path.items()}
         # make list of mounts
-        mounts = [(source_to_containter_path.get(src, src), src, rw) for src, rw in mounts.items()]
+        mounts = [(source_to_container_path.get(src, src), src, rw) for src, rw in mounts.items()]
         # add implicit /tmp mount
         if backend.singularity.bind_tmp:
             for target, _, _ in mounts:
@@ -358,9 +394,21 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                     log.info("/tmp directory already bound, not adding an explicit binding")
                     break
             else:
-                tmpdir = CustomTemporaryDirectory(clean_up=backend.singularity.clean_tmp)
-                tmpdir_name = exit_stack.enter_context(tmpdir)
-                mounts.append(("/tmp", tmpdir_name, True))
+                if type(backend.singularity.bind_tmp) is str:
+                    tmp_class = backend.singularity.bind_tmp
+                else:
+                    tmp_class = "tmp"
+                tmp_target = ephem_classes.get(tmp_class, None)
+                if tmp_target is None:
+                    raise BackendError(f"bind_tmp uses an undefined ephemeral storage class '{tmp_class}'")
+                if wrapper:
+                    src = f"EPH{len(ephem_binds)}"
+                    ephem_binds[src] = tmp_target
+                    mounts.append(("/tmp", f"::{src}::", True))
+                else:
+                    tmpdir = CustomTemporaryDirectory(clean_up=backend.singularity.clean_tmp, dir=tmp_target)
+                    tmpdir_name = exit_stack.enter_context(tmpdir)
+                    mounts.append(("/tmp", tmpdir_name, True))
 
         # sort mount paths before iterating -- this ensures that parent directories come first
         # (singularity doesn't like it if you specify a bind of a subdir before a bind of a parent) 
@@ -392,7 +440,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
         # log.info(f"argument lengths are {[len(a) for a in args]}")
 
         if wrapper:
-            args, log_args = wrapper.wrap_run_command(args, log_args, fqname=fqname, log=log)
+            args, log_args = wrapper.wrap_run_command(args, log_args, ephem_binds=ephem_binds, fqname=fqname, log=log)
 
         log.debug(f"command line is {' '.join(log_args)}")
 
