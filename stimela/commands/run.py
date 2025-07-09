@@ -28,7 +28,7 @@ from stimela import logger, log_exception
 from stimela.exceptions import RecipeValidationError, StimelaRuntimeError, StepSelectionError, StepValidationError
 from stimela.main import cli
 from stimela.kitchen.recipe import Recipe, Step, RecipeSchema, join_quote
-from stimela.kitchen.utils import graph_to_constraints
+from stimela.kitchen.run_state import graph_to_constraints
 from stimela import task_stats
 import stimela.backends
 from scabha.configuratt.common import IMPLICIT_EXTENSIONS

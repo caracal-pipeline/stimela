@@ -27,7 +27,7 @@ from .step import Step
 from stimela import task_stats 
 from stimela import backends
 from stimela.backends import StimelaBackendSchema
-from stimela.kitchen.utils import RunConstraints
+from stimela.kitchen.run_state import RunConstraints
 
 
 class DeferredAlias(Unresolved):
