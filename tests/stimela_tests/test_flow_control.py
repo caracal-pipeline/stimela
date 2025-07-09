@@ -1,5 +1,5 @@
-import os, re, subprocess, pytest
-from .test_recipe import change_test_dir, run, verify_output
+import pytest
+from .test_recipe import run, verify_output
 
 # TODO(JSKenyon): This should be made programmatic at some point.
 ALL_STEPS = {
@@ -63,14 +63,6 @@ def validate_run(test_output, run_steps):
             assert not verify_output(test_output, f"running step recipe.{s}")
         except AssertionError:
             raise AssertionError(f"Step {s} was run unexpectedly.")
-
-
-def test_basic_subrecipe(base_command):
-    print("===== expecting no errors =====")
-    retcode, output = run(base_command)
-    assert retcode == 0
-    print(output)
-
 
 def test_no_cli_options(base_command):
     """Select tag on step/s of root recipe"""
@@ -153,6 +145,26 @@ def test_select_by_tag_case_b(base_command):
     validate_run(output, run_steps)
 
 def test_select_by_tag_case_c(base_command):
+    """Select tag on step/s of subsubrecipe."""
+    retcode, output = run(f"{base_command} -t s2.t7.foo")
+    assert retcode == 0
+    print(output)
+    run_steps = {
+        "s1",
+        "s2",
+        "s2.t1-always",
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s2.t7.ssr-3-foo",
+        "s4",
+        "s4.t1-always",
+        "s4.t7",
+        "s4.t7.ssr-1-always"
+    }
+
+    validate_run(output, run_steps)
+
+def test_select_by_tag_case_d(base_command):
     """Select tag on step/s of subrecipe which are also never tagged."""
     retcode, output = run(f"{base_command} -t s2.foo")
     assert retcode == 0
@@ -217,6 +229,32 @@ def test_skip_by_tag_case_b(base_command):
 
     validate_run(output, run_steps)
 
+def test_skip_by_tag_case_c(base_command):
+    """Skip tag on step/s of subsubrecipe."""
+    retcode, output = run(f"{base_command} --skip-tags s2.t7.foo")
+    assert retcode == 0
+    print(output)
+    run_steps = {
+        "s1",
+        "s2",
+        "s2.t1-always",
+        "s2.t3",
+        "s2.t4-foo-bar",
+        "s2.t5-bar",
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s4",
+        "s4.t1-always",
+        "s4.t3",
+        "s4.t4-foo-bar",
+        "s4.t5-bar",
+        "s4.t7",
+        "s4.t7.ssr-1-always",
+        "s4.t7.ssr-3-foo"
+    }
+
+    validate_run(output, run_steps)
+
 def test_select_by_step_case_a(base_command):
     """Select step of root recipe."""
     retcode, output = run(f"{base_command} -s s3")
@@ -269,6 +307,26 @@ def test_select_by_step_case_b(base_command):
     validate_run(output, run_steps)
 
 def test_select_by_step_case_c(base_command):
+    """Select step of subsubrecipe."""
+    retcode, output = run(f"{base_command} -s s2.t7.ssr-2-never")
+    assert retcode == 0
+    print(output)
+    run_steps = {
+        "s1",
+        "s2",
+        "s2.t1-always",
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s2.t7.ssr-2-never",
+        "s4",
+        "s4.t1-always",
+        "s4.t7",
+        "s4.t7.ssr-1-always"
+    }
+
+    validate_run(output, run_steps)
+
+def test_select_by_step_case_d(base_command):
     """Select step of subrecipe which has been marked as skip."""
     retcode, output = run(f"{base_command} -s s3.t6-skip")
     assert retcode == 0
@@ -329,6 +387,26 @@ def test_select_by_step_range_case_b(base_command):
         "s2.t5-bar",
         "s2.t7",
         "s2.t7.ssr-1-always",
+        "s4",
+        "s4.t1-always",
+        "s4.t7",
+        "s4.t7.ssr-1-always"
+    }
+
+    validate_run(output, run_steps)
+
+def test_select_by_step_range_case_c(base_command):
+    """Select steps of subsubrecipe."""
+    retcode, output = run(f"{base_command} -s s2.t7.ssr-2-never:ssr-4-skip")
+    assert retcode == 0
+    print(output)
+    run_steps = {
+        "s1",
+        "s2",
+        "s2.t1-always",
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s2.t7.ssr-3-foo",
         "s4",
         "s4.t1-always",
         "s4.t7",
@@ -427,6 +505,52 @@ def test_select_by_unbounded_step_range_case_d(base_command):
 
     validate_run(output, run_steps)
 
+def test_select_by_unbounded_step_range_case_e(base_command):
+    """Select steps of sebsubrecipe with no upper bound."""
+    retcode, output = run(f"{base_command} -s s2.t7.ssr-3-foo:")
+    assert retcode == 0
+    print(output)
+    run_steps = {
+        "s1",
+        "s2",
+        "s2.t1-always",
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s2.t7.ssr-3-foo",
+        "s4",
+        "s4.t1-always",
+        "s4.t3",
+        "s4.t4-foo-bar",
+        "s4.t5-bar",
+        "s4.t7",
+        "s4.t7.ssr-1-always",
+        "s4.t7.ssr-3-foo"
+    }
+
+    validate_run(output, run_steps)
+
+def test_select_by_unbounded_step_range_case_f(base_command):
+    """Select steps of subsubrecipe with no lower bound."""
+    retcode, output = run(f"{base_command} -s s2.t7.:ssr-1-always")
+    assert retcode == 0
+    print(output)
+    run_steps = {
+        "s1",
+        "s2",
+        "s2.t1-always",
+        "s2.t3",
+        "s2.t4-foo-bar",
+        "s2.t5-bar",
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s4",
+        "s4.t1-always",
+        "s4.t7",
+        "s4.t7.ssr-1-always",
+    }
+
+    validate_run(output, run_steps)
+
 
 def test_skip_by_step_case_a(base_command):
     """Skip step of root recipe."""
@@ -460,6 +584,32 @@ def test_skip_by_step_case_b(base_command):
         "s2.t5-bar",
         "s2.t7",
         "s2.t7.ssr-1-always",
+        "s2.t7.ssr-3-foo",
+        "s4",
+        "s4.t1-always",
+        "s4.t3",
+        "s4.t4-foo-bar",
+        "s4.t5-bar",
+        "s4.t7",
+        "s4.t7.ssr-1-always",
+        "s4.t7.ssr-3-foo"
+    }
+
+    validate_run(output, run_steps)
+
+def test_skip_by_step_case_c(base_command):
+    """Skip step of subsubrecipe."""
+    retcode, output = run(f"{base_command} -k s2.t7.ssr-1-always")
+    assert retcode == 0
+    print(output)
+    run_steps = {
+        "s1",
+        "s2",
+        "s2.t1-always",
+        "s2.t4-foo-bar",
+        "s2.t3",
+        "s2.t5-bar",
+        "s2.t7",
         "s2.t7.ssr-3-foo",
         "s4",
         "s4.t1-always",
@@ -512,6 +662,30 @@ def test_skip_by_step_range_case_b(base_command):
         "s4.t7",
         "s4.t7.ssr-1-always",
         "s4.t7.ssr-3-foo"
+    }
+
+    validate_run(output, run_steps)
+
+def test_skip_by_step_range_case_c(base_command):
+    """Skip steps of subsubrecipe."""
+    retcode, output = run(f"{base_command} -k s4.t7.ssr-1-always:ssr-4-skip")
+    assert retcode == 0
+    print(output)
+    run_steps = {
+        "s1",
+        "s2",
+        "s2.t1-always",
+        "s2.t5-bar",
+        "s2.t3",
+        "s2.t4-foo-bar",
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s2.t7.ssr-3-foo",
+        "s4.t1-always",
+        "s4",
+        "s4.t3",
+        "s4.t4-foo-bar",
+        "s4.t5-bar"
     }
 
     validate_run(output, run_steps)
@@ -583,6 +757,45 @@ def test_skip_by_unbounded_step_range_case_d(base_command):
 
     validate_run(output, run_steps)
 
+def test_skip_by_unbounded_step_range_case_e(base_command):
+    """Skip steps of subsubrecipe with no upper bound."""
+    retcode, output = run(f"{base_command} -k s2.t7.ssr-3-foo:")
+    assert retcode == 0
+    print(output)
+    run_steps = {
+        "s1",
+        "s2",
+        "s2.t1-always",
+        "s2.t3",
+        "s2.t4-foo-bar",
+        "s2.t5-bar",
+        "s2.t7",
+        "s2.t7.ssr-1-always"
+    }
+
+    validate_run(output, run_steps)
+
+def test_skip_by_unbounded_step_range_case_f(base_command):
+    """Skip steps of subsubrecipe with no lower bound."""
+    retcode, output = run(f"{base_command} -k s2.t7.:ssr-2-never")
+    assert retcode == 0
+    print(output)
+    run_steps = {
+        "s2",
+        "s2.t7",
+        "s2.t7.ssr-3-foo",
+        "s4",
+        "s4.t1-always",
+        "s4.t3",
+        "s4.t4-foo-bar",
+        "s4.t5-bar",
+        "s4.t7",
+        "s4.t7.ssr-1-always",
+        "s4.t7.ssr-3-foo"
+    }
+
+    validate_run(output, run_steps)
+
 def test_unskip_steps_case_a(base_command):
     """Unskip step of recipe."""
     retcode, output = run(f"{base_command} -e s5")
@@ -640,6 +853,34 @@ def test_unskip_steps_case_b(base_command):
     validate_run(output, run_steps)
 
 def test_unskip_steps_case_c(base_command):
+    """Unskip step of subsubrecipe."""
+    retcode, output = run(f"{base_command} -e s4.t7.ssr-4-skip")
+    assert retcode == 0
+    print(output)
+    run_steps = {
+        "s1",
+        "s2",
+        "s2.t1-always",
+        "s2.t3",
+        "s2.t4-foo-bar",
+        "s2.t5-bar",
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s2.t7.ssr-3-foo",
+        "s4",
+        "s4.t1-always",
+        "s4.t3",
+        "s4.t4-foo-bar",
+        "s4.t5-bar",
+        "s4.t7",
+        "s4.t7.ssr-1-always",
+        "s4.t7.ssr-3-foo",
+        "s4.t7.ssr-4-skip"
+    }
+
+    validate_run(output, run_steps)
+
+def test_unskip_steps_case_d(base_command):
     """Unskip steps of subrecipes with no upper bound."""
     retcode, output = run(f"{base_command} -e s2.t6-skip:")
     assert retcode == 0
@@ -671,7 +912,7 @@ def test_unskip_steps_case_c(base_command):
 
     validate_run(output, run_steps)
 
-def test_unskip_steps_case_d(base_command):
+def test_unskip_steps_case_e(base_command):
     """Unskip steps of subrecipes with no lower bound."""
     retcode, output = run(f"{base_command} -e s3.:t3")
     assert retcode == 0
@@ -693,6 +934,67 @@ def test_unskip_steps_case_d(base_command):
         "s4.t3",
         "s4.t4-foo-bar",
         "s4.t5-bar",
+        "s4.t7",
+        "s4.t7.ssr-1-always",
+        "s4.t7.ssr-3-foo",
+    }
+
+    validate_run(output, run_steps)
+
+def test_unskip_steps_case_f(base_command):
+    """Unskip steps of subsubrecipes with no upper bound."""
+    retcode, output = run(f"{base_command} -e s2.t7.ssr-4-skip:")
+    assert retcode == 0
+    print(output)
+    run_steps = {
+        "s1",
+        "s2",
+        "s2.t1-always",
+        "s2.t3",
+        "s2.t4-foo-bar",
+        "s2.t5-bar",
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s2.t7.ssr-3-foo",
+        "s2.t7.ssr-4-skip",
+        "s4",
+        "s4.t1-always",
+        "s4.t3",
+        "s4.t4-foo-bar",
+        "s4.t5-bar",
+        "s4.t6-skip",
+        "s4.t7",
+        "s4.t7.ssr-1-always",
+        "s4.t7.ssr-3-foo",
+        "s4.t7.ssr-4-skip",
+        "s5"
+    }
+
+    validate_run(output, run_steps)
+
+def test_unskip_steps_case_g(base_command):
+    """Unskip steps of subsubrecipes with no lower bound."""
+    retcode, output = run(f"{base_command} -e s4.t7.:ssr-1-always")
+    assert retcode == 0
+    print(output)
+    run_steps = {
+        "s1",
+        "s2",
+        "s2.t1-always",
+        "s2.t3",
+        "s2.t4-foo-bar",
+        "s2.t5-bar",
+        "s2.t6-skip",
+        "s2.t7",
+        "s2.t7.ssr-1-always",
+        "s2.t7.ssr-3-foo",
+        "s2.t7.ssr-4-skip",
+        "s4",
+        "s4.t1-always",
+        "s4.t3",
+        "s4.t4-foo-bar",
+        "s4.t5-bar",
+        "s4.t6-skip",
         "s4.t7",
         "s4.t7.ssr-1-always",
         "s4.t7.ssr-3-foo",

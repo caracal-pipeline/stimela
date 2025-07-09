@@ -375,14 +375,14 @@ class Recipe(Cargo):
             for step_name in unskipped_steps:
                 self.unskip_step(step_name)
 
-            if not enabled_steps:
-                self.log.info("no steps have been selected for execution")
-                return 0
-
             # Apply the skip flags to disabled steps.
             for step_name in disabled_steps:
                 step = self.steps[step_name]
                 step.skip = step._skip = True
+
+            if not enabled_steps:
+                self.log.info("no steps have been selected for execution")
+                return 0
 
             # Log the steps which have been selected to run.
             self.log.info(f"the following recipe steps have been selected for execution:")
