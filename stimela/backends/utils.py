@@ -63,6 +63,8 @@ def resolve_required_mounts(mounts: Dict[str, bool],
     
     # now, for any mount that has a symlink in the path, add the symlink target to mounts
     for path, readwrite in list(mounts.items()):
+        if path.startswith("::"):
+            continue
         while path != "/":
             if os.path.islink(path):
                 chain = [path]
@@ -79,6 +81,8 @@ def resolve_required_mounts(mounts: Dict[str, bool],
     skip_targets = set()
 
     for path, readwrite in mounts.items():
+        if path.startswith("::"):
+            continue
         parent = os.path.dirname(path)
         while parent != "/":
             # if parent already mounted, and is as writeable as us, skip us
