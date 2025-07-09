@@ -34,12 +34,12 @@ class SingularityBackendOptions(object):
     auto_build: bool = True
     rebuild: bool = False
     executable: Optional[str] = None
-    remote_only: bool = False      # if True, won't look for singularity on local system -- useful in combination with slurm wrapper
+    remote_only: bool = False         # if True, won't look for singularity on local system -- useful in combination with slurm wrapper
 
-    contain: bool = True           # if True, runs with --contain
-    containall: bool = False       # if True, runs with --containall
-    bind_tmp: bool = True          # if True, implicitly binds an empty /tmp directory
-    clean_tmp: bool = True         # if False, temporary directories will not be cleaned up. Useful for debugging.
+    contain: bool = True              # if True, runs with --contain
+    containall: bool = False          # if True, runs with --containall
+    bind_tmp: Union[bool, str] = True # binds /tmp to "tmp" class if True. If string, uses specified ephemeral storage class (e.g. "ram")
+    clean_tmp: bool = True            # if False, temporary directories will not be cleaned up. Useful for debugging.
 
     # optional extra bindings
     bind_dirs: Dict[str, BindDir] = EmptyDictDefault()
@@ -320,6 +320,10 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
             rw = bind.mode == ReadWrite.rw
 
             # handle binding of ephemeral dirs
+            if bind.host == "empty":
+                if "tmp" not in ephem_classes:
+                    raise BackendError(f"bind_dirs.{label}: deprecated 'host: empty' setting requires that a 'tmp' ephemeral storage class be defined")
+                bind.host = "ephemeral:tmp"
             ephem_class = bind.host.startswith("ephemeral:")
             if ephem_class or bind.host == "ephemeral":
                 if not bind.target:
@@ -390,7 +394,13 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                     log.info("/tmp directory already bound, not adding an explicit binding")
                     break
             else:
-                tmp_target = list(ephem_classes.values())[0]
+                if type(backend.singularity.bind_tmp) is str:
+                    tmp_class = backend.singularity.bind_tmp
+                else:
+                    tmp_class = "tmp"
+                tmp_target = ephem_classes.get(tmp_class, None)
+                if tmp_target is None:
+                    raise BackendError(f"bind_tmp uses an undefined ephemeral storage class '{tmp_class}'")
                 if wrapper:
                     src = f"EPH{len(ephem_binds)}"
                     ephem_binds[src] = tmp_target
