@@ -450,6 +450,49 @@ def graph_to_constraints(
     step_exclusions: Tuple[str] = (),
     step_unskips: Tuple[str] = ()
 ):
+    """Convert a networkx.DiGraph into a stimela RunConstraints object.
+
+    Given a networkx.DiGraph representing a recipe (and its subrecipes),
+    applies a number of selection, deselection and unskip operations by
+    setting states on the graph nodes. These states are ultimately used
+    to determine whether each node is enabled or disabled, and whether it
+    must ignore skip fields in the recipe.
+
+    The strings provided to the various optional fields will be of the form
+    {subrecipe1}.{subrecipe2}...{subrecipeN}.{tag or step or step_range}.
+    Options which apply to the root recipe will be of the form
+    {tag or step or step_range}. A step range is given by
+    {start_step:stop_step}. Omitting either start_step or stop_step implies
+    an unbounded selection which will include all steps before/after the
+    stop_step/start_step.
+
+    Args:
+        graph:
+            A networkx.DiGraph object representing a stimela recipe.
+        tag_inclusions:
+            A tuple of strings of the form {(sub)recipe}.{tag} which represent
+            the tags to include in the (sub)recipe. {tag} implies the
+            root recipe.
+        tag_exclusions:
+            A tuple of strings of the form {(sub)recipe}.{tag} which represent
+            the tags to exclude in the (sub)recipe. {tag} implies the
+            root recipe.
+        step_inclusions:
+            A tuple of strings of the form {(sub)recipe}.{step} or
+            {(sub)recipe}.{start_step}:{stop_step} which represent steps to
+            include in the (sub)recipe. {step} or {start_step}:{stop_step}
+            apply to the root recipe.
+        step_exclusions:
+            A tuple of strings of the form {(sub)recipe}.{step} or
+            {(sub)recipe}.{start_step}:{stop_step} which represent steps to
+            exclude in the (sub)recipe. {step} or {start_step}:{stop_step}
+            apply to the root recipe.
+        step_unskips:
+            A tuple of strings of the form {(sub)recipe}.{step} or
+            {(sub)recipe}.{start_step}:{stop_step} which represent steps to
+            unskip in the (sub)recipe. {step} or {start_step}:{stop_step}
+            apply to the root recipe.
+    """
 
     try:
         root = graph.graph["root"]
