@@ -325,6 +325,8 @@ def update_file_logger(log: logging.Logger, logopts: DictConfig, nesting: int = 
                         log.error(f"bad substitution in log path: {err}")
                     return None
 
+        # Expand path before removing non-filename characters.
+        path = os.path.expanduser(path)
         # substitute non-filename characters for _
         path = re.sub(r'[^a-zA-Z0-9_./-]', '_', path)
 
