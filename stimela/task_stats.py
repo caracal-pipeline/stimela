@@ -59,7 +59,7 @@ _task_stack = []
 
 def init_progress_bar(boring=False):
     global progress_console, progress_bar, progress_task
-    progress_console = rich.console.Console(file=sys.stdout, highlight=False, emoji=False)
+    progress_console = rich.console.Console(file=sys.stdout, highlight=False)
     progress_bar = rich.progress.Progress(
         rich.progress.SpinnerColumn(),
         "[yellow]{task.fields[elapsed_time]}[/yellow]",
@@ -237,7 +237,7 @@ def update_stats(now: datetime, sample: TaskStatsDatum):
         _taskstats[key][0] = (now - start).total_seconds()
 
 
-def update_process_status():
+def update_process_status(stimela_process=None, child_processes=None):
     # current subtask info
     ti = _task_stack[-1] if _task_stack else None
 
@@ -247,11 +247,27 @@ def update_process_status():
 
     # form up sample datum
     s = TaskStatsDatum(num_samples=1)
+
+    # If we have the process objects, we don't need to block.
+    interval = 0 if child_processes else 1
+
+    # Grab the stimela process and its children (recursively).
+    stimela_process = stimela_process or psutil.Process()
+    stimela_children = child_processes or stimela_process.children(recursive=True)
+
+    # Assume that all child processes belong to the same task.
+    # TODO: Handling of children is rudimentary at present.
+    # How would this work for scattered/parallel steps?
+    if stimela_children and ti:
+        processes = stimela_children
+    else:
+        processes = [stimela_process]
+
     # CPU and memory
-    s.cpu = psutil.cpu_percent()
-    mem = psutil.virtual_memory()
-    s.mem_used = round(mem.total*mem.percent/100 / 2**30)
-    s.mem_total = round(mem.total / 2**30)
+    s.cpu = sum(p.cpu_percent(interval=interval) for p in processes)
+    system_memory = psutil.virtual_memory().total
+    s.mem_used = round(sum(p.memory_info().rss for p in processes) / 2**30)
+    s.mem_total = round(system_memory / 2**30)
     # load
     s.load, _, _ = psutil.getloadavg()
 
@@ -319,8 +335,16 @@ def update_process_status():
 async def run_process_status_update():
     if progress_bar:
         with contextlib.suppress(asyncio.CancelledError):
+            stimela_process = psutil.Process()
+            child_processes = set()
             while True:
-                update_process_status()
+                new_children = {c for c in stimela_process.children(recursive=True) if c not in child_processes}
+                old_children = {c for c in child_processes if c not in stimela_process.children(recursive=True)}
+                child_processes = child_processes.union(new_children) - old_children
+                try:
+                    update_process_status(stimela_process, child_processes)
+                except psutil.NoSuchProcess:
+                    continue
                 await asyncio.sleep(1)
 
 _printed_stats = dict(
@@ -360,16 +384,15 @@ def render_profiling_summary(stats: TaskStatsDatum, max_depth, unroll_loops=Fals
     table_avg.add_column("R GB", justify="right")
     table_avg.add_column("W GB", justify="right")
 
-    for name_tuple, (elapsed, sum, peak) in stats.items():
-        if name_tuple and len(name_tuple) <= max_depth:
+    for name, (elapsed, sum, peak) in stats.items():
+        if name and len(name) <= max_depth:
             # skip loop iterations, if not unrolling loops 
-            if not unroll_loops and any(n.endswith("]") for n in name_tuple):
+            if not unroll_loops and any(n.endswith("]") for n in name):
                 continue
             secs, mins, hours = elapsed % 60, int(elapsed // 60) % 60, int(elapsed // 3600)
             tstr = f"{hours:d}:{mins:02d}:{secs:04.1f}"
             avg = sum.averaged()
-            indentation_level = len(name_tuple) - 1
-            avg_row = ["  " * indentation_level + name_tuple[-1], tstr]
+            avg_row = [".".join(name), tstr]
             peak_row = avg_row.copy()
             for f, label in _printed_stats.items():
                 if f in available_stats:
