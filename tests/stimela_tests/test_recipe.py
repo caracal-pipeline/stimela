@@ -21,15 +21,25 @@ def run(command):
         return exc.returncode, exc.output.strip().decode()
 
 def verify_output(output, *regexes):
-    """Returns true if the output contains lines matching the regexes in sequence (possibly with other lines in between)"""
-    regexes = list(regexes[::-1])
-    for line in output.split("\n"):
-        if regexes and re.search(regexes[-1], line):
-            regexes.pop()
-    if regexes:
-        print("Error, the following regexes did not match the output:")
-        for regex in regexes:
-            print(f"  {regex}")
+    """Returns True if the regexes appear in sequence in the output.
+
+    Given an output string, returns True if the regexes appear in order in
+    the output string, with any number of characters between the regex strings.
+
+    Args:
+        output:
+            An output string as returned by 'run'.
+        regexes:
+            One or more regex strings to match in the output.
+    """
+    # Replace all whitespace characters with a single space to avoid dependence
+    # on terminal width when performing these tests.
+    output = re.sub(r'\s+', ' ', output)
+    # Match the regex strings with any number of characters between them.
+    regex = "(.*)".join(regexes)
+    if not re.search(regex, output):
+        print("Error, expected regex pattern did not appear in the output:")
+        print(f"  {regex}")
         return False
     return True
 
@@ -46,10 +56,12 @@ def test_test_aliasing():
     retcode, output = run("stimela -v -b native exec test_aliasing.yml a=1 s3.a=1 s4.a=1 e=e f=f")
     assert retcode == 0
     print(output)
-    assert verify_output(output, 
-            "DEBUG: ### validated outputs", 
-            "DEBUG: recipe 'alias test recipe'", 
-            "DEBUG:   out: 1")
+    assert verify_output(
+        output,
+        "DEBUG: ### validated outputs",
+        "DEBUG: recipe 'alias test recipe'",
+        "DEBUG: out: 1"
+    )
 
 def test_test_nesting():
     print("===== expecting no errors =====")

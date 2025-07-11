@@ -28,6 +28,7 @@ from stimela import logger, log_exception
 from stimela.exceptions import RecipeValidationError, StimelaRuntimeError, StepSelectionError, StepValidationError
 from stimela.main import cli
 from stimela.kitchen.recipe import Recipe, Step, RecipeSchema, join_quote
+from stimela.kitchen.run_state import graph_to_constraints
 from stimela import task_stats
 import stimela.backends
 from scabha.configuratt.common import IMPLICIT_EXTENSIONS
@@ -479,12 +480,19 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
 
         # select recipe substeps based on command line, and exit if nothing to run
         if not build_skips:
-            selection_options = []
-            for opts in (tags, skip_tags, step_ranges, skip_ranges, enable_steps):
-                selection_options.append(set(itertools.chain(*(opt.split(",") for opt in opts))))
+            graph = recipe.to_dag()  # Convert to directed acyclic graph.
+
+            constraints = graph_to_constraints(
+                graph,
+                tag_inclusions=tags,
+                tag_exclusions=skip_tags,
+                step_inclusions=step_ranges,
+                step_exclusions=skip_ranges,
+                step_unskips=enable_steps
+            )
 
             try:
-                if not recipe.restrict_steps(*selection_options):
+                if not recipe.restrict_steps(constraints):
                     sys.exit(0)
             except StepSelectionError as exc:
                 log_exception(exc)
