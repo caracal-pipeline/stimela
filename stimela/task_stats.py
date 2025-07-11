@@ -59,7 +59,7 @@ _task_stack = []
 
 def init_progress_bar(boring=False):
     global progress_console, progress_bar, progress_task
-    progress_console = rich.console.Console(file=sys.stdout, highlight=False)
+    progress_console = rich.console.Console(file=sys.stdout, highlight=False, emoji=False)
     progress_bar = rich.progress.Progress(
         rich.progress.SpinnerColumn(),
         "[yellow]{task.fields[elapsed_time]}[/yellow]",
@@ -155,8 +155,8 @@ class TaskStatsDatum(object):
     read_gbps: float    = 0
     read_ms: float      = 0
     write_count: int    = 0
-    write_gb: float     = 0 
-    write_gbps: float   = 0 
+    write_gb: float     = 0
+    write_gbps: float   = 0
     write_ms: float     = 0
     num_samples: int    = 0
 
@@ -274,7 +274,7 @@ def update_process_status(stimela_process=None, child_processes=None):
     # get disk I/O stats
     disk_io = psutil.disk_io_counters()
     global _prev_disk_io
-    prev_io, prev_time = _prev_disk_io 
+    prev_io, prev_time = _prev_disk_io
     if prev_io is not None:
         delta = (now - prev_time).total_seconds()
         io = {}
@@ -286,7 +286,7 @@ def update_process_status(stimela_process=None, child_processes=None):
         s.write_gb = io['write_bytes']/2**30
         s.read_gbps = s.read_gb / delta
         s.write_gbps = s.write_gb / delta
-        s.read_ms = io['read_time'] 
+        s.read_ms = io['read_time']
         s.write_ms = io['write_time']
     else:
         io = None
@@ -308,7 +308,7 @@ def update_process_status(stimela_process=None, child_processes=None):
             cpu_info = [
                 f"CPU [green]{s.cpu:2.1f}%[/green]",
                 f"RAM [green]{round(s.mem_used):3}[/green]/[green]{round(s.mem_total)}[/green]G",
-                f"Load [green]{s.load:2.1f}[/green]" 
+                f"Load [green]{s.load:2.1f}[/green]"
             ]
 
             if io is not None:
@@ -369,7 +369,7 @@ def render_profiling_summary(stats: TaskStatsDatum, max_depth, unroll_loops=Fals
     table_peak = Table(title=Text("\npeaks", style="bold"))
     table_peak.add_column("")
     table_peak.add_column("time hms", justify="right")
-    
+
     # accumulate set of all stats available
     available_stats = set(_taskstats_sample_names)
     for name, (elapsed, sum, peak) in stats.items():
@@ -384,15 +384,16 @@ def render_profiling_summary(stats: TaskStatsDatum, max_depth, unroll_loops=Fals
     table_avg.add_column("R GB", justify="right")
     table_avg.add_column("W GB", justify="right")
 
-    for name, (elapsed, sum, peak) in stats.items():
-        if name and len(name) <= max_depth:
-            # skip loop iterations, if not unrolling loops 
-            if not unroll_loops and any(n.endswith("]") for n in name):
+    for name_tuple, (elapsed, sum, peak) in stats.items():
+        if name_tuple and len(name_tuple) <= max_depth:
+            # skip loop iterations, if not unrolling loops
+            if not unroll_loops and any(n.endswith("]") for n in name_tuple):
                 continue
             secs, mins, hours = elapsed % 60, int(elapsed // 60) % 60, int(elapsed // 3600)
             tstr = f"{hours:d}:{mins:02d}:{secs:04.1f}"
             avg = sum.averaged()
-            avg_row = [".".join(name), tstr]
+            indentation_level = len(name_tuple) - 1
+            avg_row = ["  " * indentation_level + name_tuple[-1], tstr]
             peak_row = avg_row.copy()
             for f, label in _printed_stats.items():
                 if f in available_stats:
@@ -406,18 +407,18 @@ def render_profiling_summary(stats: TaskStatsDatum, max_depth, unroll_loops=Fals
     stimelogging.declare_chapter("profiling results")
     destroy_progress_bar()
     from rich.columns import Columns
-    # progress_console.print(table_avg, justify="center") 
-    # progress_console.print(table_peak, justify="center")  
-    # progress_console.print(Columns((table_avg, table_peak)), justify="center") 
+    # progress_console.print(table_avg, justify="center")
+    # progress_console.print(table_peak, justify="center")
+    # progress_console.print(Columns((table_avg, table_peak)), justify="center")
 
     with progress_console.capture() as capture:
-        progress_console.print(Columns((table_avg, table_peak)), justify="center") 
+        progress_console.print(Columns((table_avg, table_peak)), justify="center")
 
     text = capture.get()
 
     return text
 
-    
+
 # from rich.console import Console
 # console = Console()
 # with console.capture() as capture:
@@ -426,7 +427,7 @@ def render_profiling_summary(stats: TaskStatsDatum, max_depth, unroll_loops=Fals
 
 def save_profiling_stats(log, print_depth=2, unroll_loops=False):
     from . import stimelogging
-    
+
     stats = collect_stats()
     summary = render_profiling_summary(stats, print_depth, unroll_loops=unroll_loops)
     if print_depth:
