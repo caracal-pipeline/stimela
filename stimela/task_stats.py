@@ -249,6 +249,9 @@ def update_process_status(stimela_process=None, child_processes=None):
     s = TaskStatsDatum(num_samples=1)
 
     # Grab the stimela process and its children (recursively).
+    # TODO(JSKenyon): This is a work around for the fact that this code is
+    # called from many different places so we cannot guarantee that the
+    # kwargs are correctly supplied. Simplify in the future.
     stimela_process = stimela_process or psutil.Process()
     stimela_children = child_processes or stimela_process.children(recursive=True)
 
@@ -270,7 +273,7 @@ def update_process_status(stimela_process=None, child_processes=None):
 
     s.mem_used = round(s.mem_used  / (2 ** 30))
     system_memory = psutil.virtual_memory().total
-    s.mem_total = round(system_memory / 2**30)
+    s.mem_total = round(system_memory / (2 ** 30))
 
     # load
     s.load, _, _ = psutil.getloadavg()
@@ -340,13 +343,18 @@ async def run_process_status_update():
     if progress_bar:
         with contextlib.suppress(asyncio.CancelledError):
             stimela_process = psutil.Process()
-            child_processes = set()
+            child_processes = {}
             while True:
-                new_children = {c for c in stimela_process.children(recursive=True) if c not in child_processes}
-                old_children = {c for c in child_processes if c not in stimela_process.children(recursive=True)}
-                child_processes = child_processes.union(new_children) - old_children
+                current_children = stimela_process.children(recursive=True)
+                current_pids = {proc.pid for proc in current_children}
+                child_processes.update({c.pid: c for c in current_children if c.pid not in child_processes})
+                missing_pids = {c.pid for c in child_processes.keys() if c not in current_pids}
+
+                for pid in missing_pids:
+                    del child_processes[pid]
+
                 try:
-                    update_process_status(stimela_process, child_processes)
+                    update_process_status(stimela_process, list(child_processes.values()))
                 except psutil.NoSuchProcess:
                     continue
                 await asyncio.sleep(1)
