@@ -261,10 +261,17 @@ def update_process_status(stimela_process=None, child_processes=None):
         processes = [stimela_process]
 
     # CPU and memory
-    s.cpu = sum(p.cpu_percent() for p in processes)
+    for p in processes:
+        try:
+            s.cpu += p.cpu_percent()
+            s.mem_used += p.memory_info().rss
+        except psutil.NoSuchProcess:
+            pass  # Process ended before we could gather its stats.
+
+    s.mem_used = round(s.mem_used  / (2 ** 30))
     system_memory = psutil.virtual_memory().total
-    s.mem_used = round(sum(p.memory_info().rss for p in processes) / 2**30)
     s.mem_total = round(system_memory / 2**30)
+
     # load
     s.load, _, _ = psutil.getloadavg()
 
