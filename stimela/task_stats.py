@@ -17,15 +17,6 @@ from rich.text import Text
 
 from stimela import stimelogging
 
-IO_FIELDS = [
-    'read_bytes',
-    'read_count',
-    'read_time',
-    'write_bytes',
-    'write_count',
-    'write_time'
-]
-
 # this is "" for the main process, ".0", ".1", for subprocesses, ".0.0" for nested subprocesses
 _subprocess_identifier = ""
 
@@ -229,7 +220,7 @@ def stats_field_names():
     return _taskstats_sample_names
 
 
-async def update_stats(now: datetime, sample: TaskStatsDatum):
+def update_stats(now: datetime, sample: TaskStatsDatum):
     if _task_stack:
         ti = _task_stack[-1]
         keys = [tuple(ti.names)]
@@ -284,7 +275,7 @@ def update_process_status(stimela_process=None, child_processes=None):
     if prev_io is not None:
         delta = (now - prev_time).total_seconds()
         io = {}
-        for key in IO_FIELDS:
+        for key in 'read_bytes', 'read_count', 'read_time', 'write_bytes', 'write_count', 'write_time':
             io[key] = getattr(disk_io, key) - getattr(prev_io, key)
         s.read_count = io['read_count']
         s.write_count = io['write_count']
@@ -300,21 +291,9 @@ def update_process_status(stimela_process=None, child_processes=None):
 
     # call extra status reporter
     if ti and ti.status_reporter:
-        _, extra_stats = ti.status_reporter()
+        extra_metrics, extra_stats = ti.status_reporter()
         if extra_stats:
             s.insert_extra_stats(**extra_stats)
-
-    # update stats
-    return now, elapsed, s
-
-
-async def update_progress_bar(elapsed, s):
-
-    ti = _task_stack[-1] if _task_stack else None
-
-    # call extra status reporter
-    if ti and ti.status_reporter:
-        extra_metrics, _ = ti.status_reporter()
     else:
         extra_metrics = None
 
@@ -329,7 +308,7 @@ async def update_progress_bar(elapsed, s):
                 f"Load [green]{s.load:2.1f}[/green]"
             ]
 
-            if any(getattr(s, f, None) for f in IO_FIELDS):
+            if io is not None:
                 cpu_info += [
                     f"R [green]{s.read_count:-4}[/green] [green]{s.read_gbps:2.2f}[/green]G [green]{s.read_ms:4}[/green]ms",
                     f"W [green]{s.write_count:-4}[/green] [green]{s.write_gbps:2.2f}[/green]G [green]{s.write_ms:4}[/green]ms "
@@ -346,23 +325,24 @@ async def update_progress_bar(elapsed, s):
 
         progress_bar.update(progress_task, **updates)
 
-def run_process_status_update(pid, sender):
+    # update stats
+    update_stats(now, s)
+
+
+async def run_process_status_update():
     if progress_bar:
         with contextlib.suppress(asyncio.CancelledError):
-            stimela_process = psutil.Process(pid)
+            stimela_process = psutil.Process()
             child_processes = set()
             while True:
                 new_children = {c for c in stimela_process.children(recursive=True) if c not in child_processes}
                 old_children = {c for c in child_processes if c not in stimela_process.children(recursive=True)}
                 child_processes = child_processes.union(new_children) - old_children
                 try:
-                    now, elapsed, stats = update_process_status(
-                        stimela_process,
-                        child_processes
-                    )
-                    sender.send([now, elapsed, stats])
+                    update_process_status(stimela_process, child_processes)
                 except psutil.NoSuchProcess:
                     continue
+                await asyncio.sleep(1)
 
 _printed_stats = dict(
     k8s_cores="k8s cores",
