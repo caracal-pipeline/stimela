@@ -17,6 +17,15 @@ from rich.text import Text
 
 from stimela import stimelogging
 
+IO_FIELDS = [
+    'read_bytes',
+    'read_count',
+    'read_time',
+    'write_bytes',
+    'write_count',
+    'write_time'
+]
+
 # this is "" for the main process, ".0", ".1", for subprocesses, ".0.0" for nested subprocesses
 _subprocess_identifier = ""
 
@@ -220,7 +229,7 @@ def stats_field_names():
     return _taskstats_sample_names
 
 
-def update_stats(now: datetime, sample: TaskStatsDatum):
+async def update_stats(now: datetime, sample: TaskStatsDatum):
     if _task_stack:
         ti = _task_stack[-1]
         keys = [tuple(ti.names)]
@@ -329,23 +338,129 @@ def update_process_status(stimela_process=None, child_processes=None):
         progress_bar.update(progress_task, **updates)
 
     # update stats
-    update_stats(now, s)
+    return now, s
 
 
-async def run_process_status_update():
+def update_process_status(stimela_process=None, child_processes=None):
+    # current subtask info
+    ti = _task_stack[-1] if _task_stack else None
+
+    # elapsed time since start
+    now = datetime.now()
+    elapsed = str(now - _start_time).split('.', 1)[0]
+
+    # form up sample datum
+    s = TaskStatsDatum(num_samples=1)
+
+    # If we have the process objects, we don't need to block.
+    interval = 0 if child_processes else 1
+
+    # Grab the stimela process and its children (recursively).
+    stimela_process = stimela_process or psutil.Process()
+    stimela_children = child_processes or stimela_process.children(recursive=True)
+
+    # Assume that all child processes belong to the same task.
+    # TODO: Handling of children is rudimentary at present.
+    # How would this work for scattered/parallel steps?
+    if stimela_children and ti:
+        processes = stimela_children
+    else:
+        processes = [stimela_process]
+
+    # CPU and memory
+    s.cpu = sum(p.cpu_percent(interval=interval) for p in processes)
+    system_memory = psutil.virtual_memory().total
+    s.mem_used = round(sum(p.memory_info().rss for p in processes) / 2**30)
+    s.mem_total = round(system_memory / 2**30)
+    # load
+    s.load, _, _ = psutil.getloadavg()
+
+    # get disk I/O stats
+    disk_io = psutil.disk_io_counters()
+    global _prev_disk_io
+    prev_io, prev_time = _prev_disk_io
+    if prev_io is not None:
+        delta = (now - prev_time).total_seconds()
+        io = {}
+        for key in IO_FIELDS:
+            io[key] = getattr(disk_io, key) - getattr(prev_io, key)
+        s.read_count = io['read_count']
+        s.write_count = io['write_count']
+        s.read_gb = io['read_bytes']/2**30
+        s.write_gb = io['write_bytes']/2**30
+        s.read_gbps = s.read_gb / delta
+        s.write_gbps = s.write_gb / delta
+        s.read_ms = io['read_time']
+        s.write_ms = io['write_time']
+    else:
+        io = None
+    _prev_disk_io = disk_io, now
+
+    # call extra status reporter
+    if ti and ti.status_reporter:
+        _, extra_stats = ti.status_reporter()
+        if extra_stats:
+            s.insert_extra_stats(**extra_stats)
+
+    # update stats
+    return now, elapsed, s
+
+
+async def update_progress_bar(elapsed, s):
+
+    ti = _task_stack[-1] if _task_stack else None
+
+    # call extra status reporter
+    if ti and ti.status_reporter:
+        extra_metrics, _ = ti.status_reporter()
+    else:
+        extra_metrics = None
+
+    # if a progress bar exists, update it
+    if progress_bar is not None:
+        cpu_info = []
+        # add local metering, if not diabled by a task in the stack
+        if not any(t.hide_local_metrics for t in _task_stack):
+            cpu_info = [
+                f"CPU [green]{s.cpu:2.1f}%[/green]",
+                f"RAM [green]{round(s.mem_used):3}[/green]/[green]{round(s.mem_total)}[/green]G",
+                f"Load [green]{s.load:2.1f}[/green]"
+            ]
+
+            if any(getattr(s, f, None) for f in IO_FIELDS):
+                cpu_info += [
+                    f"R [green]{s.read_count:-4}[/green] [green]{s.read_gbps:2.2f}[/green]G [green]{s.read_ms:4}[/green]ms",
+                    f"W [green]{s.write_count:-4}[/green] [green]{s.write_gbps:2.2f}[/green]G [green]{s.write_ms:4}[/green]ms "
+                ]
+        # add extra metering
+        cpu_info += extra_metrics or []
+
+        updates = dict(elapsed_time=elapsed, cpu_info="|".join(cpu_info))
+
+        if ti is not None:
+            updates['description'] = ti.description
+            updates['status'] = ti.status or ''
+            updates['command'] = ti.command or ''
+
+        progress_bar.update(progress_task, **updates)
+
+def run_process_status_update(pid, sender):
     if progress_bar:
         with contextlib.suppress(asyncio.CancelledError):
-            stimela_process = psutil.Process()
+            stimela_process = psutil.Process(pid)
             child_processes = set()
             while True:
                 new_children = {c for c in stimela_process.children(recursive=True) if c not in child_processes}
                 old_children = {c for c in child_processes if c not in stimela_process.children(recursive=True)}
                 child_processes = child_processes.union(new_children) - old_children
                 try:
-                    update_process_status(stimela_process, child_processes)
+                    now, elapsed, stats = update_process_status(
+                        stimela_process,
+                        child_processes
+                    )
+                    sender.send([now, elapsed, stats])
                 except psutil.NoSuchProcess:
                     continue
-                await asyncio.sleep(1)
 
 _printed_stats = dict(
     k8s_cores="k8s cores",

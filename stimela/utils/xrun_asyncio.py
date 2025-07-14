@@ -6,6 +6,10 @@ import asyncio
 import logging
 import re
 from rich.markup import escape
+import signal
+import psutil
+from multiprocessing import Process, Pipe
+import contextlib
 
 from stimela import stimelogging, task_stats
 
@@ -40,7 +44,7 @@ def dispatch_to_log(log, line, command_name, stream_name, output_wrangler, style
         line, severity = output_wrangler(escape(line), severity)
     else:
         line = escape(line)
-    # escape emojis. Check that it's a str -- wranglers can return FunkyMessages instead of strings, in which case the 
+    # escape emojis. Check that it's a str -- wranglers can return FunkyMessages instead of strings, in which case the
     # escaping is aleady done for us
     if type(line) is str:
         line = re.sub(r":(\w+):", r":[bold][/bold]\1:", line)
@@ -53,11 +57,23 @@ def dispatch_to_log(log, line, command_name, stream_name, output_wrangler, style
         log.log(severity, line, extra=extra)
 
 
-def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, output_wrangler=None, shell=True, 
-            return_errcode=False, command_name=None, progress_bar=False, 
-            gentle_ctrl_c=False,
-            log_command=True, log_result=True):
-    
+def xrun(
+    command,
+    options,
+    log=None,
+    env=None,
+    timeout=-1,
+    kill_callback=None,
+    output_wrangler=None,
+    shell=True,
+    return_errcode=False,
+    command_name=None,
+    progress_bar=False,
+    gentle_ctrl_c=False,
+    log_command=True,
+    log_result=True
+):
+
     command_name = command_name or command
 
     # this part could be inside the container
@@ -98,47 +114,79 @@ def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, o
         def elapsed():
             """Returns string representing elapsed time"""
             return str(datetime.datetime.now() - start_time).split('.', 1)[0]
-        
-        loop = asyncio.get_event_loop()
-        
-        proc = loop.run_until_complete(
-                asyncio.create_subprocess_exec(*command,
-                    limit=1024**3,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE))
 
-        async def stream_reader(stream, stream_name):
+        loop = asyncio.get_event_loop()
+
+        proc = loop.run_until_complete(
+            asyncio.create_subprocess_exec(
+                *command,
+                limit=1024**3,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+        )
+
+        async def read_stream(stream, stream_name):
             while not stream.at_eof():
                 line = await stream.readline()
                 line = (line.decode('utf-8') if type(line) is bytes else line).rstrip()
                 if line or not stream.at_eof():
                     dispatch_to_log(log, line, command_name, stream_name, output_wrangler=output_wrangler)
 
-        async def proc_awaiter(proc, *cancellables):
+        async def await_process(proc, *cancellables):
             await proc.wait()
             for task in cancellables:
                 task.cancel()
 
-        reporter = asyncio.Task(task_stats.run_process_status_update())
+        async def update_stats(receiver, interval=1):
+            with contextlib.suppress(asyncio.CancelledError):
+                while True:
+                    if receiver.poll():
+                        now, elapsed, sample = receiver.recv()
+                        await task_stats.update_progress_bar(elapsed, sample)
+                        await task_stats.update_stats(now, sample)
+                    await asyncio.sleep(interval)
+
+        stimela_pid = psutil.Process().pid
+
         ctrl_c_caught = job_interrupted = False
         try:
+            receiver, sender = Pipe(duplex=False)
+            monitor_process = Process(
+                name="stimela-monitor",
+                target=task_stats.run_process_status_update,
+                args=(stimela_pid, sender),
+                daemon=True  # Terminate if parent terminates.
+            )
+            monitor_process.start()
+
+            updater = loop.create_task(update_stats(receiver))
+            awaiter = loop.create_task(await_process(proc, updater))
+
+            def cancel_updater(task):
+                updater.cancel()
+
+            awaiter.add_done_callback(cancel_updater)
+
             job = asyncio.gather(
-                proc_awaiter(proc, reporter),
-                stream_reader(proc.stdout, "stdout"),
-                stream_reader(proc.stderr, "stderr"),
-                reporter
+                awaiter,
+                read_stream(proc.stdout, "stdout"),
+                read_stream(proc.stderr, "stderr"),
+                updater
             )
             results = loop.run_until_complete(job)
+            monitor_process.terminate()
             status = proc.returncode
             if log_result:
                 log.info(f"{command_name} exited with code {status} after {elapsed()}")
         except SystemExit as exc:
             loop.run_until_complete(proc.wait())
         except KeyboardInterrupt:
+            print("Caught KeyboardInterrupt!")
             if callable(kill_callback):
                 command_context.ctrl_c()
                 log.warning(f"Ctrl+C caught after {elapsed()}, shutting down {command_name} process, please give it a few moments")
-                kill_callback() 
+                kill_callback()
                 log.info(f"the {command_name} process was shut down successfully",
                         extra=dict(stimela_subprocess_output=(command_name, "status")))
                 loop.run_until_complete(proc.wait())
@@ -172,7 +220,7 @@ def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, o
                         else:
                             log.warning(f"Killing process {proc.pid}")
                             proc.kill()
-                    
+
                     loop.run_until_complete(wait_on_process(proc))
             if job_interrupted:
                 raise StimelaCabRuntimeError(f"{command_name} interrupted with Ctrl+C")
@@ -186,6 +234,6 @@ def xrun(command, options, log=None, env=None, timeout=-1, kill_callback=None, o
 
         if status and not return_errcode:
             raise StimelaCabRuntimeError(f"{command_name} returns error code {status} after {elapsed()}")
-    
+
     return status
-    
+
