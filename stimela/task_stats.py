@@ -257,9 +257,6 @@ def update_process_status(stimela_process=None, child_processes=None):
     # form up sample datum
     s = TaskStatsDatum(num_samples=1)
 
-    # If we have the process objects, we don't need to block.
-    interval = 0 if child_processes else 1
-
     # Grab the stimela process and its children (recursively).
     stimela_process = stimela_process or psutil.Process()
     stimela_children = child_processes or stimela_process.children(recursive=True)
@@ -273,7 +270,7 @@ def update_process_status(stimela_process=None, child_processes=None):
         processes = [stimela_process]
 
     # CPU and memory
-    s.cpu = sum(p.cpu_percent(interval=interval) for p in processes)
+    s.cpu = sum(p.cpu_percent() for p in processes)
     system_memory = psutil.virtual_memory().total
     s.mem_used = round(sum(p.memory_info().rss for p in processes) / 2**30)
     s.mem_total = round(system_memory / 2**30)

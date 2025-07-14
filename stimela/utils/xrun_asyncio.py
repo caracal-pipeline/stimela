@@ -6,7 +6,6 @@ import asyncio
 import logging
 import re
 from rich.markup import escape
-import signal
 import psutil
 from multiprocessing import Process, Pipe
 import contextlib
