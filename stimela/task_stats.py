@@ -56,6 +56,8 @@ class TaskInformation(object):
 
 # stack of task information -- most recent subtask is at the end
 _task_stack = []
+stimela_process = psutil.Process()
+child_processes = {}
 
 def init_progress_bar(boring=False):
     global progress_console, progress_bar, progress_task
@@ -236,8 +238,24 @@ def update_stats(now: datetime, sample: TaskStatsDatum):
         start = _task_start_time.setdefault(key, now)
         _taskstats[key][0] = (now - start).total_seconds()
 
+def update_children():
+    """Update the module level dictionary mapping child pid to process.
 
-def update_process_status(stimela_process=None, child_processes=None):
+    This is necessary as calling Process.children will return different
+    Process objects each time. These then fail to report CPU stats unless
+    we make them block which has a large impact on performance.
+    """
+    current_children = stimela_process.children(recursive=True)
+    current_pids = {proc.pid for proc in current_children}
+    child_processes.update(
+        {c.pid: c for c in current_children if c.pid not in child_processes}
+    )
+    dropped_pids = {c for c in child_processes.keys() if c not in current_pids}
+
+    for pid in dropped_pids:
+        del child_processes[pid]
+
+def update_process_status():
     # current subtask info
     ti = _task_stack[-1] if _task_stack else None
 
@@ -248,18 +266,12 @@ def update_process_status(stimela_process=None, child_processes=None):
     # form up sample datum
     s = TaskStatsDatum(num_samples=1)
 
-    # Grab the stimela process and its children (recursively).
-    # TODO(JSKenyon): This is a work around for the fact that this code is
-    # called from many different places so we cannot guarantee that the
-    # kwargs are correctly supplied. Simplify in the future.
-    stimela_process = stimela_process or psutil.Process()
-    stimela_children = child_processes or stimela_process.children(recursive=True)
-
+    update_children()
     # Assume that all child processes belong to the same task.
-    # TODO: Handling of children is rudimentary at present.
+    # TODO(JSKenyon): Handling of children is rudimentary at present.
     # How would this work for scattered/parallel steps?
-    if stimela_children and ti:
-        processes = stimela_children
+    if child_processes and ti:
+        processes = list(child_processes.values())
     else:
         processes = [stimela_process]
 
@@ -342,21 +354,8 @@ def update_process_status(stimela_process=None, child_processes=None):
 async def run_process_status_update():
     if progress_bar:
         with contextlib.suppress(asyncio.CancelledError):
-            stimela_process = psutil.Process()
-            child_processes = {}
             while True:
-                current_children = stimela_process.children(recursive=True)
-                current_pids = {proc.pid for proc in current_children}
-                child_processes.update({c.pid: c for c in current_children if c.pid not in child_processes})
-                missing_pids = {c.pid for c in child_processes.keys() if c not in current_pids}
-
-                for pid in missing_pids:
-                    del child_processes[pid]
-
-                try:
-                    update_process_status(stimela_process, list(child_processes.values()))
-                except psutil.NoSuchProcess:
-                    continue
+                update_process_status()
                 await asyncio.sleep(1)
 
 _printed_stats = dict(
