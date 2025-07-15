@@ -273,7 +273,7 @@ def update_process_status():
     if child_processes and ti:
         processes = list(child_processes.values())
     else:
-        processes = [stimela_process]
+        processes = []  # Don't bother with cpu and mem for stimela itself.
 
     # CPU and memory
     for p in processes:
