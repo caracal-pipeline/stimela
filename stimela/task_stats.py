@@ -15,6 +15,12 @@ import rich.logging
 from rich.table import Table
 from rich.text import Text
 
+from rich.live import Live
+from rich.panel import Panel
+from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
+from rich.table import Table
+
+
 from stimela import stimelogging
 
 # this is "" for the main process, ".0", ".1", for subprocesses, ".0.0" for nested subprocesses
@@ -77,7 +83,21 @@ def init_progress_bar(boring=False):
         disable=boring)
 
     progress_task = progress_bar.add_task("stimela", status="", command="starting", cpu_info=" ", elapsed_time="", start=True)
-    progress_bar.__enter__()
+
+    progress_table = Table.grid(expand=True)
+    progress_table.add_row(
+        Panel(
+            progress_bar, expand=True, title="Status", border_style="green", padding=(2, 2)
+        ),
+    )
+
+    live_display = Live(
+        progress_table,
+        refresh_per_second=10,
+        console=progress_console
+    )
+
+    live_display.__enter__()
     atexit.register(destroy_progress_bar)
     return progress_bar, progress_console
 
