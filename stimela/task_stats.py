@@ -50,6 +50,16 @@ progress_task = progress_bar.add_task(
     start=True
 )
 
+total_elapsed = rich.progress.Progress(
+    rich.progress.SpinnerColumn(),
+    f"[yellow][bold]{'Elapsed':<10}[/bold][/yellow]",
+    rich.progress.TimeElapsedColumn(),
+    refresh_per_second=2,
+    console=progress_console,
+    transient=True
+)
+total_elapsed_task = total_elapsed.add_task("Run Time")
+
 sys_usage = rich.progress.Progress(
     "[bold]{task.description:<12} {task.fields[resource]} [/bold]",
     refresh_per_second=2,
@@ -69,11 +79,22 @@ task_usage = rich.progress.Progress(
     transient=True
 )
 
+task_name_task = task_usage.add_task("Name", resource="Pending...")
 task_cpu_usage_task = task_usage.add_task("Task CPU", resource="Pending...")
 task_ram_usage_task = task_usage.add_task("Task RAM", resource="Pending...")
 
-task_state = Group(progress_bar, task_usage)
-system_state = Group(sys_usage)
+task_elapsed = rich.progress.Progress(
+    rich.progress.SpinnerColumn(),
+    f"[yellow][bold]{'Elapsed':<10}[/bold][/yellow]",
+    rich.progress.TimeElapsedColumn(),
+    refresh_per_second=2,
+    console=progress_console,
+    transient=True
+)
+task_elapsed_task = task_elapsed.add_task("Run Time")
+
+task_state = Group(task_elapsed, progress_bar, task_usage)
+system_state = Group(total_elapsed, sys_usage)
 
 progress_table = Table.grid(expand=False)
 progress_table.add_row(
@@ -93,7 +114,7 @@ progress_table.add_row(
 
 live_display = Live(
     Align.center(progress_table),
-    refresh_per_second=10,
+    refresh_per_second=5,
     console=progress_console
 )
 
@@ -202,6 +223,7 @@ class _CommandContext(object):
 @contextlib.contextmanager
 def declare_subcommand(command):
     progress_bar and progress_bar.reset(progress_task)
+    task_elapsed and task_elapsed.reset(task_elapsed_task)
     try:
         yield _CommandContext(command)
     finally:
@@ -441,9 +463,17 @@ def update_process_status():
 
     if not task_usage.disable:
         if not any(t.hide_local_metrics for t in _task_stack):
+
+            name = 'None' if not ti else ti.description
+
+            task_usage.update(
+                task_name_task,
+                resource=f"[bold]{name}[/bold]"
+            )
+
             task_usage.update(
                 task_cpu_usage_task,
-                resource=f"[green]{s.cpu:2.1f}%[/green]"
+                resource=f"[green]{s.cpu:2.1f}[/green]%"
             )
 
             task_usage.update(
