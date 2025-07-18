@@ -12,16 +12,86 @@ import psutil
 
 import rich.progress
 import rich.logging
-from rich.table import Table
-from rich.text import Text
-
+from rich.console import Group
 from rich.live import Live
 from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
 from rich.table import Table
-
+from rich.align import Align
+from rich.text import Text
 
 from stimela import stimelogging
+
+
+progress_console = rich.console.Console(
+    file=sys.stdout,
+    highlight=False,
+    emoji=False
+)
+
+progress_bar = rich.progress.Progress(
+    rich.progress.SpinnerColumn(),
+    "[yellow]{task.fields[elapsed_time]}[/yellow]",
+    "[bold]{task.description}[/bold]",
+    rich.progress.SpinnerColumn(),
+    "[dim]{task.fields[status]}[/dim]",
+    "{task.fields[command]}",
+    rich.progress.TimeElapsedColumn(),
+    # "{task.fields[cpu_info]}",
+    refresh_per_second=2,
+    console=progress_console,
+    transient=True
+)
+
+progress_task = progress_bar.add_task(
+    "stimela",
+    status="",
+    command="Starting...",
+    cpu_info=" ",
+    elapsed_time="",
+    start=True
+)
+
+sys_usage = rich.progress.Progress(
+    "[bold]{task.description:<12} {task.fields[resource]} [/bold]",
+    refresh_per_second=2,
+    console=progress_console,
+    transient=True
+)
+
+cpu_usage_task = sys_usage.add_task("System CPU", resource="Pending...")
+ram_usage_task = sys_usage.add_task("System RAM", resource="Pending...")
+disk_read_task = sys_usage.add_task("Disk Read", resource="Pending...")
+disk_write_task = sys_usage.add_task("Disk Write", resource="Pending...")
+
+task_usage = rich.progress.Progress(
+    "[bold]{task.description:<12} {task.fields[resource]} [/bold]",
+    refresh_per_second=2,
+    console=progress_console,
+    transient=True
+)
+
+task_cpu_usage_task = task_usage.add_task("Task CPU", resource="Pending...")
+task_ram_usage_task = task_usage.add_task("Task RAM", resource="Pending...")
+
+progress_bars = Group(progress_bar, sys_usage, task_usage)
+
+progress_table = Table.grid(expand=True)
+progress_table.add_row(
+    Panel(
+        Align.center(progress_bars),
+        expand=True,
+        title="Status",
+        border_style="green",
+        padding=(2, 2)
+    ),
+)
+
+live_display = Live(
+    progress_table,
+    refresh_per_second=10,
+    console=progress_console
+)
+
 
 # this is "" for the main process, ".0", ".1", for subprocesses, ".0.0" for nested subprocesses
 _subprocess_identifier = ""
@@ -32,8 +102,6 @@ def get_subprocess_id():
 def add_subprocess_id(num: int):
     global _subprocess_identifier
     _subprocess_identifier += f".{num}"
-
-progress_bar = progress_task = None
 
 _start_time = datetime.now()
 _prev_disk_io = None, None
@@ -66,46 +134,16 @@ stimela_process = psutil.Process()
 child_processes = {}
 
 def init_progress_bar(boring=False):
-    global progress_console, progress_bar, progress_task
-    progress_console = rich.console.Console(file=sys.stdout, highlight=False, emoji=False)
-    progress_bar = rich.progress.Progress(
-        rich.progress.SpinnerColumn(),
-        "[yellow]{task.fields[elapsed_time]}[/yellow]",
-        "[bold]{task.description}[/bold]",
-        rich.progress.SpinnerColumn(),
-        "[dim]{task.fields[status]}[/dim]",
-        "{task.fields[command]}",
-        rich.progress.TimeElapsedColumn(),
-        "{task.fields[cpu_info]}",
-        refresh_per_second=2,
-        console=progress_console,
-        transient=True,
-        disable=boring)
-
-    progress_task = progress_bar.add_task("stimela", status="", command="starting", cpu_info=" ", elapsed_time="", start=True)
-
-    progress_table = Table.grid(expand=True)
-    progress_table.add_row(
-        Panel(
-            progress_bar, expand=True, title="Status", border_style="green", padding=(2, 2)
-        ),
-    )
-
-    live_display = Live(
-        progress_table,
-        refresh_per_second=10,
-        console=progress_console
-    )
-
-    live_display.__enter__()
-    atexit.register(destroy_progress_bar)
+    if not boring:
+        live_display.__enter__()
+        atexit.register(destroy_progress_bar)
     return progress_bar, progress_console
 
 def destroy_progress_bar():
-    global progress_bar
     if progress_bar is not None:
         progress_bar.__exit__(None, None, None)
-        progress_bar = None
+    if live_display is not None:
+        live_display.__exit__(None, None, None)
 
 def restate_progress():
     """Renders a snapshot of the progress bar onto the console"""
@@ -181,6 +219,7 @@ class TaskStatsDatum(object):
     write_gbps: float   = 0
     write_ms: float     = 0
     num_samples: int    = 0
+    sys_cpu: float      = 0
 
     def __post_init__(self):
         self.extras = []
@@ -286,6 +325,10 @@ def update_process_status():
     # form up sample datum
     s = TaskStatsDatum(num_samples=1)
 
+    # System wide cpu and RAM.
+    s.sys_cpu = psutil.cpu_percent()
+    sys_mem = psutil.virtual_memory()
+
     update_children()
     # Assume that all child processes belong to the same task.
     # TODO(JSKenyon): Handling of children is rudimentary at present.
@@ -304,8 +347,7 @@ def update_process_status():
             pass  # Process ended before we could gather its stats.
 
     s.mem_used = round(s.mem_used  / (2 ** 30))
-    system_memory = psutil.virtual_memory().total
-    s.mem_total = round(system_memory / (2 ** 30))
+    s.mem_total = round(sys_mem.total / (2 ** 30))
 
     # load
     s.load, _, _ = psutil.getloadavg()
@@ -342,19 +384,6 @@ def update_process_status():
     # if a progress bar exists, update it
     if progress_bar is not None:
         cpu_info = []
-        # add local metering, if not diabled by a task in the stack
-        if not any(t.hide_local_metrics for t in _task_stack):
-            cpu_info = [
-                f"CPU [green]{s.cpu:2.1f}%[/green]",
-                f"RAM [green]{round(s.mem_used):3}[/green]/[green]{round(s.mem_total)}[/green]G",
-                f"Load [green]{s.load:2.1f}[/green]"
-            ]
-
-            if io is not None:
-                cpu_info += [
-                    f"R [green]{s.read_count:-4}[/green] [green]{s.read_gbps:2.2f}[/green]G [green]{s.read_ms:4}[/green]ms",
-                    f"W [green]{s.write_count:-4}[/green] [green]{s.write_gbps:2.2f}[/green]G [green]{s.write_ms:4}[/green]ms "
-                ]
         # add extra metering
         cpu_info += extra_metrics or []
 
@@ -366,6 +395,56 @@ def update_process_status():
             updates['command'] = ti.command or ''
 
         progress_bar.update(progress_task, **updates)
+
+    if not sys_usage.disable:
+        if not any(t.hide_local_metrics for t in _task_stack):
+            sys_usage.update(
+                cpu_usage_task,
+                resource=f"[green]{s.sys_cpu}[/green]%"
+            )
+
+            used = round(sys_mem.used / 2 ** 30)
+            total = round(sys_mem.total / 2 ** 30)
+            percent = (used / total) * 100
+
+            sys_usage.update(
+                ram_usage_task,
+                resource=(
+                    f"[green]{used}/{total}[/green]GB "
+                    f"([green]{percent:.2}[/green]%)"
+                )
+            )
+
+            if io is not None:
+
+                sys_usage.update(
+                    disk_read_task,
+                    resource=(
+                        f"[green]{s.read_gbps:2.2f}[/green]GB/s "
+                        f"[green]{s.read_ms:4}[/green]ms "
+                        f"[green]{s.read_count:-4}[/green] reads"
+                    )
+                )
+                sys_usage.update(
+                    disk_write_task,
+                    resource=(
+                        f"[green]{s.write_gbps:2.2f}[/green]GB/s "
+                        f"[green]{s.write_ms:4}[/green]ms "
+                        f"[green]{s.write_count:-4}[/green] writes"
+                    )
+                )
+
+    if not task_usage.disable:
+        if not any(t.hide_local_metrics for t in _task_stack):
+            task_usage.update(
+                task_cpu_usage_task,
+                resource=f"[green]{s.cpu:2.1f}%[/green]"
+            )
+
+            task_usage.update(
+                task_ram_usage_task,
+                resource=f"[green]{s.mem_used}[/green]GB"
+            )
 
     # update stats
     update_stats(now, s)
