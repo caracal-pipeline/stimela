@@ -111,7 +111,8 @@ progress_table.add_row(
 live_display = Live(
     Align.center(progress_table),
     refresh_per_second=5,
-    console=progress_console
+    console=progress_console,
+    transient=True
 )
 
 
