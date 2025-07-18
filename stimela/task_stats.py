@@ -29,13 +29,9 @@ progress_console = rich.console.Console(
 )
 
 progress_bar = rich.progress.Progress(
-    rich.progress.SpinnerColumn(),
-    "[yellow]{task.fields[elapsed_time]}[/yellow]",
     "[bold]{task.description}[/bold]",
-    rich.progress.SpinnerColumn(),
     "[dim]{task.fields[status]}[/dim]",
     "{task.fields[command]}",
-    rich.progress.TimeElapsedColumn(),
     refresh_per_second=2,
     console=progress_console,
     transient=True
