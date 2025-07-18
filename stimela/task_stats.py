@@ -36,7 +36,6 @@ progress_bar = rich.progress.Progress(
     "[dim]{task.fields[status]}[/dim]",
     "{task.fields[command]}",
     rich.progress.TimeElapsedColumn(),
-    # "{task.fields[cpu_info]}",
     refresh_per_second=2,
     console=progress_console,
     transient=True
@@ -73,21 +72,27 @@ task_usage = rich.progress.Progress(
 task_cpu_usage_task = task_usage.add_task("Task CPU", resource="Pending...")
 task_ram_usage_task = task_usage.add_task("Task RAM", resource="Pending...")
 
-progress_bars = Group(progress_bar, sys_usage, task_usage)
+task_state = Group(progress_bar, task_usage)
+system_state = Group(sys_usage)
 
-progress_table = Table.grid(expand=True)
+progress_table = Table.grid(expand=False)
 progress_table.add_row(
     Panel(
-        Align.center(progress_bars),
-        expand=True,
-        title="Status",
+        task_state,
+        title="Task",
+        border_style="green"
+    )
+)
+progress_table.add_row(
+    Panel(
+        system_state,
+        title="System",
         border_style="green",
-        padding=(2, 2)
     ),
 )
 
 live_display = Live(
-    progress_table,
+    Align.center(progress_table),
     refresh_per_second=10,
     console=progress_console
 )
