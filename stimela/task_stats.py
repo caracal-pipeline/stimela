@@ -29,7 +29,7 @@ progress_console = rich.console.Console(
 
 total_elapsed = rich.progress.Progress(
     rich.progress.SpinnerColumn(),
-    f"[yellow][bold]{'Elapsed':<10}[/bold][/yellow]",
+    f"[yellow][bold]{'Elapsed':<9}[/bold][/yellow]",
     rich.progress.TimeElapsedColumn(),
     refresh_per_second=2,
     console=progress_console,
@@ -38,7 +38,7 @@ total_elapsed = rich.progress.Progress(
 total_elapsed_task = total_elapsed.add_task("Run Time")
 
 sys_usage = rich.progress.Progress(
-    "[bold]{task.description:<12} {task.fields[resource]} [/bold]",
+    "[bold]{task.description:<11} {task.fields[resource]} [/bold]",
     refresh_per_second=2,
     console=progress_console,
     transient=True
@@ -50,7 +50,7 @@ disk_read_task = sys_usage.add_task("Disk Read", resource="Pending...")
 disk_write_task = sys_usage.add_task("Disk Write", resource="Pending...")
 
 task_usage = rich.progress.Progress(
-    "[bold]{task.description:<12} {task.fields[resource]} [/bold]",
+    "[bold]{task.description:<11} {task.fields[resource]} [/bold]",
     refresh_per_second=2,
     console=progress_console,
     transient=True
@@ -64,7 +64,7 @@ task_ram_usage_task = task_usage.add_task("RAM", resource="Pending...")
 
 task_elapsed = rich.progress.Progress(
     rich.progress.SpinnerColumn(),
-    f"[yellow][bold]{'Elapsed':<10}[/bold][/yellow]",
+    f"[yellow][bold]{'Elapsed':<9}[/bold][/yellow]",
     rich.progress.TimeElapsedColumn(),
     refresh_per_second=2,
     console=progress_console,
@@ -322,7 +322,6 @@ def update_process_status():
 
     # elapsed time since start
     now = datetime.now()
-    elapsed = str(now - _start_time).split('.', 1)[0]
 
     # form up sample datum
     s = TaskStatsDatum(num_samples=1)
