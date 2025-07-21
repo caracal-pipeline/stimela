@@ -1307,8 +1307,6 @@ class Recipe(Cargo):
                     if errors:
                         pool.shutdown()
                         raise StimelaRuntimeError(f"{nfail}/{nloop} jobs have failed", errors)
-                # drop a rendering of the progress bar onto the console, to overwrite previous garbage if it's there
-                task_stats.restate_progress()
             # else just iterate directly
             else:
                 for args in loop_worker_args:

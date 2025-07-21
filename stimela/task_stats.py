@@ -166,13 +166,6 @@ def enable_progress_display():
 def disable_progress_display():
     live_display.__exit__(None, None, None)
 
-def restate_progress():
-    """Renders a snapshot of the progress bar onto the console"""
-    if progress_bar is not None:
-        progress_console.print(progress_bar.get_renderable())
-        progress_console.rule()
-
-
 @contextlib.contextmanager
 def declare_subtask(subtask_name, status_reporter=None, hide_local_metrics=False):
     task_names = []
@@ -469,10 +462,12 @@ def update_process_status():
                     task_status_task,
                     resource=f"[dim]{ti.status or 'N/A'}[/dim]"
                 )
-
+                # Sometimes the command contains square brackets which rich
+                # interprets as formatting. Remove them. # TODO: Figure out
+                # why the command has square brackets in the first place.
                 task_usage.update(
                     task_command_task,
-                    resource=f"{ti.command or 'N/A'}"
+                    resource=f"{(ti.command or 'N/A').strip('[]')}"
                 )
 
             task_usage.update(
