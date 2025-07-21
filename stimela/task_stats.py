@@ -28,24 +28,6 @@ progress_console = rich.console.Console(
     emoji=False
 )
 
-progress_bar = rich.progress.Progress(
-    "[bold]{task.description}[/bold]",
-    "[dim]{task.fields[status]}[/dim]",
-    "{task.fields[command]}",
-    refresh_per_second=2,
-    console=progress_console,
-    transient=True
-)
-
-progress_task = progress_bar.add_task(
-    "stimela",
-    status="",
-    command="Starting...",
-    cpu_info=" ",
-    elapsed_time="",
-    start=True
-)
-
 total_elapsed = rich.progress.Progress(
     rich.progress.SpinnerColumn(),
     f"[yellow][bold]{'Elapsed':<10}[/bold][/yellow]",

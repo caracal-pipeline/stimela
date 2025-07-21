@@ -177,7 +177,7 @@ def logger(name="STIMELA", propagate=False, boring=False, loglevel="INFO"):
         _logger.propagate = propagate
 
         global _log_console_handler, _log_formatter, _log_file_formatter, _log_boring_formatter, _log_colourful_formatter
-        global progress_console, progress_bar
+        global progress_console
 
         _log_file_formatter = StimelaLogFormatter(boring=True, override_message_attr='logfile_message')
         _log_boring_formatter = StimelaLogFormatter(boring=True)
@@ -185,7 +185,6 @@ def logger(name="STIMELA", propagate=False, boring=False, loglevel="INFO"):
 
         _log_formatter = _log_boring_formatter if boring else _log_colourful_formatter
 
-        progress_bar = task_stats.progress_bar
         progress_console = task_stats.progress_console
 
         _log_console_handler = StimelaConsoleHander(console=progress_console)
@@ -426,7 +425,10 @@ def log_exception(*errors, severity="error", log=None):
     if do_log:
         message_dispatch(": ".join(messages))
 
-    printfunc = task_stats.progress_bar.console.print if task_stats.progress_bar is not None else rich_print
+    # NOTE(JSKenyon): Can probably use the console print regardless. It should
+    # always be defined as I have removed the behaviour that set it to None.
+    has_display = task_stats.live_display.is_started
+    printfunc = task_stats.progress_console.print if has_display else rich_print
 
     if has_nesting:
         declare_chapter("detailed error report follows", style="red")
