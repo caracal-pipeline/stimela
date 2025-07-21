@@ -22,7 +22,8 @@ from scabha.basetypes import File, Directory, MS, UNSET, Placeholder
 from .cab import Cab
 from .batch import Batch
 from .step import Step
-from stimela import task_stats 
+from stimela.stimelogging import _boring as boring_logging
+from stimela import task_stats
 from stimela import backends
 from stimela.backends import StimelaBackendSchema
 from stimela.kitchen.utils import keys_from_sel_string
@@ -36,14 +37,14 @@ class DeferredAlias(Unresolved):
 @dataclass
 class ForLoopClause(object):
     # name of list variable
-    var: str 
+    var: str
     # This should be the name of an input that provides a list, or a list
     over: Optional[Any] = None
     # If !=0 , this is a scatter not a loop -- things may be evaluated in parallel using this many workers
     # (use -1 to scatter to unlimited number of workers)
     scatter: int = 0
     # How to indicate the status of the loop on the console.
-    # Default is "i/N", where i is the current index plus 1, and N is the total number of loops. 
+    # Default is "i/N", where i is the current index plus 1, and N is the total number of loops.
     # A format string can be supplied instead.
     display_status: Optional[str] = None
 
@@ -109,7 +110,7 @@ class Recipe(Cargo):
                     raise StepValidationError(f"recipe '{self.name}': error in definition of step '{label}'", exc)
             self.steps = steps
         # check that assignments don't clash with i/o parameters
- 
+
         self.validate_assignments(self.assign, self.assign_based_on, self.name)
 
         # check that for-loop variable does not clash
@@ -142,7 +143,7 @@ class Recipe(Cargo):
         #         if key in io:
         #             raise RecipeValidationError(f"'{location}.{assign_label}.{key}' clashes with an {io_label}")
 
-    def update_assignments(self, subst: SubstitutionNS, whose = None, params: Dict[str, Any] = {}, 
+    def update_assignments(self, subst: SubstitutionNS, whose = None, params: Dict[str, Any] = {},
                             ignore_subst_errors: bool = False,
                             ignore_abo_errors: bool = False):
         """Updates variable assignments, using the recipe's (or a step's) 'assign' and 'assign_based_on' sections.
@@ -151,7 +152,7 @@ class Recipe(Cargo):
         Args:
             subst (SubstitutionNS): substitution namespace
             whose (Step or None): if None, use recipe's (self) assignments, else use this step's
-            params (dict, optional): dictionary of parameters 
+            params (dict, optional): dictionary of parameters
             ignore_subst_errors (bool): ignore substitution errors (default is False)
 
         Raises:
@@ -235,7 +236,7 @@ class Recipe(Cargo):
                     raise AssignmentError(f"{whose.fqname}.assign_based_on: neither the '{basevar}={value}' case nor a DEFAULT case is defined")
                 value = 'DEFAULT'
             assignments = value_list.get(value)
-            # an empty section maps to None, so skip 
+            # an empty section maps to None, so skip
             if assignments is None:
                 continue
             if not isinstance(assignments, (dict, OrderedDict, DictConfig)):
@@ -254,7 +255,7 @@ class Recipe(Cargo):
 
     def assign_value(self, key: str, value: Any, override: bool = False,
                      subst: Optional[Dict[str, Any]] = None, whose: Optional[Any] = None):
-        """assigns a parameter value to the recipe. Handles nested assignments and 
+        """assigns a parameter value to the recipe. Handles nested assignments and
         assignments to local log options.
         """
         # ignore protected assignments
@@ -276,7 +277,7 @@ class Recipe(Cargo):
                 comps.pop(0)
             container[comps[0]] = value
 
-        # assigning to input or output? Provide default            
+        # assigning to input or output? Provide default
         if key in self.inputs_outputs:
             self.log.debug(f"default params assignment: {key}={value}")
             if value is UNSET:
@@ -438,7 +439,7 @@ class Recipe(Cargo):
                 return 0
             else:
                 if len(active_steps) != len(self.steps):
-                    # apply skip flags 
+                    # apply skip flags
                     for label, step in self.steps.items():
                         if label not in active_steps:
                             step.skip = step._skip = True
@@ -480,9 +481,9 @@ class Recipe(Cargo):
         step.fqname = f"{self.name}.{label}"
 
 
-    def add(self, cabname: str, label: str = None, 
+    def add(self, cabname: str, label: str = None,
             params: Optional[Dict[str, Any]] = None, info: str = None):
-        """Add a step to a recipe. This will create a Step instance and call add_step() 
+        """Add a step to a recipe. This will create a Step instance and call add_step()
 
         Args:
             cabname (str): name of cab to use for this step
@@ -501,7 +502,7 @@ class Recipe(Cargo):
         from_recipe: bool = False       # if True, value propagates from recipe up to step
         from_step: bool = False         # if True, value propagates from step down to recipe
 
-    def _add_alias(self, alias_name: str, alias_target: Union[str, Tuple], 
+    def _add_alias(self, alias_name: str, alias_target: Union[str, Tuple],
                     category: Optional[int] = None,
                     has_value=False):
         wildcards = False
@@ -512,7 +513,7 @@ class Recipe(Cargo):
             step_spec, step_param_name = alias_target.split('.', 1)
             # treat label as a "(cabtype)" specifier?
             if re.match(r'^\(.+\)$', step_spec):
-                steps = [(label, step) for label, step in self.steps.items() 
+                steps = [(label, step) for label, step in self.steps.items()
                         if (isinstance(step.cargo, Cab) and step.cab == step_spec[1:-1]) or
                             (isinstance(step.cargo, Recipe) and step.recipe == step_spec[1:-1])]
                 wildcards = True
@@ -537,9 +538,9 @@ class Recipe(Cargo):
             output_schema = step.outputs.get(step_param_name)
             schema = input_schema or output_schema
             # if the step was matched by a wildcard, and it doesn't have such a parameter in the schema, or else if it is
-            # already explicitly specified, then we don't alias it 
+            # already explicitly specified, then we don't alias it
             if wildcards and (schema is None or step_param_name in step.params):
-                continue                    
+                continue
             # no a wildcard, but parameter not defined? This is an error
             if schema is None:
                 raise RecipeValidationError(f"recipe '{self.name}': alias '{alias_name}' refers to unknown step parameter '{step_label}.{step_param_name}'", log=self.log)
@@ -553,7 +554,7 @@ class Recipe(Cargo):
                     raise RecipeValidationError(f"recipe '{self.name}': output alias '{alias_name}' is defined more than once", log=self.log)
                 elif output_schema:
                     raise RecipeValidationError(f"recipe '{self.name}': alias '{alias_name}' refers to both an input and an output", log=self.log)
-                alias_schema = io[alias_name] 
+                alias_schema = io[alias_name]
                 # now we know it's a multiply-defined input, check for type consistency
                 if alias_schema.dtype != schema.dtype:
                     raise RecipeValidationError(f"recipe '{self.name}': alias '{alias_name}': dtype {schema.dtype} of '{step_label}.{step_param_name}' doesn't match previous dtype {alias_schema.dtype}", log=self.log)
@@ -562,13 +563,13 @@ class Recipe(Cargo):
             else:
                 # get recipe's original schema for the parameter
                 io = self.inputs if input_schema else self.outputs
-                # if we have a schema defined for the alias, some params must be inherited from it 
+                # if we have a schema defined for the alias, some params must be inherited from it
                 orig_schema = io.get(alias_name)
                 self._orig_alias_schema[alias_name] = orig_schema
                 # define schema based on copy of the target, but preserve default
                 io[alias_name] = copy.copy(schema)
-                alias_schema = io[alias_name] 
-                # if default set in recipe schema, ignore any parameter setting in the step 
+                alias_schema = io[alias_name]
+                # if default set in recipe schema, ignore any parameter setting in the step
                 if orig_schema is not None and orig_schema.default is not UNSET:
                     if step_param_name in step.params:
                         del step.params[step_param_name]
@@ -655,7 +656,7 @@ class Recipe(Cargo):
                     step.assign = self.flatten_param_dict(OrderedDict(), step.assign)
                     self.validate_assignments(step.assign, step.assign_based_on, f"{fqname}.{label}")
                 except Exception as exc:
-                    raise StepValidationError(f"error validating step '{label}'", exc, 
+                    raise StepValidationError(f"error validating step '{label}'", exc,
                                 tb=not isinstance(exc, ScabhaBaseException))
 
             # collect aliases
@@ -678,18 +679,18 @@ class Recipe(Cargo):
                 for alias_target in alias_list:
                     self._add_alias(name, alias_target)
 
-            # automatically make aliases for step parameters that are unset, and don't have a default, and aren't implict 
+            # automatically make aliases for step parameters that are unset, and don't have a default, and aren't implict
             for label, step in self.steps.items():
                 for name, schema in step.inputs_outputs.items():
                     # does it have a value set
                     has_value = name in step.params or name in step.cargo.defaults or \
-                                schema.default is not UNSET 
+                                schema.default is not UNSET
                     if (label, name) not in self._alias_map and not schema.implicit and not has_value:
                         auto_name = f"{label}.{name}"
                         if auto_name in self.inputs or auto_name in self.outputs:
                             raise RecipeValidationError(f"recipe '{self.name}': auto-generated parameter name '{auto_name}' conflicts with another name. Please define an explicit alias for this.", log=log)
-                        self._add_alias(auto_name, (step, label, name), 
-                                        category=ParameterCategory.Required if schema.required and not has_value  
+                        self._add_alias(auto_name, (step, label, name),
+                                        category=ParameterCategory.Required if schema.required and not has_value
                                         else ParameterCategory.Obscure)
 
             # these will be re-merged when needed again
@@ -718,7 +719,7 @@ class Recipe(Cargo):
         parts = label.split("-")
         info = subst.info
         info.fqname = f"{self.fqname}.{label}"
-        info.label = label 
+        info.label = label
         info.label_parts = parts
         info.suffix = parts[-1] if len(parts) > 1 else ''
         subst.current = step.params
@@ -736,11 +737,11 @@ class Recipe(Cargo):
                 #     unset_params.add(name)
                 # elif value == "EMPTY":
                 #     own_params[name] = ""
-                if value is UNSET: 
+                if value is UNSET:
                     unset_params.add(name)
                 else:
                     own_params[name] = value
-            elif '.' not in name: 
+            elif '.' not in name:
                 raise ParameterValidationError(f"'{name}' does not refer to a known parameter")
             else:
                 label, subname = name.split('.', 1)
@@ -768,7 +769,7 @@ class Recipe(Cargo):
         # mutable=False means these sub-namespaces are not subject to {}-substitutions
         subst._add_('info', info, nosubst=True)
         subst._add_('self', info, nosubst=True)
-        subst._add_('config', self.config, nosubst=True) 
+        subst._add_('config', self.config, nosubst=True)
         subst._add_('steps', {}, nosubst=True)
         subst._add_('previous', {}, nosubst=True)
         subst.recipe = SubstitutionNS(**params)
@@ -786,7 +787,7 @@ class Recipe(Cargo):
             info1 = info.copy()
             subst_outer._add_('info', info1, nosubst=True)
             subst_outer._add_('self', info1, nosubst=True)
-            subst_outer._add_('config', self.config, nosubst=True) 
+            subst_outer._add_('config', self.config, nosubst=True)
             subst_outer.current = subst.recipe
 
         # update assignments
@@ -803,7 +804,7 @@ class Recipe(Cargo):
         def prevalidate_self(params):
             try:
                 params1 = Cargo.prevalidate(self, params, subst=subst_outer, backend=backend)
-                # mark params that have become unset 
+                # mark params that have become unset
                 unset_params.update(set(params) - set(params1))
                 params = params1
                 # validate for-loop, if needed
@@ -831,7 +832,7 @@ class Recipe(Cargo):
                     alias.from_recipe = True
                     alias.step.unset_parameter(alias.param)
 
-        # prevalidate step parameters 
+        # prevalidate step parameters
         # we call this twice, potentially, so define as a function
 
         def prevalidate_steps():
@@ -905,7 +906,7 @@ class Recipe(Cargo):
         return params
 
     def validate_for_loop(self, params, strict=False):
-        # in case of for loops, get list of values to be iterated over 
+        # in case of for loops, get list of values to be iterated over
         if self.for_loop is not None:
             # get scatter value
             if 'for_loop.scatter' in params:
@@ -940,7 +941,7 @@ class Recipe(Cargo):
             else:
                 if self._for_loop_values is None:
                     raise ParameterValidationError(f"recipe '{self.name}': for_loop.over is unset")
-                values = self._for_loop_values 
+                values = self._for_loop_values
             # finalize list of values
             if type(values) is ListConfig:
                 values = list(values)
@@ -963,14 +964,14 @@ class Recipe(Cargo):
             info = SubstitutionNS(fqname=self.fqname)
             subst._add_('info', info, nosubst=True)
             subst._add_('self', info, nosubst=True)
-            subst._add_('config', self.config, nosubst=True) 
+            subst._add_('config', self.config, nosubst=True)
 
             subst.recipe = SubstitutionNS(**params)
             subst.current = subst.recipe
 
         if 'current' in subst:
             subst.current._add_('steps', self._prevalidated_steps, nosubst=True)
-        
+
         self.update_assignments(subst, params=params, ignore_subst_errors=True)
 
         params = Cargo.validate_inputs(self, params, subst=subst, loosely=loosely, remote_fs=remote_fs)
@@ -989,7 +990,7 @@ class Recipe(Cargo):
     ## NB: OMS: is this really used or needed anywhere?
     # def _link_steps(self):
     #     """
-    #     Adds  next_step and previous_step attributes to the recipe. 
+    #     Adds  next_step and previous_step attributes to the recipe.
     #     """
     #     steps = list(self.steps.values())
     #     N = len(steps)
@@ -1036,10 +1037,10 @@ class Recipe(Cargo):
             loop_tree.add(f"iterating [bold]{self.for_loop.var}[/bold] over {over}")
         if self.steps:
             have_skips = any(step._skip for step in self.steps.values())
-            steps_tree = tree.add(f"Steps (note [italic]some steps[/italic] are skipped by default):" 
+            steps_tree = tree.add(f"Steps (note [italic]some steps[/italic] are skipped by default):"
                                 if have_skips else "Steps:")
             table = rich.table.Table.grid("", "", "", padding=(0,2)) # , show_header=False, show_lines=False, box=rich.box.SIMPLE)
-            steps_tree.add(table)            
+            steps_tree.add(table)
             for label, step in self.steps.items():
                 style = "italic" if step._skip else "bold"
                 table.add_row(f"[{style}]{label}[/{style}]", step.info)
@@ -1068,7 +1069,6 @@ class Recipe(Cargo):
         # close progress bar in subprocesses
         if subprocess:
             task_stats.add_subprocess_id(count)
-            task_stats.destroy_progress_bar()
         subst.info.subprocess = task_stats.get_subprocess_id()
         taskname = subst.info.taskname
         outputs = {}
@@ -1089,7 +1089,7 @@ class Recipe(Cargo):
                 self._update_aliases(self.for_loop.var, iter_var)
                 # update status display
                 status = None
-                status_dict = dict(index0=count, 
+                status_dict = dict(index0=count,
                             index1=count+1, total=len(self._for_loop_values),
                             var=self.for_loop.var, value=iter_var)
                 if self.for_loop.display_status:
@@ -1101,14 +1101,14 @@ class Recipe(Cargo):
                     status = "{index1}/{total}".format(**status_dict)
                 task_stats.declare_subtask_status(status)
                 taskname = f"{taskname}.{count}"
-                subst.info.taskname = taskname 
+                subst.info.taskname = taskname
                 # task_stats.declare_subtask_attributes(count)
                 # task_attrs = (count,)
                 context = task_stats.declare_subtask(f"({count})")
             else:
                 from contextlib import nullcontext
                 context = nullcontext()
-            with context: 
+            with context:
                 for label, step in self.steps.items():
                     # update step info
                     self._prep_step(label, step, subst)
@@ -1155,7 +1155,7 @@ class Recipe(Cargo):
                                 # if step was skipped, mark output as not required
                                 if alias.step._skip:
                                     self.outputs[name].required = False
-                                # if step output is validated, add it to our output 
+                                # if step output is validated, add it to our output
                                 # if alias.param in alias.step.validated_params:
                                 #     outputs[name] = alias.step.validated_params[alias.param]
                                 if alias.param in step_params:
@@ -1212,7 +1212,7 @@ class Recipe(Cargo):
         subst._add_('steps', {}, nosubst=True)
         subst._add_('previous', {}, nosubst=True)
         subst._add_('current', {}, nosubst=True)
-            
+
         subst.recipe = SubstitutionNS(**params)
         subst.recipe.log = self.logopts
         subst.recipe._add_('steps', subst.steps, nosubst=True)
@@ -1232,16 +1232,16 @@ class Recipe(Cargo):
         if not backends.initialized:
             try:
                 backend_opts = OmegaConf.merge(stimela.CONFIG.opts.backend, backend)
-                backend_opts = evaluate_and_substitute_object(backend_opts, subst, 
+                backend_opts = evaluate_and_substitute_object(backend_opts, subst,
                                                               recursion_level=-1, location=[self.fqname, "backend"])
                 if getattr(backend_opts, 'verbose', 0):
                     opts_yaml = OmegaConf.to_yaml(backend_opts)
-                    log_rich_payload(self.log, "initial backend settings are", opts_yaml, syntax="yaml") 
+                    log_rich_payload(self.log, "initial backend settings are", opts_yaml, syntax="yaml")
                 backend_opts = OmegaConf.to_object(OmegaConf.merge(StimelaBackendSchema, backend_opts))
             except Exception as exc:
                 newexc = BackendError("error validating backend settings", exc)
                 raise newexc from None
-            
+
             stimela.backends.init_backends(backend_opts, stimela.logger())
 
         try:
@@ -1254,7 +1254,7 @@ class Recipe(Cargo):
                     if isinstance(value, Unresolved) and not isinstance(value, Placeholder):
                         raise RecipeValidationError(f"recipe '{self.name}' has unresolved input '{name}'", log=self.log)
                     self._update_aliases(name, value)
-                elif schema.required and (self.for_loop is None or name != self.for_loop.var): 
+                elif schema.required and (self.for_loop is None or name != self.for_loop.var):
                         raise RecipeValidationError(f"recipe '{self.name}' is missing required input '{name}'", log=self.log)
 
             # form list of arguments for each invocation of the loop worker
@@ -1268,10 +1268,17 @@ class Recipe(Cargo):
                 if self._for_loop_scatter < 0:
                     num_workers = nloop
                 else:
-                    num_workers = min(self._for_loop_scatter, nloop) 
+                    num_workers = min(self._for_loop_scatter, nloop)
                 inital_task_status = f"0/{nloop} complete, {num_workers} workers"
                 task_stats.declare_subtask_status(inital_task_status)
+                # Disable progress during pool creation so that it isn't
+                # enabled in the resulting processes.
+                if not boring_logging:
+                    task_stats.disable_progress_display()
                 with ProcessPoolExecutor(num_workers) as pool:
+                    # Re-enable progress after pool creation.
+                    if not boring_logging:
+                        task_stats.enable_progress_display()
                     # submit each iterant to pool
                     futures = [pool.submit(self._iterate_loop_worker, *args, subprocess=True, raise_exc=False) for args in loop_worker_args]
                     # update task stats, since they're recorded independently within each step, as well
@@ -1305,14 +1312,14 @@ class Recipe(Cargo):
             # else just iterate directly
             else:
                 for args in loop_worker_args:
-                    _, _, _, outputs, _, _ = self._iterate_loop_worker(*args, raise_exc=True) 
-            
+                    _, _, _, outputs, _, _ = self._iterate_loop_worker(*args, raise_exc=True)
+
             # either way, outputs contains output aliases from the last iteration
             params.update(**outputs)
 
             # current namespace becomes recipe again
             subst.current = subst.recipe
-            
+
             self.log.info(f"recipe '{self.name}' executed successfully")
             return OrderedDict((name, value) for name, value in params.items() if name in self.outputs)
         finally:
@@ -1322,4 +1329,3 @@ class Recipe(Cargo):
 
 StepSchema = OmegaConf.structured(Step)
 RecipeSchema = OmegaConf.structured(Recipe)
-

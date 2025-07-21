@@ -115,7 +115,6 @@ live_display = Live(
     transient=True
 )
 
-
 # this is "" for the main process, ".0", ".1", for subprocesses, ".0.0" for nested subprocesses
 _subprocess_identifier = ""
 
@@ -156,17 +155,14 @@ _task_stack = []
 stimela_process = psutil.Process()
 child_processes = {}
 
-def init_progress_bar(boring=False):
-    if not boring:
-        live_display.__enter__()
-        atexit.register(destroy_progress_bar)
-    return progress_bar, progress_console
-
-def destroy_progress_bar():
-    if progress_bar is not None:
-        progress_bar.__exit__(None, None, None)
-    if live_display is not None:
+def enable_progress_display():
+    def destructor():
         live_display.__exit__(None, None, None)
+    atexit.register(destructor)
+    live_display.__enter__()
+
+def disable_progress_display():
+    live_display.__exit__(None, None, None)
 
 def restate_progress():
     """Renders a snapshot of the progress bar onto the console"""
@@ -547,7 +543,8 @@ def render_profiling_summary(stats: TaskStatsDatum, max_depth, unroll_loops=Fals
             table_peak.add_row(*peak_row)
 
     stimelogging.declare_chapter("profiling results")
-    destroy_progress_bar()
+    # Disable display - ensures that it doesn't appear below the profiling.
+    disable_progress_display()
     from rich.columns import Columns
     # progress_console.print(table_avg, justify="center")
     # progress_console.print(table_peak, justify="center")
