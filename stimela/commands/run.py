@@ -25,7 +25,7 @@ from stimela import stimelogging
 import stimela.config
 from stimela.config import ConfigExceptionTypes
 from stimela import logger, log_exception
-from stimela.stimelogging import _boring as boring_logging
+from stimela.stimelogging import is_boring
 from stimela.task_stats import enable_progress_display
 from stimela.exceptions import RecipeValidationError, StimelaRuntimeError, StepSelectionError, StepValidationError
 from stimela.main import cli
@@ -252,7 +252,7 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
 ):
 
     log = logger()
-    if not boring_logging:
+    if not is_boring():
         enable_progress_display()
     params = OrderedDict()
     errcode = 0

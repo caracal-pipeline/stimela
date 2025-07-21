@@ -219,6 +219,8 @@ def disable_file_logger(log: logging.Logger):
         log.removeHandler(fh)
         del _logger_file_handlers[log.name]
 
+def is_boring():
+    return _boring
 
 class DelayedFileHandler(logging.FileHandler):
     """A version of FileHandler that also handles directory and symlink creation in a delayed way"""

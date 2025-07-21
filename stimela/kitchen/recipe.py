@@ -22,7 +22,7 @@ from scabha.basetypes import File, Directory, MS, UNSET, Placeholder
 from .cab import Cab
 from .batch import Batch
 from .step import Step
-from stimela.stimelogging import _boring as boring_logging
+from stimela.stimelogging import is_boring
 from stimela import task_stats
 from stimela import backends
 from stimela.backends import StimelaBackendSchema
@@ -1273,11 +1273,11 @@ class Recipe(Cargo):
                 task_stats.declare_subtask_status(inital_task_status)
                 # Disable progress during pool creation so that it isn't
                 # enabled in the resulting processes.
-                if not boring_logging:
+                if not is_boring():
                     task_stats.disable_progress_display()
                 with ProcessPoolExecutor(num_workers) as pool:
                     # Re-enable progress after pool creation.
-                    if not boring_logging:
+                    if not is_boring():
                         task_stats.enable_progress_display()
                     # submit each iterant to pool
                     futures = [pool.submit(self._iterate_loop_worker, *args, subprocess=True, raise_exc=False) for args in loop_worker_args]

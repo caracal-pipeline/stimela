@@ -210,8 +210,7 @@ class _CommandContext(object):
 
 @contextlib.contextmanager
 def declare_subcommand(command):
-    progress_bar and progress_bar.reset(progress_task)
-    task_elapsed and task_elapsed.reset(task_elapsed_task)
+    task_elapsed.reset(task_elapsed_task)
     try:
         yield _CommandContext(command)
     finally:
@@ -389,27 +388,15 @@ def update_process_status():
     _prev_disk_io = disk_io, now
 
     # call extra status reporter
+    # TODO(JSKenyon): I have broken this code while updating taskstats.py to
+    # use a live display. This will need to be fixed at some point, ideally
+    # when we have access to a kubenetes cluster.
     if ti and ti.status_reporter:
         extra_metrics, extra_stats = ti.status_reporter()
         if extra_stats:
             s.insert_extra_stats(**extra_stats)
     else:
         extra_metrics = None
-
-    # if a progress bar exists, update it
-    if progress_bar is not None:
-        cpu_info = []
-        # add extra metering
-        cpu_info += extra_metrics or []
-
-        updates = dict(elapsed_time=elapsed, cpu_info="|".join(cpu_info))
-
-        if ti is not None:
-            updates['description'] = ti.description
-            updates['status'] = ti.status or ''
-            updates['command'] = ti.command or ''
-
-        progress_bar.update(progress_task, **updates)
 
     if not sys_usage.disable:
         if not any(t.hide_local_metrics for t in _task_stack):
