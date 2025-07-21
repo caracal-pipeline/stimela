@@ -99,6 +99,15 @@ live_display = Live(
     transient=True
 )
 
+def enable_progress_display():
+    def destructor():
+        live_display.__exit__(None, None, None)
+    atexit.register(destructor)
+    live_display.__enter__()
+
+def disable_progress_display():
+    live_display.__exit__(None, None, None)
+
 # this is "" for the main process, ".0", ".1", for subprocesses, ".0.0" for nested subprocesses
 _subprocess_identifier = ""
 
@@ -138,15 +147,6 @@ class TaskInformation(object):
 _task_stack = []
 stimela_process = psutil.Process()
 child_processes = {}
-
-def enable_progress_display():
-    def destructor():
-        live_display.__exit__(None, None, None)
-    atexit.register(destructor)
-    live_display.__enter__()
-
-def disable_progress_display():
-    live_display.__exit__(None, None, None)
 
 @contextlib.contextmanager
 def declare_subtask(subtask_name, status_reporter=None, hide_local_metrics=False):
