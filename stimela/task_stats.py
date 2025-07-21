@@ -472,7 +472,7 @@ def update_process_status():
 
 
 async def run_process_status_update():
-    if progress_bar:
+    if live_display.is_started:
         with contextlib.suppress(asyncio.CancelledError):
             while True:
                 update_process_status()
