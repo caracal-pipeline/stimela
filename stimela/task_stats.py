@@ -76,6 +76,8 @@ task_usage = rich.progress.Progress(
 )
 
 task_name_task = task_usage.add_task("Name", resource="Pending...")
+task_status_task = task_usage.add_task("Status", resource="Pending...")
+task_command_task = task_usage.add_task("Command", resource="Pending...")
 task_cpu_usage_task = task_usage.add_task("Task CPU", resource="Pending...")
 task_ram_usage_task = task_usage.add_task("Task RAM", resource="Pending...")
 
@@ -89,7 +91,7 @@ task_elapsed = rich.progress.Progress(
 )
 task_elapsed_task = task_elapsed.add_task("Run Time")
 
-task_state = Group(task_elapsed, progress_bar, task_usage)
+task_state = Group(task_elapsed, task_usage)
 system_state = Group(total_elapsed, sys_usage)
 
 progress_table = Table.grid(expand=False)
@@ -457,12 +459,21 @@ def update_process_status():
     if not task_usage.disable:
         if not any(t.hide_local_metrics for t in _task_stack):
 
-            name = 'None' if not ti else ti.description
+            if ti is not None:
+                task_usage.update(
+                    task_name_task,
+                    resource=f"[bold]{ti.description}[/bold]"
+                )
 
-            task_usage.update(
-                task_name_task,
-                resource=f"[bold]{name}[/bold]"
-            )
+                task_usage.update(
+                    task_status_task,
+                    resource=f"[dim]{ti.status or 'N/A'}[/dim]"
+                )
+
+                task_usage.update(
+                    task_command_task,
+                    resource=f"{ti.command or 'N/A'}"
+                )
 
             task_usage.update(
                 task_cpu_usage_task,
