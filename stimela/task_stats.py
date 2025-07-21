@@ -385,8 +385,8 @@ def update_process_status():
     else:
         extra_metrics = None
 
-    if not sys_usage.disable:
-        if not any(t.hide_local_metrics for t in _task_stack):
+    if not any(t.hide_local_metrics for t in _task_stack):
+        if not sys_usage.disable:
             sys_usage.update(
                 cpu_usage_task,
                 resource=f"[green]{s.sys_cpu}[/green]%"
@@ -423,9 +423,7 @@ def update_process_status():
                     )
                 )
 
-    if not task_usage.disable:
-        if not any(t.hide_local_metrics for t in _task_stack):
-
+        if not task_usage.disable:
             if ti is not None:
                 task_usage.update(
                     task_name_task,
