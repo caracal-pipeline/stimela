@@ -16,7 +16,6 @@ from rich.console import Group
 from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
-from rich.align import Align
 from rich.text import Text
 
 from stimela import stimelogging
@@ -45,8 +44,8 @@ sys_usage = rich.progress.Progress(
     transient=True
 )
 
-cpu_usage_task = sys_usage.add_task("System CPU", resource="Pending...")
-ram_usage_task = sys_usage.add_task("System RAM", resource="Pending...")
+cpu_usage_task = sys_usage.add_task("CPU", resource="Pending...")
+ram_usage_task = sys_usage.add_task("RAM", resource="Pending...")
 disk_read_task = sys_usage.add_task("Disk Read", resource="Pending...")
 disk_write_task = sys_usage.add_task("Disk Write", resource="Pending...")
 
@@ -60,8 +59,8 @@ task_usage = rich.progress.Progress(
 task_name_task = task_usage.add_task("Name", resource="Pending...")
 task_status_task = task_usage.add_task("Status", resource="Pending...")
 task_command_task = task_usage.add_task("Command", resource="Pending...")
-task_cpu_usage_task = task_usage.add_task("Task CPU", resource="Pending...")
-task_ram_usage_task = task_usage.add_task("Task RAM", resource="Pending...")
+task_cpu_usage_task = task_usage.add_task("CPU", resource="Pending...")
+task_ram_usage_task = task_usage.add_task("RAM", resource="Pending...")
 
 task_elapsed = rich.progress.Progress(
     rich.progress.SpinnerColumn(),
@@ -76,24 +75,31 @@ task_elapsed_task = task_elapsed.add_task("Run Time")
 task_state = Group(task_elapsed, task_usage)
 system_state = Group(total_elapsed, sys_usage)
 
-progress_table = Table.grid(expand=False)
+progress_table = Table.grid(expand=True)
+progress_table.add_column()
+progress_table.add_column(ratio=1)
+progress_table.add_column(ratio=1)
+progress_table.add_column()
 progress_table.add_row(
+    " ",  # Spacer.
     Panel(
         task_state,
         title="Task",
-        border_style="green"
-    )
-)
-progress_table.add_row(
+        border_style="green",
+        expand=True
+    ),
     Panel(
         system_state,
         title="System",
         border_style="green",
+        expand=True,
+        padding=(0,1,1,1)  # (T, R, B, L) - defaults are (R, L) = (1, 1).
     ),
+    " "  # Spacer.
 )
 
 live_display = Live(
-    Align.center(progress_table),
+    progress_table,
     refresh_per_second=5,
     console=progress_console,
     transient=True
@@ -395,7 +401,7 @@ def update_process_status():
                 ram_usage_task,
                 resource=(
                     f"[green]{used}/{total}[/green]GB "
-                    f"([green]{percent:.2}[/green]%)"
+                    f"([green]{percent:.2f}[/green]%)"
                 )
             )
 
