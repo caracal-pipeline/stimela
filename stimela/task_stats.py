@@ -35,7 +35,7 @@ total_elapsed = rich.progress.Progress(
     console=progress_console,
     transient=True
 )
-total_elapsed_task = total_elapsed.add_task("Run Time")
+total_elapsed_id = total_elapsed.add_task("Run Time")
 
 sys_usage = rich.progress.Progress(
     "[bold]{task.description:<11} {task.fields[resource]} [/bold]",
@@ -44,10 +44,10 @@ sys_usage = rich.progress.Progress(
     transient=True
 )
 
-cpu_usage_task = sys_usage.add_task("CPU", resource="Pending...")
-ram_usage_task = sys_usage.add_task("RAM", resource="Pending...")
-disk_read_task = sys_usage.add_task("Disk Read", resource="Pending...")
-disk_write_task = sys_usage.add_task("Disk Write", resource="Pending...")
+cpu_usage_id = sys_usage.add_task("CPU", resource="Pending...")
+ram_usage_id = sys_usage.add_task("RAM", resource="Pending...")
+disk_read_id = sys_usage.add_task("Disk Read", resource="Pending...")
+disk_write_id = sys_usage.add_task("Disk Write", resource="Pending...")
 
 task_usage = rich.progress.Progress(
     "[bold]{task.description:<11} {task.fields[resource]} [/bold]",
@@ -56,11 +56,11 @@ task_usage = rich.progress.Progress(
     transient=True
 )
 
-task_name_task = task_usage.add_task("Name", resource="Pending...")
-task_status_task = task_usage.add_task("Status", resource="Pending...")
-task_command_task = task_usage.add_task("Command", resource="Pending...")
-task_cpu_usage_task = task_usage.add_task("CPU", resource="Pending...")
-task_ram_usage_task = task_usage.add_task("RAM", resource="Pending...")
+task_name_id = task_usage.add_task("Name", resource="Pending...")
+task_status_id = task_usage.add_task("Status", resource="Pending...")
+task_command_id = task_usage.add_task("Command", resource="Pending...")
+task_cpu_usage_id = task_usage.add_task("CPU", resource="Pending...")
+task_ram_usage_id = task_usage.add_task("RAM", resource="Pending...")
 
 task_elapsed = rich.progress.Progress(
     rich.progress.SpinnerColumn(),
@@ -70,7 +70,7 @@ task_elapsed = rich.progress.Progress(
     console=progress_console,
     transient=True
 )
-task_elapsed_task = task_elapsed.add_task("Run Time")
+task_elapsed_id = task_elapsed.add_task("Run Time")
 
 task_state = Group(task_elapsed, task_usage)
 system_state = Group(total_elapsed, sys_usage)
@@ -198,7 +198,7 @@ class _CommandContext(object):
 
 @contextlib.contextmanager
 def declare_subcommand(command):
-    task_elapsed.reset(task_elapsed_task)
+    task_elapsed.reset(task_elapsed_id)
     try:
         yield _CommandContext(command)
     finally:
@@ -388,7 +388,7 @@ def update_process_status():
     if not any(t.hide_local_metrics for t in _task_stack):
         if not sys_usage.disable:
             sys_usage.update(
-                cpu_usage_task,
+                cpu_usage_id,
                 resource=f"[green]{s.sys_cpu}[/green]%"
             )
 
@@ -397,7 +397,7 @@ def update_process_status():
             percent = (used / total) * 100
 
             sys_usage.update(
-                ram_usage_task,
+                ram_usage_id,
                 resource=(
                     f"[green]{used}/{total}[/green]GB "
                     f"([green]{percent:.2f}[/green]%)"
@@ -407,7 +407,7 @@ def update_process_status():
             if io is not None:
 
                 sys_usage.update(
-                    disk_read_task,
+                    disk_read_id,
                     resource=(
                         f"[green]{s.read_gbps:2.2f}[/green]GB/s "
                         f"[green]{s.read_ms:4}[/green]ms "
@@ -415,7 +415,7 @@ def update_process_status():
                     )
                 )
                 sys_usage.update(
-                    disk_write_task,
+                    disk_write_id,
                     resource=(
                         f"[green]{s.write_gbps:2.2f}[/green]GB/s "
                         f"[green]{s.write_ms:4}[/green]ms "
@@ -426,29 +426,29 @@ def update_process_status():
         if not task_usage.disable:
             if ti is not None:
                 task_usage.update(
-                    task_name_task,
+                    task_name_id,
                     resource=f"[bold]{ti.description}[/bold]"
                 )
 
                 task_usage.update(
-                    task_status_task,
+                    task_status_id,
                     resource=f"[dim]{ti.status or 'N/A'}[/dim]"
                 )
                 # Sometimes the command contains square brackets which rich
                 # interprets as formatting. Remove them. # TODO: Figure out
                 # why the command has square brackets in the first place.
                 task_usage.update(
-                    task_command_task,
+                    task_command_id,
                     resource=f"{(ti.command or 'N/A').strip('[]')}"
                 )
 
             task_usage.update(
-                task_cpu_usage_task,
+                task_cpu_usage_id,
                 resource=f"[green]{s.cpu:2.1f}[/green]%"
             )
 
             task_usage.update(
-                task_ram_usage_task,
+                task_ram_usage_id,
                 resource=f"[green]{s.mem_used}[/green]GB"
             )
 
