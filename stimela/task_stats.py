@@ -501,13 +501,8 @@ def render_profiling_summary(stats: TaskStatsDatum, max_depth, unroll_loops=Fals
     table_avg.add_column("W GB", justify="right")
 
     for name_tuple, (elapsed, sum, peak) in stats.items():
-<<<<<<< HEAD
-        if name_tuple and len(name_tuple) <= max_depth:
-            # skip loop iterations, if not unrolling loops
-=======
         if name_tuple and len(name_tuple) <= max_depth and elapsed > 0:
             # skip loop iterations, if not unrolling loops 
->>>>>>> master
             if not unroll_loops and any(n.endswith("]") for n in name_tuple):
                 continue
             secs, mins, hours = elapsed % 60, int(elapsed // 60) % 60, int(elapsed // 3600)
