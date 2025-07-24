@@ -31,10 +31,24 @@ progress_console = rich.console.Console(
     highlight=False,
     emoji=False
 )
-
 class Display:
 
     progress_console = progress_console
+
+    system_attr_map = {
+        "cpu_usage": "CPU",
+        "ram_usage": "RAM",
+        "disk_read": "Read",
+        "disk_write": "Write",
+    }
+
+    task_attr_map = {
+        "task_name": "Step",
+        "task_status": "Status",
+        "task_command": "Command",
+        "task_cpu_usage": "CPU",
+        "task_ram_usage": "RAM",
+    }
 
     def __init__(self):
 
@@ -46,46 +60,23 @@ class Display:
         self.task_elapsed = self._default_timer()
         self.task_elapsed_id = self.task_elapsed.add_task("")
 
-        self.cpu_usage = self._default_status()
-        self.cpu_usage_id = self.cpu_usage.add_task(
-            "CPU", value="Pending..."
-        )
-        self.ram_usage = self._default_status()
-        self.ram_usage_id = self.ram_usage.add_task(
-            "RAM", value="Pending..."
-        )
-        self.disk_read = self._default_status()
-        self.disk_read_id = self.disk_read.add_task(
-            "Read", value="Pending..."
-        )
-        self.disk_write = self._default_status()
-        self.disk_write_id = self.disk_write.add_task(
-            "Write", value="Pending..."
-        )
+        for k, v in self.system_attr_map.items():
+            status = self._default_status()
+            status_id = status.add_task(v, value=None)
+            setattr(self, k, status)
+            setattr(self, f"{k}_id", status_id)
 
-        self.task_name = self._default_status()
-        self.task_name_id = self.task_name.add_task(
-            "Step", value="Pending..."
-        )
-        self.task_status = self._default_status()
-        self.task_status_id = self.task_status.add_task(
-            "Status", value="Pending..."
-        )
-        self.task_command = self._default_status()
-        self.task_command_id = self.task_command.add_task(
-            "Command", value="Pending..."
-        )
-        self.task_cpu_usage = self._default_status()
-        self.task_cpu_usage_id = self.task_cpu_usage.add_task(
-            "CPU", value="Pending..."
-        )
-        self.task_ram_usage = self._default_status()
-        self.task_ram_usage_id = self.task_ram_usage.add_task(
-            "RAM", value="Pending..."
-        )
+        for k, v in self.task_attr_map.items():
+            status = self._default_status()
+            status_id = status.add_task(v, value=None)
+            setattr(self, k, status)
+            setattr(self, f"{k}_id", status_id)
+
+        msg = Text("DISPLAY HAS NOT BEEN CONFIGURED", justify="center")
+        msg.stylize("bold red")
 
         self.live_display = Live(
-            "Display not configured",
+            msg,
             refresh_per_second=5,
             console=progress_console,
             transient=True
