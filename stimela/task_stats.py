@@ -123,14 +123,14 @@ class Display:
 
         width = max(len(fn) for fn in progress_fields.values() if fn)
 
-        self.total_elapsed = self._timer_element(width=width)
+        self.total_elapsed = self._timer_element(width=width - 1)
         self.total_elapsed_id = self.total_elapsed.add_task("", start=True)
 
-        self.task_elapsed = self._timer_element(width=width)
+        self.task_elapsed = self._timer_element(width=width - 1)
         self.task_elapsed_id = self.task_elapsed.add_task("")
 
         for k, v in progress_fields.items():
-            status = self._status_element(width=width + 1)
+            status = self._status_element(width=width)
             status_id = status.add_task(v, value=None)
             setattr(self, k, status)
             setattr(self, f"{k}_id", status_id)
