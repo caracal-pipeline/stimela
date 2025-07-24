@@ -38,6 +38,7 @@ class Display:
     progress_fields = {
         "cpu_usage": "CPU",
         "ram_usage": "RAM",
+        "system_load": "Load",
         "disk_read": "Read",
         "disk_write": "Write",
         "task_name": "Step",
@@ -149,7 +150,8 @@ class Display:
             self.cpu_usage,
             self.ram_usage,
             self.disk_read,
-            self.disk_write
+            self.disk_write,
+            self.system_load
         )
 
         table = Table.grid(expand=True)
@@ -163,8 +165,7 @@ class Display:
                 system_group,
                 title="System",
                 border_style="green",
-                expand=True,
-                padding=(0,1,1,1)  # (T, R, B, L) - defaults to (R, L) = (1, 1).
+                expand=True
             ),
             Panel(
                 task_group,
@@ -442,6 +443,7 @@ def update_process_status():
     s = TaskStatsDatum(num_samples=1)
 
     # System wide cpu and RAM.
+    ncpu = psutil.cpu_count()
     s.sys_cpu = psutil.cpu_percent()
     sys_mem = psutil.virtual_memory()
 
@@ -466,7 +468,7 @@ def update_process_status():
     s.mem_total = round(sys_mem.total / (2 ** 30))
 
     # load
-    s.load, _, _ = psutil.getloadavg()
+    s.load, load_5m, load_15m = psutil.getloadavg()
 
     # get disk I/O stats
     disk_io = psutil.disk_io_counters()
@@ -516,6 +518,16 @@ def update_process_status():
             value=(
                 f"[green]{used}/{total}[/green]GB "
                 f"([green]{percent:.2f}[/green]%)"
+            )
+        )
+
+        display.system_load.update(
+            display.system_load_id,
+            value=(
+                f"[green]{s.load/ncpu * 100:.2f}[/green]%/"
+                f"[green]{load_5m/ncpu * 100:.2f}[/green]%/"
+                f"[green]{load_15m/ncpu * 100:.2f}[/green]% "
+                f"(1/5/15 min)"
             )
         )
 
