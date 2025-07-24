@@ -51,10 +51,10 @@ class Display:
         self.disk_read = self._default_status()
         self.disk_write = self._default_status()
 
-        self.cpu_usage_id = self.cpu_usage.add_task("CPU", resource="Pending...")
-        self.ram_usage_id = self.ram_usage.add_task("RAM", resource="Pending...")
-        self.disk_read_id = self.disk_read.add_task("Read", resource="Pending...")
-        self.disk_write_id = self.disk_write.add_task("Write", resource="Pending...")
+        self.cpu_usage_id = self.cpu_usage.add_task("CPU", value="Pending...")
+        self.ram_usage_id = self.ram_usage.add_task("RAM", value="Pending...")
+        self.disk_read_id = self.disk_read.add_task("Read", value="Pending...")
+        self.disk_write_id = self.disk_write.add_task("Write", value="Pending...")
 
         self.task_name = self._default_status()
         self.task_status = self._default_status()
@@ -62,11 +62,11 @@ class Display:
         self.task_cpu_usage = self._default_status()
         self.task_ram_usage = self._default_status()
 
-        self.task_name_id = self.task_name.add_task("Step", resource="Pending...")
-        self.task_status_id = self.task_status.add_task("Status", resource="Pending...")
-        self.task_command_id = self.task_command.add_task("Command", resource="Pending...")
-        self.task_cpu_usage_id = self.task_cpu_usage.add_task("CPU", resource="Pending...")
-        self.task_ram_usage_id = self.task_ram_usage.add_task("RAM", resource="Pending...")
+        self.task_name_id = self.task_name.add_task("Step", value="Pending...")
+        self.task_status_id = self.task_status.add_task("Status", value="Pending...")
+        self.task_command_id = self.task_command.add_task("Command", value="Pending...")
+        self.task_cpu_usage_id = self.task_cpu_usage.add_task("CPU", value="Pending...")
+        self.task_ram_usage_id = self.task_ram_usage.add_task("RAM", value="Pending...")
 
         self.live_display = Live(
             "Display not configured",
@@ -95,7 +95,7 @@ class Display:
                 table_column=Column(no_wrap=True)
             ),
             TextColumn(
-                "[bold]{task.fields[resource]}[/bold]",
+                "[bold]{task.fields[value]}[/bold]",
                 table_column=Column(no_wrap=True)
             ),
             refresh_per_second=2,
@@ -478,7 +478,7 @@ def update_process_status():
 
         display.cpu_usage.update(
             display.cpu_usage_id,
-            resource=f"[green]{s.sys_cpu}[/green]%"
+            value=f"[green]{s.sys_cpu}[/green]%"
         )
 
         used = round(sys_mem.used / 2 ** 30)
@@ -487,7 +487,7 @@ def update_process_status():
 
         display.ram_usage.update(
             display.ram_usage_id,
-            resource=(
+            value=(
                 f"[green]{used}/{total}[/green]GB "
                 f"([green]{percent:.2f}[/green]%)"
             )
@@ -497,7 +497,7 @@ def update_process_status():
 
             display.disk_read.update(
                 display.disk_read_id,
-                resource=(
+                value=(
                     f"[green]{s.read_gbps:2.2f}[/green]GB/s "
                     f"[green]{s.read_ms:4}[/green]ms "
                     f"[green]{s.read_count:-4}[/green] reads"
@@ -505,7 +505,7 @@ def update_process_status():
             )
             display.disk_write.update(
                 display.disk_write_id,
-                resource=(
+                value=(
                     f"[green]{s.write_gbps:2.2f}[/green]GB/s "
                     f"[green]{s.write_ms:4}[/green]ms "
                     f"[green]{s.write_count:-4}[/green] writes"
@@ -515,29 +515,29 @@ def update_process_status():
         if ti is not None:
             display.task_name.update(
                 display.task_name_id,
-                resource=f"[bold]{ti.description}[/bold]"
+                value=f"[bold]{ti.description}[/bold]"
             )
 
             display.task_status.update(
                 display.task_status_id,
-                resource=f"[dim]{ti.status or 'N/A'}[/dim]"
+                value=f"[dim]{ti.status or 'N/A'}[/dim]"
             )
             # Sometimes the command contains square brackets which rich
             # interprets as formatting. Remove them. # TODO: Figure out
             # why the command has square brackets in the first place.
             display.task_command.update(
                 display.task_command_id,
-                resource=f"{(ti.command or 'N/A').strip('[]')}"
+                value=f"{(ti.command or 'N/A').strip('[]')}"
             )
 
         display.task_cpu_usage.update(
             display.task_cpu_usage_id,
-            resource=f"[green]{s.cpu:2.1f}[/green]%"
+            value=f"[green]{s.cpu:2.1f}[/green]%"
         )
 
         display.task_ram_usage.update(
             display.task_ram_usage_id,
-            resource=f"[green]{s.mem_used}[/green]GB"
+            value=f"[green]{s.mem_used}[/green]GB"
         )
 
     # update stats
