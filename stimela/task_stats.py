@@ -38,6 +38,8 @@ class Display:
 
     def __init__(self):
 
+        self.display_style = "default"
+
         self.total_elapsed = self._default_timer()
         self.total_elapsed_id = self.total_elapsed.add_task("", start=True)
 
@@ -101,7 +103,24 @@ class Display:
             transient=True
         )
 
-    def configure_fancy_renderable(self):
+    def set_display_style(self, style):
+
+        if self.display_style == style:
+            return  # Already configured.
+
+        if self.display_style != "default":
+            self.__init__()  # Reset to the default display configuration.
+
+        if style == "fancy":
+            self._configure_fancy_display()
+        elif style == "simple":
+            self._configure_simple_display()
+        elif style == "default":
+            pass
+        else:
+            raise ValueError(f"Unrecognised style when configuring display.")
+
+    def _configure_fancy_display(self):
 
         task_group = Group(
             self.task_elapsed,
@@ -145,11 +164,11 @@ class Display:
 
         self.live_display.update(table)
 
-    def configure_simple_renderable(self):
+    def _configure_simple_display(self):
         self.total_elapsed.update(self.total_elapsed_id, description="R")
         self.task_elapsed.update(self.task_elapsed_id, description="S")
 
-        # Drop the description column to avoid inclusion of empty column.
+        # Drop the description column of task_name for brevity.
         self.task_name.columns = self.task_name.columns[1:]
 
         self.task_status.update(self.task_status_id, description="")
@@ -175,12 +194,7 @@ class Display:
 display = Display()
 
 def enable_progress_display(style="fancy"):
-    if style == "fancy":
-        display.configure_fancy_renderable()
-    elif style == "simple":
-        display.configure_simple_renderable()
-    else:
-        raise ValueError(f"Unrecognised style when configuring display.")
+    display.set_display_style(style)
     def destructor():
         display.live_display.__exit__(None, None, None)
     atexit.register(destructor)
