@@ -10,12 +10,17 @@ from scabha.basetypes import EmptyListDefault
 from omegaconf import OmegaConf
 import psutil
 
-import rich.progress
 import rich.logging
+from rich.progress import (
+    Progress,
+    SpinnerColumn,
+    TimeElapsedColumn,
+    TextColumn
+)
 from rich.console import Group
 from rich.live import Live
 from rich.panel import Panel
-from rich.table import Table
+from rich.table import Table, Column
 from rich.text import Text
 
 from stimela import stimelogging
@@ -27,18 +32,28 @@ progress_console = rich.console.Console(
     emoji=False
 )
 
-total_elapsed = rich.progress.Progress(
-    rich.progress.SpinnerColumn(),
-    f"[yellow][bold]{'Elapsed':<9}[/bold][/yellow]",
-    rich.progress.TimeElapsedColumn(),
+total_elapsed = Progress(
+    SpinnerColumn(),
+    TextColumn(
+        "[yellow][bold]{task.description}[/bold][/yellow]",
+        table_column=Column(no_wrap=True)
+    ),
+    TimeElapsedColumn(),
     refresh_per_second=2,
     console=progress_console,
     transient=True
 )
-total_elapsed_id = total_elapsed.add_task("Run Time")
+total_elapsed_id = total_elapsed.add_task(f"{'Elapsed':<9}", start=True)
 
-sys_usage = rich.progress.Progress(
-    "[bold]{task.description:<11} {task.fields[resource]} [/bold]",
+sys_usage = Progress(
+    TextColumn(
+        "[bold]{task.description}[/bold]",
+        table_column=Column(no_wrap=True, width=7)
+    ),
+    TextColumn(
+        "[bold]{task.fields[resource]}[/bold]",
+        table_column=Column(no_wrap=True)
+    ),
     refresh_per_second=2,
     console=progress_console,
     transient=True
@@ -46,31 +61,41 @@ sys_usage = rich.progress.Progress(
 
 cpu_usage_id = sys_usage.add_task("CPU", resource="Pending...")
 ram_usage_id = sys_usage.add_task("RAM", resource="Pending...")
-disk_read_id = sys_usage.add_task("Disk Read", resource="Pending...")
-disk_write_id = sys_usage.add_task("Disk Write", resource="Pending...")
+disk_read_id = sys_usage.add_task("Read", resource="Pending...")
+disk_write_id = sys_usage.add_task("Write", resource="Pending...")
 
-task_usage = rich.progress.Progress(
-    "[bold]{task.description:<11} {task.fields[resource]} [/bold]",
+task_usage = Progress(
+    TextColumn(
+        "[bold]{task.description}[/bold]",
+        table_column=Column(no_wrap=True, width=7)
+    ),
+    TextColumn(
+        "[bold]{task.fields[resource]}[/bold]",
+        table_column=Column(no_wrap=True)
+    ),
     refresh_per_second=2,
     console=progress_console,
     transient=True
 )
 
-task_name_id = task_usage.add_task("Name", resource="Pending...")
+task_name_id = task_usage.add_task("Step", resource="Pending...")
 task_status_id = task_usage.add_task("Status", resource="Pending...")
 task_command_id = task_usage.add_task("Command", resource="Pending...")
 task_cpu_usage_id = task_usage.add_task("CPU", resource="Pending...")
 task_ram_usage_id = task_usage.add_task("RAM", resource="Pending...")
 
-task_elapsed = rich.progress.Progress(
-    rich.progress.SpinnerColumn(),
-    f"[yellow][bold]{'Elapsed':<9}[/bold][/yellow]",
-    rich.progress.TimeElapsedColumn(),
+task_elapsed = Progress(
+    SpinnerColumn(),
+    TextColumn(
+        "[yellow][bold]{task.description}[/bold][/yellow]",
+        table_column=Column(no_wrap=True)
+    ),
+    TimeElapsedColumn(),
     refresh_per_second=2,
     console=progress_console,
     transient=True
 )
-task_elapsed_id = task_elapsed.add_task("Run Time")
+task_elapsed_id = task_elapsed.add_task(f"{'Elapsed':<9}")
 
 task_state = Group(task_elapsed, task_usage)
 system_state = Group(total_elapsed, sys_usage)
@@ -105,7 +130,58 @@ live_display = Live(
     transient=True
 )
 
-def enable_progress_display():
+def one_liner():
+    total_elapsed.update(total_elapsed_id, description="R")
+    task_elapsed.update(task_elapsed_id, description="S")
+
+    task_usage.update(task_name_id, description="")
+    task_usage.update(task_status_id, description="")
+    task_usage.update(task_command_id, visible=False)
+    task_usage.update(task_cpu_usage_id, description="CPU")
+    task_usage.update(task_ram_usage_id, description="RAM")
+
+    column_specs = [
+        *total_elapsed.columns,
+        *task_elapsed.columns,
+        *(task_usage.columns * len(task_usage.tasks))
+    ]
+
+    table_columns = [
+            (
+                Column(no_wrap=True)
+                if isinstance(_column, str)
+                else _column.get_table_column().copy()
+            )
+            for _column in column_specs
+    ]
+
+    columns = []
+    for task in task_usage.tasks:
+        if task.visible:
+            columns.extend(
+                [
+                    (
+                        column.format(task=task)
+                        if isinstance(column, str)
+                        else column(task)
+                    )
+                    for column in task_usage.columns
+                ]
+            )
+
+    table = Table.grid(*table_columns, padding=(0, 1), expand=False)
+    # renderable_table = Table.grid(expand=False)
+    table.add_row(
+        total_elapsed,
+        task_elapsed,
+        *columns
+    )
+
+    return table
+
+def enable_progress_display(fancy=True):
+    if not fancy:
+        live_display._get_renderable = one_liner
     def destructor():
         live_display.__exit__(None, None, None)
     atexit.register(destructor)
@@ -502,7 +578,7 @@ def render_profiling_summary(stats: TaskStatsDatum, max_depth, unroll_loops=Fals
 
     for name_tuple, (elapsed, sum, peak) in stats.items():
         if name_tuple and len(name_tuple) <= max_depth and elapsed > 0:
-            # skip loop iterations, if not unrolling loops 
+            # skip loop iterations, if not unrolling loops
             if not unroll_loops and any(n.endswith("]") for n in name_tuple):
                 continue
             secs, mins, hours = elapsed % 60, int(elapsed // 60) % 60, int(elapsed // 3600)
