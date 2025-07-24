@@ -1274,11 +1274,11 @@ class Recipe(Cargo):
                 # Disable progress during pool creation so that it isn't
                 # enabled in the resulting processes.
                 if not is_boring():
-                    task_stats.disable_progress_display()
+                    task_stats.display.disable()
                 with ProcessPoolExecutor(num_workers) as pool:
                     # Re-enable progress after pool creation.
                     if not is_boring():
-                        task_stats.enable_progress_display()
+                        task_stats.display.enable()
                     # submit each iterant to pool
                     futures = [pool.submit(self._iterate_loop_worker, *args, subprocess=True, raise_exc=False) for args in loop_worker_args]
                     # update task stats, since they're recorded independently within each step, as well

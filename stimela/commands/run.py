@@ -26,7 +26,7 @@ import stimela.config
 from stimela.config import ConfigExceptionTypes
 from stimela import logger, log_exception
 from stimela.stimelogging import is_boring
-from stimela.task_stats import enable_progress_display
+from stimela.task_stats import display
 from stimela.exceptions import RecipeValidationError, StimelaRuntimeError, StepSelectionError, StepValidationError
 from stimela.main import cli
 from stimela.kitchen.recipe import Recipe, Step, RecipeSchema, join_quote
@@ -253,7 +253,7 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
 
     log = logger()
     if not is_boring():
-        enable_progress_display(style="fancy")
+        display.enable()
     params = OrderedDict()
     errcode = 0
     recipe_or_cab = None

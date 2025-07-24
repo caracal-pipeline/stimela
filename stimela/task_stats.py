@@ -217,17 +217,17 @@ class Display:
 
         self.live_display.update(table)
 
+    def enable(self, style="fancy"):
+        self.set_display_style(style)
+        def destructor():
+            self.live_display.__exit__(None, None, None)
+        atexit.register(destructor)
+        self.live_display.__enter__()
+
+    def disable(self):
+        self.live_display.__exit__(None, None, None)
+
 display = Display()
-
-def enable_progress_display(style="fancy"):
-    display.set_display_style(style)
-    def destructor():
-        display.live_display.__exit__(None, None, None)
-    atexit.register(destructor)
-    display.live_display.__enter__()
-
-def disable_progress_display():
-    display.live_display.__exit__(None, None, None)
 
 # this is "" for the main process, ".0", ".1", for subprocesses, ".0.0" for nested subprocesses
 _subprocess_identifier = ""
@@ -636,7 +636,7 @@ def render_profiling_summary(stats: TaskStatsDatum, max_depth, unroll_loops=Fals
 
     stimelogging.declare_chapter("profiling results")
     # Disable display - ensures that it doesn't appear below the profiling.
-    disable_progress_display()
+    display.disable()
     from rich.columns import Columns
     # progress_console.print(table_avg, justify="center")
     # progress_console.print(table_peak, justify="center")
