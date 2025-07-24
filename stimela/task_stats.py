@@ -1,5 +1,6 @@
 import atexit
 from dataclasses import dataclass, fields
+from collections import defaultdict
 import sys
 import os.path
 from datetime import datetime, timedelta
@@ -46,6 +47,8 @@ class Display:
         "task_command": "Command",
         "task_cpu_usage": "CPU",
         "task_ram_usage": "RAM",
+        "task_peak_ram_usage": "MAX.",
+        "task_peak_cpu_usage": "MAX.",
     }
 
     def __init__(self):
@@ -73,6 +76,8 @@ class Display:
             console=progress_console,
             transient=True
         )
+
+        self.task_maxima = defaultdict(float)
 
     def _timer_element(self, width=None):
         return Progress(
@@ -136,13 +141,29 @@ class Display:
             setattr(self, k, status)
             setattr(self, f"{k}_id", status_id)
 
+        ram_table = Table.grid(expand=True, padding=(0,1))
+        ram_table.add_column(ratio=1)
+        ram_table.add_column(ratio=1)
+        ram_table.add_row(
+            self.task_ram_usage,
+            self.task_peak_ram_usage,
+        )
+
+        cpu_table = Table.grid(expand=True, padding=(0,1))
+        cpu_table.add_column(ratio=1)
+        cpu_table.add_column(ratio=1)
+        cpu_table.add_row(
+            self.task_cpu_usage,
+            self.task_peak_cpu_usage,
+        )
+
         task_group = Group(
             self.task_elapsed,
             self.task_name,
             self.task_status,
             self.task_command,
-            self.task_cpu_usage,
-            self.task_ram_usage
+            cpu_table,
+            ram_table
         )
 
         system_group = Group(
@@ -217,6 +238,10 @@ class Display:
         )
 
         self.live_display.update(table)
+
+    def reset_current_task(self):
+        self.task_elapsed.reset(self.task_elapsed_id)
+        self.task_maxima = defaultdict(float)
 
     def enable(self, style="fancy"):
         self.set_display_style(style)
@@ -314,7 +339,7 @@ class _CommandContext(object):
 
 @contextlib.contextmanager
 def declare_subcommand(command):
-    display.task_elapsed.reset(display.task_elapsed_id)
+    display.reset_current_task()
     try:
         yield _CommandContext(command)
     finally:
@@ -573,9 +598,23 @@ def update_process_status():
             value=f"[green]{s.cpu:2.1f}[/green]%"
         )
 
+        max_cpu = max(s.cpu, display.task_maxima["task_peak_cpu_usage"])
+        display.task_maxima["task_peak_cpu_usage"] = max_cpu
+        display.task_peak_cpu_usage.update(
+            display.task_peak_cpu_usage_id,
+            value=f"[green]{max_cpu:2.1f}[/green]%"
+        )
+
         display.task_ram_usage.update(
             display.task_ram_usage_id,
             value=f"[green]{s.mem_used}[/green]GB"
+        )
+
+        max_ram = max(s.mem_used, display.task_maxima["task_peak_ram_usage"])
+        display.task_maxima["task_peak_ram_usage"] = max_ram
+        display.task_peak_ram_usage.update(
+            display.task_peak_ram_usage_id,
+            value=f"[green]{max_ram}[/green]GB"
         )
 
     # update stats
