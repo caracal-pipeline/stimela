@@ -47,26 +47,42 @@ class Display:
         self.task_elapsed_id = self.task_elapsed.add_task("")
 
         self.cpu_usage = self._default_status()
+        self.cpu_usage_id = self.cpu_usage.add_task(
+            "CPU", value="Pending..."
+        )
         self.ram_usage = self._default_status()
+        self.ram_usage_id = self.ram_usage.add_task(
+            "RAM", value="Pending..."
+        )
         self.disk_read = self._default_status()
+        self.disk_read_id = self.disk_read.add_task(
+            "Read", value="Pending..."
+        )
         self.disk_write = self._default_status()
-
-        self.cpu_usage_id = self.cpu_usage.add_task("CPU", value="Pending...")
-        self.ram_usage_id = self.ram_usage.add_task("RAM", value="Pending...")
-        self.disk_read_id = self.disk_read.add_task("Read", value="Pending...")
-        self.disk_write_id = self.disk_write.add_task("Write", value="Pending...")
+        self.disk_write_id = self.disk_write.add_task(
+            "Write", value="Pending..."
+        )
 
         self.task_name = self._default_status()
+        self.task_name_id = self.task_name.add_task(
+            "Step", value="Pending..."
+        )
         self.task_status = self._default_status()
+        self.task_status_id = self.task_status.add_task(
+            "Status", value="Pending..."
+        )
         self.task_command = self._default_status()
+        self.task_command_id = self.task_command.add_task(
+            "Command", value="Pending..."
+        )
         self.task_cpu_usage = self._default_status()
+        self.task_cpu_usage_id = self.task_cpu_usage.add_task(
+            "CPU", value="Pending..."
+        )
         self.task_ram_usage = self._default_status()
-
-        self.task_name_id = self.task_name.add_task("Step", value="Pending...")
-        self.task_status_id = self.task_status.add_task("Status", value="Pending...")
-        self.task_command_id = self.task_command.add_task("Command", value="Pending...")
-        self.task_cpu_usage_id = self.task_cpu_usage.add_task("CPU", value="Pending...")
-        self.task_ram_usage_id = self.task_ram_usage.add_task("RAM", value="Pending...")
+        self.task_ram_usage_id = self.task_ram_usage.add_task(
+            "RAM", value="Pending..."
+        )
 
         self.live_display = Live(
             "Display not configured",
