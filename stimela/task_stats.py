@@ -106,23 +106,22 @@ class Display:
         if self.display_style == style:
             return  # Already configured.
 
-        if self.display_style != "default":
-            self.__init__()  # Reset to the default display configuration.
-
         if style == "fancy":
             self._configure_fancy_display()
         elif style == "simple":
             self._configure_simple_display()
         elif style == "default":
-            pass
+            self.__init__()
         else:
             raise ValueError(f"Unrecognised style when configuring display.")
 
     def _configure_fancy_display(self):
 
+        self.display_style = "fancy"
+
         progress_fields = self.progress_fields
 
-        width = max(len(fn) for fn in progress_fields.keys())
+        width = max(len(fn) for fn in progress_fields.values() if fn)
 
         self.total_elapsed = self._timer_element(width=width)
         self.total_elapsed_id = self.total_elapsed.add_task("", start=True)
@@ -130,7 +129,7 @@ class Display:
         self.task_elapsed = self._timer_element(width=width)
         self.task_elapsed_id = self.task_elapsed.add_task("")
 
-        for k, v in progress_fields:
+        for k, v in progress_fields.items():
             status = self._status_element(width=width + 1)
             status_id = status.add_task(v, value=None)
             setattr(self, k, status)
@@ -180,6 +179,8 @@ class Display:
         self.live_display.update(table)
 
     def _configure_simple_display(self):
+
+        self.display_style = "simple"
 
         progress_fields = self.progress_fields | {
             "disk_read": "R",
