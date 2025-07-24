@@ -54,20 +54,20 @@ class Display:
 
         self.display_style = "default"
 
-        self.total_elapsed = self._default_timer()
+        self.total_elapsed = self._timer_element()
         self.total_elapsed_id = self.total_elapsed.add_task("", start=True)
 
-        self.task_elapsed = self._default_timer()
+        self.task_elapsed = self._timer_element()
         self.task_elapsed_id = self.task_elapsed.add_task("")
 
         for k, v in self.system_attr_map.items():
-            status = self._default_status()
+            status = self._status_element()
             status_id = status.add_task(v, value=None)
             setattr(self, k, status)
             setattr(self, f"{k}_id", status_id)
 
         for k, v in self.task_attr_map.items():
-            status = self._default_status()
+            status = self._status_element()
             status_id = status.add_task(v, value=None)
             setattr(self, k, status)
             setattr(self, f"{k}_id", status_id)
@@ -82,12 +82,12 @@ class Display:
             transient=True
         )
 
-    def _default_timer(self):
+    def _timer_element(self, width=None):
         return Progress(
             SpinnerColumn(),
             TextColumn(
                 "[yellow][bold]{task.description}[/bold][/yellow]",
-                table_column=Column(no_wrap=True)
+                table_column=Column(no_wrap=True, width=width)
             ),
             TimeElapsedColumn(),
             refresh_per_second=2,
@@ -95,11 +95,11 @@ class Display:
             transient=True
         )
 
-    def _default_status(self):
+    def _status_element(self, width=None):
         return Progress(
             TextColumn(
                 "[bold]{task.description}[/bold]",
-                table_column=Column(no_wrap=True)
+                table_column=Column(no_wrap=True, width=width)
             ),
             TextColumn(
                 "[bold]{task.fields[value]}[/bold]",
