@@ -427,7 +427,7 @@ def log_exception(*errors, severity="error", log=None):
 
     # NOTE(JSKenyon): Can probably use the console print regardless. It should
     # always be defined as I have removed the behaviour that set it to None.
-    has_display = task_stats.live_display.is_started
+    has_display = task_stats.display.live_display.is_started
     printfunc = task_stats.progress_console.print if has_display else rich_print
 
     if has_nesting:

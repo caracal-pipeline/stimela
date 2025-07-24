@@ -32,163 +32,185 @@ progress_console = rich.console.Console(
     emoji=False
 )
 
-total_elapsed = Progress(
-    SpinnerColumn(),
-    TextColumn(
-        "[yellow][bold]{task.description}[/bold][/yellow]",
-        table_column=Column(no_wrap=True)
-    ),
-    TimeElapsedColumn(),
-    refresh_per_second=2,
-    console=progress_console,
-    transient=True
-)
-total_elapsed_id = total_elapsed.add_task(f"{'Elapsed':<9}", start=True)
+class Display:
 
-sys_usage = Progress(
-    TextColumn(
-        "[bold]{task.description}[/bold]",
-        table_column=Column(no_wrap=True, width=7)
-    ),
-    TextColumn(
-        "[bold]{task.fields[resource]}[/bold]",
-        table_column=Column(no_wrap=True)
-    ),
-    refresh_per_second=2,
-    console=progress_console,
-    transient=True
-)
+    progress_console = progress_console
 
-cpu_usage_id = sys_usage.add_task("CPU", resource="Pending...")
-ram_usage_id = sys_usage.add_task("RAM", resource="Pending...")
-disk_read_id = sys_usage.add_task("Read", resource="Pending...")
-disk_write_id = sys_usage.add_task("Write", resource="Pending...")
+    def __init__(self):
 
-task_usage = Progress(
-    TextColumn(
-        "[bold]{task.description}[/bold]",
-        table_column=Column(no_wrap=True, width=7)
-    ),
-    TextColumn(
-        "[bold]{task.fields[resource]}[/bold]",
-        table_column=Column(no_wrap=True)
-    ),
-    refresh_per_second=2,
-    console=progress_console,
-    transient=True
-)
+        self.total_elapsed = self._default_timer()
+        self.total_elapsed_id = self.total_elapsed.add_task("", start=True)
 
-task_name_id = task_usage.add_task("Step", resource="Pending...")
-task_status_id = task_usage.add_task("Status", resource="Pending...")
-task_command_id = task_usage.add_task("Command", resource="Pending...")
-task_cpu_usage_id = task_usage.add_task("CPU", resource="Pending...")
-task_ram_usage_id = task_usage.add_task("RAM", resource="Pending...")
+        self.task_elapsed = self._default_timer()
+        self.task_elapsed_id = self.task_elapsed.add_task("")
 
-task_elapsed = Progress(
-    SpinnerColumn(),
-    TextColumn(
-        "[yellow][bold]{task.description}[/bold][/yellow]",
-        table_column=Column(no_wrap=True)
-    ),
-    TimeElapsedColumn(),
-    refresh_per_second=2,
-    console=progress_console,
-    transient=True
-)
-task_elapsed_id = task_elapsed.add_task(f"{'Elapsed':<9}")
+        self.cpu_usage = self._default_status()
+        self.ram_usage = self._default_status()
+        self.disk_read = self._default_status()
+        self.disk_write = self._default_status()
 
-task_state = Group(task_elapsed, task_usage)
-system_state = Group(total_elapsed, sys_usage)
+        self.cpu_usage_id = self.cpu_usage.add_task("CPU", resource="Pending...")
+        self.ram_usage_id = self.ram_usage.add_task("RAM", resource="Pending...")
+        self.disk_read_id = self.disk_read.add_task("Read", resource="Pending...")
+        self.disk_write_id = self.disk_write.add_task("Write", resource="Pending...")
 
-progress_table = Table.grid(expand=True)
-progress_table.add_column()
-progress_table.add_column(ratio=1)
-progress_table.add_column(ratio=1)
-progress_table.add_column()
-progress_table.add_row(
-    " ",  # Spacer.
-    Panel(
-        task_state,
-        title="Task",
-        border_style="green",
-        expand=True
-    ),
-    Panel(
-        system_state,
-        title="System",
-        border_style="green",
-        expand=True,
-        padding=(0,1,1,1)  # (T, R, B, L) - defaults are (R, L) = (1, 1).
-    ),
-    " "  # Spacer.
-)
+        self.task_name = self._default_status()
+        self.task_status = self._default_status()
+        self.task_command = self._default_status()
+        self.task_cpu_usage = self._default_status()
+        self.task_ram_usage = self._default_status()
 
-live_display = Live(
-    progress_table,
-    refresh_per_second=5,
-    console=progress_console,
-    transient=True
-)
+        self.task_name_id = self.task_name.add_task("Step", resource="Pending...")
+        self.task_status_id = self.task_status.add_task("Status", resource="Pending...")
+        self.task_command_id = self.task_command.add_task("Command", resource="Pending...")
+        self.task_cpu_usage_id = self.task_cpu_usage.add_task("CPU", resource="Pending...")
+        self.task_ram_usage_id = self.task_ram_usage.add_task("RAM", resource="Pending...")
 
-def one_liner():
-    total_elapsed.update(total_elapsed_id, description="R")
-    task_elapsed.update(task_elapsed_id, description="S")
+        self.live_display = Live(
+            "Display not configured",
+            refresh_per_second=5,
+            console=progress_console,
+            transient=True
+        )
 
-    task_usage.update(task_name_id, description="")
-    task_usage.update(task_status_id, description="")
-    task_usage.update(task_command_id, visible=False)
-    task_usage.update(task_cpu_usage_id, description="CPU")
-    task_usage.update(task_ram_usage_id, description="RAM")
+    def _default_timer(self):
+        return Progress(
+            SpinnerColumn(),
+            TextColumn(
+                "[yellow][bold]{task.description}[/bold][/yellow]",
+                table_column=Column(no_wrap=True)
+            ),
+            TimeElapsedColumn(),
+            refresh_per_second=2,
+            console=self.progress_console,
+            transient=True
+        )
 
-    column_specs = [
-        *total_elapsed.columns,
-        *task_elapsed.columns,
-        *(task_usage.columns * len(task_usage.tasks))
-    ]
+    def _default_status(self):
+        return Progress(
+            TextColumn(
+                "[bold]{task.description}[/bold]",
+                table_column=Column(no_wrap=True, width=7)
+            ),
+            TextColumn(
+                "[bold]{task.fields[resource]}[/bold]",
+                table_column=Column(no_wrap=True)
+            ),
+            refresh_per_second=2,
+            console=progress_console,
+            transient=True
+        )
 
-    table_columns = [
-            (
-                Column(no_wrap=True)
-                if isinstance(_column, str)
-                else _column.get_table_column().copy()
-            )
-            for _column in column_specs
-    ]
+    def configure_fancy_renderable(self):
 
-    columns = []
-    for task in task_usage.tasks:
-        if task.visible:
-            columns.extend(
-                [
-                    (
-                        column.format(task=task)
-                        if isinstance(column, str)
-                        else column(task)
-                    )
-                    for column in task_usage.columns
-                ]
-            )
+        task_group = Group(
+            self.task_elapsed,
+            self.task_name,
+            self.task_status,
+            self.task_command,
+            self.task_cpu_usage,
+            self.task_ram_usage
+        )
 
-    table = Table.grid(*table_columns, padding=(0, 1), expand=False)
-    # renderable_table = Table.grid(expand=False)
-    table.add_row(
-        total_elapsed,
-        task_elapsed,
-        *columns
-    )
+        system_group = Group(
+            self.total_elapsed,
+            self.cpu_usage,
+            self.ram_usage,
+            self.disk_read,
+            self.disk_write
+        )
 
-    return table
+        table = Table.grid(expand=True)
+        table.add_column()
+        table.add_column(ratio=1)
+        table.add_column(ratio=1)
+        table.add_column()
+        table.add_row(
+            " ",  # Spacer.
+            Panel(
+                task_group,
+                title="Task",
+                border_style="green",
+                expand=True
+            ),
+            Panel(
+                system_group,
+                title="System",
+                border_style="green",
+                expand=True,
+                padding=(0,1,1,1)  # (T, R, B, L) - defaults are (R, L) = (1, 1).
+            ),
+            " "  # Spacer.
+        )
 
-def enable_progress_display(fancy=True):
-    if not fancy:
-        live_display._get_renderable = one_liner
+        self.live_display.update(table)
+
+
+# def one_liner():
+#     total_elapsed.update(total_elapsed_id, description="R")
+#     task_elapsed.update(task_elapsed_id, description="S")
+
+#     task_usage.update(task_name_id, description="")
+#     task_usage.update(task_status_id, description="")
+#     task_usage.update(task_command_id, visible=False)
+#     task_usage.update(task_cpu_usage_id, description="CPU")
+#     task_usage.update(task_ram_usage_id, description="RAM")
+
+#     column_specs = [
+#         *total_elapsed.columns,
+#         *task_elapsed.columns,
+#         *(task_usage.columns * len(task_usage.tasks))
+#     ]
+
+#     table_columns = [
+#             (
+#                 Column(no_wrap=True)
+#                 if isinstance(_column, str)
+#                 else _column.get_table_column().copy()
+#             )
+#             for _column in column_specs
+#     ]
+
+#     columns = []
+#     for task in task_usage.tasks:
+#         if task.visible:
+#             columns.extend(
+#                 [
+#                     (
+#                         column.format(task=task)
+#                         if isinstance(column, str)
+#                         else column(task)
+#                     )
+#                     for column in task_usage.columns
+#                 ]
+#             )
+
+#     table = Table.grid(*table_columns, padding=(0, 1), expand=False)
+#     # renderable_table = Table.grid(expand=False)
+#     table.add_row(
+#         total_elapsed,
+#         task_elapsed,
+#         *columns
+#     )
+
+#     return table
+
+display = Display()
+
+def enable_progress_display(style="fancy"):
+    if style == "fancy":
+        display.configure_fancy_renderable()
+    elif style == "simple":
+        display.configure_fancy_renderable()
+    else:
+        raise ValueError(f"Unrecognised style when configuring display.")
     def destructor():
-        live_display.__exit__(None, None, None)
+        display.live_display.__exit__(None, None, None)
     atexit.register(destructor)
-    live_display.__enter__()
+    display.live_display.__enter__()
 
 def disable_progress_display():
-    live_display.__exit__(None, None, None)
+    display.live_display.__exit__(None, None, None)
 
 # this is "" for the main process, ".0", ".1", for subprocesses, ".0.0" for nested subprocesses
 _subprocess_identifier = ""
