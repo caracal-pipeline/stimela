@@ -253,7 +253,7 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
 
     log = logger()
     if not is_boring():
-        enable_progress_display(style="fancy")
+        enable_progress_display(style="simple")
     params = OrderedDict()
     errcode = 0
     recipe_or_cab = None

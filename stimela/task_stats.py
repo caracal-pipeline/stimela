@@ -35,14 +35,11 @@ class Display:
 
     progress_console = progress_console
 
-    system_attr_map = {
+    progress_fields = {
         "cpu_usage": "CPU",
         "ram_usage": "RAM",
         "disk_read": "Read",
         "disk_write": "Write",
-    }
-
-    task_attr_map = {
         "task_name": "Step",
         "task_status": "Status",
         "task_command": "Command",
@@ -60,13 +57,7 @@ class Display:
         self.task_elapsed = self._timer_element()
         self.task_elapsed_id = self.task_elapsed.add_task("")
 
-        for k, v in self.system_attr_map.items():
-            status = self._status_element()
-            status_id = status.add_task(v, value=None)
-            setattr(self, k, status)
-            setattr(self, f"{k}_id", status_id)
-
-        for k, v in self.task_attr_map.items():
+        for k, v in self.progress_fields.items():
             status = self._status_element()
             status_id = status.add_task(v, value=None)
             setattr(self, k, status)
@@ -129,6 +120,22 @@ class Display:
 
     def _configure_fancy_display(self):
 
+        progress_fields = self.progress_fields
+
+        width = max(len(fn) for fn in progress_fields.keys())
+
+        self.total_elapsed = self._timer_element(width=width)
+        self.total_elapsed_id = self.total_elapsed.add_task("", start=True)
+
+        self.task_elapsed = self._timer_element(width=width)
+        self.task_elapsed_id = self.task_elapsed.add_task("")
+
+        for k, v in progress_fields:
+            status = self._status_element(width=width + 1)
+            status_id = status.add_task(v, value=None)
+            setattr(self, k, status)
+            setattr(self, f"{k}_id", status_id)
+
         task_group = Group(
             self.task_elapsed,
             self.task_name,
@@ -154,17 +161,18 @@ class Display:
         table.add_row(
             " ",  # Spacer.
             Panel(
-                task_group,
-                title="Task",
-                border_style="green",
-                expand=True
-            ),
-            Panel(
                 system_group,
                 title="System",
                 border_style="green",
                 expand=True,
-                padding=(0,1,1,1)  # (T, R, B, L) - defaults are (R, L) = (1, 1).
+                padding=(0,1,1,1)  # (T, R, B, L) - defaults to (R, L) = (1, 1).
+            ),
+            Panel(
+                task_group,
+                title="Task",
+                border_style="green",
+                expand=True,
+
             ),
             " "  # Spacer.
         )
@@ -172,24 +180,34 @@ class Display:
         self.live_display.update(table)
 
     def _configure_simple_display(self):
-        self.total_elapsed.update(self.total_elapsed_id, description="R")
-        self.task_elapsed.update(self.task_elapsed_id, description="S")
 
-        # Drop the description column of task_name for brevity.
+        progress_fields = self.progress_fields | {
+            "disk_read": "R",
+            "disk_write": "W",
+        }
+
+        self.total_elapsed = self._timer_element()
+        self.total_elapsed_id = self.total_elapsed.add_task("R", start=True)
+
+        self.task_elapsed = self._timer_element()
+        self.task_elapsed_id = self.task_elapsed.add_task("S")
+
+        for k, v in progress_fields.items():
+            status = self._status_element()
+            status_id = status.add_task(v, value=None)
+            setattr(self, k, status)
+            setattr(self, f"{k}_id", status_id)
+
+        # Drop the description column of name and status for brevity.
         self.task_name.columns = self.task_name.columns[1:]
-
-        self.task_status.update(self.task_status_id, description="")
-        self.task_command.update(self.task_command_id, visible=False)
-        self.task_cpu_usage.update(self.task_cpu_usage_id, description="CPU")
-        self.task_ram_usage.update(self.task_ram_usage_id, description="RAM")
-        self.disk_read.update(self.disk_read_id, description="R")
-        self.disk_write.update(self.disk_write_id, description="W")
+        self.task_status.columns = self.task_status.columns[1:]
 
         table = Table.grid(expand=False, padding=(0, 1))
         table.add_row(
             self.total_elapsed,
             self.task_elapsed,
             self.task_name,
+            self.task_status,
             self.task_cpu_usage,
             self.task_ram_usage,
             self.disk_read,
