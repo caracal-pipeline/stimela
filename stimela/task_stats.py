@@ -296,7 +296,7 @@ class _CommandContext(object):
 
 @contextlib.contextmanager
 def declare_subcommand(command):
-    task_elapsed.reset(task_elapsed_id)
+    display.task_elapsed.reset(display.task_elapsed_id)
     try:
         yield _CommandContext(command)
     finally:
@@ -484,78 +484,78 @@ def update_process_status():
         extra_metrics = None
 
     if not any(t.hide_local_metrics for t in _task_stack):
-        if not sys_usage.disable:
-            sys_usage.update(
-                cpu_usage_id,
-                resource=f"[green]{s.sys_cpu}[/green]%"
+
+        display.cpu_usage.update(
+            display.cpu_usage_id,
+            resource=f"[green]{s.sys_cpu}[/green]%"
+        )
+
+        used = round(sys_mem.used / 2 ** 30)
+        total = round(sys_mem.total / 2 ** 30)
+        percent = (used / total) * 100
+
+        display.ram_usage.update(
+            display.ram_usage_id,
+            resource=(
+                f"[green]{used}/{total}[/green]GB "
+                f"([green]{percent:.2f}[/green]%)"
             )
+        )
 
-            used = round(sys_mem.used / 2 ** 30)
-            total = round(sys_mem.total / 2 ** 30)
-            percent = (used / total) * 100
+        if io is not None:
 
-            sys_usage.update(
-                ram_usage_id,
+            display.disk_read.update(
+                display.disk_read_id,
                 resource=(
-                    f"[green]{used}/{total}[/green]GB "
-                    f"([green]{percent:.2f}[/green]%)"
+                    f"[green]{s.read_gbps:2.2f}[/green]GB/s "
+                    f"[green]{s.read_ms:4}[/green]ms "
+                    f"[green]{s.read_count:-4}[/green] reads"
+                )
+            )
+            display.disk_write.update(
+                display.disk_write_id,
+                resource=(
+                    f"[green]{s.write_gbps:2.2f}[/green]GB/s "
+                    f"[green]{s.write_ms:4}[/green]ms "
+                    f"[green]{s.write_count:-4}[/green] writes"
                 )
             )
 
-            if io is not None:
 
-                sys_usage.update(
-                    disk_read_id,
-                    resource=(
-                        f"[green]{s.read_gbps:2.2f}[/green]GB/s "
-                        f"[green]{s.read_ms:4}[/green]ms "
-                        f"[green]{s.read_count:-4}[/green] reads"
-                    )
-                )
-                sys_usage.update(
-                    disk_write_id,
-                    resource=(
-                        f"[green]{s.write_gbps:2.2f}[/green]GB/s "
-                        f"[green]{s.write_ms:4}[/green]ms "
-                        f"[green]{s.write_count:-4}[/green] writes"
-                    )
-                )
-
-        if not task_usage.disable:
-            if ti is not None:
-                task_usage.update(
-                    task_name_id,
-                    resource=f"[bold]{ti.description}[/bold]"
-                )
-
-                task_usage.update(
-                    task_status_id,
-                    resource=f"[dim]{ti.status or 'N/A'}[/dim]"
-                )
-                # Sometimes the command contains square brackets which rich
-                # interprets as formatting. Remove them. # TODO: Figure out
-                # why the command has square brackets in the first place.
-                task_usage.update(
-                    task_command_id,
-                    resource=f"{(ti.command or 'N/A').strip('[]')}"
-                )
-
-            task_usage.update(
-                task_cpu_usage_id,
-                resource=f"[green]{s.cpu:2.1f}[/green]%"
+        if ti is not None:
+            display.task_name.update(
+                display.task_name_id,
+                resource=f"[bold]{ti.description}[/bold]"
             )
 
-            task_usage.update(
-                task_ram_usage_id,
-                resource=f"[green]{s.mem_used}[/green]GB"
+            display.task_status.update(
+                display.task_status_id,
+                resource=f"[dim]{ti.status or 'N/A'}[/dim]"
             )
+            # Sometimes the command contains square brackets which rich
+            # interprets as formatting. Remove them. # TODO: Figure out
+            # why the command has square brackets in the first place.
+            display.task_command.update(
+                display.task_command_id,
+                resource=f"{(ti.command or 'N/A').strip('[]')}"
+            )
+
+        display.task_cpu_usage.update(
+            display.task_cpu_usage_id,
+            resource=f"[green]{s.cpu:2.1f}[/green]%"
+        )
+
+        display.task_ram_usage.update(
+            display.task_ram_usage_id,
+            resource=f"[green]{s.mem_used}[/green]GB"
+        )
 
     # update stats
     update_stats(now, s)
 
 
 async def run_process_status_update():
-    if live_display.is_started:
+    if display.live_display.is_started:
         with contextlib.suppress(asyncio.CancelledError):
             while True:
                 update_process_status()
