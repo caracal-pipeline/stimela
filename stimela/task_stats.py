@@ -90,7 +90,7 @@ class Display:
         return Progress(
             TextColumn(
                 "[bold]{task.description}[/bold]",
-                table_column=Column(no_wrap=True, width=7)
+                table_column=Column(no_wrap=True)
             ),
             TextColumn(
                 "[bold]{task.fields[resource]}[/bold]",
@@ -145,55 +145,32 @@ class Display:
 
         self.live_display.update(table)
 
+    def configure_simple_renderable(self):
+        self.total_elapsed.update(self.total_elapsed_id, description="R")
+        self.task_elapsed.update(self.task_elapsed_id, description="S")
 
-# def one_liner():
-#     total_elapsed.update(total_elapsed_id, description="R")
-#     task_elapsed.update(task_elapsed_id, description="S")
+        # Drop the description column to avoid inclusion of empty column.
+        self.task_name.columns = self.task_name.columns[1:]
 
-#     task_usage.update(task_name_id, description="")
-#     task_usage.update(task_status_id, description="")
-#     task_usage.update(task_command_id, visible=False)
-#     task_usage.update(task_cpu_usage_id, description="CPU")
-#     task_usage.update(task_ram_usage_id, description="RAM")
+        self.task_status.update(self.task_status_id, description="")
+        self.task_command.update(self.task_command_id, visible=False)
+        self.task_cpu_usage.update(self.task_cpu_usage_id, description="CPU")
+        self.task_ram_usage.update(self.task_ram_usage_id, description="RAM")
+        self.disk_read.update(self.disk_read_id, description="R")
+        self.disk_write.update(self.disk_write_id, description="W")
 
-#     column_specs = [
-#         *total_elapsed.columns,
-#         *task_elapsed.columns,
-#         *(task_usage.columns * len(task_usage.tasks))
-#     ]
+        table = Table.grid(expand=False, padding=(0, 1))
+        table.add_row(
+            self.total_elapsed,
+            self.task_elapsed,
+            self.task_name,
+            self.task_cpu_usage,
+            self.task_ram_usage,
+            self.disk_read,
+            self.disk_write
+        )
 
-#     table_columns = [
-#             (
-#                 Column(no_wrap=True)
-#                 if isinstance(_column, str)
-#                 else _column.get_table_column().copy()
-#             )
-#             for _column in column_specs
-#     ]
-
-#     columns = []
-#     for task in task_usage.tasks:
-#         if task.visible:
-#             columns.extend(
-#                 [
-#                     (
-#                         column.format(task=task)
-#                         if isinstance(column, str)
-#                         else column(task)
-#                     )
-#                     for column in task_usage.columns
-#                 ]
-#             )
-
-#     table = Table.grid(*table_columns, padding=(0, 1), expand=False)
-#     # renderable_table = Table.grid(expand=False)
-#     table.add_row(
-#         total_elapsed,
-#         task_elapsed,
-#         *columns
-#     )
-
-#     return table
+        self.live_display.update(table)
 
 display = Display()
 
@@ -201,7 +178,7 @@ def enable_progress_display(style="fancy"):
     if style == "fancy":
         display.configure_fancy_renderable()
     elif style == "simple":
-        display.configure_fancy_renderable()
+        display.configure_simple_renderable()
     else:
         raise ValueError(f"Unrecognised style when configuring display.")
     def destructor():
@@ -520,7 +497,6 @@ def update_process_status():
                     f"[green]{s.write_count:-4}[/green] writes"
                 )
             )
-
 
         if ti is not None:
             display.task_name.update(
