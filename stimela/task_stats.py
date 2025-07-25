@@ -125,7 +125,15 @@ class Display:
         elif style == "default":
             self.__init__()
         else:
-            raise ValueError(f"Unrecognised style when configuring display.")
+            raise ValueError(f"Unrecognised style: {style}")
+
+    def set_display_style_override(self, style=None):
+
+        if style in self.styles or style is None:
+            self.style_override = style
+        else:
+            raise ValueError(f"Unrecognised style: {style}")
+        self.set_display_style()
 
     def _configure_fancy_display(self):
 

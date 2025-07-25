@@ -76,7 +76,7 @@ def cli(
     log.info(f"starting")        # remove this eventually, but it's handy for timing things right now
 
     # Apply display style override when provided.
-    display.style_override = display_style
+    display.set_display_style_override(display_style)
 
     stimela.VERBOSE = verbose
     if verbose:
