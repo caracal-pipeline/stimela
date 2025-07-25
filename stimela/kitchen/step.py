@@ -405,7 +405,7 @@ class Step:
             context = nullcontext()
             parent_log_info = parent_log_warning = parent_log.debug
         else:
-            context = task_stats.declare_subtask(self.name, hide_local_metrics=backend_runner.is_remote)
+            context = task_stats.declare_subtask(self.name)
             stimelogging.declare_chapter(f"{self.fqname}")
             parent_log_info, parent_log_warning = parent_log.info, parent_log.warning
 

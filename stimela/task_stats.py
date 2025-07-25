@@ -33,7 +33,6 @@ class TaskInformation(object):
     task_attrs: List[str] = EmptyListDefault()
     command: Optional[str] = None
     status_reporter: Optional[Callable] = None
-    hide_local_metrics: bool = False
 
     def __post_init__(self):
         self.names_orig = list(self.names)
@@ -54,14 +53,14 @@ stimela_process = psutil.Process()
 child_processes = {}
 
 @contextlib.contextmanager
-def declare_subtask(subtask_name, status_reporter=None, hide_local_metrics=False):
+def declare_subtask(subtask_name, status_reporter=None):
     task_names = []
     if _task_stack:
         task_names = _task_stack[-1].names + \
                     (_task_stack[-1].task_attrs or [])
     task_names.append(subtask_name)
     _task_stack.append(
-        TaskInformation(task_names, status_reporter=status_reporter, hide_local_metrics=hide_local_metrics)
+        TaskInformation(task_names, status_reporter=status_reporter)
     )
     update_process_status()
     try:
