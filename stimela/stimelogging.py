@@ -19,7 +19,7 @@ from rich.pretty import Pretty
 from rich.errors import MarkupError
 from warnings import warn
 
-from . import task_stats
+from stimela.display import progress_console, display
 
 CONSOLE_PRINT_OPTIONS = [
     "sep",
@@ -61,7 +61,7 @@ def defunkify(arg: Union[str, FunkyMessage]):
 class StimelaConsoleHander(rich.logging.RichHandler):
     def __init__(self, console):
         rich.logging.RichHandler.__init__(self, console=console,
-                    highlighter=rich.highlighter.NullHighlighter(), 
+                    highlighter=rich.highlighter.NullHighlighter(),
                     markup=True,
                     show_level=False, show_path=False, show_time=False, keywords=[])
         self._console = console
@@ -177,15 +177,12 @@ def logger(name="STIMELA", propagate=False, boring=False, loglevel="INFO"):
         _logger.propagate = propagate
 
         global _log_console_handler, _log_formatter, _log_file_formatter, _log_boring_formatter, _log_colourful_formatter
-        global progress_console, progress_bar
 
         _log_file_formatter = StimelaLogFormatter(boring=True, override_message_attr='logfile_message')
         _log_boring_formatter = StimelaLogFormatter(boring=True)
         _log_colourful_formatter = StimelaLogFormatter(boring=False)
 
         _log_formatter = _log_boring_formatter if boring else _log_colourful_formatter
-
-        progress_bar, progress_console = task_stats.init_progress_bar(boring=boring)
 
         _log_console_handler = StimelaConsoleHander(console=progress_console)
 
@@ -218,6 +215,8 @@ def disable_file_logger(log: logging.Logger):
         log.removeHandler(fh)
         del _logger_file_handlers[log.name]
 
+def is_boring():
+    return _boring
 
 class DelayedFileHandler(logging.FileHandler):
     """A version of FileHandler that also handles directory and symlink creation in a delayed way"""
@@ -231,7 +230,7 @@ class DelayedFileHandler(logging.FileHandler):
         if not self.is_open:
             self.is_open = True
             logdir = os.path.dirname(self.logfile)
-            if logdir and not os.path.exists(logdir):            
+            if logdir and not os.path.exists(logdir):
                 os.makedirs(logdir)
                 if self.symlink:
                     symlink_path = os.path.join(os.path.dirname(logdir.rstrip("/")) or ".", self.symlink)
@@ -261,7 +260,7 @@ def setup_file_logger(log: logging.Logger, logfile: str, level: Optional[Union[i
         [logging.Logger]: logger object
     """
     current_logfile, fh = _logger_file_handlers.get(log.name, (None, None))
-    
+
     # does the logger need a new FileHandler created
     if current_logfile != logfile:
         log.debug(f"will switch to logfile {logfile} (previous was {current_logfile})")
@@ -308,7 +307,7 @@ def update_file_logger(log: logging.Logger, logopts: DictConfig, nesting: int = 
         nesting (int):                                 nesting level of this logger
         logopts (Union[StimelaLogConfig, DictConfig]): config settings
         subst (Dict[str, Any]):                        dictionary of substitutions for pathnames in logopts
-        location (List[str]):                          location of this logger in the hierarchy  
+        location (List[str]):                          location of this logger in the hierarchy
 
     Returns:
         [type]: [description]
@@ -318,7 +317,7 @@ def update_file_logger(log: logging.Logger, logopts: DictConfig, nesting: int = 
         path = os.path.join(logopts.dir or ".", logopts.name + logopts.ext)
 
         if subst is not None:
-            with forgiving_substitutions_from(subst, raise_errors=False) as context: 
+            with forgiving_substitutions_from(subst, raise_errors=False) as context:
                 path = context.evaluate(path, location=location + ["log"])
                 if context.errors:
                     for err in context.errors:
@@ -346,7 +345,7 @@ def get_logfile_dir(log: logging.Logger):
 
 
 def log_exception(*errors, severity="error", log=None):
-    """Logs one or more error messages or exceptions (unless they are marked as already logged), and 
+    """Logs one or more error messages or exceptions (unless they are marked as already logged), and
     pretty-prints them to the console  as appropriate.
     """
     def exc_message(e):
@@ -363,7 +362,7 @@ def log_exception(*errors, severity="error", log=None):
     else:
         colour = "yellow"
         message_dispatch = (log or logger()).warning
-    
+
     trees = []
     do_log = False
     messages = []
@@ -405,16 +404,16 @@ def log_exception(*errors, severity="error", log=None):
             messages.append(exc.message)
             if not exc.logged:
                 do_log = exc.logged = True
-            tree = Tree(exc_message(exc) if _boring else 
-                            f"[{colour}]{exc_message(exc)}[/{colour}]", 
+            tree = Tree(exc_message(exc) if _boring else
+                            f"[{colour}]{exc_message(exc)}[/{colour}]",
                         guide_style="" if _boring else "dim")
             trees.append(tree)
             if exc.nested:
                 add_nested(exc.nested, tree)
                 has_nesting = True
         else:
-            tree = Tree(exc_message(exc) if _boring else 
-                            f"[{colour}]{exc_message(exc)}[/{colour}]", 
+            tree = Tree(exc_message(exc) if _boring else
+                            f"[{colour}]{exc_message(exc)}[/{colour}]",
                         guide_style="" if _boring else "dim")
             trees.append(tree)
             do_log = True
@@ -423,18 +422,21 @@ def log_exception(*errors, severity="error", log=None):
     if do_log:
         message_dispatch(": ".join(messages))
 
-    printfunc = task_stats.progress_bar.console.print if task_stats.progress_bar is not None else rich_print
+    # NOTE(JSKenyon): Can probably use the console print regardless. It should
+    # always be defined as I have removed the behaviour that set it to None.
+    has_display = display.live_display.is_started
+    printfunc = progress_console.print if has_display else rich_print
 
     if has_nesting:
         declare_chapter("detailed error report follows", style="red")
         for tree in trees:
             printfunc(Padding(tree, pad=(0,0,0,8)))
 
-def log_rich_payload(log: logging.Logger, message: str, payload: Any, 
-                     console_payload: Optional[Any] = None, syntax: Optional[str] = None, 
+def log_rich_payload(log: logging.Logger, message: str, payload: Any,
+                     console_payload: Optional[Any] = None, syntax: Optional[str] = None,
                      level: int = logging.INFO):
-    """Logs a message with a rich payload. File logger will get plain text version ("message: \npayload"), 
-    console logger will get a rich renderable console_payload object instead, or a Syntax object. 
+    """Logs a message with a rich payload. File logger will get plain text version ("message: \npayload"),
+    console logger will get a rich renderable console_payload object instead, or a Syntax object.
 
     Args:
         log (logging.Logger): logger to use
@@ -448,6 +450,6 @@ def log_rich_payload(log: logging.Logger, message: str, payload: Any,
         console_payload = Syntax(payload, syntax, padding=(0, 0, 0, 8))
     elif console_payload is None:
         console_payload = Pretty(payload, indent_size=8)
-    log.log(level, f"{message}:", 
+    log.log(level, f"{message}:",
             extra=dict(logfile_message=f"{message}: \n{str(payload)}",
                         console_payload=console_payload))
