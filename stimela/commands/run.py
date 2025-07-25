@@ -253,6 +253,7 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
 
     log = logger()
     if not is_boring():
+        display.set_display_style()
         display.enable()
     params = OrderedDict()
     errcode = 0

@@ -606,7 +606,7 @@ class Step:
                 if type(self.cargo) is Recipe:
                     self.cargo._run(params, subst, backend=backend)
                 elif type(self.cargo) is Cab:
-                    if backend_runner.backend_name in ("slurm", "kubernetes"):
+                    if backend_runner.backend_name in ("slurm", "kube"):
                         task_stats.display.set_display_style("simple")
                     else:
                         task_stats.display.set_display_style("fancy")

@@ -51,9 +51,12 @@ class Display:
         "task_peak_cpu_usage": "Peak",
     }
 
+    styles = {"fancy", "simple"}
+
     def __init__(self):
 
         self.display_style = "default"
+        self.style_override = None
 
         self.total_elapsed = self._timer_element()
         self.total_elapsed_id = self.total_elapsed.add_task("", start=True)
@@ -107,7 +110,10 @@ class Display:
             transient=True
         )
 
-    def set_display_style(self, style):
+    def set_display_style(self, style="simple"):
+
+        if self.style_override:  # If set, ignore style argument.
+            style = self.style_override
 
         if self.display_style == style:
             return  # Already configured.
@@ -131,6 +137,8 @@ class Display:
 
         # Set the width of the text column in the recipe timer.
         self.total_elapsed.columns[1].get_table_column().width = width - 1
+        # Set the description recipe timer task.
+        self.total_elapsed.update(self.total_elapsed_id, description="")
 
         self.task_elapsed = self._timer_element(width=width - 1)
         self.task_elapsed_id = self.task_elapsed.add_task("")
@@ -211,6 +219,8 @@ class Display:
 
         # Set the width of the text column in the recipe timer.
         self.total_elapsed.columns[1].get_table_column().width = None
+        # Set the description recipe timer task.
+        self.total_elapsed.update(self.total_elapsed_id, description="R")
 
         self.task_elapsed = self._timer_element()
         self.task_elapsed_id = self.task_elapsed.add_task("S")
@@ -243,8 +253,7 @@ class Display:
         self.task_elapsed.reset(self.task_elapsed_id)
         self.task_maxima = defaultdict(float)
 
-    def enable(self, style="fancy"):
-        self.set_display_style(style)
+    def enable(self):
         def destructor():
             self.live_display.__exit__(None, None, None)
         atexit.register(destructor)
