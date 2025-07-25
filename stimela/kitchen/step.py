@@ -607,7 +607,7 @@ class Step:
                 if type(self.cargo) is Recipe:
                     self.cargo._run(params, subst, backend=backend)
                 elif type(self.cargo) is Cab:
-                    if backend_runner.backend_name in ("slurm", "kube"):
+                    if backend_runner.is_remote:
                         display.set_display_style("remote")
                     else:
                         display.set_display_style("fancy")
