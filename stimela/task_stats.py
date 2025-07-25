@@ -287,7 +287,7 @@ def update_process_status():
     # call extra status reporter
     # TODO(JSKenyon): I have broken this code while updating taskstats.py to
     # use a live display. This will need to be fixed at some point, ideally
-    # when we have access to a kubenetes cluster.
+    # when we have access to a kubernetes cluster.
     if task_info and task_info.status_reporter:
         extra_metrics, extra_stats = task_info.status_reporter()
         if extra_stats:
@@ -295,11 +295,8 @@ def update_process_status():
     else:
         extra_metrics = None
 
-    # TODO(JSKenyon): This is not correct and needs to be handled elsewhere.
-    # When using a remote backend, local metrics and not useful and should
-    # be hidden.
-    if not any(ti.hide_local_metrics for ti in _task_stack):
-        display.update(sys_stats, task_stats, task_info)
+    # Update the display using the stats and info objects.
+    display.update(sys_stats, task_stats, task_info)
 
     # update stats
     update_stats(now, task_stats)

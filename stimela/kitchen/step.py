@@ -608,7 +608,7 @@ class Step:
                     self.cargo._run(params, subst, backend=backend)
                 elif type(self.cargo) is Cab:
                     if backend_runner.backend_name in ("slurm", "kube"):
-                        display.set_display_style("simple")
+                        display.set_display_style("remote")
                     else:
                         display.set_display_style("fancy")
                     cabstat = backend_runner.run(self.cargo, params=params, log=self.log, subst=subst, fqname=self.fqname)

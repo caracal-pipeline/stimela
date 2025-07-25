@@ -39,7 +39,7 @@ class Display:
         "task_peak_cpu_usage": "Peak",
     }
 
-    styles = {"fancy", "simple"}
+    styles = {"fancy", "simple", "remote"}
 
     def __init__(self):
 
@@ -110,6 +110,8 @@ class Display:
             self._configure_fancy_display()
         elif style == "simple":
             self._configure_simple_display()
+        elif style == "remote":
+            self._configure_remote_display()
         elif style == "default":
             self.__init__()
         else:
@@ -241,6 +243,42 @@ class Display:
             self.task_ram_usage,
             self.disk_read,
             self.disk_write
+        )
+
+        self.live_display.update(table)
+
+    def _configure_remote_display(self):
+
+        self.display_style = "remote"
+
+        progress_fields = self.progress_fields
+
+        # Set the width of the text column in the recipe timer.
+        self.total_elapsed.columns[1].get_table_column().width = None
+        # Set the description recipe timer task.
+        self.total_elapsed.update(self.total_elapsed_id, description="R")
+
+        self.task_elapsed = self._timer_element()
+        self.task_elapsed_id = self.task_elapsed.add_task("S")
+
+        for k, v in progress_fields.items():
+            status = self._status_element()
+            status_id = status.add_task(v, value=None)
+            setattr(self, k, status)
+            setattr(self, f"{k}_id", status_id)
+
+        # Drop the description column of name, status and command for brevity.
+        self.task_name.columns = self.task_name.columns[1:]
+        self.task_status.columns = self.task_status.columns[1:]
+        self.task_command.columns = self.task_command.columns[1:]
+
+        table = Table.grid(expand=False, padding=(0, 1))
+        table.add_row(
+            self.total_elapsed,
+            self.task_elapsed,
+            self.task_name,
+            self.task_status,
+            self.task_command
         )
 
         self.live_display.update(table)
