@@ -10,6 +10,7 @@ from rich.markup import escape
 from stimela.config import EmptyDictDefault, EmptyListDefault
 import stimela
 from stimela import log_exception, stimelogging, task_stats
+from stimela.display import display
 from stimela.stimelogging import log_rich_payload
 from stimela.backends import StimelaBackendSchema, runner
 from stimela.exceptions import *
@@ -607,9 +608,9 @@ class Step:
                     self.cargo._run(params, subst, backend=backend)
                 elif type(self.cargo) is Cab:
                     if backend_runner.backend_name in ("slurm", "kube"):
-                        task_stats.display.set_display_style("simple")
+                        display.set_display_style("simple")
                     else:
-                        task_stats.display.set_display_style("fancy")
+                        display.set_display_style("fancy")
                     cabstat = backend_runner.run(self.cargo, params=params, log=self.log, subst=subst, fqname=self.fqname)
                     # check for runstate
                     if cabstat.success is False:

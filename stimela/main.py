@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from omegaconf import OmegaConf
 import stimela
 from stimela import config, stimelogging, backends
-from stimela.task_stats import display
+from stimela.display import display
 
 UID = stimela.UID
 GID = stimela.GID

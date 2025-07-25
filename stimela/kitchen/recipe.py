@@ -24,6 +24,7 @@ from .batch import Batch
 from .step import Step
 from stimela.stimelogging import is_boring
 from stimela import task_stats
+from stimela.display import display
 from stimela import backends
 from stimela.backends import StimelaBackendSchema
 from stimela.kitchen.utils import keys_from_sel_string
@@ -1274,11 +1275,11 @@ class Recipe(Cargo):
                 # Disable progress during pool creation so that it isn't
                 # enabled in the resulting processes.
                 if not is_boring():
-                    task_stats.display.disable()
+                    display.disable()
                 with ProcessPoolExecutor(num_workers) as pool:
                     # Re-enable progress after pool creation.
                     if not is_boring():
-                        task_stats.display.enable()
+                        display.enable()
                     # submit each iterant to pool
                     futures = [pool.submit(self._iterate_loop_worker, *args, subprocess=True, raise_exc=False) for args in loop_worker_args]
                     # update task stats, since they're recorded independently within each step, as well

@@ -19,7 +19,7 @@ from rich.pretty import Pretty
 from rich.errors import MarkupError
 from warnings import warn
 
-from . import task_stats
+from stimela.display import progress_console, display
 
 CONSOLE_PRINT_OPTIONS = [
     "sep",
@@ -177,15 +177,12 @@ def logger(name="STIMELA", propagate=False, boring=False, loglevel="INFO"):
         _logger.propagate = propagate
 
         global _log_console_handler, _log_formatter, _log_file_formatter, _log_boring_formatter, _log_colourful_formatter
-        global progress_console
 
         _log_file_formatter = StimelaLogFormatter(boring=True, override_message_attr='logfile_message')
         _log_boring_formatter = StimelaLogFormatter(boring=True)
         _log_colourful_formatter = StimelaLogFormatter(boring=False)
 
         _log_formatter = _log_boring_formatter if boring else _log_colourful_formatter
-
-        progress_console = task_stats.progress_console
 
         _log_console_handler = StimelaConsoleHander(console=progress_console)
 
@@ -427,8 +424,8 @@ def log_exception(*errors, severity="error", log=None):
 
     # NOTE(JSKenyon): Can probably use the console print regardless. It should
     # always be defined as I have removed the behaviour that set it to None.
-    has_display = task_stats.display.live_display.is_started
-    printfunc = task_stats.progress_console.print if has_display else rich_print
+    has_display = display.live_display.is_started
+    printfunc = progress_console.print if has_display else rich_print
 
     if has_nesting:
         declare_chapter("detailed error report follows", style="red")
