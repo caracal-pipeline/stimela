@@ -1282,6 +1282,7 @@ class Recipe(Cargo):
                         # NOTE(JSKenyon): Hacky solution - we don't actually
                         # have the runner at this point so we try to figure out
                         # which display to use empirically.
+                        backend_opts = stimela.CONFIG.opts.backend
                         remote_loop = backend_opts.slurm.enable
                         remote_loop |= backend_opts.select[0] == "kube"
                         if remote_loop:
