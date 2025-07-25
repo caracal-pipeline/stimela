@@ -1279,6 +1279,15 @@ class Recipe(Cargo):
                 with ProcessPoolExecutor(num_workers) as pool:
                     # Re-enable progress after pool creation.
                     if not is_boring():
+                        # NOTE(JSKenyon): Hacky solution - we don't actually
+                        # have the runner at this point so we try to figure out
+                        # which display to use empirically.
+                        remote_loop = backend_opts.slurm.enable
+                        remote_loop |= backend_opts.select[0] == "kube"
+                        if remote_loop:
+                            display.set_display_style("remote")
+                        else:
+                            display.set_display_style("fancy")
                         display.enable()
                     # submit each iterant to pool
                     futures = [pool.submit(self._iterate_loop_worker, *args, subprocess=True, raise_exc=False) for args in loop_worker_args]
