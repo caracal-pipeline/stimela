@@ -270,6 +270,98 @@ class Display:
     def disable(self):
         self.live_display.__exit__(None, None, None)
 
+    def update(self, sys_stats, task_stats, task_info):
+
+        self.cpu_usage.update(
+            self.cpu_usage_id,
+            value=f"[green]{sys_stats.cpu}[/green]%"
+        )
+
+        used = sys_stats.mem_used
+        total = sys_stats.mem_total
+        percent = (used / total) * 100
+
+        self.ram_usage.update(
+            self.ram_usage_id,
+            value=(
+                f"[green]{used}/{total}[/green]GB "
+                f"([green]{percent:.2f}[/green]%)"
+            )
+        )
+
+        self.system_load.update(
+            self.system_load_id,
+            value=(
+                f"[green]{task_stats.load_1m:.2f}[/green]%/"
+                f"[green]{task_stats.load_5m:.2f}[/green]%/"
+                f"[green]{task_stats.load_15m:.2f}[/green]% "
+                f"(1/5/15 min)"
+            )
+        )
+
+        self.disk_read.update(
+            self.disk_read_id,
+            value=(
+                f"[green]{task_stats.read_gbps:2.2f}[/green]GB/s "
+                f"[green]{task_stats.read_ms:4}[/green]ms "
+                f"[green]{task_stats.read_count:-4}[/green] reads"
+            )
+        )
+        self.disk_write.update(
+            self.disk_write_id,
+            value=(
+                f"[green]{task_stats.write_gbps:2.2f}[/green]GB/s "
+                f"[green]{task_stats.write_ms:4}[/green]ms "
+                f"[green]{task_stats.write_count:-4}[/green] writes"
+            )
+        )
+
+        if task_info is not None:
+            self.task_name.update(
+                self.task_name_id,
+                value=f"[bold]{task_info.description}[/bold]"
+            )
+
+            self.task_status.update(
+                self.task_status_id,
+                value=f"[dim]{task_info.status or 'N/A'}[/dim]"
+            )
+            # Sometimes the command contains square brackets which rich
+            # interprets as formatting. Remove them. # TODO: Figure out
+            # why the command has square brackets in the first place.
+            self.task_command.update(
+                self.task_command_id,
+                value=f"{(task_info.command or 'N/A').strip('[]')}"
+            )
+
+        self.task_cpu_usage.update(
+            self.task_cpu_usage_id,
+            value=f"[green]{task_stats.cpu:2.1f}[/green]%"
+        )
+
+        max_cpu = max(
+            task_stats.cpu, self.task_maxima["task_peak_cpu_usage"]
+        )
+        self.task_maxima["task_peak_cpu_usage"] = max_cpu
+        self.task_peak_cpu_usage.update(
+            self.task_peak_cpu_usage_id,
+            value=f"[green]{max_cpu:2.1f}[/green]%"
+        )
+
+        self.task_ram_usage.update(
+            self.task_ram_usage_id,
+            value=f"[green]{task_stats.mem_used}[/green]GB"
+        )
+
+        max_ram = max(
+            task_stats.mem_used, self.task_maxima["task_peak_ram_usage"]
+        )
+        self.task_maxima["task_peak_ram_usage"] = max_ram
+        self.task_peak_ram_usage.update(
+            self.task_peak_ram_usage_id,
+            value=f"[green]{max_ram}[/green]GB"
+        )
+
 display = Display()
 
 # this is "" for the main process, ".0", ".1", for subprocesses, ".0.0" for nested subprocesses
@@ -282,7 +374,6 @@ def add_subprocess_id(num: int):
     global _subprocess_identifier
     _subprocess_identifier += f".{num}"
 
-_start_time = datetime.now()
 _prev_disk_io = None, None
 
 @dataclass
@@ -363,13 +454,20 @@ def declare_subcommand(command):
         _task_stack[-1].command = None
         update_process_status()
 
+@dataclass
+class SystemStatsDatum:
+    n_cpu: int = psutil.cpu_count()
+    cpu: float = psutil.cpu_percent()
+    mem_used: float = round(psutil.virtual_memory().used / (2 ** 30))
+    mem_total: float = round(psutil.virtual_memory().total / (2 ** 30))
 
 @dataclass
 class TaskStatsDatum(object):
     cpu: float          = 0
     mem_used: float     = 0
-    mem_total: float    = 0
-    load: float         = 0
+    load_1m: float      = 0
+    load_5m: float      = 0
+    load_15m: float     = 0
     read_count: int     = 0
     read_gb: float      = 0
     read_gbps: float    = 0
@@ -379,7 +477,6 @@ class TaskStatsDatum(object):
     write_gbps: float   = 0
     write_ms: float     = 0
     num_samples: int    = 0
-    sys_cpu: float      = 0
 
     def __post_init__(self):
         self.extras = []
@@ -476,24 +573,20 @@ def update_children():
 
 def update_process_status():
     # current subtask info
-    ti = _task_stack[-1] if _task_stack else None
+    task_info = _task_stack[-1] if _task_stack else None
 
     # elapsed time since start
     now = datetime.now()
 
     # form up sample datum
-    s = TaskStatsDatum(num_samples=1)
-
-    # System wide cpu and RAM.
-    ncpu = psutil.cpu_count()
-    s.sys_cpu = psutil.cpu_percent()
-    sys_mem = psutil.virtual_memory()
+    task_stats = TaskStatsDatum(num_samples=1)
+    sys_stats = SystemStatsDatum()
 
     update_children()
     # Assume that all child processes belong to the same task.
     # TODO(JSKenyon): Handling of children is rudimentary at present.
     # How would this work for scattered/parallel steps?
-    if child_processes and ti:
+    if child_processes and task_info:
         processes = list(child_processes.values())
     else:
         processes = []  # Don't bother with cpu and mem for stimela itself.
@@ -501,16 +594,16 @@ def update_process_status():
     # CPU and memory
     for p in processes:
         try:
-            s.cpu += p.cpu_percent()
-            s.mem_used += p.memory_info().rss
+            task_stats.cpu += p.cpu_percent()
+            task_stats.mem_used += p.memory_info().rss
         except psutil.NoSuchProcess:
             pass  # Process ended before we could gather its stats.
 
-    s.mem_used = round(s.mem_used  / (2 ** 30))
-    s.mem_total = round(sys_mem.total / (2 ** 30))
+    task_stats.mem_used = round(task_stats.mem_used  / (2 ** 30))
 
     # load
-    s.load, load_5m, load_15m = psutil.getloadavg()
+    load = [l/sys_stats.n_cpu * 100 for l in psutil.getloadavg()]
+    task_stats.load_1m, task_stats.load_5m, task_stats.load_15m = load
 
     # get disk I/O stats
     disk_io = psutil.disk_io_counters()
@@ -519,16 +612,24 @@ def update_process_status():
     if prev_io is not None:
         delta = (now - prev_time).total_seconds()
         io = {}
-        for key in 'read_bytes', 'read_count', 'read_time', 'write_bytes', 'write_count', 'write_time':
+        io_fields = (
+            'read_bytes',
+            'read_count',
+            'read_time',
+            'write_bytes',
+            'write_count',
+            'write_time'
+        )
+        for key in io_fields:
             io[key] = getattr(disk_io, key) - getattr(prev_io, key)
-        s.read_count = io['read_count']
-        s.write_count = io['write_count']
-        s.read_gb = io['read_bytes']/2**30
-        s.write_gb = io['write_bytes']/2**30
-        s.read_gbps = s.read_gb / delta
-        s.write_gbps = s.write_gb / delta
-        s.read_ms = io['read_time']
-        s.write_ms = io['write_time']
+        task_stats.read_count = io['read_count']
+        task_stats.write_count = io['write_count']
+        task_stats.read_gb = io['read_bytes']/2**30
+        task_stats.write_gb = io['write_bytes']/2**30
+        task_stats.read_gbps = task_stats.read_gb / delta
+        task_stats.write_gbps = task_stats.write_gb / delta
+        task_stats.read_ms = io['read_time']
+        task_stats.write_ms = io['write_time']
     else:
         io = None
     _prev_disk_io = disk_io, now
@@ -537,105 +638,21 @@ def update_process_status():
     # TODO(JSKenyon): I have broken this code while updating taskstats.py to
     # use a live display. This will need to be fixed at some point, ideally
     # when we have access to a kubenetes cluster.
-    if ti and ti.status_reporter:
-        extra_metrics, extra_stats = ti.status_reporter()
+    if task_info and task_info.status_reporter:
+        extra_metrics, extra_stats = task_info.status_reporter()
         if extra_stats:
-            s.insert_extra_stats(**extra_stats)
+            task_stats.insert_extra_stats(**extra_stats)
     else:
         extra_metrics = None
 
-    if not any(t.hide_local_metrics for t in _task_stack):
-
-        display.cpu_usage.update(
-            display.cpu_usage_id,
-            value=f"[green]{s.sys_cpu}[/green]%"
-        )
-
-        used = round(sys_mem.used / 2 ** 30)
-        total = round(sys_mem.total / 2 ** 30)
-        percent = (used / total) * 100
-
-        display.ram_usage.update(
-            display.ram_usage_id,
-            value=(
-                f"[green]{used}/{total}[/green]GB "
-                f"([green]{percent:.2f}[/green]%)"
-            )
-        )
-
-        display.system_load.update(
-            display.system_load_id,
-            value=(
-                f"[green]{s.load/ncpu * 100:.2f}[/green]%/"
-                f"[green]{load_5m/ncpu * 100:.2f}[/green]%/"
-                f"[green]{load_15m/ncpu * 100:.2f}[/green]% "
-                f"(1/5/15 min)"
-            )
-        )
-
-        if io is not None:
-
-            display.disk_read.update(
-                display.disk_read_id,
-                value=(
-                    f"[green]{s.read_gbps:2.2f}[/green]GB/s "
-                    f"[green]{s.read_ms:4}[/green]ms "
-                    f"[green]{s.read_count:-4}[/green] reads"
-                )
-            )
-            display.disk_write.update(
-                display.disk_write_id,
-                value=(
-                    f"[green]{s.write_gbps:2.2f}[/green]GB/s "
-                    f"[green]{s.write_ms:4}[/green]ms "
-                    f"[green]{s.write_count:-4}[/green] writes"
-                )
-            )
-
-        if ti is not None:
-            display.task_name.update(
-                display.task_name_id,
-                value=f"[bold]{ti.description}[/bold]"
-            )
-
-            display.task_status.update(
-                display.task_status_id,
-                value=f"[dim]{ti.status or 'N/A'}[/dim]"
-            )
-            # Sometimes the command contains square brackets which rich
-            # interprets as formatting. Remove them. # TODO: Figure out
-            # why the command has square brackets in the first place.
-            display.task_command.update(
-                display.task_command_id,
-                value=f"{(ti.command or 'N/A').strip('[]')}"
-            )
-
-        display.task_cpu_usage.update(
-            display.task_cpu_usage_id,
-            value=f"[green]{s.cpu:2.1f}[/green]%"
-        )
-
-        max_cpu = max(s.cpu, display.task_maxima["task_peak_cpu_usage"])
-        display.task_maxima["task_peak_cpu_usage"] = max_cpu
-        display.task_peak_cpu_usage.update(
-            display.task_peak_cpu_usage_id,
-            value=f"[green]{max_cpu:2.1f}[/green]%"
-        )
-
-        display.task_ram_usage.update(
-            display.task_ram_usage_id,
-            value=f"[green]{s.mem_used}[/green]GB"
-        )
-
-        max_ram = max(s.mem_used, display.task_maxima["task_peak_ram_usage"])
-        display.task_maxima["task_peak_ram_usage"] = max_ram
-        display.task_peak_ram_usage.update(
-            display.task_peak_ram_usage_id,
-            value=f"[green]{max_ram}[/green]GB"
-        )
+    # TODO(JSKenyon): This is not correct and needs to be handled elsewhere.
+    # When using a remote backend, local metrics and not useful and should
+    # be hidden.
+    if not any(ti.hide_local_metrics for ti in _task_stack):
+        display.update(sys_stats, task_stats, task_info)
 
     # update stats
-    update_stats(now, s)
+    update_stats(now, task_stats)
 
 
 async def run_process_status_update():
@@ -650,10 +667,10 @@ _printed_stats = dict(
     k8s_mem="k8s mem GB",
     cpu="CPU %",
     mem_used="Mem GB",
-    load="Load",
+    load_1m="Load %",
     read_gbps="R GB/s",
     write_gbps="W GB/s",
-    )
+)
 
 # these stats are written as sums
 _sum_stats = ("read_count", "read_gb", "read_ms", "write_count", "write_gb", "write_ms")
