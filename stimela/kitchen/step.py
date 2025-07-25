@@ -16,14 +16,14 @@ from stimela.exceptions import *
 import scabha.exceptions
 from scabha.exceptions import SubstitutionError, SubstitutionErrorList
 from scabha.validate import evaluate_and_substitute, evaluate_and_substitute_object, Unresolved, join_quote
-from scabha.substitutions import SubstitutionNS, substitutions_from 
+from scabha.substitutions import SubstitutionNS, substitutions_from
 from scabha.basetypes import UNSET, Placeholder, MS, File, Directory, SkippedOutput
 from .cab import Cab, get_cab_schema
 
 Conditional = Optional[str]
 
 
-def resolve_dotted_reference(key, base, current, context): 
+def resolve_dotted_reference(key, base, current, context):
     """helper function to look up a key like a.b.c in a nested dict-like structure"""
     path = key.split('.')
     if path[0]:
@@ -55,7 +55,7 @@ class Step:
     recipe: Optional[Any] = None                    # if not None, this step is a nested recipe
     params: Dict[str, Any] = EmptyDictDefault()     # assigns parameter values
     info: Optional[str] = None                      # comment or info string
-    skip: Optional[str] = None                      # if this evaluates to True, step is skipped.  
+    skip: Optional[str] = None                      # if this evaluates to True, step is skipped.
     skip_if_outputs: Optional[str] = None           # skip if outputs "exist' or "fresh"
     tags: List[str] = EmptyListDefault()
 
@@ -103,7 +103,7 @@ class Step:
         else:
             # otherwise, self._skip stays at None, and will be re-evaluated at runtime
             self._skip = None
-        
+
     def summary(self, params=None, recursive=True, ignore_missing=False, inputs=True, outputs=True):
         summary_params = OrderedDict()
         for name, value in (params or self.validated_params or self.params).items():
@@ -119,7 +119,7 @@ class Step:
 
     @property
     def missing_params(self):
-        return OrderedDict([(name, schema) for name, schema in self.cargo.inputs_outputs.items() 
+        return OrderedDict([(name, schema) for name, schema in self.cargo.inputs_outputs.items()
                             if schema.required and name not in self.validated_params])
 
     @property
@@ -146,7 +146,7 @@ class Step:
     def log(self):
         """Logger object passed from cargo"""
         return self.cargo and self.cargo.log
-    
+
     @property
     def logopts(self):
         """Logger options passed from cargo"""
@@ -196,12 +196,12 @@ class Step:
                             raise StepValidationError(f"recipe '{self.recipe}' not found in lib.recipes")
                         self.recipe = self.config.lib.recipes[self.recipe]
                     # dotted name -- look in config
-                    else: 
+                    else:
                         section, var = resolve_dotted_reference(self.recipe, config, current=None, context=f"step '{self.name}'")
                         if var not in section:
                             raise StepValidationError(f"recipe '{self.recipe}' not found")
                         self.recipe = section[var]
-                    # self.recipe is now hopefully a DictConfig or a Recipe object, so fall through below to validate it 
+                    # self.recipe is now hopefully a DictConfig or a Recipe object, so fall through below to validate it
                 # instantiate from omegaconf object, if needed
                 if type(self.recipe) is DictConfig:
                     try:
@@ -248,10 +248,10 @@ class Step:
             self.cargo.finalize(config, log=log, fqname=self.fqname, backend=backend, nesting=nesting)
 
             # build dictionary of defaults from cargo
-            self.defaults = {name: schema.default for name, schema in self.cargo.inputs_outputs.items() 
+            self.defaults = {name: schema.default for name, schema in self.cargo.inputs_outputs.items()
                              if schema.default is not UNSET and not isinstance(schema.default, Unresolved) }
             self.defaults.update(**self.cargo.defaults)
-            
+
             # set missing parameters from defaults
             for name, value in self.defaults.items():
                 if name not in self.params:
@@ -260,8 +260,8 @@ class Step:
             # check for valid backend
             backend_opts = OmegaConf.to_object(OmegaConf.merge(
                 StimelaBackendSchema,
-                backend or {}, 
-                self.cargo.backend or {}, 
+                backend or {},
+                self.cargo.backend or {},
                 self.backend or {}))
             runner.validate_backend_settings(backend_opts, log=log)
 
@@ -331,18 +331,18 @@ class Step:
             return
         backend = OmegaConf.merge(backend or {}, self.cargo.backend or {}, self.backend or {})
         log = log or self.log
-        # recurse into sub-recipe 
+        # recurse into sub-recipe
         from .recipe import Recipe
         if type(self.cargo) is Recipe:
             return self.cargo.build(backend, rebuild=rebuild, build_skips=build_skips, log=log)
-        # else build 
+        # else build
         else:
             # validate backend settings and call the build function
             try:
                 backend_opts = OmegaConf.merge(self.config.opts.backend, backend)
                 if getattr(backend_opts, 'verbose', 0):
                     opts_yaml = OmegaConf.to_yaml(backend_opts)
-                    log_rich_payload(self.log, "effective backend settings are", opts_yaml, syntax="yaml") 
+                    log_rich_payload(self.log, "effective backend settings are", opts_yaml, syntax="yaml")
                 backend_opts = OmegaConf.to_object(OmegaConf.merge(stimela.CONFIG.opts.backend, backend_opts))
                 backend_runner = runner.validate_backend_settings(backend_opts, log=log)
             except Exception as exc:
@@ -353,7 +353,7 @@ class Step:
                 return backend_runner.build(self.cargo, log=log, rebuild=rebuild)
 
 
-    def run(self, backend: Optional[Dict] = None, subst: Optional[Dict[str, Any]] = None, 
+    def run(self, backend: Optional[Dict] = None, subst: Optional[Dict[str, Any]] = None,
             is_outer_step: bool=False,
             parent_log: Optional[logging.Logger] = None) -> Dict[str, Any]:
         """executes the step
@@ -386,11 +386,11 @@ class Step:
         # validate backend settings
         try:
             backend_opts = OmegaConf.merge(self.config.opts.backend, backend)
-            backend_opts = evaluate_and_substitute_object(backend_opts, subst, 
+            backend_opts = evaluate_and_substitute_object(backend_opts, subst,
                                                           recursion_level=-1, location=[self.fqname, "backend"])
             if not is_outer_step and backend_opts.verbose:
                 opts_yaml = OmegaConf.to_yaml(backend_opts)
-                log_rich_payload(self.log, "current backend settings are", opts_yaml, syntax="yaml") 
+                log_rich_payload(self.log, "current backend settings are", opts_yaml, syntax="yaml")
             backend_opts = OmegaConf.merge(StimelaBackendSchema, backend_opts)
             backend_opts = OmegaConf.to_object(backend_opts)
             backend_runner = runner.validate_backend_settings(backend_opts, log=self.log)
@@ -399,7 +399,7 @@ class Step:
             raise newexc from None
 
         # if step is being explicitly skipped, omit from profiling, and drop info/warning messages to debug level
-        explicit_skip = self.skip is True 
+        explicit_skip = self.skip is True
         if explicit_skip:
             context = nullcontext()
             parent_log_info = parent_log_warning = parent_log.debug
@@ -415,7 +415,7 @@ class Step:
             # evaluate the skip attribute (it can be a formula and/or a {}-substititon)
             skip = self._skip
             if self._skip is None and subst is not None:
-                skip = evaluate_and_substitute_object(self.skip, subst, 
+                skip = evaluate_and_substitute_object(self.skip, subst,
                                                       location=[self.fqname, "skip"])
                 if skip is UNSET:  # skip: =IFSET(recipe.foo) will return UNSET
                     skip = False
@@ -446,12 +446,12 @@ class Step:
                 level = logging.WARNING if skip else logging.ERROR
                 if not exc.logged and not explicit_skip:
                     if type(exc) is SubstitutionErrorList:
-                        self.log_exception(StepValidationError(f"unresolved {{}}-substitution(s) in inputs:", exc.nested), 
+                        self.log_exception(StepValidationError(f"unresolved {{}}-substitution(s) in inputs:", exc.nested),
                                            severity=severity)
                         # for err in exc.errors:
                         #     self.log.log(level, f"  {err}")
                     else:
-                        self.log_exception(StepValidationError(f"error validating inputs:", exc), 
+                        self.log_exception(StepValidationError(f"error validating inputs:", exc),
                                            severity=severity)
                     exc.logged = True
                 if not explicit_skip:
@@ -471,8 +471,8 @@ class Step:
                 if subst is not None:
                     subst.current = params
 
-            ## check for (a) invalid params (b) unresolved inputs 
-            # (c) unresolved outputs of File/MS/Directory type 
+            ## check for (a) invalid params (b) unresolved inputs
+            # (c) unresolved outputs of File/MS/Directory type
             invalid = self.invalid_params
             for name in self.unresolved_params:
                 schema = self.cargo.inputs_outputs[name]
@@ -502,7 +502,7 @@ class Step:
                 parent_log_info(f"ignoring skip_if_outputs: {skip_if_outputs} because it has been force-disabled")
                 skip_if_outputs = None
 
-            ## if skip on fresh outputs is in effect, find mtime of most recent input 
+            ## if skip on fresh outputs is in effect, find mtime of most recent input
             if skip_if_outputs:
                 # max_mtime will remain 0 if we're not echecking for freshness, or if there are no file-type inputs
                 max_mtime, max_mtime_path = 0, None
@@ -606,6 +606,10 @@ class Step:
                 if type(self.cargo) is Recipe:
                     self.cargo._run(params, subst, backend=backend)
                 elif type(self.cargo) is Cab:
+                    if backend_runner.backend_name in ("slurm", "kubernetes"):
+                        task_stats.display.set_display_style("simple")
+                    else:
+                        task_stats.display.set_display_style("fancy")
                     cabstat = backend_runner.run(self.cargo, params=params, log=self.log, subst=subst, fqname=self.fqname)
                     # check for runstate
                     if cabstat.success is False:
@@ -652,7 +656,7 @@ class Step:
                 self.log_summary(logging.DEBUG, "validated outputs", ignore_missing=True, outputs=True)
 
             # bomb out if an output was invalid
-            invalid = [name for name in self.invalid_params + self.unresolved_params 
+            invalid = [name for name in self.invalid_params + self.unresolved_params
                         if name in self.cargo.outputs and self.cargo.outputs[name].required is not False]
             if invalid:
                 if skip:

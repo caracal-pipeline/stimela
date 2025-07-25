@@ -47,8 +47,8 @@ class Display:
         "task_command": "Command",
         "task_cpu_usage": "CPU",
         "task_ram_usage": "RAM",
-        "task_peak_ram_usage": "MAX.",
-        "task_peak_cpu_usage": "MAX.",
+        "task_peak_ram_usage": "Peak",
+        "task_peak_cpu_usage": "Peak",
     }
 
     def __init__(self):
@@ -129,8 +129,8 @@ class Display:
 
         width = max(len(fn) for fn in progress_fields.values() if fn)
 
-        self.total_elapsed = self._timer_element(width=width - 1)
-        self.total_elapsed_id = self.total_elapsed.add_task("", start=True)
+        # Set the width of the text column in the recipe timer.
+        self.total_elapsed.columns[1].get_table_column().width = width - 1
 
         self.task_elapsed = self._timer_element(width=width - 1)
         self.task_elapsed_id = self.task_elapsed.add_task("")
@@ -209,8 +209,8 @@ class Display:
             "disk_write": "W",
         }
 
-        self.total_elapsed = self._timer_element()
-        self.total_elapsed_id = self.total_elapsed.add_task("R", start=True)
+        # Set the width of the text column in the recipe timer.
+        self.total_elapsed.columns[1].get_table_column().width = None
 
         self.task_elapsed = self._timer_element()
         self.task_elapsed_id = self.task_elapsed.add_task("S")
