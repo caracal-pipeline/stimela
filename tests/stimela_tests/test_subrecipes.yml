@@ -36,6 +36,23 @@ lib:
         t6-skip:
           cab: echo
           skip: true
+        t7:
+          recipe: subsubrecipe
+    subsubrecipe:
+      info: "this is a subsubrecipe"
+      steps:
+        ssr-1-always:
+          cab: echo
+          tags: [always]
+        ssr-2-never:
+          cab: echo
+          tags: [never]
+        ssr-3-foo:
+          cab: echo
+          tags: [foo]
+        ssr-4-skip:
+          cab: echo
+          skip: true
 
 recipe:
   info: "this is a top-level recipe to test tags and skips"
@@ -51,3 +68,6 @@ recipe:
     s4:
       recipe: subrecipe
       tags: [foo]
+    s5:
+      cab: echo
+      skip: true
