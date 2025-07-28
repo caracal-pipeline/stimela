@@ -22,7 +22,7 @@ from scabha.basetypes import File, Directory, MS, UNSET, Placeholder
 from .cab import Cab
 from .batch import Batch
 from .step import Step
-from stimela.stimelogging import is_boring
+from stimela.stimelogging import is_logging_boring
 from stimela import task_stats
 from stimela.display import display
 from stimela import backends
@@ -1263,6 +1263,19 @@ class Recipe(Cargo):
             for count, iter_var in enumerate(self._for_loop_values):
                 loop_worker_args.append((params, subst, backend, count, iter_var))
 
+            # NOTE(JSKenyon): We don't actually have the runner at this point
+            # so dynamically changing the display based on the backend is
+            # problematic. The loop being run may also use different backends
+            # for each step. However, in most cases a scattered loop will be
+            # either remote (kube, slurm) or local, and not a mixture of the
+            # two. This chooses the display based on the global backend config
+            # - step level overrides are ignored.
+            backend_opts = stimela.CONFIG.opts.backend
+            _backend = [
+                b for b in backend_opts.select if backend_opts[b].enable
+            ][0]
+            remote_backend = _backend == "kube" or backend_opts.slurm.enable
+
             # if scatter is enabled, use a process pool
             if self._for_loop_scatter:
                 nloop = len(loop_worker_args)
@@ -1270,26 +1283,22 @@ class Recipe(Cargo):
                     num_workers = nloop
                 else:
                     num_workers = min(self._for_loop_scatter, nloop)
-                inital_task_status = f"0/{nloop} complete, {num_workers} workers"
-                task_stats.declare_subtask_status(inital_task_status)
-                # Disable progress during pool creation so that it isn't
+                # Disable display during pool creation so that it isn't
                 # enabled in the resulting processes.
-                if not is_boring():
+                if not is_logging_boring():
                     display.disable()
                 with ProcessPoolExecutor(num_workers) as pool:
-                    # Re-enable progress after pool creation.
-                    if not is_boring():
-                        # NOTE(JSKenyon): Hacky solution - we don't actually
-                        # have the runner at this point so we try to figure out
-                        # which display to use empirically.
-                        backend_opts = stimela.CONFIG.opts.backend
-                        remote_loop = backend_opts.slurm.enable
-                        remote_loop |= backend_opts.select[0] == "kube"
-                        if remote_loop:
+                    # Re-enable display after pool creation.
+                    if not is_logging_boring():
+                        if remote_backend:
                             display.set_display_style("remote")
                         else:
                             display.set_display_style("fancy")
                         display.enable()
+                    # Set status on scatter subtask once display is re-enabled.
+                    task_stats.declare_subtask_status(
+                        f"0/{nloop} complete, {num_workers} workers"
+                    )
                     # submit each iterant to pool
                     futures = [pool.submit(self._iterate_loop_worker, *args, subprocess=True, raise_exc=False) for args in loop_worker_args]
                     # update task stats, since they're recorded independently within each step, as well
