@@ -8,6 +8,8 @@ from collections.abc import Mapping
 import rich.table
 
 from concurrent.futures import ProcessPoolExecutor, as_completed
+import threading
+import time
 
 from stimela.config import EmptyDictDefault, EmptyListDefault
 import stimela
@@ -1301,6 +1303,18 @@ class Recipe(Cargo):
                     task_stats.declare_subtask_status(
                         f"0/{nloop} complete, {num_workers} workers"
                     )
+
+                    stop_profiler = threading.Event()
+
+                    def update_progress():
+                        while not stop_profiler.is_set():
+                            time.sleep(0.5)  # Separate from previous call.
+                            task_stats.update_process_status()
+                            time.sleep(0.5)
+
+                    monitor_thread = threading.Thread(target=update_progress)
+                    monitor_thread.start()
+
                     # update task stats, since they're recorded independently within each step, as well
                     # as get any exceptions from the nesting
                     errors = []
@@ -1327,6 +1341,8 @@ class Recipe(Cargo):
                     if errors:
                         pool.shutdown()
                         raise StimelaRuntimeError(f"{nfail}/{nloop} jobs have failed", errors)
+                    stop_profiler.set()
+                    monitor_thread.join()
             # else just iterate directly
             else:
                 for args in loop_worker_args:

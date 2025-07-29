@@ -49,7 +49,6 @@ class TaskInformation(object):
 
 # stack of task information -- most recent subtask is at the end
 _task_stack = []
-stimela_process = psutil.Process()
 child_processes = {}
 
 @contextlib.contextmanager
@@ -210,7 +209,7 @@ def update_children():
     Process objects each time. These then fail to report CPU stats unless
     we make them block which has a large impact on performance.
     """
-    current_children = stimela_process.children(recursive=True)
+    current_children = psutil.Process().children(recursive=True)
     current_pids = {proc.pid for proc in current_children}
     child_processes.update(
         {c.pid: c for c in current_children if c.pid not in child_processes}
@@ -231,10 +230,9 @@ def update_process_status():
     task_stats = TaskStatsDatum(num_samples=1)
     sys_stats = SystemStatsDatum()
 
+    # Track the child processes (and retain their Process objects).
     update_children()
-    # Assume that all child processes belong to the same task.
-    # TODO(JSKenyon): Handling of children is rudimentary at present.
-    # How would this work for scattered/parallel steps?
+
     if child_processes and task_info:
         processes = list(child_processes.values())
     else:
