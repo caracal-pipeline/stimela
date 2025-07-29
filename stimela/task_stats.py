@@ -7,6 +7,8 @@ from typing import OrderedDict, Any, List, Callable, Optional
 from scabha.basetypes import EmptyListDefault
 from omegaconf import OmegaConf
 import psutil
+import threading
+import time
 
 from rich.table import Table
 from rich.text import Text
@@ -305,6 +307,26 @@ async def run_process_status_update():
         while True:
             update_process_status()
             await asyncio.sleep(1)
+
+class MonitorThread:
+
+    def __init__(self):
+        self.thread = threading.Thread(target=self._update)
+        self.event = threading.Event()
+
+    def _update(self):
+        while not self.event.is_set():
+            time.sleep(0.5)
+            update_process_status()
+            time.sleep(0.5)
+
+    def start(self):
+        self.event.clear()
+        self.thread.start()
+
+    def stop(self):
+        self.event.set()
+        self.thread.join()
 
 _printed_stats = dict(
     k8s_cores="k8s cores",
