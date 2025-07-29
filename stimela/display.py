@@ -288,13 +288,15 @@ class Display:
         self.task_maxima = defaultdict(float)
 
     def enable(self):
-        def destructor():
-            self.live_display.__exit__(None, None, None)
-        atexit.register(destructor)
-        self.live_display.__enter__()
+        atexit.register(self.disable)
+        self.live_display.start(True)
 
     def disable(self):
-        self.live_display.__exit__(None, None, None)
+        self.live_display.stop()
+
+    @property
+    def is_enabled(self):
+        return self.live_display.is_started
 
     def update(self, sys_stats, task_stats, task_info):
 

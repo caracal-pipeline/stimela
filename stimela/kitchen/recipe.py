@@ -1067,9 +1067,10 @@ class Recipe(Cargo):
         """"
         Needed for concurrency
         """
-        # close progress bar in subprocesses
+        # If this is a subprocess, do not log to terminal to keep things neat.
         if subprocess:
             task_stats.add_subprocess_id(count)
+            display.progress_console.quiet = True
         subst.info.subprocess = task_stats.get_subprocess_id()
         taskname = subst.info.taskname
         outputs = {}
@@ -1079,7 +1080,6 @@ class Recipe(Cargo):
             # if for-loop, assign new value
             if self.for_loop:
                 self.log.info(f"for loop iteration {count}: {self.for_loop.var} = {iter_var}")
-                print(f"for loop iteration {count}: {self.for_loop.var} = {iter_var}")
                 if self.for_loop.var in self.inputs_outputs:
                     params[self.for_loop.var] = iter_var
                 else:
@@ -1288,6 +1288,8 @@ class Recipe(Cargo):
                 if not is_logging_boring():
                     display.disable()
                 with ProcessPoolExecutor(num_workers) as pool:
+                    # submit each iterant to pool
+                    futures = [pool.submit(self._iterate_loop_worker, *args, subprocess=True, raise_exc=False) for args in loop_worker_args]
                     # Re-enable display after pool creation.
                     if not is_logging_boring():
                         if remote_backend:
@@ -1299,8 +1301,6 @@ class Recipe(Cargo):
                     task_stats.declare_subtask_status(
                         f"0/{nloop} complete, {num_workers} workers"
                     )
-                    # submit each iterant to pool
-                    futures = [pool.submit(self._iterate_loop_worker, *args, subprocess=True, raise_exc=False) for args in loop_worker_args]
                     # update task stats, since they're recorded independently within each step, as well
                     # as get any exceptions from the nesting
                     errors = []

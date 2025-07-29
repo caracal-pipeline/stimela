@@ -295,18 +295,18 @@ def update_process_status():
         extra_metrics = None
 
     # Update the display using the stats and info objects.
-    display.update(sys_stats, task_stats, task_info)
+    if display.is_enabled:
+        display.update(sys_stats, task_stats, task_info)
 
     # update stats
     update_stats(now, task_stats)
 
 
 async def run_process_status_update():
-    if display.live_display.is_started:
-        with contextlib.suppress(asyncio.CancelledError):
-            while True:
-                update_process_status()
-                await asyncio.sleep(1)
+    with contextlib.suppress(asyncio.CancelledError):
+        while True:
+            update_process_status()
+            await asyncio.sleep(1)
 
 _printed_stats = dict(
     k8s_cores="k8s cores",
