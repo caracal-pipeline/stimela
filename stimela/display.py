@@ -98,6 +98,21 @@ class Display:
             transient=True
         )
 
+    def reset_current_task(self):
+        self.task_elapsed.reset(self.task_elapsed_id)
+        self.task_maxima = defaultdict(float)
+
+    def enable(self):
+        atexit.register(self.disable)
+        self.live_display.start(True)
+
+    def disable(self):
+        self.live_display.stop()
+
+    @property
+    def is_enabled(self):
+        return self.live_display.is_started
+
     def set_display_style(self, style="simple"):
 
         if self.style_override:  # If set, ignore style argument.
@@ -282,21 +297,6 @@ class Display:
         )
 
         self.live_display.update(table)
-
-    def reset_current_task(self):
-        self.task_elapsed.reset(self.task_elapsed_id)
-        self.task_maxima = defaultdict(float)
-
-    def enable(self):
-        atexit.register(self.disable)
-        self.live_display.start(True)
-
-    def disable(self):
-        self.live_display.stop()
-
-    @property
-    def is_enabled(self):
-        return self.live_display.is_started
 
     def update(self, sys_stats, task_stats, task_info):
 
