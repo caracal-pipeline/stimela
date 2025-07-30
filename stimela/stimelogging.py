@@ -424,8 +424,7 @@ def log_exception(*errors, severity="error", log=None):
 
     # NOTE(JSKenyon): Can probably use the console print regardless. It should
     # always be defined as I have removed the behaviour that set it to None.
-    has_display = display.live_display.is_started
-    printfunc = progress_console.print if has_display else rich_print
+    printfunc = progress_console.print if display.is_enabled else rich_print
 
     if has_nesting:
         declare_chapter("detailed error report follows", style="red")
