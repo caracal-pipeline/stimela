@@ -104,12 +104,13 @@ def declare_subcommand(command):
         _task_stack[-1].command = None
         update_process_status()
 
-@dataclass
 class SystemStatsDatum:
-    n_cpu: int = psutil.cpu_count()
-    cpu: float = psutil.cpu_percent()
-    mem_used: float = round(psutil.virtual_memory().used / (2 ** 30))
-    mem_total: float = round(psutil.virtual_memory().total / (2 ** 30))
+
+    def __init__(self):
+        self.n_cpu = psutil.cpu_count()
+        self.cpu = psutil.cpu_percent()
+        self.mem_used = round(psutil.virtual_memory().used / (2 ** 30))
+        self.mem_total = round(psutil.virtual_memory().total / (2 ** 30))
 
 @dataclass
 class TaskStatsDatum(object):
