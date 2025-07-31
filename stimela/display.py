@@ -13,10 +13,10 @@ from rich.panel import Panel
 from rich.table import Table, Column
 from rich.text import Text
 
-from stimela.stimelogging import progress_console
+from stimela.stimelogging import rich_console
 class Display:
 
-    progress_console = progress_console
+    rich_console = rich_console
 
     progress_fields = {
         "cpu_usage": "CPU",
@@ -58,7 +58,7 @@ class Display:
         self.live_display = Live(
             msg,
             refresh_per_second=5,
-            console=progress_console,
+            console=rich_console,
             transient=True
         )
 
@@ -73,7 +73,7 @@ class Display:
             ),
             TimeElapsedColumn(),
             refresh_per_second=2,
-            console=self.progress_console,
+            console=self.rich_console,
             transient=True
         )
 
@@ -88,7 +88,7 @@ class Display:
                 table_column=Column(no_wrap=True)
             ),
             refresh_per_second=2,
-            console=progress_console,
+            console=rich_console,
             transient=True
         )
 

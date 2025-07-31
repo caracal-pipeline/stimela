@@ -37,12 +37,11 @@ CONSOLE_PRINT_OPTIONS = [
     "new_line_start"
 ]
 
-progress_console = Console(
+rich_console = Console(
     file=sys.stdout,
     highlight=False,
     emoji=False
 )
-
 
 class FunkyMessage(object):
     """Class representing a message with two versions: funky (with markup), and boring (no markup)"""
@@ -161,7 +160,7 @@ def is_logger_initialized():
 
 def declare_chapter(title: str, **kw):
     if not _boring:
-        progress_console.rule(title, **kw)
+        rich_console.rule(title, **kw)
 
 def apply_style(text: str, style: str):
     if _boring:
@@ -189,7 +188,7 @@ def logger(name="STIMELA", propagate=False, boring=False, loglevel="INFO"):
 
         _log_formatter = _log_boring_formatter if boring else _log_colourful_formatter
 
-        _log_console_handler = StimelaConsoleHander(console=progress_console)
+        _log_console_handler = StimelaConsoleHander(console=rich_console)
 
         _log_console_handler.setFormatter(_log_formatter)
         _log_console_handler.setLevel(loglevel)
@@ -430,7 +429,7 @@ def log_exception(*errors, severity="error", log=None):
     if has_nesting:
         declare_chapter("detailed error report follows", style="red")
         for tree in trees:
-            progress_console.print(Padding(tree, pad=(0,0,0,8)))
+            rich_console.print(Padding(tree, pad=(0,0,0,8)))
 
 def log_rich_payload(log: logging.Logger, message: str, payload: Any,
                      console_payload: Optional[Any] = None, syntax: Optional[str] = None,

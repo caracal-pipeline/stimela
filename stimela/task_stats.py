@@ -14,7 +14,7 @@ from rich.table import Table
 from rich.text import Text
 
 from stimela import stimelogging
-from stimela.display import progress_console, display
+from stimela.display import rich_console, display
 
 # this is "" for the main process, ".0", ".1", for subprocesses, ".0.0" for nested subprocesses
 _subprocess_identifier = ""
@@ -390,12 +390,12 @@ def render_profiling_summary(stats: TaskStatsDatum, max_depth, unroll_loops=Fals
     # Disable display - ensures that it doesn't appear below the profiling.
     display.disable()
     from rich.columns import Columns
-    # progress_console.print(table_avg, justify="center")
-    # progress_console.print(table_peak, justify="center")
-    # progress_console.print(Columns((table_avg, table_peak)), justify="center")
+    # rich_console.print(table_avg, justify="center")
+    # rich_console.print(table_peak, justify="center")
+    # rich_console.print(Columns((table_avg, table_peak)), justify="center")
 
-    with progress_console.capture() as capture:
-        progress_console.print(Columns((table_avg, table_peak)), justify="center")
+    with rich_console.capture() as capture:
+        rich_console.print(Columns((table_avg, table_peak)), justify="center")
 
     text = capture.get()
 
