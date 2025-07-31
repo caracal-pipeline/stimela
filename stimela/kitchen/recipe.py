@@ -1,5 +1,6 @@
 import os, os.path, re, fnmatch, copy, traceback, logging
 from typing import Any, Tuple, List, Dict, Optional, Union
+from io import StringIO
 from dataclasses import dataclass
 from omegaconf import MISSING, OmegaConf, DictConfig, ListConfig
 from omegaconf.errors import OmegaConfBaseException
@@ -1067,10 +1068,11 @@ class Recipe(Cargo):
         """"
         Needed for concurrency
         """
-        # If this is a subprocess, do not log to terminal to keep things neat.
         if subprocess:
             task_stats.add_subprocess_id(count)
-            display.progress_console.quiet = True
+            # When running in a processpool, gather log messages in a string
+            # which can be returned to the parent process.
+            display.progress_console.file = StringIO()
         subst.info.subprocess = task_stats.get_subprocess_id()
         taskname = subst.info.taskname
         outputs = {}
@@ -1169,8 +1171,13 @@ class Recipe(Cargo):
             # else will be returned
             exception = exc
             tb = FormattedTraceback(sys.exc_info()[2])
+        finally:
+            if subprocess:
+                subprocess_logs = display.progress_console.file.getvalue()
+            else:
+                subprocess_logs = None
 
-        return task_attrs, task_kwattrs, task_stats.collect_stats(), outputs, exception, tb
+        return task_attrs, task_kwattrs, task_stats.collect_stats(), outputs, exception, tb, subprocess_logs
 
     def build(self, backend={}, rebuild=False, build_skips=False, log: Optional[logging.Logger] = None):
         # set up backend
@@ -1310,7 +1317,9 @@ class Recipe(Cargo):
                     errors = []
                     nfail = ncomplete = 0
                     for f in as_completed(futures):
-                        attrs, kwattrs, stats, outputs, exc, tb = f.result()
+                        attrs, kwattrs, stats, outputs, exc, tb, log_output = f.result()
+                        # Print the logs associated with the completed future.
+                        display.progress_console.print(log_output, soft_wrap=True)
                         task_stats.declare_subtask_attributes(*attrs, **kwattrs)
                         task_stats.add_missing_stats(stats)
                         if exc is not None:
@@ -1336,7 +1345,7 @@ class Recipe(Cargo):
             # else just iterate directly
             else:
                 for args in loop_worker_args:
-                    _, _, _, outputs, _, _ = self._iterate_loop_worker(*args, raise_exc=True)
+                    _, _, _, outputs, _, _, _ = self._iterate_loop_worker(*args, raise_exc=True)
 
             # either way, outputs contains output aliases from the last iteration
             params.update(**outputs)
