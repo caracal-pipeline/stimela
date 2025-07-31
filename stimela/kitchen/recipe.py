@@ -1290,15 +1290,18 @@ class Recipe(Cargo):
                     num_workers = nloop
                 else:
                     num_workers = min(self._for_loop_scatter, nloop)
+                # If the display is disabled at the point, it implies that we
+                # should leave it that way (may be in a child process).
+                pause_display = display.is_enabled
                 # Disable display during pool creation so that it isn't
                 # enabled in the resulting processes.
-                if not is_logging_boring():
+                if pause_display:
                     display.disable()
                 with ProcessPoolExecutor(num_workers) as pool:
                     # submit each iterant to pool
                     futures = [pool.submit(self._iterate_loop_worker, *args, subprocess=True, raise_exc=False) for args in loop_worker_args]
                     # Re-enable display after pool creation.
-                    if not is_logging_boring():
+                    if pause_display:
                         if remote_backend:
                             display.set_display_style("remote")
                         else:
@@ -1319,6 +1322,7 @@ class Recipe(Cargo):
                     for f in as_completed(futures):
                         attrs, kwattrs, stats, outputs, exc, tb, log_output = f.result()
                         # Print the logs associated with the completed future.
+                        rich_console.print(rich_console.file)
                         rich_console.print(log_output, soft_wrap=True)
                         task_stats.declare_subtask_attributes(*attrs, **kwattrs)
                         task_stats.add_missing_stats(stats)
