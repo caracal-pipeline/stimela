@@ -23,7 +23,7 @@ from scabha.basetypes import File, Directory, MS, UNSET, Placeholder
 from .cab import Cab
 from .batch import Batch
 from .step import Step
-from stimela.stimelogging import is_logging_boring
+from stimela.stimelogging import rich_console, is_logging_boring
 from stimela import task_stats
 from stimela.display import display
 from stimela import backends
@@ -1072,7 +1072,7 @@ class Recipe(Cargo):
             task_stats.add_subprocess_id(count)
             # When running in a processpool, gather log messages in a string
             # which can be returned to the parent process.
-            display.rich_console.file = StringIO()
+            rich_console.file = StringIO()
         subst.info.subprocess = task_stats.get_subprocess_id()
         taskname = subst.info.taskname
         outputs = {}
@@ -1173,7 +1173,7 @@ class Recipe(Cargo):
             tb = FormattedTraceback(sys.exc_info()[2])
         finally:
             if subprocess:
-                subprocess_logs = display.rich_console.file.getvalue()
+                subprocess_logs = rich_console.file.getvalue()
             else:
                 subprocess_logs = None
 
@@ -1319,7 +1319,7 @@ class Recipe(Cargo):
                     for f in as_completed(futures):
                         attrs, kwattrs, stats, outputs, exc, tb, log_output = f.result()
                         # Print the logs associated with the completed future.
-                        display.rich_console.print(log_output, soft_wrap=True)
+                        rich_console.print(log_output, soft_wrap=True)
                         task_stats.declare_subtask_attributes(*attrs, **kwattrs)
                         task_stats.add_missing_stats(stats)
                         if exc is not None:
