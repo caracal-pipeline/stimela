@@ -1,5 +1,6 @@
-import  os.path
-import  re
+import sys
+import os.path
+import re
 import logging
 import traceback
 import copy
@@ -8,8 +9,8 @@ from typing import Optional, OrderedDict, Union, Any
 from omegaconf import DictConfig
 from scabha.exceptions import ScabhaBaseException, FormattedTraceback
 from scabha.substitutions import SubstitutionNS, forgiving_substitutions_from
-import rich.progress
 import rich.logging
+from rich.console import Console
 from rich.tree import Tree
 from rich import print as rich_print
 from rich.markup import escape
@@ -18,8 +19,6 @@ from rich.syntax import Syntax
 from rich.pretty import Pretty
 from rich.errors import MarkupError
 from warnings import warn
-
-from stimela.display import progress_console, display
 
 CONSOLE_PRINT_OPTIONS = [
     "sep",
@@ -37,6 +36,12 @@ CONSOLE_PRINT_OPTIONS = [
     "soft_wrap",
     "new_line_start"
 ]
+
+progress_console = Console(
+    file=sys.stdout,
+    highlight=False,
+    emoji=False
+)
 
 
 class FunkyMessage(object):
@@ -422,14 +427,10 @@ def log_exception(*errors, severity="error", log=None):
     if do_log:
         message_dispatch(": ".join(messages))
 
-    # NOTE(JSKenyon): Can probably use the console print regardless. It should
-    # always be defined as I have removed the behaviour that set it to None.
-    printfunc = progress_console.print if display.is_enabled else rich_print
-
     if has_nesting:
         declare_chapter("detailed error report follows", style="red")
         for tree in trees:
-            printfunc(Padding(tree, pad=(0,0,0,8)))
+            progress_console.print(Padding(tree, pad=(0,0,0,8)))
 
 def log_rich_payload(log: logging.Logger, message: str, payload: Any,
                      console_payload: Optional[Any] = None, syntax: Optional[str] = None,

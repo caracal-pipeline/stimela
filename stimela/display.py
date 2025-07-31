@@ -13,13 +13,7 @@ from rich.panel import Panel
 from rich.table import Table, Column
 from rich.text import Text
 
-
-progress_console = Console(
-    file=sys.stdout,
-    highlight=False,
-    emoji=False
-)
-
+from stimela.stimelogging import progress_console
 class Display:
 
     progress_console = progress_console
