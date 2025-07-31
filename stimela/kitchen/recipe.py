@@ -1322,6 +1322,7 @@ class Recipe(Cargo):
                     for f in as_completed(futures):
                         attrs, kwattrs, stats, outputs, exc, tb, log_output = f.result()
                         # Print the logs associated with the completed future.
+                        # These are already timestamped by the child process.
                         rich_console.print(log_output, soft_wrap=True)
                         task_stats.declare_subtask_attributes(*attrs, **kwattrs)
                         task_stats.add_missing_stats(stats)
