@@ -23,7 +23,7 @@ from scabha.basetypes import File, Directory, MS, UNSET, Placeholder
 from .cab import Cab
 from .batch import Batch
 from .step import Step
-from stimela.stimelogging import rich_console, is_logging_boring
+from stimela.stimelogging import rich_console
 from stimela import task_stats
 from stimela.display import display
 from stimela import backends
@@ -1322,7 +1322,6 @@ class Recipe(Cargo):
                     for f in as_completed(futures):
                         attrs, kwattrs, stats, outputs, exc, tb, log_output = f.result()
                         # Print the logs associated with the completed future.
-                        rich_console.print(rich_console.file)
                         rich_console.print(log_output, soft_wrap=True)
                         task_stats.declare_subtask_attributes(*attrs, **kwattrs)
                         task_stats.add_missing_stats(stats)
