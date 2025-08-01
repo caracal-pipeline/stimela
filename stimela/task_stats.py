@@ -310,22 +310,35 @@ async def run_process_status_update():
             await asyncio.sleep(1)
 
 class MonitorThread:
+    """Starts a thread to monitor resource usage.
 
-    def __init__(self):
+    Attributes:
+        thread: A thread object.
+        event: An event object which can break the monitor loop.
+        interval: Wait interval in seconds between updates.
+    """
+
+    def __init__(self, interval: float = 1):
         self.thread = threading.Thread(target=self._update)
         self.event = threading.Event()
+        self.interval = interval
 
     def _update(self):
+        """Code run in the thread. Updates resource usage based on interval."""
+        half_interval = self.interval / 2
+        # Sleep on either side to prevent rapid calls to psutil.
         while not self.event.is_set():
-            time.sleep(0.5)
+            time.sleep(half_interval)
             update_process_status()
-            time.sleep(0.5)
+            time.sleep(half_interval)
 
     def start(self):
+        """Starts the monitor thread."""
         self.event.clear()
         self.thread.start()
 
     def stop(self):
+        """Breaks the monitor loop and joins the thread."""
         self.event.set()
         self.thread.join()
 

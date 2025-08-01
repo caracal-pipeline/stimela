@@ -1368,7 +1368,7 @@ class Recipe(Cargo):
                         status = f"{status}, {num_workers} workers"
                         task_stats.declare_subtask_status(status)
 
-                    monitor.stop()  # Top monitoring resource usage.
+                    monitor.stop()  # Stop monitoring resource usage.
 
                     if errors:
                         pool.shutdown()
