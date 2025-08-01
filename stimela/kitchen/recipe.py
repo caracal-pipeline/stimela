@@ -1270,25 +1270,6 @@ class Recipe(Cargo):
             for count, iter_var in enumerate(self._for_loop_values):
                 loop_worker_args.append((params, subst, backend, count, iter_var))
 
-            # NOTE(JSKenyon): We don't actually have the runner at this point
-            # so dynamically changing the display based on the backend is
-            # problematic. The loop being run may also use different backends
-            # for each step. However, in most cases a scattered loop will be
-            # either remote (kube, slurm) or local, and not a mixture of the
-            # two. This chooses the display based on the global backend config
-            # - step level overrides are ignored.
-            backend_opts = OmegaConf.merge(stimela.CONFIG.opts.backend, backend)
-            requested_backends = backend_opts.select
-            if isinstance(requested_backends, list):
-                selected_backend = next(
-                    rb for rb in requested_backends if backend_opts[rb].enabled
-                )
-            else:
-                selected_backend = requested_backends
-            backend_is_remote = (
-                backend_opts.slurm.enable or selected_backend == "kube"
-            )
-
             # if scatter is enabled, use a process pool
             if self._for_loop_scatter:
                 nloop = len(loop_worker_args)
@@ -1296,6 +1277,30 @@ class Recipe(Cargo):
                     num_workers = nloop
                 else:
                     num_workers = min(self._for_loop_scatter, nloop)
+
+                # NOTE(JSKenyon): We don't actually have the runner at this
+                # point so dynamically changing the display based on the
+                # backend is problematic. The loop being run may also use
+                # different backends for each step. However, in most cases a
+                # scattered loop will be either remote (kube, slurm) or local,
+                # and not a mixture of the two. This chooses the display based
+                # on the backend config at the recipe level - step level
+                # overrides are ignored.
+                backend_opts = OmegaConf.merge(
+                    stimela.CONFIG.opts.backend,
+                    backend
+                )
+                requested_backends = backend_opts.select
+                if isinstance(requested_backends, list):
+                    selected_backend = next(
+                        b for b in requested_backends if backend_opts[b].enabled
+                    )
+                else:
+                    selected_backend = requested_backends
+                backend_is_remote = (
+                    backend_opts.slurm.enable or selected_backend == "kube"
+                )
+
                 # If the display is disabled at this point, it implies that we
                 # should leave it that way (may be in a child process).
                 pause_display = display.is_enabled
@@ -1327,18 +1332,20 @@ class Recipe(Cargo):
                         f"0/{nloop} complete, {num_workers} workers"
                     )
 
+                    # Start a thread to monitor resource usage.
                     monitor = task_stats.MonitorThread()
                     monitor.start()
 
-                    # update task stats, since they're recorded independently within each step, as well
-                    # as get any exceptions from the nesting
+                    # update task stats, since they're recorded independently
+                    # within each step, as well as get any exceptions from the
+                    # nested steps/recipes.
                     errors = []
                     nfail = ncomplete = 0
                     for f in as_completed(futures):
-                        attrs, kwattrs, stats, outputs, exc, tb, log_output = f.result()
+                        attrs, kwattrs, stats, outputs, exc, tb, subprocess_logs = f.result()
                         # Print the logs associated with the completed future.
                         # These are already timestamped by the child process.
-                        rich_console.print(log_output, soft_wrap=True)
+                        rich_console.print(subprocess_logs, soft_wrap=True)
                         task_stats.declare_subtask_attributes(*attrs, **kwattrs)
                         task_stats.add_missing_stats(stats)
                         if exc is not None:
