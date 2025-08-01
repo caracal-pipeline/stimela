@@ -1300,6 +1300,7 @@ class Recipe(Cargo):
                 backend_is_remote = (
                     backend_opts.slurm.enable or selected_backend == "kube"
                 )
+                display_style = "remote" if backend_is_remote else "fancy"
 
                 # If the display is disabled at this point, it implies that we
                 # should leave it that way (may be in a child process).
@@ -1322,10 +1323,7 @@ class Recipe(Cargo):
 
                     # Re-enable display after pool creation.
                     if pause_display:
-                        if backend_is_remote:
-                            display.set_display_style("remote")
-                        else:
-                            display.set_display_style("fancy")
+                        display.set_display_style(display_style)
                         display.enable()
                     # Set status on scatter subtask once display is re-enabled.
                     task_stats.declare_subtask_status(
@@ -1363,11 +1361,12 @@ class Recipe(Cargo):
                             status = f"{status}, [red]{nfail}[/red] failed"
                         status = f"{status}, {num_workers} workers"
                         task_stats.declare_subtask_status(status)
+
+                    monitor.stop()  # Top monitoring resource usage.
+
                     if errors:
                         pool.shutdown()
-                        monitor.stop()
                         raise StimelaRuntimeError(f"{nfail}/{nloop} jobs have failed", errors)
-                monitor.stop()
             # else just iterate directly
             else:
                 for args in loop_worker_args:
