@@ -1296,7 +1296,7 @@ class Recipe(Cargo):
                     num_workers = nloop
                 else:
                     num_workers = min(self._for_loop_scatter, nloop)
-                # If the display is disabled at the point, it implies that we
+                # If the display is disabled at this point, it implies that we
                 # should leave it that way (may be in a child process).
                 pause_display = display.is_enabled
                 # Disable display during pool creation so that it isn't
@@ -1305,7 +1305,16 @@ class Recipe(Cargo):
                     display.disable()
                 with ProcessPoolExecutor(num_workers) as pool:
                     # submit each iterant to pool
-                    futures = [pool.submit(self._iterate_loop_worker, *args, subprocess=True, raise_exc=False) for args in loop_worker_args]
+                    futures = []
+                    for args in loop_worker_args:
+                        future = pool.submit(
+                            self._iterate_loop_worker,
+                            *args,
+                            subprocess=True,
+                            raise_exc=False
+                        )
+                        futures.append(future)
+
                     # Re-enable display after pool creation.
                     if pause_display:
                         if backend_is_remote:
