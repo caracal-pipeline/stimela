@@ -48,7 +48,7 @@ class Display:
 
         for k, v in self.progress_fields.items():
             status = self._status_element()
-            status_id = status.add_task(v, value=None)
+            status_id = status.add_task(v, value="Pending...")
             setattr(self, k, status)
             setattr(self, f"{k}_id", status_id)
 
@@ -152,7 +152,7 @@ class Display:
 
         for k, v in progress_fields.items():
             status = self._status_element(width=width)
-            status_id = status.add_task(v, value=None)
+            status_id = status.add_task(v, value="Pending...")
             setattr(self, k, status)
             setattr(self, f"{k}_id", status_id)
 
@@ -234,7 +234,7 @@ class Display:
 
         for k, v in progress_fields.items():
             status = self._status_element()
-            status_id = status.add_task(v, value=None)
+            status_id = status.add_task(v, value="Pending...")
             setattr(self, k, status)
             setattr(self, f"{k}_id", status_id)
 
@@ -272,7 +272,7 @@ class Display:
 
         for k, v in progress_fields.items():
             status = self._status_element()
-            status_id = status.add_task(v, value=None)
+            status_id = status.add_task(v, value="Pending...")
             setattr(self, k, status)
             setattr(self, f"{k}_id", status_id)
 
