@@ -15,6 +15,19 @@ from rich.text import Text
 
 from stimela.stimelogging import rich_console
 class Display:
+    """Manages a rich live display.
+
+    This class is manages and configures a rich live display object for
+    tracking the progress of a Stimela recipe as well as its resource usage.
+
+    Attributes:
+        rich_console: The rich console associated with this display.
+        progress_fields: A key-vlaue mapping between resource field name and
+          its description in the display.
+        styles: Available styles for configuring the live display.
+        display_style: The currently configured display style.
+        style_override: An override which supersedes display_style.
+    """
 
     rich_console = rich_console
 
