@@ -1,5 +1,5 @@
 import atexit
-import sys
+from typing import Optional
 from collections import defaultdict
 from rich.progress import (
     Progress,
@@ -7,7 +7,7 @@ from rich.progress import (
     TimeElapsedColumn,
     TextColumn
 )
-from rich.console import Console, Group
+from rich.console import Group
 from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table, Column
@@ -20,12 +20,32 @@ class Display:
     This class is manages and configures a rich live display object for
     tracking the progress of a Stimela recipe as well as its resource usage.
 
+    In addition to the attributes below, for each key in progress_fields, this
+    class will add an attribute of the same name as well as as corresponding
+    id attribute.
+
     Attributes:
-        progress_fields: A key-vlaue mapping between resource field name and
-          its description in the display.
-        styles: Available styles for configuring the live display.
-        display_style: The currently configured display style.
-        style_override: An override which supersedes display_style.
+        progress_fields:
+            A key-vlaue mapping between resource field name and
+            its description in the display.
+        styles:
+            Available styles for configuring the live display.
+        display_style:
+            The currently configured display style.
+        style_override:
+            An override which supersedes display_style.
+        live_display:
+            A rich live display which can be rendered to the console.
+        task_maxima:
+            Tracks the maxima of the current task's displayed values.
+        total_elapsed:
+            A rich progress object which tracks total elapsed time.
+        total_elapsed_id:
+            The task id associated with total_elapsed.
+        task_elapsed:
+            A rich progress object which tracks the elapsed time in a task.
+        task_elapsed_id:
+            The task id associated with task_elapsed.
     """
 
     progress_fields = {
@@ -46,6 +66,7 @@ class Display:
     styles = {"fancy", "simple", "remote"}
 
     def __init__(self):
+        """Initializes an instance of the Display object."""
 
         self.display_style = "default"
         self.style_override = None
@@ -55,6 +76,8 @@ class Display:
 
         self.task_elapsed = self._timer_element()
         self.task_elapsed_id = self.task_elapsed.add_task("")
+
+        self.task_maxima = defaultdict(float)
 
         for k, v in self.progress_fields.items():
             status = self._status_element()
@@ -72,9 +95,12 @@ class Display:
             transient=True
         )
 
-        self.task_maxima = defaultdict(float)
+    def _timer_element(self, width: Optional[int] = None):
+        """Return a timer progress element consisting of some columns.
 
-    def _timer_element(self, width=None):
+        Args:
+            width: Column width for text column.
+        """
         return Progress(
             SpinnerColumn(),
             TextColumn(
@@ -87,7 +113,12 @@ class Display:
             transient=True
         )
 
-    def _status_element(self, width=None):
+    def _status_element(self, width: Optional[int] = None):
+        """Return a status progress element consisting of some columns.
+
+        Args:
+            width: Column width for text column.
+        """
         return Progress(
             TextColumn(
                 "[bold]{task.description}[/bold]",
@@ -103,22 +134,30 @@ class Display:
         )
 
     def reset_current_task(self):
+        """Reset both the timer and the maxima for the current task."""
         self.task_elapsed.reset(self.task_elapsed_id)
         self.task_maxima = defaultdict(float)
 
     def enable(self):
+        """Start rendering the live display."""
         atexit.register(self.disable)
         self.live_display.start(True)
 
     def disable(self):
+        """Stop rendering the live display."""
         self.live_display.stop()
 
     @property
     def is_enabled(self):
         return self.live_display.is_started
 
-    def set_display_style(self, style="simple"):
+    def set_display_style(self, style: str = "simple"):
+        """Reconfigures the display style based on the provided string.
 
+        Args:
+            style:
+                Specifies which display style should be applied.
+        """
         if self.style_override:  # If set, ignore style argument.
             style = self.style_override
 
@@ -136,8 +175,13 @@ class Display:
         else:
             raise ValueError(f"Unrecognised style: {style}")
 
-    def set_display_style_override(self, style=None):
+    def set_display_style_override(self, style: Optional[str] = None):
+        """Sets the display style override and applies the display style.
 
+        Args:
+            style:
+                Specifies which display style should be applied.
+        """
         if style in self.styles or style is None:
             self.style_override = style
         else:
@@ -145,6 +189,7 @@ class Display:
         self.set_display_style()
 
     def _configure_fancy_display(self):
+        """Configures the display in fancy mode."""
 
         self.display_style = "fancy"
 
@@ -226,6 +271,7 @@ class Display:
         self.live_display.update(table)
 
     def _configure_simple_display(self):
+        """Configures the display in simple mode."""
 
         self.display_style = "simple"
 
@@ -267,6 +313,7 @@ class Display:
         self.live_display.update(table)
 
     def _configure_remote_display(self):
+        """Configures the display in remote mode."""
 
         self.display_style = "remote"
 
@@ -303,7 +350,16 @@ class Display:
         self.live_display.update(table)
 
     def update(self, sys_stats, task_stats, task_info):
+        """Updates the progress elements using the provided values.
 
+        Args:
+            sys_stats:
+                An object containing the current system status.
+            task_stats:
+                An object containing the current task stats.
+            task_info:
+                An object containing information about the current task.
+        """
         self.cpu_usage.update(
             self.cpu_usage_id,
             value=f"[green]{sys_stats.cpu}[/green]%"
