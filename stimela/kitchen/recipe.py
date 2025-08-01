@@ -1272,6 +1272,12 @@ class Recipe(Cargo):
 
             # if scatter is enabled, use a process pool
             if self._for_loop_scatter:
+                self.log.info(
+                    f"[yellow]Scattering recipe {self.fqname} - terminal logs "
+                    f"will appear on the completion of a scattered step. Log "
+                    f"files will be updated in real time.[/yellow]"
+                )
+
                 nloop = len(loop_worker_args)
                 if self._for_loop_scatter < 0:
                     num_workers = nloop
