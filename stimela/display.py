@@ -17,11 +17,11 @@ from stimela.stimelogging import rich_console
 class Display:
     """Manages a rich live display.
 
-    This class is manages and configures a rich live display object for
-    tracking the progress of a Stimela recipe as well as its resource usage.
+    This class manages and configures a rich live display object for tracking
+    the progress of a Stimela recipe as well as its resource usage.
 
     In addition to the attributes below, for each key in progress_fields, this
-    class will add an attribute of the same name as well as as corresponding
+    class will add an attribute of the same name as well as a corresponding
     id attribute.
 
     Attributes:
