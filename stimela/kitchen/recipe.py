@@ -1277,11 +1277,17 @@ class Recipe(Cargo):
             # either remote (kube, slurm) or local, and not a mixture of the
             # two. This chooses the display based on the global backend config
             # - step level overrides are ignored.
-            backend_opts = stimela.CONFIG.opts.backend
-            _backend = [
-                b for b in backend_opts.select if backend_opts[b].enable
-            ][0]
-            remote_backend = _backend == "kube" or backend_opts.slurm.enable
+            backend_opts = OmegaConf.merge(stimela.CONFIG.opts.backend, backend)
+            requested_backends = backend_opts.select
+            if isinstance(requested_backends, list):
+                selected_backend = next(
+                    rb for rb in requested_backends if backend_opts[rb].enabled
+                )
+            else:
+                selected_backend = requested_backends
+            backend_is_remote = (
+                backend_opts.slurm.enable or selected_backend == "kube"
+            )
 
             # if scatter is enabled, use a process pool
             if self._for_loop_scatter:
@@ -1302,7 +1308,7 @@ class Recipe(Cargo):
                     futures = [pool.submit(self._iterate_loop_worker, *args, subprocess=True, raise_exc=False) for args in loop_worker_args]
                     # Re-enable display after pool creation.
                     if pause_display:
-                        if remote_backend:
+                        if backend_is_remote:
                             display.set_display_style("remote")
                         else:
                             display.set_display_style("fancy")
