@@ -7,13 +7,14 @@ from rich.progress import (
     TimeElapsedColumn,
     TextColumn
 )
-from rich.console import Group
+from rich.console import Group, Console
 from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table, Column
 from rich.text import Text
 
 from stimela.stimelogging import rich_console
+
 class Display:
     """Manages a rich live display.
 
@@ -65,8 +66,14 @@ class Display:
 
     styles = {"fancy", "simple", "remote"}
 
-    def __init__(self):
-        """Initializes an instance of the Display object."""
+    def __init__(self, console: Console):
+        """Initializes an instance of the Display object.
+
+        Args:
+            console: A rich console to which the display will render.
+        """
+
+        self.console = console
 
         self.display_style = "default"
         self.style_override = None
@@ -91,7 +98,7 @@ class Display:
         self.live_display = Live(
             msg,
             refresh_per_second=5,
-            console=rich_console,
+            console=self.console,
             transient=True
         )
 
@@ -109,7 +116,7 @@ class Display:
             ),
             TimeElapsedColumn(),
             refresh_per_second=2,
-            console=rich_console,
+            console=self.console,
             transient=True
         )
 
@@ -129,7 +136,7 @@ class Display:
                 table_column=Column(no_wrap=True)
             ),
             refresh_per_second=2,
-            console=rich_console,
+            console=self.console,
             transient=True
         )
 
@@ -450,4 +457,4 @@ class Display:
             value=f"[green]{max_ram}[/green]GB"
         )
 
-display = Display()
+display = Display(rich_console)
