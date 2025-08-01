@@ -21,15 +21,12 @@ class Display:
     tracking the progress of a Stimela recipe as well as its resource usage.
 
     Attributes:
-        rich_console: The rich console associated with this display.
         progress_fields: A key-vlaue mapping between resource field name and
           its description in the display.
         styles: Available styles for configuring the live display.
         display_style: The currently configured display style.
         style_override: An override which supersedes display_style.
     """
-
-    rich_console = rich_console
 
     progress_fields = {
         "cpu_usage": "CPU",
@@ -86,7 +83,7 @@ class Display:
             ),
             TimeElapsedColumn(),
             refresh_per_second=2,
-            console=self.rich_console,
+            console=rich_console,
             transient=True
         )
 
