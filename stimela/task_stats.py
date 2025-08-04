@@ -284,20 +284,24 @@ def update_process_status():
         io = None
     _prev_disk_io = disk_io, now
 
-    # call extra status reporter
-    # TODO(JSKenyon): I have broken this code while updating taskstats.py to
-    # use a live display. This will need to be fixed at some point, ideally
-    # when we have access to a kubernetes cluster.
+    # Call extra status reporter which should return stats which can be added
+    # to the task_stats object as well as a list of strings which can be used
+    # in the display.
     if task_info and task_info.status_reporter:
         extra_metrics, extra_stats = task_info.status_reporter()
         if extra_stats:
             task_stats.insert_extra_stats(**extra_stats)
     else:
-        extra_metrics = None
+        extra_metrics, extra_stats = None, None
 
     # Update the display using the stats and info objects.
     if display.is_enabled:
-        display.update(sys_stats, task_stats, task_info)
+        display.update(
+            sys_stats,
+            task_stats,
+            task_info,
+            extra_info=extra_metrics
+        )
 
     # update stats
     update_stats(now, task_stats)

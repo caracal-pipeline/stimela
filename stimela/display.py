@@ -62,6 +62,7 @@ class Display:
         "task_ram_usage": "RAM",
         "task_peak_ram_usage": "Peak",
         "task_peak_cpu_usage": "Peak",
+        "extra_info": "Extra info"  # TODO(JSKenyon): Separate display?
     }
 
     styles = {"fancy", "simple", "remote"}
@@ -330,6 +331,7 @@ class Display:
         self.task_name.columns = self.task_name.columns[1:]
         self.task_status.columns = self.task_status.columns[1:]
         self.task_command.columns = self.task_command.columns[1:]
+        self.extra_info.columns = self.extra_info.columns[1:]
 
         table = Table.grid(expand=False, padding=(0, 1))
         table.add_row(
@@ -337,12 +339,13 @@ class Display:
             self.task_elapsed,
             self.task_name,
             self.task_status,
-            self.task_command
+            self.task_command,
+            self.extra_info
         )
 
         self.live_display.update(table)
 
-    def update(self, sys_stats, task_stats, task_info):
+    def update(self, sys_stats, task_stats, task_info, extra_info=None):
         """Updates the progress elements using the provided values.
 
         Args:
@@ -442,5 +445,11 @@ class Display:
             self.task_peak_ram_usage_id,
             value=f"[green]{max_ram}[/green]GB"
         )
+
+        if extra_info:
+            self.extra_info.update(
+                self.extra_info_id,
+                value=" | ".join(extra_info)
+            )
 
 display = Display(rich_console)
