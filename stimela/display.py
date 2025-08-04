@@ -218,21 +218,13 @@ class Display:
             setattr(self, k, status)
             setattr(self, f"{k}_id", status_id)
 
-        ram_table = Table.grid(expand=True, padding=(0,1))
-        ram_table.add_column(ratio=1)
-        ram_table.add_column(ratio=1)
-        ram_table.add_row(
-            self.task_ram_usage,
-            self.task_peak_ram_usage,
-        )
+        ram_columns = [Column(ratio=1), Column(ratio=1)]
+        ram_table = Table.grid(*ram_columns, expand=True, padding=(0,1))
+        ram_table.add_row(self.task_ram_usage, self.task_peak_ram_usage)
 
-        cpu_table = Table.grid(expand=True, padding=(0,1))
-        cpu_table.add_column(ratio=1)
-        cpu_table.add_column(ratio=1)
-        cpu_table.add_row(
-            self.task_cpu_usage,
-            self.task_peak_cpu_usage,
-        )
+        cpu_columns = [Column(ratio=1), Column(ratio=1)]
+        cpu_table = Table.grid(*cpu_columns, expand=True, padding=(0,1))
+        cpu_table.add_row(self.task_cpu_usage, self.task_peak_cpu_usage)
 
         task_group = Group(
             self.task_elapsed,
@@ -252,13 +244,9 @@ class Display:
             self.system_load
         )
 
-        table = Table.grid(expand=True)
-        table.add_column()
-        table.add_column(ratio=1)
-        table.add_column(ratio=1)
-        table.add_column()
+        group_columns = [Column(ratio=1), Column(ratio=1)]
+        table = Table.grid(*group_columns, expand=True)
         table.add_row(
-            " ",  # Spacer.
             Panel(
                 system_group,
                 title="System",
@@ -270,9 +258,7 @@ class Display:
                 title="Task",
                 border_style="green",
                 expand=True,
-
             ),
-            " "  # Spacer.
         )
 
         self.live_display.update(table)
