@@ -1,5 +1,6 @@
+from __future__ import annotations
 import atexit
-from typing import Optional
+from typing import Optional, List, TYPE_CHECKING
 from collections import defaultdict
 from rich.progress import (
     Progress,
@@ -14,6 +15,13 @@ from rich.table import Table, Column
 from rich.text import Text
 
 from stimela.stimelogging import rich_console
+
+if TYPE_CHECKING:
+    from stimela.task_stats import (
+        TaskInformation,
+        TaskStatsDatum,
+        SystemStatsDatum
+    )
 
 class Display:
     """Manages a rich live display.
@@ -345,7 +353,13 @@ class Display:
 
         self.live_display.update(table)
 
-    def update(self, sys_stats, task_stats, task_info, extra_info=None):
+    def update(
+        self,
+        sys_stats: SystemStatsDatum,
+        task_stats: TaskStatsDatum,
+        task_info: TaskInformation,
+        extra_info: Optional[List[str]] = None
+    ):
         """Updates the progress elements using the provided values.
 
         Args:
@@ -355,6 +369,10 @@ class Display:
                 An object containing the current task stats.
             task_info:
                 An object containing information about the current task.
+            extra_info:
+                A list of strings which will be combined and added to the
+                extra_info field. Typically used for non-standard information
+                originating from a backend.
         """
         self.cpu_usage.update(
             self.cpu_usage_id,
