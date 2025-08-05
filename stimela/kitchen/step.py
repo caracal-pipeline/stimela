@@ -10,7 +10,7 @@ from rich.markup import escape
 from stimela.config import EmptyDictDefault, EmptyListDefault
 import stimela
 from stimela import log_exception, stimelogging, task_stats
-from stimela.display import display
+from stimela.display.display import display
 from stimela.stimelogging import log_rich_payload
 from stimela.backends import StimelaBackendSchema, runner
 from stimela.exceptions import *

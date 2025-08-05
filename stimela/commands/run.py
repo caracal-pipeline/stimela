@@ -26,7 +26,7 @@ import stimela.config
 from stimela.config import ConfigExceptionTypes
 from stimela import logger, log_exception
 from stimela.stimelogging import is_logging_boring
-from stimela.display import display
+from stimela.display.display import display
 from stimela.exceptions import RecipeValidationError, StimelaRuntimeError, StepSelectionError, StepValidationError
 from stimela.main import cli
 from stimela.kitchen.recipe import Recipe, Step, RecipeSchema, join_quote

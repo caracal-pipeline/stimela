@@ -25,7 +25,7 @@ from .batch import Batch
 from .step import Step
 from stimela.stimelogging import rich_console
 from stimela import task_stats
-from stimela.display import display
+from stimela.display.display import display
 from stimela import backends
 from stimela.backends import StimelaBackendSchema
 from stimela.kitchen.utils import keys_from_sel_string

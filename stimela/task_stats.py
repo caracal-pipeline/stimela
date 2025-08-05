@@ -14,7 +14,7 @@ from rich.table import Table
 from rich.text import Text
 
 from stimela import stimelogging
-from stimela.display import rich_console, display
+from stimela.display.display import rich_console, display
 
 # this is "" for the main process, ".0", ".1", for subprocesses, ".0.0" for nested subprocesses
 _subprocess_identifier = ""
@@ -288,11 +288,10 @@ def update_process_status():
     # to the task_stats object as well as a list of strings which can be used
     # in the display.
     if task_info and task_info.status_reporter:
-        extra_metrics, extra_stats = task_info.status_reporter()
-        if extra_stats:
-            task_stats.insert_extra_stats(**extra_stats)
+        extra_datum = task_info.status_reporter()
+        task_stats.insert_extra_stats(**extra_datum.profiling_results)
     else:
-        extra_metrics, extra_stats = None, None
+        extra_datum = None
 
     # Update the display using the stats and info objects.
     if display.is_enabled:
@@ -300,7 +299,7 @@ def update_process_status():
             sys_stats,
             task_stats,
             task_info,
-            extra_info=extra_metrics
+            extra_info=extra_datum
         )
 
     # update stats
