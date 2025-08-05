@@ -39,6 +39,24 @@ k8s_memory_units_in_bytes = {
     "E": 10**18
 }
 
+@dataclass
+class KubeReport:
+    status = None
+    running_pods = None
+    pending_pods = None
+    terminating_pods = None
+    successful_pods = None
+    failed_pods = None
+    stateless_pods = None
+    total_pods = None
+    total_cores = None
+    total_memory = None
+    connection_status = "connected"
+
+    @property
+    def profiling_results(self):
+        return {"k8s_cores": self.total_cores, "k8s_mem": self.total_memory}
+
 def resolve_unit(quantity:str, units: Dict = k8s_memory_units_in_bytes):
     match = re.fullmatch(r"^(\d+)(.*)$", quantity)
     if not match or match.group(2) not in units:
@@ -80,24 +98,6 @@ def apply_pod_spec(kps, pod_spec: Dict[str, Any], predefined_pod_specs: Dict[str
                 log.info(f"setting {kind} CPU limit to {kps.cpu.limit}")
 
     return pod_spec
-
-@dataclass
-class KubeStatusDatum:
-    status = None
-    running_pods = None
-    pending_pods = None
-    terminating_pods = None
-    successful_pods = None
-    failed_pods = None
-    stateless_pods = None
-    total_pods = None
-    total_cores = None
-    total_memory = None
-    connection_status = "connected"
-
-    @property
-    def profiling_results(self):
-        return {"k8s_cores": self.total_cores, "k8s_mem": self.total_memory}
 
 class StatusReporter(object):
     def __init__(self, log: logging.Logger,
@@ -236,12 +236,15 @@ class StatusReporter(object):
         except (ConnectionError, HTTPError) as exc:
             self.connected = False
             # self.log.warning(f"disconnected: {exc}")
+
+        # Init the report dataclass.
+        report = KubeReport()
         # add connection status
         if not self.connected:
             interval = str(datetime.now() - self._last_connected)
             interval = interval.split(".", 1)[0]
-            datum.connection_status = f"disconnected ({interval}s)"
-            return datum
+            report.connection_status = f"disconnected ({interval}s)"
+            return report
 
         # process metrics if we got them
         if metrics:
@@ -255,37 +258,35 @@ class StatusReporter(object):
                         totals['memory'] += resolve_unit(usage.get('memory'), k8s_memory_units_in_bytes)
                     # print(f"Pod: {pname}, CPU: {usage.get('cpu')}, Memory: {usage.get('memory')}")
 
-        datum = KubeStatusDatum()
-
         # add main pod/job status
         if self.main_status:
-            datum.status = self.main_status  # Blue
+            report.status = self.main_status  # Blue
         elif self.podname in self.pod_statuses:
-            datum.status = self.pod_statuses[self.podname]  # Blue
+            report.status = self.pod_statuses[self.podname]  # Blue
 
         # add count of running pods
-        datum.total_pods = npods = len(self.pod_statuses)
+        report.total_pods = npods = len(self.pod_statuses)
         nrun = sum([s.startswith("Running") for s in self.pod_statuses.values()])
-        datum.running_pods = nrun  # Green
+        report.running_pods = nrun  # Green
         npend = sum([s.startswith("Pending") for s in self.pod_statuses.values()])
-        datum.pending_pods = npend  # Yellow
+        report.pending_pods = npend  # Yellow
         nterm = sum([s.startswith("Terminating") for s in self.pod_statuses.values()])
-        datum.terminating_pods = nterm  # Blue
+        report.terminating_pods = nterm  # Blue
         nsucc = sum([s.startswith("Succeeded") for s in self.pod_statuses.values()])
-        datum.successful_pods = nsucc  # Green
+        report.successful_pods = nsucc  # Green
         nfail = sum([stat.startswith("Failed") for stat in self.pod_statuses.values()])
-        datum.failed_pods = nfail # Red
+        report.failed_pods = nfail # Red
         nuk = npods - nrun - npend - nterm - nsucc - nfail
-        datum.stateless_pods = nuk  # Red
+        report.stateless_pods = nuk  # Red
 
         # add metrics
         if metrics:
-            datum.total_cores = totals['cpu']
-            datum.total_memory = round(totals['memory'] / 2**30)
+            report.total_cores = totals['cpu']
+            report.total_memory = round(totals['memory'] / 2**30)
 
         if self._last_disconnected is not None:
-            datum.connection_status = "connected"
+            report.connection_status = "connected"
 
-        return datum
+        return report
 
 
