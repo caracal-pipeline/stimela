@@ -1303,10 +1303,13 @@ class Recipe(Cargo):
                     )
                 else:
                     selected_backend = requested_backends
-                backend_is_remote = (
-                    backend_opts.slurm.enable or selected_backend == "kube"
-                )
-                display_style = "remote" if backend_is_remote else "fancy"
+
+                if selected_backend == "kube":
+                    display_style = "kube"
+                elif backend_opts.slurm.enable:
+                    display_style = "slurm"
+                else:
+                    display_style = "local"
 
                 # If the display is disabled at this point, it implies that we
                 # should leave it that way (may be in a child process).
