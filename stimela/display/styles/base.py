@@ -1,4 +1,3 @@
-from copy import copy
 from abc import ABC, abstractmethod
 from rich.progress import Progress
 from .elements import timer_element
@@ -42,8 +41,16 @@ class DisplayStyle(BaseDisplayStyle):
             run_timer:
                 rich.Progress object tracking total run time.
         """
-        self.run_elapsed = copy(run_timer)
+        self.run_elapsed = run_timer
         self.run_elapsed_id = 0  # We only ever add a single task.
+
+        # NOTE(JSKenyon): Ideally, we would copy the timer Progress object but
+        # it is a complex object which includes a lock. This code instead
+        # 'resets' the properties of the progress object which we mutute in
+        # the subclasses.
+        self.run_elapsed.update(self.run_elapsed_id, description="")
+        self.run_elapsed.columns[1].get_table_column().width = None
+
         self.task_elapsed = timer_element()
         self.task_elapsed_id = self.task_elapsed.add_task("")
 
