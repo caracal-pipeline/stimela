@@ -1,4 +1,4 @@
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, asdict
 import os.path
 from datetime import datetime
 import contextlib
@@ -104,9 +104,14 @@ def declare_subcommand(command):
         _task_stack[-1].command = None
         update_process_status()
 
+@dataclass
 class SystemStatsDatum:
+    n_cpu: int = 0
+    cpu: float = 0
+    mem_used: int = 0
+    mem_total: int = 0
 
-    def __init__(self):
+    def __post_init__(self):
         self.n_cpu = psutil.cpu_count()
         self.cpu = psutil.cpu_percent()
         self.mem_used = round(psutil.virtual_memory().used / (2 ** 30))
