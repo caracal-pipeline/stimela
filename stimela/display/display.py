@@ -129,28 +129,16 @@ class Display:
 
         if style == "fancy":
             self.display_style = "fancy"
-            self.current_display = FancyDisplay(
-                self.total_elapsed,
-                self.console
-            )
+            self.current_display = FancyDisplay(self.total_elapsed)
         elif style == "simple":
             self.display_style = "simple"
-            self.current_display = SimpleDisplay(
-                self.total_elapsed,
-                self.console
-            )
+            self.current_display = SimpleDisplay(self.total_elapsed)
         elif style == "kube":
             self.display_style = "kube"
-            self.current_display = KubeDisplay(
-                self.total_elapsed,
-                self.console
-            )
+            self.current_display = KubeDisplay(self.total_elapsed)
         elif style == "slurm":
             self.display_style = "slurm"
-            self.current_display = SlurmDisplay(
-                self.total_elapsed,
-                self.console
-            )
+            self.current_display = SlurmDisplay(self.total_elapsed)
         else:
             raise ValueError(f"Unrecognised style: {style}")
 
