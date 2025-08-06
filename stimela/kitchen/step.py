@@ -609,6 +609,8 @@ class Step:
                 elif type(self.cargo) is Cab:
                     if backend_runner.backend_name == "kube":
                         display.set_display_style("kube")
+                    elif backend_runner.is_remote:
+                        display.set_display_style("slurm")
                     else:
                         display.set_display_style("local")
                     cabstat = backend_runner.run(self.cargo, params=params, log=self.log, subst=subst, fqname=self.fqname)
