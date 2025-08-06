@@ -1,4 +1,4 @@
-from dataclasses import dataclass, fields, asdict
+from dataclasses import dataclass, fields
 import os.path
 from datetime import datetime
 import contextlib
