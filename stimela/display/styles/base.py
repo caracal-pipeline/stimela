@@ -1,9 +1,10 @@
 from copy import copy
+from abc import ABC, abstractmethod
 from rich.progress import Progress
 from .elements import timer_element
 
 
-class DisplayStyle:
+class DisplayStyle(ABC):
 
     def __init__(self, recipe_timer: Progress):
         self.total_elapsed = copy(recipe_timer)
@@ -13,3 +14,7 @@ class DisplayStyle:
 
     def reset(self):
         self.task_elapsed.reset(self.task_elapsed_id)
+
+    @abstractmethod
+    def update(self):
+        pass
