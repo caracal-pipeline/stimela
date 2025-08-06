@@ -6,7 +6,8 @@ from rich.console import Group
 from rich.panel import Panel
 from rich.table import Table, Column
 
-from stimela.display.styles.base import DisplayStyle
+from .base import DisplayStyle
+from .elements import timer_element, status_element
 
 if TYPE_CHECKING:
     from stimela.task_stats import (
@@ -32,10 +33,10 @@ class FancyDisplay(DisplayStyle):
         "task_peak_cpu_usage": "Peak"
     }
 
-    def __init__(self, global_timer, console):
+    def __init__(self, global_timer):
         """Configures the display in simple mode."""
 
-        super().__init__(global_timer, console)
+        super().__init__(global_timer)
 
         self.task_maxima = defaultdict(float)
 
@@ -46,11 +47,11 @@ class FancyDisplay(DisplayStyle):
         # Set the description recipe timer task.
         self.total_elapsed.update(self.total_elapsed_id, description="")
 
-        self.task_elapsed = self._timer_element(width=width - 1)
+        self.task_elapsed = timer_element(width=width - 1)
         self.task_elapsed_id = self.task_elapsed.add_task("")
 
         for k, v in self.progress_fields.items():
-            status = self._status_element(width=width)
+            status = status_element(width=width)
             status_id = status.add_task(v, value="Pending...")
             setattr(self, k, status)
             setattr(self, f"{k}_id", status_id)

@@ -2,7 +2,8 @@ from __future__ import annotations
 from typing import Optional, List, TYPE_CHECKING
 from rich.table import Table
 
-from stimela.display.styles.base import DisplayStyle
+from .base import DisplayStyle
+from .elements import status_element
 
 if TYPE_CHECKING:
     from stimela.task_stats import (
@@ -23,16 +24,16 @@ class SimpleDisplay(DisplayStyle):
         "disk_write": "W",
     }
 
-    def __init__(self, recipe_timer, console):
+    def __init__(self, recipe_timer):
         """Configures the display in simple mode."""
 
-        super().__init__(recipe_timer, console)
+        super().__init__(recipe_timer)
 
         self.total_elapsed.update(self.total_elapsed_id, description="R")
         self.task_elapsed.update(self.task_elapsed_id, description="S")
 
         for k, v in self.progress_fields.items():
-            status = self._status_element(has_description=v is not None)
+            status = status_element(has_description=v is not None)
             status_id = status.add_task(v, value="Pending...")
             setattr(self, k, status)
             setattr(self, f"{k}_id", status_id)
