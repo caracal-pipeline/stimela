@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 class FancyDisplay(DisplayStyle):
 
-    progress_fields = {
+    tracked_values = {
         "cpu_usage": "CPU",
         "ram_usage": "RAM",
         "system_load": "Load",
@@ -40,7 +40,7 @@ class FancyDisplay(DisplayStyle):
 
         self.task_maxima = defaultdict(float)
 
-        width = max(len(fn) for fn in self.progress_fields.values() if fn)
+        width = max(len(fn) for fn in self.tracked_values.values() if fn)
 
         # Set the width of the text column in the recipe timer.
         self.run_elapsed.columns[1].get_table_column().width = width - 1
@@ -50,7 +50,7 @@ class FancyDisplay(DisplayStyle):
         self.task_elapsed = timer_element(width=width - 1)
         self.task_elapsed_id = self.task_elapsed.add_task("")
 
-        for k, v in self.progress_fields.items():
+        for k, v in self.tracked_values.items():
             status = status_element(width=width)
             status_id = status.add_task(v, value="Pending...")
             setattr(self, k, status)

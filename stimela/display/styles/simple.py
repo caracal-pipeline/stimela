@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 class SimpleDisplay(DisplayStyle):
 
-    progress_fields = {
+    tracked_values = {
         "task_name": None,
         "task_status": None,
         "task_cpu_usage": "CPU",
@@ -32,7 +32,7 @@ class SimpleDisplay(DisplayStyle):
         self.run_elapsed.update(self.run_elapsed_id, description="R")
         self.task_elapsed.update(self.task_elapsed_id, description="S")
 
-        for k, v in self.progress_fields.items():
+        for k, v in self.tracked_values.items():
             status = status_element(has_description=v is not None)
             status_id = status.add_task(v, value="Pending...")
             setattr(self, k, status)
