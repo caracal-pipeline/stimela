@@ -33,14 +33,7 @@ class Display:
     This class manages and configures a rich live display object for tracking
     the progress of a Stimela recipe as well as its resource usage.
 
-    In addition to the attributes below, for each key in progress_fields, this
-    class will add an attribute of the same name as well as a corresponding
-    id attribute.
-
     Attributes:
-        progress_fields:
-            A key-vlaue mapping between resource field name and
-            its description in the display.
         styles:
             Available styles for configuring the live display.
         display_style:
@@ -55,10 +48,6 @@ class Display:
             A rich progress object which tracks total elapsed time.
         run_elapsed_id:
             The task id associated with run_elapsed.
-        task_elapsed:
-            A rich progress object which tracks the elapsed time in a task.
-        task_elapsed_id:
-            The task id associated with task_elapsed.
     """
 
     run_elapsed = Progress(
