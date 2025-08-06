@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import re
 from datetime import datetime
 from rich.markup import escape
@@ -41,17 +41,17 @@ k8s_memory_units_in_bytes = {
 
 @dataclass
 class KubeReport:
-    status = None
-    running_pods = None
-    pending_pods = None
-    terminating_pods = None
-    successful_pods = None
-    failed_pods = None
-    stateless_pods = None
-    total_pods = None
-    total_cores = None
-    total_memory = None
-    connection_status = "connected"
+    status: Optional[str] = None
+    running_pods: Optional[int] = None
+    pending_pods: Optional[int] = None
+    terminating_pods: Optional[int] = None
+    successful_pods: Optional[int] = None
+    failed_pods: Optional[int] = None
+    stateless_pods: Optional[int] = None
+    total_pods: Optional[int] = None
+    total_cores: Optional[float] = None
+    total_memory: Optional[float] = None
+    connection_status: str = "connected"
 
     @property
     def profiling_results(self):
