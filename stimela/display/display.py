@@ -51,17 +51,17 @@ class Display:
             A rich live display which can be rendered to the console.
         task_maxima:
             Tracks the maxima of the current task's displayed values.
-        total_elapsed:
+        run_elapsed:
             A rich progress object which tracks total elapsed time.
-        total_elapsed_id:
-            The task id associated with total_elapsed.
+        run_elapsed_id:
+            The task id associated with run_elapsed.
         task_elapsed:
             A rich progress object which tracks the elapsed time in a task.
         task_elapsed_id:
             The task id associated with task_elapsed.
     """
 
-    total_elapsed = Progress(
+    run_elapsed = Progress(
         SpinnerColumn(),
         TextColumn(
             "[yellow][bold]{task.description}[/bold][/yellow]",
@@ -71,7 +71,7 @@ class Display:
         refresh_per_second=2,
         transient=True
     )
-    total_elapsed_id = total_elapsed.add_task("", start=True)
+    run_elapsed_id = run_elapsed.add_task("", start=True)
 
     styles = {"fancy", "simple", "slurm", "kube"}
 
@@ -129,16 +129,16 @@ class Display:
 
         if style == "fancy":
             self.display_style = "fancy"
-            self.current_display = FancyDisplay(self.total_elapsed)
+            self.current_display = FancyDisplay(self.run_elapsed)
         elif style == "simple":
             self.display_style = "simple"
-            self.current_display = SimpleDisplay(self.total_elapsed)
+            self.current_display = SimpleDisplay(self.run_elapsed)
         elif style == "kube":
             self.display_style = "kube"
-            self.current_display = KubeDisplay(self.total_elapsed)
+            self.current_display = KubeDisplay(self.run_elapsed)
         elif style == "slurm":
             self.display_style = "slurm"
-            self.current_display = SlurmDisplay(self.total_elapsed)
+            self.current_display = SlurmDisplay(self.run_elapsed)
         else:
             raise ValueError(f"Unrecognised style: {style}")
 

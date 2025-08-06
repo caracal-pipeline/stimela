@@ -24,12 +24,12 @@ class SimpleDisplay(DisplayStyle):
         "disk_write": "W",
     }
 
-    def __init__(self, recipe_timer):
+    def __init__(self, run_timer):
         """Configures the display in simple mode."""
 
-        super().__init__(recipe_timer)
+        super().__init__(run_timer)
 
-        self.total_elapsed.update(self.total_elapsed_id, description="R")
+        self.run_elapsed.update(self.run_elapsed_id, description="R")
         self.task_elapsed.update(self.task_elapsed_id, description="S")
 
         for k, v in self.progress_fields.items():
@@ -40,7 +40,7 @@ class SimpleDisplay(DisplayStyle):
 
         table = Table.grid(expand=False, padding=(0, 1))
         table.add_row(
-            self.total_elapsed,
+            self.run_elapsed,
             self.task_elapsed,
             self.task_name,
             self.task_status,

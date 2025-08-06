@@ -36,19 +36,19 @@ class KubeDisplay(DisplayStyle):
         "kube_peak_core_usage": "Peak"
     }
 
-    def __init__(self, global_timer):
+    def __init__(self, run_timer):
         """Configures the display in simple mode."""
 
-        super().__init__(global_timer)
+        super().__init__(run_timer)
 
         self.task_maxima = defaultdict(float)
 
         width = max(len(fn) for fn in self.progress_fields.values() if fn)
 
         # Set the width of the text column in the recipe timer.
-        self.total_elapsed.columns[1].get_table_column().width = width - 1
+        self.run_elapsed.columns[1].get_table_column().width = width - 1
         # Set the description recipe timer task.
-        self.total_elapsed.update(self.total_elapsed_id, description="")
+        self.run_elapsed.update(self.run_elapsed_id, description="")
 
         self.task_elapsed = timer_element(width=width - 1)
         self.task_elapsed_id = self.task_elapsed.add_task("")
@@ -93,7 +93,7 @@ class KubeDisplay(DisplayStyle):
         )
 
         session_group = Group(
-            self.total_elapsed,
+            self.run_elapsed,
             pod_panel,
         )
 
