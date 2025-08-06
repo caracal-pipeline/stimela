@@ -1,4 +1,3 @@
-from .fancy import FancyDisplay
-from .simple import SimpleDisplay
+from .local import LocalDisplay, SimpleLocalDisplay
 from .kube import KubeDisplay, SimpleKubeDisplay
 from .slurm import SlurmDisplay

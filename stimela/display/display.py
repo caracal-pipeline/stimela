@@ -14,8 +14,8 @@ from rich.text import Text
 
 from stimela.stimelogging import rich_console
 from stimela.display.styles import (
-    FancyDisplay,
-    SimpleDisplay,
+    SimpleLocalDisplay,
+    LocalDisplay,
     SimpleKubeDisplay,
     KubeDisplay,
     SlurmDisplay
@@ -64,11 +64,11 @@ class Display:
     run_elapsed_id = run_elapsed.add_task("", start=True)
 
     styles = {
-        "fancy",
-        "simple",
-        "slurm",
+        "simplelocal",
+        "local",
         "simplekube",
-        "kube"
+        "kube",
+        "slurm"
     }
 
     def __init__(self, console: Console):
@@ -123,12 +123,12 @@ class Display:
         if self.display_style == style:
             return  # Already configured.
 
-        if style == "fancy":
-            self.display_style = "fancy"
-            self.current_display = FancyDisplay(self.run_elapsed)
-        elif style == "simple":
-            self.display_style = "simple"
-            self.current_display = SimpleDisplay(self.run_elapsed)
+        if style == "local":
+            self.display_style = "local"
+            self.current_display = LocalDisplay(self.run_elapsed)
+        elif style == "simplelocal":
+            self.display_style = "simplelocal"
+            self.current_display = SimpleLocalDisplay(self.run_elapsed)
         elif style == "simplekube":
             self.display_style = "simplekube"
             self.current_display = SimpleKubeDisplay(self.run_elapsed)
