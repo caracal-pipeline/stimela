@@ -126,12 +126,15 @@ class Display:
     def is_enabled(self):
         return self.live_display.is_started
 
-    def set_display_style(self, style: str = "local", variant: str = "fancy"):
+    def set_display_style(self, style: str = "local", variant: str = "simple"):
         """Reconfigures the display style based on the provided string.
 
         Args:
             style:
                 Specifies which display style should be applied.
+            variant:
+                Specifies which variant of the display to use. May be ignored
+                if variant_override is set on this object.
         """
         # If the variant override has been set, prefer it over the input.
         variant = self.variant_override or variant
