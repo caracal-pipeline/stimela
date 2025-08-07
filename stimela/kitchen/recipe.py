@@ -1297,9 +1297,9 @@ class Recipe(Cargo):
                     backend
                 )
                 requested_backends = backend_opts.select
-                if isinstance(requested_backends, list):
+                if isinstance(requested_backends, (list, ListConfig)):
                     selected_backend = next(
-                        b for b in requested_backends if backend_opts[b].enabled
+                        b for b in requested_backends if backend_opts[b].enable
                     )
                 else:
                     selected_backend = requested_backends
