@@ -1,11 +1,12 @@
 from __future__ import annotations
-from typing import Optional, List, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 from collections import defaultdict
 
 from rich.console import Group
 from rich.panel import Panel
 from rich.table import Table, Column
 from rich.text import Text
+from rich.progress import Progress
 
 from .base import DisplayStyle
 from .elements import timer_element, status_element
@@ -18,6 +19,26 @@ if TYPE_CHECKING:
     )
 
 class KubeDisplay(DisplayStyle):
+    """Styles a rich live display appropriately for kube backend.
+
+    In addition to the attributes below, attributes will be added for each
+    key in tracked_values. A *_id attribute will also be added for each key.
+
+    Attributes:
+        tracked_values:
+            A mapping from name to description for quantities present in
+            this display stlye.
+        run_elapsed:
+            A rich.Progress object tracking total time elapsed.
+        run_elapsed_id:
+            The task ID of the task associcated with run_elapsed.
+        task_elapsed:
+            A rich.Progress object tracking time elapsed in the current task.
+        task_elapsed_id:
+            The task ID of the task associcated with task_elapsed.
+        task_maxima:
+            A dict for tracking the peak values of certain progress elements.
+    """
 
     tracked_values = {
         "task_name": "Step",
@@ -36,8 +57,13 @@ class KubeDisplay(DisplayStyle):
         "kube_peak_core_usage": "Peak"
     }
 
-    def __init__(self, run_timer):
-        """Configures the display in simple mode."""
+    def __init__(self, run_timer: Progress):
+        """Configures the display in kube fancy mode.
+
+        Args:
+            run_timer:
+                Progress object which tracks total run time.
+        """
 
         super().__init__(run_timer)
 
@@ -118,6 +144,7 @@ class KubeDisplay(DisplayStyle):
         self.render_target = table
 
     def reset(self):
+        """Reset elements of the display e.g. time elapsed in a task."""
         super().reset()
         self.task_maxima.clear()
 
@@ -229,6 +256,26 @@ class KubeDisplay(DisplayStyle):
 
 
 class SimpleKubeDisplay(DisplayStyle):
+    """Styles a rich live display appropriately for kube backend.
+
+    In addition to the attributes below, attributes will be added for each
+    key in tracked_values. A *_id attribute will also be added for each key.
+
+    Attributes:
+        tracked_values:
+            A mapping from name to description for quantities present in
+            this display stlye.
+        run_elapsed:
+            A rich.Progress object tracking total time elapsed.
+        run_elapsed_id:
+            The task ID of the task associcated with run_elapsed.
+        task_elapsed:
+            A rich.Progress object tracking time elapsed in the current task.
+        task_elapsed_id:
+            The task ID of the task associcated with task_elapsed.
+        task_maxima:
+            A dict for tracking the peak values of certain progress elements.
+    """
 
     tracked_values = {
         "task_name": None,
@@ -242,12 +289,15 @@ class SimpleKubeDisplay(DisplayStyle):
         "kube_ram_usage": "RAM"
     }
 
-    def __init__(self, run_timer):
-        """Configures the display in simple mode."""
+    def __init__(self, run_timer: Progress):
+        """Configures the display in kube simple mode.
+
+        Args:
+            run_timer:
+                Progress object which tracks total run time.
+        """
 
         super().__init__(run_timer)
-
-        self.task_maxima = defaultdict(float)
 
         self.run_elapsed.update(self.run_elapsed_id, description="R")
         self.task_elapsed.update(self.task_elapsed_id, description="S")

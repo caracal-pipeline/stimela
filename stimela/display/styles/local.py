@@ -5,6 +5,7 @@ from collections import defaultdict
 from rich.console import Group
 from rich.panel import Panel
 from rich.table import Table, Column
+from rich.progress import Progress
 
 from .base import DisplayStyle
 from .elements import timer_element, status_element
@@ -17,6 +18,26 @@ if TYPE_CHECKING:
     )
 
 class LocalDisplay(DisplayStyle):
+    """Styles a rich live display appropriately for local backends.
+
+    In addition to the attributes below, attributes will be added for each
+    key in tracked_values. A *_id attribute will also be added for each key.
+
+    Attributes:
+        tracked_values:
+            A mapping from name to description for quantities present in
+            this display stlye.
+        run_elapsed:
+            A rich.Progress object tracking total time elapsed.
+        run_elapsed_id:
+            The task ID of the task associcated with run_elapsed.
+        task_elapsed:
+            A rich.Progress object tracking time elapsed in the current task.
+        task_elapsed_id:
+            The task ID of the task associcated with task_elapsed.
+        task_maxima:
+            A dict for tracking the peak values of certain progress elements.
+    """
 
     tracked_values = {
         "cpu_usage": "CPU",
@@ -33,8 +54,13 @@ class LocalDisplay(DisplayStyle):
         "task_peak_cpu_usage": "Peak"
     }
 
-    def __init__(self, run_timer):
-        """Configures the display in simple mode."""
+    def __init__(self, run_timer: Progress):
+        """Configures the display in local fancy mode.
+
+        Args:
+            run_timer:
+                Progress object which tracks total run time.
+        """
 
         super().__init__(run_timer)
 
@@ -102,6 +128,7 @@ class LocalDisplay(DisplayStyle):
         self.render_target = table
 
     def reset(self):
+        """Reset elements of the display e.g. time elapsed in a task."""
         super().reset()
         self.task_maxima.clear()
 
@@ -217,6 +244,24 @@ class LocalDisplay(DisplayStyle):
 
 
 class SimpleLocalDisplay(DisplayStyle):
+    """Styles a rich live display appropriately for local backends.
+
+    In addition to the attributes below, attributes will be added for each
+    key in tracked_values. A *_id attribute will also be added for each key.
+
+    Attributes:
+        tracked_values:
+            A mapping from name to description for quantities present in
+            this display stlye.
+        run_elapsed:
+            A rich.Progress object tracking total time elapsed.
+        run_elapsed_id:
+            The task ID of the task associcated with run_elapsed.
+        task_elapsed:
+            A rich.Progress object tracking time elapsed in the current task.
+        task_elapsed_id:
+            The task ID of the task associcated with task_elapsed.
+    """
 
     tracked_values = {
         "task_name": None,
@@ -227,8 +272,13 @@ class SimpleLocalDisplay(DisplayStyle):
         "disk_write": "W",
     }
 
-    def __init__(self, run_timer):
-        """Configures the display in simple mode."""
+    def __init__(self, run_timer: Progress):
+        """Configures the display in local simple mode.
+
+        Args:
+            run_timer:
+                Progress object which tracks total run time.
+        """
 
         super().__init__(run_timer)
 

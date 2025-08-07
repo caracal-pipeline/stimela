@@ -1,6 +1,7 @@
 from __future__ import annotations
-from typing import Optional, List, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 from rich.table import Table
+from rich.progress import Progress
 
 from .base import DisplayStyle
 from .elements import status_element
@@ -14,6 +15,26 @@ if TYPE_CHECKING:
 
 
 class SimpleSlurmDisplay(DisplayStyle):
+    """Styles a rich live display appropriately for slurm.
+
+    In addition to the attributes below, attributes will be added for each
+    key in tracked_values. A *_id attribute will also be added for each key.
+
+    Attributes:
+        tracked_values:
+            A mapping from name to description for quantities present in
+            this display stlye.
+        run_elapsed:
+            A rich.Progress object tracking total time elapsed.
+        run_elapsed_id:
+            The task ID of the task associcated with run_elapsed.
+        task_elapsed:
+            A rich.Progress object tracking time elapsed in the current task.
+        task_elapsed_id:
+            The task ID of the task associcated with task_elapsed.
+        task_maxima:
+            A dict for tracking the peak values of certain progress elements.
+    """
 
     tracked_values = {
         "task_name": None,
@@ -21,8 +42,13 @@ class SimpleSlurmDisplay(DisplayStyle):
         "task_command": None,
     }
 
-    def __init__(self, run_timer):
-        """Configures the display in simple mode."""
+    def __init__(self, run_timer: Progress):
+        """Configures the display in slurm mode.
+
+        Args:
+            run_timer:
+                Progress object which tracks total run time.
+        """
 
         super().__init__(run_timer)
 

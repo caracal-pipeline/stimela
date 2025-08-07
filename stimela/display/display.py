@@ -166,7 +166,7 @@ class Display:
         task_info: TaskInformation,
         extra_info: Optional[object] = None
     ):
-        """Updates the progress elements using the provided values.
+        """Calls the update method on current_display.
 
         Args:
             sys_stats:

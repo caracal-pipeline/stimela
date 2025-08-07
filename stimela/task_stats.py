@@ -291,7 +291,9 @@ def update_process_status():
 
     # Call extra status reporter which should return stats which can be added
     # to the task_stats object as well as a list of strings which can be used
-    # in the display.
+    # in the display. TODO(JSKenyon): All backends should produce a Report
+    # object which can be used here. At present, this only applies to the
+    # kube backend.
     if task_info and task_info.status_reporter:
         report = task_info.status_reporter()
         task_stats.insert_extra_stats(**report.profiling_results)

@@ -23,7 +23,8 @@ def timer_element(
             Determines whether a spinner is added on the left.
         right_spinner:
             Determines whether a spinner is added on the right.
-        width: Column width for text column.
+        width:
+            Column width for text column.
     """
     columns = []
 
