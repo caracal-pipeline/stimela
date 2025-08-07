@@ -41,15 +41,14 @@ class DisplayStyle(BaseDisplayStyle):
             run_timer:
                 rich.Progress object tracking total run time.
         """
-        self.run_elapsed = run_timer
-        self.run_elapsed_id = 0  # We only ever add a single task.
-
-        # NOTE(JSKenyon): Ideally, we would copy the timer Progress object but
-        # it is a complex object which includes a lock. This code instead
-        # 'resets' the properties of the progress object which we mutute in
-        # the subclasses.
-        self.run_elapsed.update(self.run_elapsed_id, description="")
-        self.run_elapsed.columns[1].get_table_column().width = None
+        # Create a new run timer which shares a start time with the global
+        # run timer. This means each display can mutate their version of the
+        # run timer without affecting the other display types.
+        run_start_time = run_timer.tasks[0].start_time
+        self.run_elapsed = timer_element()
+        self.run_elapsed_id = self.run_elapsed.add_task("", start=False)
+        self.run_elapsed.tasks[self.run_elapsed_id].start_time = run_start_time
+        self.run_elapsed.start_task(self.run_elapsed_id)
 
         self.task_elapsed = timer_element()
         self.task_elapsed_id = self.task_elapsed.add_task("")

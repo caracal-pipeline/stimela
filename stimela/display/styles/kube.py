@@ -70,32 +70,33 @@ class KubeDisplay(DisplayStyle):
         task_group = Group(
             self.task_elapsed,
             self.task_name,
-            self.kube_connection_status,
             self.task_command,
             cpu_table,
             ram_table
         )
 
         pod_table_title = Text("Pods")
+        pod_table_title.pad(10, "-")
         pod_table_title.stylize("bold green")
 
         pod_columns = [Column(ratio=1), Column(ratio=1)]
-        pod_table = Table.grid(*pod_columns, expand=True, padding=(0, 1))
+        pod_table = Table(
+            *pod_columns,
+            title=pod_table_title,
+            show_header=False,
+            expand=True,
+            padding=(0, 0),
+            box=None
+        )
         pod_table.add_row(self.pending_pods, self.terminating_pods)
         pod_table.add_row(self.running_pods, self.successful_pods)
         pod_table.add_row(self.failed_pods, self.stateless_pods)
 
-        pod_panel = Panel(
-            pod_table,
-            title="[bold]Pods[/bold]",
-            border_style="green",
-            expand=True
-        )
+        status_columns = [Column(ratio=1), Column(ratio=1)]
+        status_table = Table.grid(*status_columns, expand=True, padding=(0,1))
+        status_table.add_row(self.run_elapsed, self.kube_connection_status)
 
-        session_group = Group(
-            self.run_elapsed,
-            pod_panel,
-        )
+        session_group = Group(status_table, pod_table)
 
         group_columns = [Column(ratio=1), Column(ratio=1)]
         table = Table.grid(*group_columns, expand=True)

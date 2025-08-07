@@ -285,7 +285,7 @@ class StatusReporter(object):
             report.total_memory = round(totals['memory'] / 2**30)
 
         if self._last_disconnected is not None:
-            report.connection_status = "connected"
+            report.connection_status = "reconnected"
 
         return report
 
