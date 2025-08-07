@@ -96,7 +96,7 @@ class Display:
         )
 
     def reset_current_task(self):
-        """Reset both the timer and the maxima for the current task."""
+        """Calls the reset method of the current DisplayStyle object."""
         self.current_display.reset()
 
     def enable(self):
@@ -131,10 +131,12 @@ class Display:
 
         Args:
             style:
-                Specifies which display style should be applied.
+                Specifies which display style should be applied. Current
+                options are 'local', 'slurm' and 'kube'.
             variant:
                 Specifies which variant of the display to use. May be ignored
-                if variant_override is set on this object.
+                if variant_override is set on this object. Current options are
+                'simple' and 'fancy'.
         """
         # If the variant override has been set, prefer it over the input.
         variant = self.variant_override or variant
