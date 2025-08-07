@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Optional, List, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 from collections import defaultdict
 
 from rich.console import Group
