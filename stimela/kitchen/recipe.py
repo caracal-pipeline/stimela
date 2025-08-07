@@ -1317,7 +1317,7 @@ class Recipe(Cargo):
                 # Disable display during pool creation so that it isn't
                 # enabled in the resulting processes.
                 if pause_display:
-                    display.disable()
+                    display.disable(reset_cursor=True)
                 with ProcessPoolExecutor(num_workers) as pool:
                     # submit each iterant to pool
                     futures = []

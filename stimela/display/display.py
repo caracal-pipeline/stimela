@@ -11,6 +11,7 @@ from rich.console import Console
 from rich.live import Live
 from rich.table import Column
 from rich.text import Text
+from rich.control import Control
 
 from stimela.stimelogging import rich_console
 from stimela.display.styles import (
@@ -102,9 +103,23 @@ class Display:
         atexit.register(self.disable)
         self.live_display.start(True)
 
-    def disable(self):
-        """Stop rendering the live display."""
+    def disable(self, reset_cursor=False):
+        """Stop rendering the live display.
+
+        Disabling the display will leave the cursor above the bottom of the
+        terminal for multiline displays. Re-enabling the display will then
+        result in it being rendered higher up. The cursor can be reset to
+        avoid this problem.
+
+        Args:
+            reset_cursor:
+                Determines whether the cursor will be reset to the bottom
+                left corner of the terminal.
+        """
         self.live_display.stop()
+
+        if reset_cursor:
+            self.console.control(Control.move_to(0, self.console.height - 1))
 
     @property
     def is_enabled(self):
