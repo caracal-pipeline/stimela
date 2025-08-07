@@ -1304,8 +1304,14 @@ class Recipe(Cargo):
                 else:
                     selected_backend = requested_backends
 
+                # TODO(JSKenyon): For now, we default to a minimal display for
+                # the kube backend when scattering. This is consistent with
+                # the behaviour prior to the addition of multiple displays.
+                # At present, the status reporter for the kube backend is not
+                # configured at this point so we cannot track all the pods
+                # running in the scattered loop.
                 if selected_backend == "kube":
-                    display_style = "kube"
+                    display_style = "slurm"
                 elif backend_opts.slurm.enable:
                     display_style = "slurm"
                 else:
