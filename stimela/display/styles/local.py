@@ -110,7 +110,7 @@ class LocalDisplay(DisplayStyle):
         sys_stats: SystemStatsDatum,
         task_stats: TaskStatsDatum,
         task_info: TaskInformation,
-        extra_info: Optional[List[str]] = None
+        extra_info: Optional[object] = None
     ):
         """Updates the progress elements using the provided values.
 
@@ -122,9 +122,8 @@ class LocalDisplay(DisplayStyle):
             task_info:
                 An object containing information about the current task.
             extra_info:
-                A list of strings which will be combined and added to the
-                extra_info field. Typically used for non-standard information
-                originating from a backend.
+                A Report object containing additional information. Typically
+                used for information originating from a backend.
         """
         self.cpu_usage.update(
             self.cpu_usage_id,
@@ -261,7 +260,7 @@ class SimpleLocalDisplay(DisplayStyle):
         sys_stats: SystemStatsDatum,
         task_stats: TaskStatsDatum,
         task_info: TaskInformation,
-        extra_info: Optional[List[str]] = None
+        extra_info: Optional[object] = None
     ):
         """Updates the progress elements using the provided values.
 
@@ -273,9 +272,8 @@ class SimpleLocalDisplay(DisplayStyle):
             task_info:
                 An object containing information about the current task.
             extra_info:
-                A list of strings which will be combined and added to the
-                extra_info field. Typically used for non-standard information
-                originating from a backend.
+                A Report object containing additional information. Typically
+                used for information originating from a backend.
         """
         self.disk_read.update(
             self.disk_read_id,

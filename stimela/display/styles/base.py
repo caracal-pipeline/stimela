@@ -1,6 +1,15 @@
+from __future__ import annotations
+from typing import Optional, TYPE_CHECKING
 from abc import ABC, abstractmethod
 from rich.progress import Progress
 from .elements import timer_element
+
+if TYPE_CHECKING:
+    from stimela.task_stats import (
+        TaskInformation,
+        TaskStatsDatum,
+        SystemStatsDatum
+    )
 
 
 class BaseDisplayStyle(ABC):
@@ -11,10 +20,30 @@ class BaseDisplayStyle(ABC):
     """
     @abstractmethod
     def reset(self):
+        """Reset elements of the display e.g. time elapsed in a task."""
         pass
 
     @abstractmethod
-    def update(self):
+    def update(
+        self,
+        sys_stats: SystemStatsDatum,
+        task_stats: TaskStatsDatum,
+        task_info: TaskInformation,
+        extra_info: Optional[object] = None
+    ):
+        """Updates the progress elements using the provided values.
+
+        Args:
+            sys_stats:
+                An object containing the current system status.
+            task_stats:
+                An object containing the current task stats.
+            task_info:
+                An object containing information about the current task.
+            extra_info:
+                A Report object containing additional information. Typically
+                used for information originating from a backend.
+        """
         pass
 
 

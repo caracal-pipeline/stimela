@@ -293,10 +293,10 @@ def update_process_status():
     # to the task_stats object as well as a list of strings which can be used
     # in the display.
     if task_info and task_info.status_reporter:
-        extra_datum = task_info.status_reporter()
-        task_stats.insert_extra_stats(**extra_datum.profiling_results)
+        report = task_info.status_reporter()
+        task_stats.insert_extra_stats(**report.profiling_results)
     else:
-        extra_datum = None
+        report = None
 
     # Update the display using the stats and info objects.
     if display.is_enabled:
@@ -304,7 +304,7 @@ def update_process_status():
             sys_stats,
             task_stats,
             task_info,
-            extra_info=extra_datum
+            extra_info=report
         )
 
     # update stats

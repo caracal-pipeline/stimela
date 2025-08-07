@@ -51,7 +51,7 @@ class SimpleSlurmDisplay(DisplayStyle):
         sys_stats: SystemStatsDatum,
         task_stats: TaskStatsDatum,
         task_info: TaskInformation,
-        extra_info: Optional[List[str]] = None
+        extra_info: Optional[object] = None
     ):
         """Updates the progress elements using the provided values.
 
@@ -63,9 +63,8 @@ class SimpleSlurmDisplay(DisplayStyle):
             task_info:
                 An object containing information about the current task.
             extra_info:
-                A list of strings which will be combined and added to the
-                extra_info field. Typically used for non-standard information
-                originating from a backend.
+                A Report object containing additional information. Typically
+                used for information originating from a backend.
         """
         if task_info is not None:
             self.task_name.update(
