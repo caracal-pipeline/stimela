@@ -125,7 +125,7 @@ class Display:
     def is_enabled(self):
         return self.live_display.is_started
 
-    def set_display_style(self, style: str = "local"):
+    def set_display_style(self, style: str = "simplelocal"):
         """Reconfigures the display style based on the provided string.
 
         Args:
