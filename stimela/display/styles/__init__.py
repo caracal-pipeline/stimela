@@ -1,3 +1,3 @@
 from .local import LocalDisplay, SimpleLocalDisplay
 from .kube import KubeDisplay, SimpleKubeDisplay
-from .slurm import SlurmDisplay
+from .slurm import SimpleSlurmDisplay

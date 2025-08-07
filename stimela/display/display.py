@@ -19,7 +19,7 @@ from stimela.display.styles import (
     LocalDisplay,
     SimpleKubeDisplay,
     KubeDisplay,
-    SlurmDisplay
+    SimpleSlurmDisplay
 )
 
 if TYPE_CHECKING:
@@ -36,20 +36,21 @@ class Display:
     the progress of a Stimela recipe as well as its resource usage.
 
     Attributes:
-        styles:
-            Available styles for configuring the live display.
-        display_style:
-            The currently configured display style.
-        style_override:
-            An override which supersedes display_style.
-        live_display:
-            A rich live display which can be rendered to the console.
-        task_maxima:
-            Tracks the maxima of the current task's displayed values.
         run_elapsed:
             A rich progress object which tracks total elapsed time.
         run_elapsed_id:
             The task id associated with run_elapsed.
+        style_map:
+            Mapping from (name, variant) to DisplayStyle.
+        console:
+            A rich Console object with which the display is associated.
+        variant_override:
+            An override which supersedes the variant specified in
+            set_display_style.
+        current_display:
+            The currently active DisplayStyle object.
+        live_display:
+            A rich live display which can be rendered to the console.
     """
 
     run_elapsed = Progress(
@@ -64,12 +65,13 @@ class Display:
     )
     run_elapsed_id = run_elapsed.add_task("", start=True)
 
-    styles = {
-        "simplelocal",
-        "local",
-        "simplekube",
-        "kube",
-        "slurm"
+    style_map = {
+        ("local", "simple"): SimpleLocalDisplay,
+        ("local", "fancy"): LocalDisplay,
+        ("kube", "simple"): SimpleKubeDisplay,
+        ("kube", "fancy"): KubeDisplay,
+        ("slurm", "simple"): SimpleSlurmDisplay,
+        ("slurm", "fancy"): SimpleSlurmDisplay  # No fancy variant as yet.
     }
 
     def __init__(self, console: Console):
@@ -80,9 +82,8 @@ class Display:
         """
 
         self.console = console
-
-        self.display_style = "default"
-        self.style_override = None
+        self.variant_override = None
+        self.current_display = None
 
         msg = Text("DISPLAY HAS NOT BEEN CONFIGURED", justify="center")
         msg.stylize("bold red")
@@ -125,51 +126,33 @@ class Display:
     def is_enabled(self):
         return self.live_display.is_started
 
-    def set_display_style(self, style: str = "simplelocal"):
+    def set_display_style(self, style: str = "local", variant: str = "fancy"):
         """Reconfigures the display style based on the provided string.
 
         Args:
             style:
                 Specifies which display style should be applied.
         """
-        if self.style_override:  # If set, ignore style argument.
-            style = self.style_override
+        # If the variant override has been set, prefer it over the input.
+        variant = self.variant_override or variant
 
-        if self.display_style == style:
+        new_display_type = self.style_map.get((style, variant))
+
+        if new_display_type is None:
+            raise ValueError(
+                f"Unrecognised style ({style}) or variant ({variant}) when "
+                f"configuring display."
+            )
+
+        if isinstance(self.current_display, new_display_type):
             return  # Already configured.
 
-        if style == "local":
-            self.display_style = "local"
-            self.current_display = LocalDisplay(self.run_elapsed)
-        elif style == "simplelocal":
-            self.display_style = "simplelocal"
-            self.current_display = SimpleLocalDisplay(self.run_elapsed)
-        elif style == "simplekube":
-            self.display_style = "simplekube"
-            self.current_display = SimpleKubeDisplay(self.run_elapsed)
-        elif style == "kube":
-            self.display_style = "kube"
-            self.current_display = KubeDisplay(self.run_elapsed)
-        elif style == "slurm":
-            self.display_style = "slurm"
-            self.current_display = SlurmDisplay(self.run_elapsed)
-        else:
-            raise ValueError(f"Unrecognised style: {style}")
-
+        self.current_display = new_display_type(self.run_elapsed)
         self.live_display.update(self.current_display.render_target)
 
-    def set_display_style_override(self, style: Optional[str] = None):
-        """Sets the display style override and applies the display style.
-
-        Args:
-            style:
-                Specifies which display style should be applied.
-        """
-        if style in self.styles or style is None:
-            self.style_override = style
-        else:
-            raise ValueError(f"Unrecognised style: {style}")
-        self.set_display_style()
+    def set_variant_override(self, override: Optional[str] = None):
+        """Configures a global override for the display variant."""
+        self.variant_override = override
 
     def update(
         self,

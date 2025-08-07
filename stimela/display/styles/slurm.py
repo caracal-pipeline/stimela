@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     )
 
 
-class SlurmDisplay(DisplayStyle):
+class SimpleSlurmDisplay(DisplayStyle):
 
     tracked_values = {
         "task_name": None,
