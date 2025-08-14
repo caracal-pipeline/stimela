@@ -97,7 +97,7 @@ def resolve_recipe_files(filename: str, log: logging.Logger, use_manifest: bool 
     # apply globs and check for real files (i.e. don't match directories)
     filenames = itertools.chain(*[glob.glob(g) for g in globs])
     filenames = [f for f in filenames if os.path.isfile(f)]
-        
+
     # return list or raise error
     if filenames:
         return filenames

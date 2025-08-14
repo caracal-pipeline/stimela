@@ -56,6 +56,8 @@ class TaskInformation(object):
 
 # stack of task information -- most recent subtask is at the end
 _task_stack = []
+stimela_process = psutil.Process()
+child_processes = {}
 
 def init_progress_bar(boring=False):
     global progress_console, progress_bar, progress_task
@@ -155,8 +157,8 @@ class TaskStatsDatum(object):
     read_gbps: float    = 0
     read_ms: float      = 0
     write_count: int    = 0
-    write_gb: float     = 0 
-    write_gbps: float   = 0 
+    write_gb: float     = 0
+    write_gbps: float   = 0
     write_ms: float     = 0
     num_samples: int    = 0
 
@@ -236,6 +238,22 @@ def update_stats(now: datetime, sample: TaskStatsDatum):
         start = _task_start_time.setdefault(key, now)
         _taskstats[key][0] = (now - start).total_seconds()
 
+def update_children():
+    """Update the module level dictionary mapping child pid to process.
+
+    This is necessary as calling Process.children will return different
+    Process objects each time. These then fail to report CPU stats unless
+    we make them block which has a large impact on performance.
+    """
+    current_children = stimela_process.children(recursive=True)
+    current_pids = {proc.pid for proc in current_children}
+    child_processes.update(
+        {c.pid: c for c in current_children if c.pid not in child_processes}
+    )
+    dropped_pids = {c for c in child_processes.keys() if c not in current_pids}
+
+    for pid in dropped_pids:
+        del child_processes[pid]
 
 def update_process_status():
     # current subtask info
@@ -247,18 +265,35 @@ def update_process_status():
 
     # form up sample datum
     s = TaskStatsDatum(num_samples=1)
+
+    update_children()
+    # Assume that all child processes belong to the same task.
+    # TODO(JSKenyon): Handling of children is rudimentary at present.
+    # How would this work for scattered/parallel steps?
+    if child_processes and ti:
+        processes = list(child_processes.values())
+    else:
+        processes = []  # Don't bother with cpu and mem for stimela itself.
+
     # CPU and memory
-    s.cpu = psutil.cpu_percent()
-    mem = psutil.virtual_memory()
-    s.mem_used = round(mem.total*mem.percent/100 / 2**30)
-    s.mem_total = round(mem.total / 2**30)
+    for p in processes:
+        try:
+            s.cpu += p.cpu_percent()
+            s.mem_used += p.memory_info().rss
+        except psutil.NoSuchProcess:
+            pass  # Process ended before we could gather its stats.
+
+    s.mem_used = round(s.mem_used  / (2 ** 30))
+    system_memory = psutil.virtual_memory().total
+    s.mem_total = round(system_memory / (2 ** 30))
+
     # load
     s.load, _, _ = psutil.getloadavg()
 
     # get disk I/O stats
     disk_io = psutil.disk_io_counters()
     global _prev_disk_io
-    prev_io, prev_time = _prev_disk_io 
+    prev_io, prev_time = _prev_disk_io
     if prev_io is not None:
         delta = (now - prev_time).total_seconds()
         io = {}
@@ -270,7 +305,7 @@ def update_process_status():
         s.write_gb = io['write_bytes']/2**30
         s.read_gbps = s.read_gb / delta
         s.write_gbps = s.write_gb / delta
-        s.read_ms = io['read_time'] 
+        s.read_ms = io['read_time']
         s.write_ms = io['write_time']
     else:
         io = None
@@ -292,7 +327,7 @@ def update_process_status():
             cpu_info = [
                 f"CPU [green]{s.cpu:2.1f}%[/green]",
                 f"RAM [green]{round(s.mem_used):3}[/green]/[green]{round(s.mem_total)}[/green]G",
-                f"Load [green]{s.load:2.1f}[/green]" 
+                f"Load [green]{s.load:2.1f}[/green]"
             ]
 
             if io is not None:
@@ -345,7 +380,7 @@ def render_profiling_summary(stats: TaskStatsDatum, max_depth, unroll_loops=Fals
     table_peak = Table(title=Text("\npeaks", style="bold"))
     table_peak.add_column("")
     table_peak.add_column("time hms", justify="right")
-    
+
     # accumulate set of all stats available
     available_stats = set(_taskstats_sample_names)
     for name, (elapsed, sum, peak) in stats.items():
@@ -362,7 +397,7 @@ def render_profiling_summary(stats: TaskStatsDatum, max_depth, unroll_loops=Fals
 
     for name_tuple, (elapsed, sum, peak) in stats.items():
         if name_tuple and len(name_tuple) <= max_depth and elapsed > 0:
-            # skip loop iterations, if not unrolling loops 
+            # skip loop iterations, if not unrolling loops
             if not unroll_loops and any(n.endswith("]") for n in name_tuple):
                 continue
             secs, mins, hours = elapsed % 60, int(elapsed // 60) % 60, int(elapsed // 3600)
@@ -383,18 +418,18 @@ def render_profiling_summary(stats: TaskStatsDatum, max_depth, unroll_loops=Fals
     stimelogging.declare_chapter("profiling results")
     destroy_progress_bar()
     from rich.columns import Columns
-    # progress_console.print(table_avg, justify="center") 
-    # progress_console.print(table_peak, justify="center")  
-    # progress_console.print(Columns((table_avg, table_peak)), justify="center") 
+    # progress_console.print(table_avg, justify="center")
+    # progress_console.print(table_peak, justify="center")
+    # progress_console.print(Columns((table_avg, table_peak)), justify="center")
 
     with progress_console.capture() as capture:
-        progress_console.print(Columns((table_avg, table_peak)), justify="center") 
+        progress_console.print(Columns((table_avg, table_peak)), justify="center")
 
     text = capture.get()
 
     return text
 
-    
+
 # from rich.console import Console
 # console = Console()
 # with console.capture() as capture:
@@ -403,7 +438,7 @@ def render_profiling_summary(stats: TaskStatsDatum, max_depth, unroll_loops=Fals
 
 def save_profiling_stats(log, print_depth=2, unroll_loops=False):
     from . import stimelogging
-    
+
     stats = collect_stats()
     summary = render_profiling_summary(stats, print_depth, unroll_loops=unroll_loops)
     if print_depth:
