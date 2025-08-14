@@ -15,7 +15,6 @@ from scabha.cargo import ParameterCategory
 from stimela.kitchen.recipe import Recipe
 from stimela.kitchen.cab import Cab
 from stimela.exceptions import RecipeValidationError, CabValidationError
-from stimela.task_stats import destroy_progress_bar
 
 from .run import load_recipe_files, resolve_recipe_files
 
@@ -33,7 +32,7 @@ from .run import load_recipe_files, resolve_recipe_files
                 help="""Increases level of detail to include all inputs/outputs.""")
 @click.option("-R", "--required", is_flag=True,
                 help="""Decreases level of detail to include required inputs/outputs only.""")
-@click.argument("what", nargs=-1, metavar="filename.yml ... [recipe name] [cab name]", required=True) 
+@click.argument("what", nargs=-1, metavar="filename.yml ... [recipe name] [cab name]", required=True)
 def doc(what: List[str] = [], do_list=False, implicit=False, obscure=False, all=False, required=False):
 
     log = logger()
@@ -49,7 +48,7 @@ def doc(what: List[str] = [], do_list=False, implicit=False, obscure=False, all=
         max_category = ParameterCategory.Obscure
     elif implicit:
         max_category = ParameterCategory.Implicit
-        
+
     def load_recipe(name: str, section: Dict):
         try:
             if not section.get('name'):
@@ -80,12 +79,10 @@ def doc(what: List[str] = [], do_list=False, implicit=False, obscure=False, all=
         else:
             log.info(f"treating '{item}' as a recipe or cab name")
             names_to_document.append(item)
-    
+
     # load config and recipes from all given files
     if files_to_load:
         top_level_recipes = load_recipe_files(files_to_load)
-
-    destroy_progress_bar()
 
     if not files_to_load:
         log.error(f"No YAML documents were specified")
@@ -93,7 +90,7 @@ def doc(what: List[str] = [], do_list=False, implicit=False, obscure=False, all=
 
     if errcode:
         sys.exit(errcode)
-    
+
     log.info(f"loaded {len(stimela.CONFIG.cabs)} cab definition(s) and {len(stimela.CONFIG.lib.recipes)} recipe(s)")
 
     if not stimela.CONFIG.lib.recipes and not stimela.CONFIG.cabs:
@@ -125,7 +122,7 @@ def doc(what: List[str] = [], do_list=False, implicit=False, obscure=False, all=
             recipe = load_recipe(name, stimela.CONFIG.lib.recipes[name])
             tree = top_tree.add(f"Recipe: [bold]{name}[/bold]")
             recipe.rich_help(tree, max_category=max_category)
-        
+
         for name in cabs_to_document:
             try:
                 cab = Cab(**stimela.CONFIG.cabs[name])
@@ -138,7 +135,7 @@ def doc(what: List[str] = [], do_list=False, implicit=False, obscure=False, all=
             tree = top_tree.add(f"Cab: [bold]{name}[/bold]")
             cab.rich_help(tree, max_category=max_category)
 
-    # list recipes and cabs -- also do this by default if nothing explicit was documented    
+    # list recipes and cabs -- also do this by default if nothing explicit was documented
     if do_list or not (recipes_to_document or cabs_to_document):
         if stimela.CONFIG.lib.recipes:
             subtree = top_tree.add("Recipes:")
@@ -152,8 +149,8 @@ def doc(what: List[str] = [], do_list=False, implicit=False, obscure=False, all=
             table = Table.grid("", "", padding=(0,2))
             for name, cab in sorted(stimela.CONFIG.cabs.items()):
                 table.add_row(f"[bold]{name}[/bold]", getattr(cab, 'info', ''))
-            subtree.add(table)            
-        
+            subtree.add(table)
+
     rich_print(top_tree)
 
 
