@@ -14,7 +14,7 @@ from typing import List, Optional, Tuple
 from collections import OrderedDict
 from omegaconf.omegaconf import OmegaConf, OmegaConfBaseException
 from benedict import benedict
-
+from pathlib import Path
 
 import stimela
 from scabha import configuratt
@@ -269,6 +269,8 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
 
     # Load parameter files using benedict and flatten into a dotstring-value dict.
     for pf in parameter_file:
+        if not Path(pf).exists():
+            raise FileNotFoundError(f"{pf} is not a path to a valid parameter file.")
         pf_dict = benedict.from_yaml(pf, keypath_separator=">>").flatten(separator=".")
         for key, value in pf_dict.items():
             try:
