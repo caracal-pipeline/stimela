@@ -7,6 +7,8 @@ from omegaconf.errors import OmegaConfBaseException
 from collections import OrderedDict
 from collections.abc import Mapping
 import rich.table
+import networkx as nx
+
 
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
@@ -28,7 +30,7 @@ from stimela import task_stats
 from stimela.display.display import display
 from stimela import backends
 from stimela.backends import StimelaBackendSchema
-from stimela.kitchen.utils import keys_from_sel_string
+from stimela.kitchen.run_state import RunConstraints
 
 
 class DeferredAlias(Unresolved):
@@ -327,16 +329,16 @@ class Recipe(Cargo):
     def finalized(self):
         return self._alias_map is not None
 
-    def enable_step(self, label, enable=True):
+    def unskip_step(self, label, unskip=True):
         self.finalize()
         step = self.steps.get(label)
         if step is None:
             raise RecipeValidationError(f"recipe '{self.name}': unknown step {label}", log=self.log)
-        if enable:
+        if unskip:
             if step._skip is True:
-                self.log.warning(f"enabling step '{label}' which is normally skipped")
+                self.log.warning(f"unskipping step '{label}' which is normally skipped")
             elif step._skip is not False:
-                self.log.warning(f"enabling step '{label}' which is normally conditionally skipped ('{step.skip}')")
+                self.log.warning(f"unskipping step '{label}' which is normally conditionally skipped ('{step.skip}')")
             step.skip = step._skip = False
             step.skip_if_outputs = None
         else:
@@ -345,126 +347,68 @@ class Recipe(Cargo):
 
     def restrict_steps(
         self,
-        tags: List[str] = [],
-        skip_tags: List[str] = [],
-        step_ranges: List[str] = [],
-        skip_ranges: List[str] = [],
-        enable_steps: List[str] = []
-    ):
-        try:
-            # extract subsets of tags and step specifications that refer to sub-recipes
-            # this will map name -> (tags, skip_tags, step_ranges, enable_steps). Name is None for the parent recipe.
-            subrecipe_entries = OrderedDict()
-            def process_specifier_list(specs: List[str], num=0):
-                for spec in specs:
-                    if '.' in spec:
-                        subrecipe, spec = spec.split('.', 1)
-                        if subrecipe not in self.steps or not isinstance(self.steps[subrecipe].cargo, Recipe):
-                            raise StepSelectionError(f"'{subrecipe}' (in '{subrecipe}.{spec}') does not refer to a valid subrecipe")
-                    else:
-                        subrecipe = None
-                    entry = subrecipe_entries.setdefault(subrecipe, ([],[],[],[],[]))
-                    entry[num].append(spec)
-            # this builds up all the entries given on the command-line
-            for num, options in enumerate((tags, skip_tags, step_ranges, skip_ranges, enable_steps)):
-                process_specifier_list(options, num)
+        constraints: RunConstraints,
+    ) -> int:
+        """Apply the state of a RunConstraints object to the current recipe.
 
-            self.log.info(f"selecting recipe steps for (sub)recipe: [bold green]{self.name}[/bold green]")
+        Given a RunConstraints object, query it for enabled, disabled and
+        unskipped steps at the current recipe level before recursing into
+        subrecipes. After this method is run, all the skip attributes of
+        the recipe steps should be correctly set.
 
-            # process our own entries - the parent recipe has None key.
-            tags, skip_tags, step_ranges, skip_ranges, enable_steps = subrecipe_entries.get(None, ([],[],[],[],[]))
+        Args:
+            constraints:
+                A RunConstraints object which can be queried for the state
+                of various recipe steps (graph nodes).
 
-            # Check that all specified tags (if any), exist.
-            known_tags = set.union(*([v.tags for v in self.steps.values()] or [set()]))
-            unknown_tags = (set(tags) | set(skip_tags)) - known_tags
-            if unknown_tags:
-                unknown_tags = "', '".join(unknown_tags)
-                raise StepSelectionError(f"Unknown tag(s) '{unknown_tags}'")
+        Returns:
+            An integer count of the enabled steps.
+        """
 
-            # We have to handle the following functionality:
-            #   - user specifies specific tag(s) to run
-            #   - user specifies specific tag(s) to skip
-            #   - user specifies step(s) to run
-            #   - user specifies step(s) to skip
-            #   - ensure steps tagged with always run unless explicitly skipped
-            #   - individually specified steps to run must be force enabled
+        self.log.info(
+            f"selecting recipe steps for (sub)recipe: "
+            f"[bold green]{self.name}[/bold green]"
+        )
 
-            always_steps = {k for k, v in self.steps.items() if "always" in v.tags}
-            never_steps = {k for k, v in self.steps.items() if "never" in v.tags}
-            tag_selected_steps = {k for k, v in self.steps.items() for t in tags if t in v.tags}
-            tag_skipped_steps = {k for k, v in self.steps.items() for t in skip_tags if t in v.tags}
-            selected_steps = [keys_from_sel_string(self.steps, sel_string) for sel_string in step_ranges]
-            skipped_steps = [keys_from_sel_string(self.steps, sel_string) for sel_string in skip_ranges]
+        enabled_steps = constraints.get_enabled_steps(self.fqname)
+        disabled_steps = constraints.get_disabled_steps(self.fqname)
+        unskipped_steps = constraints.get_unskipped_steps(self.fqname)
 
-            # Steps which are singled out are special (cherry-picked). They MUST be enabled and run.
-            # NOTE: Single step slices (e.g last_step:) will also trigger this behaviour and may be
-            # worth raising a warning over.
-            cherry_picked_steps = set.union(*([sel for sel in selected_steps if len(sel) == 1] or [set()]))
-            enable_steps.extend(list(cherry_picked_steps))
+        # Make the recipe aware of the unskipped steps i.e. steps which
+        # have skip fields in the recipe but which should be run regardless.
+        # This does not guarantee that the step is enabled (selected).
+        for step_name in unskipped_steps:
+            self.unskip_step(step_name)
 
-            selected_steps = set.union(*(selected_steps or [set()]))
-            skipped_steps = set.union(*(skipped_steps or [set()]))
+        # Apply the skip flags to disabled steps.
+        for step_name in disabled_steps:
+            step = self.steps[step_name]
+            step.skip = step._skip = True
 
-            if always_steps:
-                self.log.info(f"the following step(s) are marked as always run: ({', '.join(always_steps)})")
-            if never_steps:
-                self.log.info(f"the following step(s) are marked as never run: ({', '.join(never_steps)})")
-            if tag_selected_steps:
-                self.log.info(f"the following step(s) have been selected by tag: ({', '.join(tag_selected_steps)})")
-            if tag_selected_steps:
-                self.log.info(f"the following step(s) have been skipped by tag: ({', '.join(tag_skipped_steps)})")
-            if selected_steps:
-                self.log.info(f"the following step(s) have been explicitly selected: ({', '.join(selected_steps)})")
-            if skipped_steps:
-                self.log.info(f"the following step(s) have been explicitly skipped: ({', '.join(skipped_steps)})")
-            if cherry_picked_steps:
-                self.log.info(f"the following step(s) have been cherry-picked: ({', '.join(cherry_picked_steps)})")
+        if not enabled_steps:
+            self.log.info("no steps have been selected for execution")
+            return 0
 
-            # Build up the active steps according to option priority.
-            active_steps = (tag_selected_steps | selected_steps) or set(self.steps.keys())
-            active_steps |= always_steps
-            active_steps -= tag_skipped_steps
-            active_steps -= never_steps - tag_selected_steps
-            active_steps -= skipped_steps
-            active_steps |= cherry_picked_steps
+        # Log the steps which have been selected to run.
+        msg = ' '.join(enabled_steps)
+        self.log.info(f"the following recipe steps have been enabled:")
+        self.log.info(f"    [bold green]{msg}[/bold green]")
 
-            # Enable steps explicitly enabled by the user as well as those
-            # implicitly enabled by cherry-picking above.
-            for name in enable_steps:
-                if name in self.steps:
-                    self.enable_step(name)  # config file may have skip=True, but we force-enable here
-                else:
-                    raise StepSelectionError(f"'{name}' does not refer to a valid step")
+        if disabled_steps:
+            msg = ' '.join(disabled_steps)
+            self.log.info(f"the following recipe steps have been disabled:")
+            self.log.info(f"    [bold grey50]{msg}[/bold grey50]")
+        if unskipped_steps:
+            msg = ' '.join(unskipped_steps)
+            self.log.info(f"the following recipe steps have been unskipped:")
+            self.log.info(f"    [bold cyan]{msg}[/bold cyan]")
 
-            if not active_steps:
-                self.log.info("no steps have been selected for execution")
-                return 0
-            else:
-                if len(active_steps) != len(self.steps):
-                    # apply skip flags
-                    for label, step in self.steps.items():
-                        if label not in active_steps:
-                            step.skip = step._skip = True
-                            # remove auto-aliases associated with skipped steps
+        # Recurse into subrecipes, applying the constraints.
+        for step in self.steps.values():
+            if isinstance(step.cargo, Recipe):
+                step.cargo.restrict_steps(constraints)
 
-                # see how many steps are actually going to run
-                scheduled_steps = [label for label, step in self.steps.items() if not step._skip]
-                # report scheduled steps to log if (a) they're a subset or (b) any selection options were passed
-                if len(scheduled_steps) != len(self.steps) or None in subrecipe_entries:
-                    self.log.info(f"the following recipe steps have been selected for execution:")
-                    self.log.info(f"    [bold green]{' '.join(scheduled_steps)}[/bold green]")
-
-                # now recurse into sub-recipes. If nothing was specified for a sub-recipe,
-                # we still need to recurse in to make sure it applies its tags,
-                for label, step in self.steps.items():
-                    if label in active_steps and isinstance(step.cargo, Recipe):
-                        options = subrecipe_entries.get(label, ([],[],[],[],[]))
-                        step.cargo.restrict_steps(*options)
-
-                return len(scheduled_steps)
-        except StepSelectionError as exc:
-            log_exception(exc, log=self.log)
-            raise exc
+        return len(enabled_steps)
 
 
     def add_step(self, step: Step, label: str = None):
@@ -1399,6 +1343,51 @@ class Recipe(Cargo):
             steps = subst.steps
             subst.update(subst_copy)
             subst.current.steps = steps
+
+    def to_dag(
+        self,
+        graph: Optional[nx.DiGraph] = None,
+        parent: Optional[str] = None
+    ) -> nx.DiGraph:
+        """Converts a stimela recipe into a simple directed acyclic graph.
+
+        Uses networkx to convert a (possibly) nested recipe into a directed
+        acyclic graph where node are recipes steps, and each step has its tags
+        stored as node attributes. The output of this function can be used to
+        reason about overall flow control.
+
+        Args:
+            graph:
+                Parent graph. Implementation detail for recursion.
+            parent:
+                Parent node to connect children to. Implentation detail for
+                recursion.
+
+        Returns:
+            A networkx.DiGraph representing the recipe.
+        """
+
+        # Here, root is a just a graph attribute we set for convenience.
+        graph = graph or nx.DiGraph(root=self.fqname)
+
+        if parent is None:  # Implies outermost level.
+            graph.add_node(self.fqname)  # Add the recipe as a root node.
+            parent = self.fqname
+
+        for step_name, step in self.steps.items():
+            tags = tuple(getattr(step, "tags", []))
+
+            # Use verbose keys as we cannot guarantee uniqueness between
+            # subrecipes.
+            node_name = ".".join((self.fqname, step_name))
+            graph.add_node(node_name, tags=tags)
+            graph.add_edge(parent, node_name)
+
+            if isinstance(step.cargo, Recipe):
+                graph = step.cargo.to_dag(graph=graph, parent=node_name)
+
+        return graph
+
 
 StepSchema = OmegaConf.structured(Step)
 RecipeSchema = OmegaConf.structured(Recipe)
