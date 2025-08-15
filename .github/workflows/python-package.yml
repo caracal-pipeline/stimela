@@ -31,7 +31,7 @@ jobs:
     - name: Install stimela
       run: uv sync --group tests
     - name: Run stimela to check for successful install
-      run: uv run stimela
+      run: uv run stimela --help
     - name: Test with pytest
       run: uv run pytest tests
     # The following will be replaced with ruff in a subsequent PR.
