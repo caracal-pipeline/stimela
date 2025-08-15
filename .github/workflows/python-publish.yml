@@ -31,7 +31,7 @@ jobs:
       with:
         version: "0.8.5"
     - name: Install stimela
-      run: uv sync --with docs
+      run: uv sync --group docs
     - name: Build stimela
       run: uv build
     - name: Publish to pypi
