@@ -9,6 +9,7 @@ authors = [
 requires-python = ">=3.9,<3.14"
 readme = "README.rst"
 license = "GPL-2.0-only"
+license-files = ["LICENSE"]
 dependencies = [
     "munch>=2.5.0,<3",
     "omegaconf~=2.1",
