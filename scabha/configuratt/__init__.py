@@ -1,16 +1,16 @@
 import os.path
 import uuid
 from dataclasses import make_dataclass
-from typing import Any, List, Dict, Optional, OrderedDict, Union, Callable
-from omegaconf.omegaconf import OmegaConf, DictConfig, ListConfig
+from typing import Callable, List, Optional, Union
+
 from omegaconf.errors import OmegaConfBaseException
+from omegaconf.omegaconf import DictConfig, ListConfig, OmegaConf
 from yaml.error import YAMLError
 
-from scabha.exceptions import ScabhaBaseException
+from .cache import load_cache, save_cache
+from .common import ConfigurattError, pop_conf
 from .deps import ConfigDependencies
 from .resolvers import resolve_config_refs
-from .cache import load_cache, save_cache
-from .common import *
 
 
 def load(
@@ -121,12 +121,12 @@ def load_nested(
     use_sources : Optional[List[DictConfig]]
         list of existing configs to be used to resolve "_use" references, or None to disable
     location : Optional[str]
-        if set, contents of files are being loaded under 'location.subsection_name'. If not set, then 'subsection_name' is being
-        loaded at root level. This is used for correctly formatting error messages and such.
+        if set, contents of files are being loaded under 'location.subsection_name'. If not set, then
+        'subsection_name' is being loaded at root level. This is used for correctly formatting error messages and such.
     nameattr : Union[Callable, str, None]
-        if None, subsection_name will be taken from the basename of the file. If set to a string such as 'name', will set
-        subsection_name from that field in the subsection config. If callable, will be called with the subsection config object as a single
-        argument, and must return the subsection name
+        if None, subsection_name will be taken from the basename of the file. If set to a string such as 'name', will
+        set subsection_name from that field in the subsection config. If callable, will be called with the subsection
+        config object as a single argument, and must return the subsection name
     config_class : Optional[str]
         name of config dataclass to form (when using typeinfo), if None, then generated automatically
     include_path : Optional[str]
@@ -217,7 +217,7 @@ def check_requirements(conf: DictConfig, bases: List[DictConfig], strict: bool =
                     break
                 try:
                     section = section[elem]
-                except Exception as exc:
+                except Exception:
                     break
             # got to the end? Success
             else:
@@ -226,9 +226,8 @@ def check_requirements(conf: DictConfig, bases: List[DictConfig], strict: bool =
         return False
 
     def _scan(section, location=""):
-        # Short-circuit out if section is empty. Seems both DictConfig and ListConfig can be a kind of None
-        # (funny OmegeConf API feature), where they're an instance of DictConfig or ListConfig, but don't support __getitem__.
-        #
+        # Short-circuit out if section is empty. Seems both DictConfig and ListConfig can be a kind of None (funny
+        # OmegeConf API feature), where they're an instance of DictConfig or ListConfig, but don't support __getitem__.
         if not section:
             return [], False
 
