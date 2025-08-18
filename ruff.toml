@@ -2,5 +2,5 @@ line-length = 120
 
 target-version = "py310"
 
-# [lint]
-# extend-select = ["E501"]
+[lint]
+extend-select = ["E501"]
