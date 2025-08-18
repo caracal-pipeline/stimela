@@ -3,7 +3,7 @@ import importlib
 import re
 import traceback
 
-# need * imports from both to make eval(self.dtype, globals()) work
+# Imports of typing and scabha.basetypes needed for calling eval on arbitrary type strings.
 import typing
 import warnings
 from collections import OrderedDict
