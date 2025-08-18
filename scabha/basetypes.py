@@ -3,7 +3,6 @@ from dataclasses import field, dataclass
 from collections import OrderedDict
 from typing import List, Union, get_args, get_origin, Any
 import os.path
-import re
 from .exceptions import UnsetError
 from itertools import zip_longest
 from typeguard import (
@@ -108,30 +107,60 @@ class URI(str):
 class File(URI):
     @property
     def NAME(self):
-        return File(os.path.basename(self))
+        """
+        Returns:
+            str: Input filename as a string
+        """
+        return os.path.basename(self)
 
     @property
     def PATH(self):
+        """
+        Returns:
+            File: Absolute path of file (os.path.abspath)
+        """
         return File(os.path.abspath(self))
 
     @property
     def DIR(self):
+        """
+        Returns:
+            File: Path to parent directory
+        """
         return File(os.path.dirname(self))
 
     @property
     def BASEPATH(self):
-        return File(os.path.splitext(self)[0])
+        """
+        Returns:
+            str: Filename withtout the extension
+        """
+        return os.path.splitext(self)[0]
 
     @property
     def BASENAME(self):
-        return File(os.path.splitext(self.NAME)[0])
+        """
+        Returns:
+            str: Base name of file
+        """
+        return os.path.splitext(self.NAME)[0]
 
     @property
     def EXT(self):
+        """
+
+        Returns:
+            str : File extension
+        """
         return os.path.splitext(self)[1]
 
     @property
     def EXISTS(self):
+        """
+
+        Returns:
+            bool: Does the file exist?
+        """
         return os.path.exists(self)
 
 class Directory(File):
