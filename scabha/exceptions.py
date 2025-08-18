@@ -1,10 +1,11 @@
 import sys
-from typing import List, Union, Dict
-from typing import Optional as _Optional
-from types import TracebackType
-from collections import OrderedDict
-from omegaconf import DictConfig
 import traceback
+from collections import OrderedDict
+from types import TracebackType
+from typing import Dict, List, Union
+from typing import Optional as _Optional
+
+from omegaconf import DictConfig
 
 logger = None
 
@@ -27,7 +28,7 @@ class FormattedTraceback(object):
     """This holds the lines of a formatted traceback object."""
 
     def __init__(self, tb: TracebackType):
-        self.lines = [l.rstrip() for l in traceback.format_tb(tb)]
+        self.lines = [ln.rstrip() for ln in traceback.format_tb(tb)]
 
 
 class StimelaPendingDeprecationWarning(PendingDeprecationWarning):
