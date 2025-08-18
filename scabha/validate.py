@@ -1,23 +1,24 @@
+# ruff: noqa: E731 - ignore assignment of lambda expressions. TODO(JSKenyon): Fix this.
 import dataclasses
+import keyword
 import os
 import os.path
-import yaml
-import re
-import keyword
 import pathlib
-from typing import *
+import re
 from collections import OrderedDict
+from typing import List, Dict, Any, Optional
 
 import pydantic
 import pydantic.dataclasses
-
-from omegaconf import OmegaConf, ListConfig, DictConfig
+import yaml
+from omegaconf import DictConfig, ListConfig, OmegaConf
 
 from scabha.basetypes import Unresolved
-from .exceptions import Error, ParameterValidationError, SchemaError, SubstitutionErrorList
-from .substitutions import SubstitutionNS, substitutions_from
-from .basetypes import URI, File, Directory, MS, UNSET
+
+from .basetypes import MS, UNSET, URI, Directory, File
 from .evaluator import Evaluator
+from .exceptions import Error, ParameterValidationError, SubstitutionErrorList
+from .substitutions import SubstitutionNS, substitutions_from
 
 
 def join_quote(values):
@@ -72,18 +73,19 @@ def validate_parameters(
 
     Args:
         params (Dict[str, Any]):   map of input parameter values
-        schemas (Dict[str, Any]):   map of parameter names to schemas. Each schema must contain a dtype field and a choices field.
+        schemas (Dict[str, Any]):   map of parameter names to schemas. Each schema must contain a dtype field and a
+            choices field.
         defaults (Dict[str, Any], optional): dictionary of default values to be used when a value is missing
         subst (SubsititionNS, optional): namespace to do {}-substitutions on parameter values
-        fqname: fully-qualified name of the parameter set (e.g. "recipe_name.step_name"), used in error messages. If not given,
-                errors will report parameter names only
+        fqname: fully-qualified name of the parameter set (e.g. "recipe_name.step_name"), used in error messages. If
+            not given, errors will report parameter names only
 
         check_unknowns (bool): if True, unknown parameters (not in schema) raise an error
         check_required (bool): if True, missing parameters with required=True will raise an error
-        check_inputs_exist (bool): if True, input files with must_exist={None,True} in schema must exist, or will raise an error.
-                                   If False, doesn't check.
-        check_outputs_exist (bool): if True, output files with must_exist=True in schema must exist, or will raise an error.
-                                   If False, doesn't check.
+        check_inputs_exist (bool): if True, input files with must_exist={None,True} in schema must exist, or will
+            raise an error. If False, doesn't check.
+        check_outputs_exist (bool): if True, output files with must_exist=True in schema must exist, or will raise an
+            error. If False, doesn't check.
         create_dirs (bool): if True, non-existing directories in filenames (and parameters with mkdir=True in schema)
                             will be created.
         ignore_subst_errors (bool): if True, substitution errors will be ignored
@@ -217,7 +219,7 @@ def validate_parameters(
                     files = yaml.safe_load(value)
                     if type(files) is not list:
                         files = [value]
-                except Exception as exc:
+                except Exception:
                     files = [value]
             elif isinstance(value, (list, tuple)):
                 files = value
