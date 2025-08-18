@@ -1,6 +1,8 @@
+# ruff: noqa: F405 - Ignore errors related to * imports.
 import dataclasses
 import warnings
-import re, importlib
+import re
+import importlib
 import traceback
 from collections import OrderedDict
 from enum import IntEnum
@@ -17,15 +19,14 @@ from .exceptions import (
     DefinitionError,
     SchemaError,
     AssignmentError,
-    StimelaDeprecationWarning,
     StimelaPendingDeprecationWarning,
 )
 from .validate import validate_parameters, Unresolved
 from .substitutions import SubstitutionNS
 
 # need * imports from both to make eval(self.dtype, globals()) work
-from typing import *
-from .basetypes import *
+from typing import *  # noqa: F403
+from .basetypes import *  # noqa: F403
 
 ## almost supported by omegaconf, see https://github.com/omry/omegaconf/issues/144, for now just use Any
 ListOrString = Any
@@ -135,7 +136,8 @@ class Parameter(object):
     writable: bool = False
     # data type
     dtype: str = "str"
-    # specifies that the value is implicitly set inside the step (i.e. not a free parameter). Typically used with filenames
+    # specifies that the value is implicitly set inside the step (i.e. not a free parameter).
+    # Typically used with filenames,
     implicit: Any = None
     # optonal list of arbitrary tags, used to group parameters
     tags: List[str] = EmptyListDefault()
@@ -154,7 +156,7 @@ class Parameter(object):
     # default value
     default: Any = _UNSET_DEFAULT
 
-    # list of aliases for this parameter (i.e. references to other parameters whose schemas/values this parameter shares)
+    # list of aliases for this parameter (references to other parameters whose schemas/values this parameter shares)
     aliases: Optional[List[str]] = ()
 
     # if true, create empty directory for the output itself, if it doesn't exist
@@ -173,7 +175,8 @@ class Parameter(object):
     # May be deprecated in favour of path_policies.must_exist in the future
     must_exist: Optional[bool] = None
 
-    # for file and dir-type parameters: if True, ignore them when making processing logic decisions based on file freshness
+    # for file and dir-type parameters: if True, ignore them when making processing logic decisions based
+    # on file freshness
     skip_freshness_checks: Optional[bool] = None
 
     # if command-line option for underlying binary has a different name, specify it here
@@ -240,9 +243,9 @@ class Parameter(object):
             )
             self.path_policies.write_parent = self.write_parent_dir
 
-        # converts string dtype into proper type object
-        # yes I know eval() is naughty but this is the best we can do for now
-        # see e.g. https://stackoverflow.com/questions/67500755/python-convert-type-hint-string-representation-from-docstring-to-actual-type-t
+        # Converts string dtype into proper type object.
+        # NOTE(o-smirnov): yes I know eval() is naughty but this is the best we can do for now see e.g.
+        # https://stackoverflow.com/questions/67500755/python-convert-type-hint-string-representation-from-docstring-to-actual-type-t
         # The alternative is a non-standard API call i.e. typing._eval_type()
         try:
             self._dtype = eval(self.dtype, globals())
@@ -448,9 +451,9 @@ class Cargo(object):
             params = {key: value for key, value in params.items() if value is not UNSET and type(value) is not UNSET}
             try:
                 self.inputs, self.outputs = self._dyn_schema(params, *self._original_inputs_outputs)
-            except Exception as exc:
+            except Exception:
                 lines = traceback.format_exc().strip().split("\n")
-                raise SchemaError(f"error evaluating dynamic schema", lines)  # [exc, sys.exc_info()[2]])
+                raise SchemaError("error evaluating dynamic schema", lines)  # [exc, sys.exc_info()[2]])
             self._inputs_outputs = None  # to regenerate
             for io in self.inputs, self.outputs:
                 for name, schema in list(io.items()):
@@ -458,7 +461,7 @@ class Cargo(object):
                         try:
                             schema = OmegaConf.unsafe_merge(ParameterSchema.copy(), schema)
                         except Exception as exc:
-                            raise SchemaError(f"error in dynamic schema for parameter 'name'", exc)
+                            raise SchemaError("error in dynamic schema for parameter 'name'", exc)
                         io[name] = Parameter(**schema)
             # new outputs may have been added
             for schema in self.outputs.values():
