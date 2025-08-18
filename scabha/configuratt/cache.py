@@ -1,23 +1,15 @@
-import os.path
-import sys
 import glob
 import hashlib
+import os.path
 import pathlib
+import sys
+from typing import List
+
 import dill as pickle
 
-import uuid
-from dataclasses import make_dataclass
 
-from omegaconf.omegaconf import OmegaConf, DictConfig, ListConfig
-from omegaconf.errors import OmegaConfBaseException
-from typing import Any, List, Dict, Optional, OrderedDict, Union, Callable
-
-from scabha.exceptions import ScabhaBaseException
-
-from yaml.error import YAMLError
+from .common import PACKAGE_VERSION
 from .deps import ConfigDependencies
-from .resolvers import resolve_config_refs
-from .common import *
 
 # path for cache
 CACHEDIR = os.environ.get("CONFIGURATT_CACHE_DIR") or os.path.expanduser("~/.cache/configuratt")
@@ -39,7 +31,7 @@ def clear_cache(log=None):
         log and log.info(f"clearing {len(files)} cached config(s) from cache")
     else:
         files = []
-        log and log.info(f"no configs in cache")
+        log and log.info("no configs in cache")
     for filename in files:
         try:
             os.unlink(filename)
