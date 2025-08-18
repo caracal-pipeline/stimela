@@ -1,26 +1,27 @@
-import glob
-import os.path
-import fnmatch
-import pyparsing
-
-pyparsing.ParserElement.enable_packrat()
-from pyparsing import *
-from pyparsing import common
-from functools import reduce
-import operator
+# ruff: noqa: E741 - ignore ambiguous variable name.
 import dataclasses
-
-from .substitutions import SubstitutionError, SubstitutionContext
-from .basetypes import Unresolved, UNSET
-from .exceptions import *
-
+import fnmatch
+import glob
+import operator
+import os.path
 import typing
-from typing import Dict, List, Any
+from functools import reduce
+from typing import Any, Dict, List
+from collections import OrderedDict
+
+import pyparsing as pp
 from omegaconf import DictConfig, ListConfig
+
+from .basetypes import UNSET, Unresolved
+from .exceptions import FormulaError, ParserError, UnsetError
+from .substitutions import SubstitutionContext, SubstitutionError
+
+pp.ParserElement.enable_packrat()
 
 _parser = None
 
-# see https://stackoverflow.com/questions/43244861/pyparsing-infixnotation-optimization for a cleaner parser with functions
+# see https://stackoverflow.com/questions/43244861/pyparsing-infixnotation-optimization
+# for a cleaner parser with functions
 
 
 def _not_operator(value):
@@ -195,7 +196,7 @@ class FunctionHandler(ResultsHandler):
             raise FormulaError(f"{'.'.join(evaluator.location)}: VALID() expects one argument, got {len(args)}")
         try:
             result = evaluator._evaluate_result(args[0], allow_unset=True)
-        except (TypeError, ValueError) as exc:
+        except (TypeError, ValueError):
             return False
         if isinstance(result, Unresolved):
             return False
@@ -362,28 +363,28 @@ class FunctionHandler(ResultsHandler):
 
 
 def construct_parser():
-    lparen = Literal("(").suppress()
-    rparen = Literal(")").suppress()
-    lbrack = Literal("[").suppress()
-    rbrack = Literal("]").suppress()
-    comma = Literal(",").suppress()
-    period = Literal(".").suppress()
-    string = (QuotedString('"') | QuotedString("'"))("constant")
-    UNSET = Keyword("UNSET")("unset")
-    SELF = Keyword("SELF")("self_value")
-    EMPTY = Keyword("EMPTY")("empty")
-    bool_false = (Keyword("False") | Keyword("false"))("bool_false").set_parse_action(lambda: [False])
-    bool_true = (Keyword("True") | Keyword("true"))("bool_true").set_parse_action(lambda: [True])
+    lparen = pp.Literal("(").suppress()
+    rparen = pp.Literal(")").suppress()
+    lbrack = pp.Literal("[").suppress()
+    rbrack = pp.Literal("]").suppress()
+    comma = pp.Literal(",").suppress()  # noqa: F841 - unusued
+    period = pp.Literal(".").suppress()
+    string = (pp.QuotedString('"') | pp.QuotedString("'"))("constant")
+    UNSET = pp.Keyword("UNSET")("unset")
+    SELF = pp.Keyword("SELF")("self_value")
+    EMPTY = pp.Keyword("EMPTY")("empty")
+    bool_false = (pp.Keyword("False") | pp.Keyword("false"))("bool_false").set_parse_action(lambda: [False])
+    bool_true = (pp.Keyword("True") | pp.Keyword("true"))("bool_true").set_parse_action(lambda: [True])
 
     boolean = (bool_true | bool_false)("constant")
-    number = common.number("constant")
+    number = pp.common.number("constant")
 
-    fieldname = Word(alphas + "_", alphanums + "_-@*?")
-    nested_field = Group(fieldname + OneOrMore(period + fieldname))("namespace_lookup")
-    anyseq = CharsNotIn(",)")("constant")
+    fieldname = pp.Word(pp.alphas + "_", pp.alphanums + "_-@*?")
+    nested_field = pp.Group(fieldname + pp.OneOrMore(period + fieldname))("namespace_lookup")
+    anyseq = pp.CharsNotIn(",)")("constant")
 
     # allow expression to be used recursively
-    expr = Forward()
+    expr = pp.Forward()
 
     # functions -- get all all-uppercase members from FunctionHandler
     anyseq_funcnames = {"GLOB", "EXISTS", "ERROR"}
@@ -392,36 +393,41 @@ def construct_parser():
     )
     all_funcnames -= anyseq_funcnames
 
-    functions = reduce(operator.or_, map(Keyword, all_funcnames))
+    functions = reduce(operator.or_, map(pp.Keyword, all_funcnames))
     # these functions take one argument, which could also be a sequence
-    anyseq_functions = reduce(operator.or_, map(Keyword, anyseq_funcnames))
+    anyseq_functions = reduce(operator.or_, map(pp.Keyword, anyseq_funcnames))
 
     atomic_value = boolean | UNSET | EMPTY | nested_field | string | number
 
-    function_call_anyseq = Group(anyseq_functions + lparen + (expr | anyseq) + rparen).setParseAction(
+    function_call_anyseq = pp.Group(anyseq_functions + lparen + (expr | anyseq) + rparen).setParseAction(
         FunctionHandler.pa
     )
-    function_call = Group(functions + lparen + Opt(delimited_list(expr | SELF)) + rparen).setParseAction(
+    function_call = pp.Group(functions + lparen + pp.Opt(pp.delimited_list(expr | SELF)) + rparen).setParseAction(
         FunctionHandler.pa
     )
 
     operators = [
-        ((lbrack + expr + rbrack), 1, opAssoc.LEFT, GetItemHandler.pa),
-        (Literal("**"), 2, opAssoc.LEFT, BinaryHandler.pa),
-        (Literal("-") | Literal("+") | Literal("~"), 1, opAssoc.RIGHT, UnaryHandler.pa),
-        (Literal("*") | Literal("//") | Literal("/") | Literal("%"), 2, opAssoc.LEFT, BinaryHandler.pa),
-        (Literal("+") | Literal("-"), 2, opAssoc.LEFT, BinaryHandler.pa),
-        (Literal("<<") | Literal(">>"), 2, opAssoc.LEFT, BinaryHandler.pa),
-        (Literal("&"), 2, opAssoc.LEFT, BinaryHandler.pa),
-        (Literal("^"), 2, opAssoc.LEFT, BinaryHandler.pa),
-        (Literal("|"), 2, opAssoc.LEFT, BinaryHandler.pa),
-        (reduce(operator.or_, map(Literal, ("==", "!=", ">=", "<=", ">", "<"))), 2, opAssoc.LEFT, BinaryHandler.pa),
-        (CaselessKeyword("in") | CaselessKeyword("not in"), 2, opAssoc.LEFT, BinaryHandler.pa),
-        (CaselessKeyword("not"), 1, opAssoc.RIGHT, UnaryHandler.pa),
-        (CaselessKeyword("and") | CaselessKeyword("or"), 2, opAssoc.LEFT, BinaryHandler.pa),
+        ((lbrack + expr + rbrack), 1, pp.opAssoc.LEFT, GetItemHandler.pa),
+        (pp.Literal("**"), 2, pp.opAssoc.LEFT, BinaryHandler.pa),
+        (pp.Literal("-") | pp.Literal("+") | pp.Literal("~"), 1, pp.opAssoc.RIGHT, UnaryHandler.pa),
+        (pp.Literal("*") | pp.Literal("//") | pp.Literal("/") | pp.Literal("%"), 2, pp.opAssoc.LEFT, BinaryHandler.pa),
+        (pp.Literal("+") | pp.Literal("-"), 2, pp.opAssoc.LEFT, BinaryHandler.pa),
+        (pp.Literal("<<") | pp.Literal(">>"), 2, pp.opAssoc.LEFT, BinaryHandler.pa),
+        (pp.Literal("&"), 2, pp.opAssoc.LEFT, BinaryHandler.pa),
+        (pp.Literal("^"), 2, pp.opAssoc.LEFT, BinaryHandler.pa),
+        (pp.Literal("|"), 2, pp.opAssoc.LEFT, BinaryHandler.pa),
+        (
+            reduce(operator.or_, map(pp.Literal, ("==", "!=", ">=", "<=", ">", "<"))),
+            2,
+            pp.opAssoc.LEFT,
+            BinaryHandler.pa,
+        ),
+        (pp.CaselessKeyword("in") | pp.CaselessKeyword("not in"), 2, pp.opAssoc.LEFT, BinaryHandler.pa),
+        (pp.CaselessKeyword("not"), 1, pp.opAssoc.RIGHT, UnaryHandler.pa),
+        (pp.CaselessKeyword("and") | pp.CaselessKeyword("or"), 2, pp.opAssoc.LEFT, BinaryHandler.pa),
     ]
 
-    infix = infix_notation(atomic_value | function_call | function_call_anyseq | nested_field, operators)(
+    infix = pp.infix_notation(atomic_value | function_call | function_call_anyseq | nested_field, operators)(
         "subexpression"
     )
 
@@ -515,7 +521,7 @@ class Evaluator(object):
         return self._evaluate_result(value, allow_unset=True, subst=subst)
 
     def namespace_lookup(self, *args, subst=True):
-        if len(args) == 1 and type(args[0]) is ParseResults:
+        if len(args) == 1 and type(args[0]) is pp.ParseResults:
             args = args[0]
             assert args._name == "namespace_lookup"
         value = self.ns
@@ -547,7 +553,7 @@ class Evaluator(object):
             value = parse_result.evaluate(self)
 
         # if result is already a constant, resolve it
-        elif type(parse_result) is not ParseResults:
+        elif type(parse_result) is not pp.ParseResults:
             return self._resolve(parse_result, subst=subst)
 
         # lookup processing method based on name
