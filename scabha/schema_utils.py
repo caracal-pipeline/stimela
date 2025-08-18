@@ -1,15 +1,18 @@
-import os
+# ruff: noqa: E731 - ignore assignment of lambda expressions. TODO(JSKenyon): Fix this.
 import re
-import click
-from scabha.exceptions import SchemaError
-from .cargo import Parameter, UNSET, _UNSET_DEFAULT, Cargo, ParameterPolicies
-from typing import List, Union, Optional, Callable, Dict, DefaultDict, Any
-from .basetypes import EmptyDictDefault, File, is_file_type
-from dataclasses import dataclass, make_dataclass, field, asdict
-from omegaconf import OmegaConf, MISSING
-from collections.abc import MutableSet, MutableSequence, MutableMapping
-from scabha import configuratt
 from collections import OrderedDict
+from collections.abc import MutableMapping, MutableSequence, MutableSet
+from dataclasses import asdict, dataclass, field, make_dataclass
+from typing import Any, Callable, Dict, List, Optional, Union
+
+import click
+from omegaconf import MISSING, OmegaConf
+
+from scabha import configuratt
+from scabha.exceptions import SchemaError
+
+from .basetypes import EmptyDictDefault, File, is_file_type
+from .cargo import _UNSET_DEFAULT, UNSET, Cargo, Parameter, ParameterPolicies
 
 
 def schema_to_dataclass(io: Dict[str, Parameter], class_name: str, bases=(), post_init: Optional[Callable] = None):
@@ -293,7 +296,8 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]], default_policies: D
                     if policies.repeat == "list":
                         if not policies.positional:
                             raise SchemaError(
-                                f"click parameter '{name}': repeat=list policy is only supported for positional=true parameters"
+                                f"click parameter '{name}': repeat=list policy is only supported for "
+                                f"positional=true parameters"
                             )
                         nargs = -1
                         dtype = elem_type
