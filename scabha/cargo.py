@@ -1,32 +1,41 @@
-# ruff: noqa: F405 - Ignore errors related to * imports.
 import dataclasses
-import warnings
-import re
 import importlib
+import re
 import traceback
+
+# need * imports from both to make eval(self.dtype, globals()) work
+import typing
+import warnings
 from collections import OrderedDict
-from enum import IntEnum
 from dataclasses import dataclass
-from omegaconf import ListConfig, DictConfig, OmegaConf
+from enum import IntEnum
+from typing import Any, Dict, List, Optional
 
 import rich.box
 import rich.markup
-from rich.table import Table
+from omegaconf import DictConfig, ListConfig, OmegaConf
 from rich.markdown import Markdown
+from rich.table import Table
+
+from scabha import basetypes
+from scabha.basetypes import (
+    UNSET,
+    EmptyClassDefault,
+    EmptyDictDefault,
+    EmptyListDefault,
+    is_file_list_type,
+    is_file_type,
+)
 
 from .exceptions import (
-    ParameterValidationError,
-    DefinitionError,
-    SchemaError,
     AssignmentError,
+    DefinitionError,
+    ParameterValidationError,
+    SchemaError,
     StimelaPendingDeprecationWarning,
 )
-from .validate import validate_parameters, Unresolved
 from .substitutions import SubstitutionNS
-
-# need * imports from both to make eval(self.dtype, globals()) work
-from typing import *  # noqa: F403
-from .basetypes import *  # noqa: F403
+from .validate import Unresolved, validate_parameters
 
 ## almost supported by omegaconf, see https://github.com/omry/omegaconf/issues/144, for now just use Any
 ListOrString = Any
@@ -248,7 +257,7 @@ class Parameter(object):
         # https://stackoverflow.com/questions/67500755/python-convert-type-hint-string-representation-from-docstring-to-actual-type-t
         # The alternative is a non-standard API call i.e. typing._eval_type()
         try:
-            self._dtype = eval(self.dtype, globals())
+            self._dtype = eval(self.dtype, vars(typing) | vars(basetypes))
         except Exception as exc:
             raise SchemaError(f"'{self.dtype}' is not a valid dtype", exc)
 
