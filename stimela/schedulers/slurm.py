@@ -1,5 +1,5 @@
 import shlex
-from typing import Dict, Optional, Any 
+from typing import Dict, Optional, Any
 from stimela.kitchen.batch import Batch
 from stimela import logger
 from stimela.utils.xrun_poll import xrun
@@ -9,8 +9,8 @@ import subprocess
 
 binary = "srun"
 
-class SlurmBatch(Batch):
 
+class SlurmBatch(Batch):
     def exists(self):
         try:
             subprocess.check_output(["which", binary])
@@ -27,7 +27,7 @@ class SlurmBatch(Batch):
             fh.writelines(f"#SBATCH --qos=normal\n")
             fh.writelines(f"#SBATCH --mail-type=ALL\n")
             fh.writelines(f"#SBATCH --error=stimela_slurm_{self.name}.err\n")
-            #fh.writelines(f"#SBATCH --time=2-00:00\n")
+            # fh.writelines(f"#SBATCH --time=2-00:00\n")
             if self.mem:
                 fh.writelines(f"#SBATCH --mem={self.mem}\n")
             if self.cpus:
@@ -41,9 +41,15 @@ class SlurmBatch(Batch):
             fh.writelines(f"{runcmd}\n")
 
         self.log.info(f"Submiting job to schedular. The job name is {jobname}")
-        retcode = xrun(binary, [jobfile], shell=False, log=self.log, 
-                    output_wrangler=self.cab.apply_output_wranglers, 
-                    return_errcode=True, command_name=binary)
+        retcode = xrun(
+            binary,
+            [jobfile],
+            shell=False,
+            log=self.log,
+            output_wrangler=self.cab.apply_output_wranglers,
+            return_errcode=True,
+            command_name=binary,
+        )
 
         # if retcode is not 0, and cab didn't declare itself a success,
         if retcode:

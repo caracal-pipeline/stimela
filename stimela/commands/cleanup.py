@@ -11,15 +11,17 @@ from stimela.exceptions import RecipeValidationError, BackendError
 
 from .run import load_recipe_files
 
-@cli.command("cleanup",
+
+@cli.command(
+    "cleanup",
     help="""
     Cleans up backend resources associated with recipe(s).
-    """)
-@click.argument("items", nargs=-1, metavar="filename.yml...") 
+    """,
+)
+@click.argument("items", nargs=-1, metavar="filename.yml...")
 def cleanup(items: List[str] = []):
-    
     log = logger()
-        
+
     # load all recipe/config files
     # load config and recipes from all given files
     load_recipe_files(items)
@@ -38,4 +40,3 @@ def cleanup(items: List[str] = []):
         except BackendError as exc:
             log_exception(exc)
             return 1
-

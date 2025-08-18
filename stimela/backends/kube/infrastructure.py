@@ -9,7 +9,15 @@ from stimela.stimelogging import log_exception
 from stimela.task_stats import update_process_status
 
 from stimela.exceptions import BackendError
-from . import session_id, session_user, resource_labels, run_kube, KubeBackendOptions, get_kube_api, get_context_namespace
+from . import (
+    session_id,
+    session_user,
+    resource_labels,
+    run_kube,
+    KubeBackendOptions,
+    get_kube_api,
+    get_context_namespace,
+)
 
 Lifecycle = KubeBackendOptions.Volume.Lifecycle
 
@@ -33,6 +41,7 @@ session_init_commands: Dict[str, List[str]] = {}
 # logger used for global kube messages
 klog: Optional[logging.Logger] = None
 
+
 def _delete_pod(kube_api, podname, namespace, log, warn_not_found=True):
     log.info(f"deleting pod {podname}")
     try:
@@ -43,11 +52,14 @@ def _delete_pod(kube_api, podname, namespace, log, warn_not_found=True):
         if "reason" in body and body["reason"] == "NotFound" and warn_not_found:
             log.warning(f"pod {podname} not found, this is probably OK, perhaps it just died on its own")
         else:
-            log_exception(BackendError(f"k8s API error while deleting pod {podname}", (exc, body)), 
-                        severity="error", log=log)
+            log_exception(
+                BackendError(f"k8s API error while deleting pod {podname}", (exc, body)), severity="error", log=log
+            )
+
 
 def cleanup(backend: StimelaBackendOptions, log: logging.Logger):
     return init(backend, log, cleanup=True)
+
 
 def init(backend: StimelaBackendOptions, log: logging.Logger, cleanup: bool = False):
     global klog
@@ -66,7 +78,7 @@ def init(backend: StimelaBackendOptions, log: logging.Logger, cleanup: bool = Fa
         log_exception(exc, log=klog)
         log_exception(BackendError("error initializing kube backend", exc), log=klog)
         return False
-    
+
     context, namespace = get_context_namespace()
     klog.info(f"k8s context is {context}, namespace is {namespace}")
 
@@ -74,11 +86,10 @@ def init(backend: StimelaBackendOptions, log: logging.Logger, cleanup: bool = Fa
         klog.info("checking for k8s pods from other sessions")
 
         try:
-            pods = kube_api.list_namespaced_pod(namespace=namespace, 
-                                                label_selector=f"stimela_user={session_user}")
+            pods = kube_api.list_namespaced_pod(namespace=namespace, label_selector=f"stimela_user={session_user}")
         except ApiException as exc:
             raise BackendError(f"k8s API error while listing pods", json.loads(exc.body))
-        
+
         running_pods = []
         for pod in pods.items:
             if pod.status.phase in ("Running", "Pending") and not pod.metadata.deletion_timestamp:
@@ -101,9 +112,12 @@ def init(backend: StimelaBackendOptions, log: logging.Logger, cleanup: bool = Fa
     refresh_pvc_list(kube)
 
     # cleanup transient PVCs
-    transient_pvcs = {name: pvc for name, pvc in active_pvcs.items() 
-                        if pvc.metadata.labels and 'stimela_transient_pvc' in pvc.metadata.labels}
-    
+    transient_pvcs = {
+        name: pvc
+        for name, pvc in active_pvcs.items()
+        if pvc.metadata.labels and "stimela_transient_pvc" in pvc.metadata.labels
+    }
+
     if transient_pvcs:
         if cleanup or kube.infrastructure.on_startup.cleanup_pvcs:
             klog.warning(f"you have {len(transient_pvcs)} transient PVC(s) from another stimela session")
@@ -120,7 +134,7 @@ def init(backend: StimelaBackendOptions, log: logging.Logger, cleanup: bool = Fa
 
     # resolve global-level volumes
     if not cleanup and kube.volumes:
-        resolve_volumes(kube, log=klog, refresh=False) # no refresh needed
+        resolve_volumes(kube, log=klog, refresh=False)  # no refresh needed
 
     return True
 
@@ -135,10 +149,10 @@ def refresh_pvc_list(kube: KubeBackendOptions):
         raise BackendError(f"k8s API error while listing PVCs", json.loads(exc.body)) from None
     pvc_names = []
     terminating_pvcs = {}
-    # convert to PVC entry 
+    # convert to PVC entry
     for pvc in list_pvcs.items:
-        if pvc.metadata.labels and 'stimela_pvc_name' in pvc.metadata.labels:
-            name = pvc.metadata.labels['stimela_pvc_name']
+        if pvc.metadata.labels and "stimela_pvc_name" in pvc.metadata.labels:
+            name = pvc.metadata.labels["stimela_pvc_name"]
         else:
             name = pvc.metadata.name
         # add to terminating list, if marked for deletion
@@ -148,14 +162,14 @@ def refresh_pvc_list(kube: KubeBackendOptions):
         pvc_names.append(name)
         # insert new entry if it doesn't exist
         if name not in active_pvcs:
-            active_pvcs[name] = KubeBackendOptions.Volume(name=pvc.metadata.name, 
-                                    capacity=pvc.spec.resources.requests['storage'], 
-                                    lifecycle=Lifecycle.persist)
+            active_pvcs[name] = KubeBackendOptions.Volume(
+                name=pvc.metadata.name, capacity=pvc.spec.resources.requests["storage"], lifecycle=Lifecycle.persist
+            )
         active_pvcs[name].status = pvc.status.phase
         active_pvcs[name].metadata = pvc.metadata
         active_pvcs[name].owner = pvc.metadata.labels and pvc.metadata.labels.get("stimela_user")
     # delete stale entries
-    active_pvcs = {name: active_pvcs[name] for name in pvc_names} 
+    active_pvcs = {name: active_pvcs[name] for name in pvc_names}
 
 
 def resolve_volumes(kube: KubeBackendOptions, log: logging.Logger, step_token=None, refresh=True):
@@ -169,49 +183,55 @@ def resolve_volumes(kube: KubeBackendOptions, log: logging.Logger, step_token=No
     # look for required PVCs
     for name, pvc in kube.volumes.items():
         exist_policy = pvc.at_step if step_token else pvc.at_start
-        exist_policy_desc = 'at step' if step_token else 'at start'
+        exist_policy_desc = "at step" if step_token else "at start"
         # Exists? Check that size is enough
         pvc0 = active_pvcs.get(name)
         # check for existing PVCs
         if pvc0 is not None:
             if exist_policy == ExistsPolicy.cant_exist:
-                raise BackendError(f"PVC '{name}' already exists: according to its '{exist_policy_desc}' policy, this is an error")
+                raise BackendError(
+                    f"PVC '{name}' already exists: according to its '{exist_policy_desc}' policy, this is an error"
+                )
             # check if we need to re-create
             if exist_policy == ExistsPolicy.recreate:
                 log.info(f"PVC '{name}' already exists: re-creating according to its '{exist_policy_desc}' policy")
                 delete_pvcs(kube, pvc_names=[name], log=log, force=True, refresh=False)
                 pvc0 = None
-            # else reusing -- check capacity 
+            # else reusing -- check capacity
             elif pvc.capacity is None or resolve_unit(pvc.capacity) <= resolve_unit(pvc0.capacity):
                 log.info(f"found existing PVC '{name}' of size {pvc0.capacity}, status is {pvc0.status}")
                 # copy name -- pre-existsing PVC may have been auto-named
                 pvc.name = pvc0.name
             else:
-                raise BackendError(f"Existing PVC '{name}' of size {pvc0.capacity} is smaller than the requested {pvc.capacity}")
-            
+                raise BackendError(
+                    f"Existing PVC '{name}' of size {pvc0.capacity} is smaller than the requested {pvc.capacity}"
+                )
+
         # Doesn't exist? Create
         if pvc0 is None:
             if exist_policy == ExistsPolicy.must_exist:
-                raise BackendError(f"PVC '{name}' doesn't exist: according to its '{exist_policy_desc}' policy, this is an error")
+                raise BackendError(
+                    f"PVC '{name}' doesn't exist: according to its '{exist_policy_desc}' policy, this is an error"
+                )
             if pvc.storage_class_name is None or pvc.capacity is None:
                 raise BackendError(f"Can't create PVC '{name}': storage class name or capacity not specified")
             # create new one
             pvc.name = name
-            pvc.status = 'Creating'
+            pvc.status = "Creating"
             pvc.creation_time = time.time()
             labels = resource_labels.copy()
-            labels['stimela_pvc_name'] = name
-            labels['stimela_pvc_initialized'] = ''
+            labels["stimela_pvc_name"] = name
+            labels["stimela_pvc_initialized"] = ""
             # append token for limited-lifecycle PVCs
             if pvc.append_id:
                 if pvc.lifecycle == Lifecycle.session:
                     pvc.name = f"{name}-{session_id}"
-                    labels['stimela_transient_pvc'] = 'session'
+                    labels["stimela_transient_pvc"] = "session"
                 elif pvc.lifecycle == Lifecycle.step:
                     if step_token is None:
                         raise BackendError(f"PVC '{name}' with lifecycle=step not allowed at infrastructure level")
                     pvc.name = f"{name}-{step_token}"
-                    labels['stimela_transient_pvc'] = 'step'
+                    labels["stimela_transient_pvc"] = "step"
             # if existing PVC with that is still terminating, wait
             if pvc.name in terminating_pvcs:
                 log.info(f"waiting for existing PVC '{pvc.name}' to terminate before re-creating")
@@ -220,9 +240,7 @@ def resolve_volumes(kube: KubeBackendOptions, log: logging.Logger, step_token=No
             newpvc = client.V1PersistentVolumeClaim()
             newpvc.metadata = client.V1ObjectMeta(name=pvc.name, labels=labels)
             if pvc.from_snapshot:
-                data_source = dict(name=pvc.from_snapshot, 
-                                   kind='VolumeSnapshot',
-                                   apiGroup='snapshot.storage.k8s.io')
+                data_source = dict(name=pvc.from_snapshot, kind="VolumeSnapshot", apiGroup="snapshot.storage.k8s.io")
                 log.info(f"creating new PVC '{pvc.name}' of size {pvc.capacity} from snapshot '{pvc.from_snapshot}'")
             else:
                 log.info(f"creating new PVC '{pvc.name}' of size {pvc.capacity}")
@@ -231,7 +249,8 @@ def resolve_volumes(kube: KubeBackendOptions, log: logging.Logger, step_token=No
                 access_modes=list(pvc.access_modes),
                 storage_class_name=pvc.storage_class_name,
                 data_source=data_source,
-                resources=client.V1ResourceRequirements(requests={"storage": pvc.capacity}))
+                resources=client.V1ResourceRequirements(requests={"storage": pvc.capacity}),
+            )
             try:
                 resp = kube_api.create_namespaced_persistent_volume_claim(namespace, newpvc)
             except ApiException as exc:
@@ -267,7 +286,7 @@ def await_pvcs(namespace, pvc_names, log: logging.Logger):
             except ApiException as exc:
                 raise BackendError(f"k8s API error while reading PVC '{pvc.name}'", json.loads(exc.body))
             pvc.status = pvc_entry.status.phase
-            if pvc.status == 'Bound':
+            if pvc.status == "Bound":
                 log.info(f"PVC '{pvc.name}' is now bound")
                 waiting_pvcs.remove(name)
                 continue
@@ -280,6 +299,7 @@ def await_pvcs(namespace, pvc_names, log: logging.Logger):
                 waiting_reported.add(name)
         # wait some more
         time.sleep(1)
+
 
 def _await_pvc_termination(namespace, pvc: KubeBackendOptions.Volume, log: logging.Logger):
     global terminating_pvcs
@@ -304,14 +324,15 @@ def _await_pvc_termination(namespace, pvc: KubeBackendOptions.Volume, log: loggi
         time.sleep(1)
 
 
-
-def delete_pvcs(kube: KubeBackendOptions, pvc_names, log: logging.Logger, force=False, step=True, session=False, refresh=True):
+def delete_pvcs(
+    kube: KubeBackendOptions, pvc_names, log: logging.Logger, force=False, step=True, session=False, refresh=True
+):
     namespace, kube_api, _ = get_kube_api()
     global terminating_pvcs
 
     if refresh:
         refresh_pvc_list(kube)
-    
+
     for name in pvc_names:
         if name in terminating_pvcs:
             continue
@@ -319,21 +340,26 @@ def delete_pvcs(kube: KubeBackendOptions, pvc_names, log: logging.Logger, force=
         pvc = active_pvcs.get(name)
         if pvc is None:
             raise BackendError(f"'{name}' does not refer to a previously defined PVC")
-        
-        if pvc.status != 'Terminating' and \
-            force or \
-            (step and pvc.lifecycle == Lifecycle.step) or \
-            (session and pvc.lifecycle == Lifecycle.session):
+
+        if (
+            pvc.status != "Terminating"
+            and force
+            or (step and pvc.lifecycle == Lifecycle.step)
+            or (session and pvc.lifecycle == Lifecycle.session)
+        ):
             log.info(f"deleting PVC '{pvc.name}'")
             try:
                 resp = kube_api.delete_namespaced_persistent_volume_claim(name=pvc.name, namespace=namespace)
             except ApiException as exc:
                 body = json.loads(exc.body)
-                log_exception(BackendError(f"k8s API error while deleting PVC '{pvc.name}'", (exc, body)), 
-                                severity="error", log=log)
+                log_exception(
+                    BackendError(f"k8s API error while deleting PVC '{pvc.name}'", (exc, body)),
+                    severity="error",
+                    log=log,
+                )
                 continue
             log.debug(f"delete_namespaced_persistent_volume_claim({pvc.name}): {resp}")
-            pvc.status = 'Terminating'
+            pvc.status = "Terminating"
             terminating_pvcs[pvc.name] = name
 
 
@@ -341,8 +367,8 @@ def close(backend: StimelaBackendOptions, log: logging.Logger):
     kube = backend.kube
     context, namespace = get_context_namespace()
     if context is None:
-        return 
-    
+        return
+
     klog.info("closing kube backend")
 
     # release PVCs
@@ -350,16 +376,15 @@ def close(backend: StimelaBackendOptions, log: logging.Logger):
 
     # cleanup pods, if any
     if kube.infrastructure.on_exit.cleanup_pods:
-        namespace, kube_api, _ = run_kube.get_kube_api() 
+        namespace, kube_api, _ = run_kube.get_kube_api()
 
         try:
-            pods = kube_api.list_namespaced_pod(namespace=namespace, 
-                                                label_selector=f"stimela_session_id={session_id}")
+            pods = kube_api.list_namespaced_pod(namespace=namespace, label_selector=f"stimela_session_id={session_id}")
         except ApiException as exc:
             body = json.loads(exc.body)
             log_exception(BackendError(f"k8s API error while listing pods", (exc, body)), severity="error", log=klog)
             return
-        
+
         running_pods = []
         for pod in pods.items:
             if pod.status.phase in ("Running", "Pending") and not pod.metadata.deletion_timestamp:
@@ -372,4 +397,3 @@ def close(backend: StimelaBackendOptions, log: logging.Logger):
                 _delete_pod(kube_api, podname, namespace, klog)
 
     atexit.unregister(close)
-

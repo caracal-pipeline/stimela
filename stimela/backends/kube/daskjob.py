@@ -48,14 +48,9 @@ def create_parser():
         "-v",
         "--volume",
         nargs="*",
-        help=(
-            "PersistentVolumeClaims that will be mounted into the pod."
-            "Should be of the form pvc-name:mount_point"
-        ),
+        help=("PersistentVolumeClaims that will be mounted into the pod.Should be of the form pvc-name:mount_point"),
     )
-    p.add_argument(
-        "-w", "--nworkers", default=1, type=int, help="Number of dask workers to launch"
-    )
+    p.add_argument("-w", "--nworkers", default=1, type=int, help="Number of dask workers to launch")
     p.add_argument(
         "-cr",
         "--cpu-request",
@@ -76,9 +71,7 @@ def create_parser():
         type=float,
         help="cpu limit for the worker pods",
     )
-    p.add_argument(
-        "-ml", "--mem-limit", default="1Gi", help="memory limit for the worker pods"
-    )
+    p.add_argument("-ml", "--mem-limit", default="1Gi", help="memory limit for the worker pods")
 
     return p
 
@@ -100,7 +93,7 @@ def daskjob_template(args):
     return {
         "apiVersion": "kubernetes.dask.org/v1",
         "kind": "DaskJob",
-        "metadata": {"name": args.job_name, "namespace": args.namespace, "labels": labels },
+        "metadata": {"name": args.job_name, "namespace": args.namespace, "labels": labels},
         "spec": {
             "cluster": {
                 "spec": {
@@ -126,7 +119,7 @@ def daskjob_template(args):
                             },
                             "type": "ClusterIP",
                         },
-                        "metadata": { "labels": labels },
+                        "metadata": {"labels": labels},
                         "spec": {
                             "containers": [
                                 {
@@ -136,7 +129,7 @@ def daskjob_template(args):
                                             "name": "SCHEDULER_ENV",
                                             "value": "hello-world",
                                         },
-                                        *env_var
+                                        *env_var,
                                     ],
                                     "image": args.image,
                                     "imagePullPolicy": args.pull_policy,
@@ -175,7 +168,7 @@ def daskjob_template(args):
                     },
                     "worker": {
                         "replicas": args.nworkers,
-                        "metadata": { "labels": labels },
+                        "metadata": {"labels": labels},
                         "spec": {
                             "containers": [
                                 {
@@ -183,18 +176,15 @@ def daskjob_template(args):
                                         "dask-worker",
                                         "--name",
                                         "$(DASK_WORKER_NAME)",
-                                        "--nworkers", '1',
-                                        "--nthreads", str(args.threads_per_worker),
-                                        "--memory-limit", str(args.memory_limit),
+                                        "--nworkers",
+                                        "1",
+                                        "--nthreads",
+                                        str(args.threads_per_worker),
+                                        "--memory-limit",
+                                        str(args.memory_limit),
                                         "$(DASK_SCHEDULER_ADDRESS)",
                                     ],
-                                    "env": [
-                                        {
-                                            "name": "WORKER_ENV",
-                                            "value": "hello-world"
-                                        },
-                                        *env_var
-                                    ],
+                                    "env": [{"name": "WORKER_ENV", "value": "hello-world"}, *env_var],
                                     "image": args.image,
                                     "imagePullPolicy": args.pull_policy,
                                     "name": "worker",
@@ -205,7 +195,7 @@ def daskjob_template(args):
                 }
             },
             "job": {
-                "metadata": { "labels": labels},
+                "metadata": {"labels": labels},
                 "spec": {
                     "containers": [
                         {
@@ -214,7 +204,7 @@ def daskjob_template(args):
                             "name": "job",
                         }
                     ],
-                }
+                },
             },
         },
     }

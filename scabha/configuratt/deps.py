@@ -12,6 +12,7 @@ from typing import Any, List, Dict, Optional, OrderedDict, Union, Callable
 
 from .common import *
 
+
 @dataclass
 class FailRecord(object):
     filename: str
@@ -19,6 +20,7 @@ class FailRecord(object):
     modulename: Optional[str] = None
     fname: Optional[str] = None
     warn: bool = True
+
 
 @dataclass
 class RequirementRecord(object):
@@ -37,8 +39,8 @@ class ConfigDependencies(object):
         self._git = which("git")
         # self.provides = OmegaConf.create()
         # self.requires = OmegaConf.create()
-    
-    def add(self, filename: str, origin: Optional[str]=None, missing=False, **extra_attrs):
+
+    def add(self, filename: str, origin: Optional[str] = None, missing=False, **extra_attrs):
         """Adds a file to the set of dependencies
 
         Args:
@@ -55,19 +57,19 @@ class ConfigDependencies(object):
             depinfo.origin = origin
         else:
             if missing or not os.path.exists(filename):
-                depinfo.mtime     = 0 
+                depinfo.mtime = 0
                 depinfo.mtime_str = "n/a"
                 self.deps[filename] = depinfo
                 return
             # get mtime and hash
-            depinfo.mtime     = os.path.getmtime(filename) 
-            depinfo.mtime_str = datetime.datetime.fromtimestamp(depinfo.mtime).strftime('%c')
+            depinfo.mtime = os.path.getmtime(filename)
+            depinfo.mtime_str = datetime.datetime.fromtimestamp(depinfo.mtime).strftime("%c")
             if not os.path.isdir(filename):
-                depinfo.md5hash   = hashlib.md5(open(filename, "rb").read()).hexdigest()
+                depinfo.md5hash = hashlib.md5(open(filename, "rb").read()).hexdigest()
             # add git info
             dirname = os.path.realpath(filename)
             if not os.path.isdir(dirname):
-                dirname = os.path.dirname(dirname) 
+                dirname = os.path.dirname(dirname)
             gitinfo = self._get_git_info(dirname)
             if gitinfo:
                 depinfo.git = gitinfo
@@ -113,9 +115,9 @@ class ConfigDependencies(object):
         if not self._git:
             return None
         try:
-            branches = subprocess.check_output("git -c color.ui=never branch -a -v -v".split(), 
-                                                cwd=dirname, 
-                                                stderr=subprocess.DEVNULL)
+            branches = subprocess.check_output(
+                "git -c color.ui=never branch -a -v -v".split(), cwd=dirname, stderr=subprocess.DEVNULL
+            )
         except subprocess.CalledProcessError as exc:
             self._git_cache[dirname] = None
             return None
@@ -135,7 +137,7 @@ class ConfigDependencies(object):
         # get remote info
         try:
             remotes = subprocess.check_output("git remote -v".split(), cwd=dirname)
-            gitinfo.remotes = remotes.decode().strip().split('\n')
+            gitinfo.remotes = remotes.decode().strip().split("\n")
         except subprocess.CalledProcessError as exc:
             pass
 
@@ -145,10 +147,13 @@ class ConfigDependencies(object):
     def get_description(self):
         desc = OrderedDict()
         for filename, attrs in self.deps.items():
-            attrs_items = attrs.items() if attrs else [] 
-            attrs_str = [f"mtime: {datetime.datetime.fromtimestamp(value).strftime('%c')}" 
-                            if attr == "mtime" else f"{attr}: {value}"
-                            for attr, value in attrs_items]
+            attrs_items = attrs.items() if attrs else []
+            attrs_str = [
+                f"mtime: {datetime.datetime.fromtimestamp(value).strftime('%c')}"
+                if attr == "mtime"
+                else f"{attr}: {value}"
+                for attr, value in attrs_items
+            ]
             desc[filename] = attrs_str
         return desc
 
@@ -233,5 +238,5 @@ class ConfigDependencies(object):
     #             del section[loc_elem[-1]]
     #         except KeyError as exc:
     #             pass
-        
+
     #     return optional

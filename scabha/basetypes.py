@@ -6,28 +6,30 @@ import os.path
 import re
 from .exceptions import UnsetError
 from itertools import zip_longest
-from typeguard import (
-    check_type, TypeCheckError, TypeCheckerCallable, TypeCheckMemo, checker_lookup_functions
-)
+from typeguard import check_type, TypeCheckError, TypeCheckerCallable, TypeCheckMemo, checker_lookup_functions
 from inspect import isclass
 import uritools
 from pathlib import Path
 
 
 def EmptyDictDefault():
-    return field(default_factory=lambda:OrderedDict())
+    return field(default_factory=lambda: OrderedDict())
+
 
 def EmptyListDefault():
-    return field(default_factory=lambda:[])
+    return field(default_factory=lambda: [])
+
 
 def ListDefault(*args):
-    return field(default_factory=lambda:list(args))
+    return field(default_factory=lambda: list(args))
+
 
 def DictDefault(**kw):
-    return field(default_factory=lambda:dict(**kw))
+    return field(default_factory=lambda: dict(**kw))
+
 
 def EmptyClassDefault(obj):
-    return field(default_factory=obj) 
+    return field(default_factory=obj)
 
 
 @dataclass
@@ -46,22 +48,28 @@ class Unresolved(object):
     def __str__(self):
         return f"Unresolved({self.value})"
 
+
 class UNSET(Unresolved):
     """Marks unset values in formulas"""
+
     pass
+
 
 class Placeholder(Unresolved):
     """Marks placeholder values that are guaranteed to resolve later, such as for-loop iterants"""
+
     pass
+
 
 class SkippedOutput(Unresolved):
     """Marks invalid outputs of skipped steps"""
+
     def __str__(self):
         return f"Skipped({self.value})"
 
+
 class URI(str):
     def __init__(self, value):
-
         uri_components = uritools.urisplit(value)
         self.scheme = uri_components.scheme or "file"  # Protocol.
         self.authority = uri_components.authority
@@ -89,11 +97,7 @@ class URI(str):
             self.path = self.abs_path = uri_components.path
 
         self.full_uri = uritools.uricompose(
-            scheme=self.scheme,
-            authority=self.authority,
-            path=self.abs_path,
-            query=self.query,
-            fragment=self.fragment
+            scheme=self.scheme, authority=self.authority, path=self.abs_path, query=self.query, fragment=self.fragment
         )
 
         self.remote = self.scheme != "file"
@@ -134,16 +138,21 @@ class File(URI):
     def EXISTS(self):
         return os.path.exists(self)
 
+
 class Directory(File):
     pass
+
 
 class MS(Directory):
     pass
 
+
 FILE_TYPES = (File, MS, Directory, URI)
+
 
 def is_file_type(dtype):
     return any(dtype == t for t in FILE_TYPES)
+
 
 def is_file_list_type(dtype):
     return any(dtype == List[t] for t in FILE_TYPES)
@@ -152,7 +161,7 @@ def is_file_list_type(dtype):
 def check_filelike(value: Any, origin_type: Any, args: tuple[Any, ...], memo: TypeCheckMemo) -> None:
     """Custom checker for filelike objects. Currently checks for strings."""
     if not isinstance(value, str):
-        raise TypeCheckError(f'{value} is not compatible with URI or its subclasses.')
+        raise TypeCheckError(f"{value} is not compatible with URI or its subclasses.")
 
 
 def filelike_lookup(origin_type: Any, args: tuple[Any, ...], extras: tuple[Any, ...]) -> TypeCheckerCallable | None:
@@ -162,7 +171,9 @@ def filelike_lookup(origin_type: Any, args: tuple[Any, ...], extras: tuple[Any, 
 
     return None
 
+
 checker_lookup_functions.append(filelike_lookup)  # Register custom type checker.
+
 
 def get_filelikes(dtype, value, filelikes=None):
     """Recursively recover all filelike elements from a composite dtype."""
@@ -170,15 +181,13 @@ def get_filelikes(dtype, value, filelikes=None):
     filelikes = set() if filelikes is None else filelikes
 
     if value is UNSET or isinstance(value, Unresolved):
-      return []
-      
+        return []
+
     origin = get_origin(dtype)
     args = get_args(dtype)
 
     if origin:  # Implies composition.
-
         if origin is dict:
-
             # No further work required for empty collections.
             if len(value) == 0:
                 return filelikes
@@ -190,13 +199,12 @@ def get_filelikes(dtype, value, filelikes=None):
                 filelikes = get_filelikes(v_dtype, v, filelikes)
 
         elif origin in (tuple, list, set):
-
             # No further work required for empty collections.
             if len(value) == 0:
                 return filelikes
 
             # This is a special case for tuples of arbitrary
-            # length i.e. list-like behaviour. We can simply 
+            # length i.e. list-like behaviour. We can simply
             # strip out the Ellipsis.
             args = tuple([arg for arg in args if arg != ...])
 
@@ -204,7 +212,6 @@ def get_filelikes(dtype, value, filelikes=None):
                 filelikes = get_filelikes(dt, v, filelikes)
 
         elif origin is Union:
-
             for dt in args:
                 try:
                     check_type(value, dt)

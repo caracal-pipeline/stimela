@@ -1,6 +1,7 @@
 import os, re, subprocess, pytest
 from .test_recipe import change_test_dir, run, verify_output
 
+
 def test_wrangler_replace_suppress():
     print("===== expecting no errors =====")
     retcode, output = run("stimela -b native run test_wranglers.yml test_replace_suppress")
@@ -31,6 +32,7 @@ def test_wrangler_force_failure():
     print(output)
     assert verify_output(output, "Nobody expected the fox!")
 
+
 def test_wrangler_parse():
     print("===== expecting no errors =====")
     retcode, output = run("stimela -b native run test_wranglers.yml test_parse")
@@ -49,4 +51,3 @@ def test_wrangler_parse():
     assert retcode == 0
     print(output)
     assert verify_output(output, "The bloody cheetah ate 22 dogs!")
-

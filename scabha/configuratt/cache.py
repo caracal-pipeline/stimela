@@ -20,8 +20,7 @@ from .resolvers import resolve_config_refs
 from .common import *
 
 # path for cache
-CACHEDIR = os.environ.get("CONFIGURATT_CACHE_DIR") or os.path.expanduser(
-    "~/.cache/configuratt")
+CACHEDIR = os.environ.get("CONFIGURATT_CACHE_DIR") or os.path.expanduser("~/.cache/configuratt")
 
 
 def _compute_hash(filelist, extra_keys):
@@ -48,6 +47,7 @@ def clear_cache(log=None):
             log and log.error(f"failed to remove cached config {filename}: {exc}")
             sys.exit(1)
 
+
 def load_cache(filelist: List[str], extra_keys=[], verbose=None):
     filehash = _compute_hash(filelist, extra_keys)
     if not os.path.isdir(CACHEDIR):
@@ -68,7 +68,7 @@ def load_cache(filelist: List[str], extra_keys=[], verbose=None):
             return None, None
     # load cache
     try:
-        conf, deps = pickle.load(open(filename, 'rb'))
+        conf, deps = pickle.load(open(filename, "rb"))
         if not isinstance(deps, ConfigDependencies):
             raise TypeError(f"cached deps object is of type {type(deps)}, expecting ConfigDependencies")
     except Exception as exc:
@@ -85,7 +85,7 @@ def load_cache(filelist: List[str], extra_keys=[], verbose=None):
 
 def save_cache(filelist: List[str], conf, deps: ConfigDependencies, extra_keys=[], verbose=False):
     pathlib.Path(CACHEDIR).mkdir(parents=True, exist_ok=True)
-    filelist = list(filelist)   # add self to dependencies
+    filelist = list(filelist)  # add self to dependencies
     filehash = _compute_hash(filelist, extra_keys)
     filename = os.path.join(CACHEDIR, filehash)
     # add ourselves to dependencies, so that cache is cleared if implementation changes
@@ -93,7 +93,3 @@ def save_cache(filelist: List[str], conf, deps: ConfigDependencies, extra_keys=[
     pickle.dump((conf, deps), open(filename, "wb"), 2)
     if verbose:
         print(f"Caching config for {' '.join(filelist)} as {filename}")
-
-
-
-

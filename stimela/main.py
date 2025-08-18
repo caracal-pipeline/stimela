@@ -18,18 +18,20 @@ log = None
 
 _command_aliases = dict(exec="run", help="doc")
 
+
 class RunExecGroup(click.Group):
-    """ Makes the run and exec commands point to the same thing
+    """Makes the run and exec commands point to the same thing
 
     Args:
         click (_type_): _description_
     """
+
     def get_command(self, ctx, cmd_name):
         rv = click.Group.get_command(self, ctx, cmd_name)
         if rv is not None:
             return rv
 
-        if cmd_name in _command_aliases:  
+        if cmd_name in _command_aliases:
             return click.Group.get_command(self, ctx, _command_aliases[cmd_name])
         ctx.fail("Uknown command or alias")
 
@@ -40,28 +42,48 @@ class RunExecGroup(click.Group):
 
 
 @click.group(cls=RunExecGroup)
-@click.option('--backend', '-b', type=click.Choice(backends.SUPPORTED_BACKENDS), 
-                 help="Backend to use.")
-@click.option('--config', '-c', 'config_files', metavar='FILE', multiple=True,
-                help="Extra user-defined config file(s) to load.")
-@click.option('--set', '-s', 'config_dotlist', metavar='SECTION.VAR=VALUE', multiple=True,
-                help="Extra user-defined config settings to apply.")
-@click.option('--no-sys-config', is_flag=True, 
-                help="Do not load standard config files.")
-@click.option('-I', '--include', metavar="DIR", multiple=True, 
-                help="Add directory to _include paths. Can be given multiple times.")
-@click.option('--clear-cache', '-C', is_flag=True, 
-                help="Reset the configuration cache. First thing to try in case of strange configuration errors.")
-@click.option('--boring', '-B', is_flag=True, 
-                help="Disables progress bar and any other fancy console outputs.")
-@click.option('--verbose', '-v', is_flag=True, 
-              help='Be extra verbose in output.')
+@click.option("--backend", "-b", type=click.Choice(backends.SUPPORTED_BACKENDS), help="Backend to use.")
+@click.option(
+    "--config", "-c", "config_files", metavar="FILE", multiple=True, help="Extra user-defined config file(s) to load."
+)
+@click.option(
+    "--set",
+    "-s",
+    "config_dotlist",
+    metavar="SECTION.VAR=VALUE",
+    multiple=True,
+    help="Extra user-defined config settings to apply.",
+)
+@click.option("--no-sys-config", is_flag=True, help="Do not load standard config files.")
+@click.option(
+    "-I",
+    "--include",
+    metavar="DIR",
+    multiple=True,
+    help="Add directory to _include paths. Can be given multiple times.",
+)
+@click.option(
+    "--clear-cache",
+    "-C",
+    is_flag=True,
+    help="Reset the configuration cache. First thing to try in case of strange configuration errors.",
+)
+@click.option("--boring", "-B", is_flag=True, help="Disables progress bar and any other fancy console outputs.")
+@click.option("--verbose", "-v", is_flag=True, help="Be extra verbose in output.")
 @click.version_option(str(stimela.__version__))
-def cli(config_files=[], config_dotlist=[], include=[], backend=None, 
-        verbose=False, no_sys_config=False, clear_cache=False, boring=False):
+def cli(
+    config_files=[],
+    config_dotlist=[],
+    include=[],
+    backend=None,
+    verbose=False,
+    no_sys_config=False,
+    clear_cache=False,
+    boring=False,
+):
     global log
     log = stimela.logger(loglevel=logging.DEBUG if verbose else logging.INFO, boring=boring)
-    log.info(f"starting")        # remove this eventually, but it's handy for timing things right now
+    log.info(f"starting")  # remove this eventually, but it's handy for timing things right now
 
     stimela.VERBOSE = verbose
     if verbose:
@@ -69,25 +91,32 @@ def cli(config_files=[], config_dotlist=[], include=[], backend=None,
 
     # use this logger for exceptions
     import scabha.exceptions
+
     scabha.exceptions.set_logger(log)
     if verbose:
         scabha.exceptions.ALWAYS_REPORT_TRACEBACK = True
 
     import scabha.configuratt.cache
+
     scabha.configuratt.cache.set_cache_dir(os.path.expanduser("~/.cache/stimela-configs"))
     # clear cache if requested
     if clear_cache:
         scabha.configuratt.cache.clear_cache(log)
 
     # load config files
-    stimela.CONFIG = config.load_config(extra_configs=config_files, extra_dotlist=config_dotlist, include_paths=include,
-                                        verbose=verbose, use_sys_config=not no_sys_config)
+    stimela.CONFIG = config.load_config(
+        extra_configs=config_files,
+        extra_dotlist=config_dotlist,
+        include_paths=include,
+        verbose=verbose,
+        use_sys_config=not no_sys_config,
+    )
     if stimela.CONFIG is None:
         log.error("failed to load configuration, exiting")
         sys.exit(1)
 
     if config.CONFIG_LOADED:
-        log.info(f"loaded config from {config.CONFIG_LOADED}") 
+        log.info(f"loaded config from {config.CONFIG_LOADED}")
 
     # select backend, passing it any config options that have been set up
     if backend:
@@ -102,9 +131,9 @@ def cli(config_files=[], config_dotlist=[], include=[], backend=None,
         if verbose:
             stimela.CONFIG.opts.log.level = "DEBUG"
         # setup file logging
-        subst = OmegaConf.create(dict(
-                    info=OmegaConf.create(dict(fqname='stimela', taskname='stimela')), 
-                    config=stimela.CONFIG))
+        subst = OmegaConf.create(
+            dict(info=OmegaConf.create(dict(fqname="stimela", taskname="stimela")), config=stimela.CONFIG)
+        )
         stimelogging.update_file_logger(log, stimela.CONFIG.opts.log, nesting=-1, subst=subst)
 
     # report dependencies
@@ -112,7 +141,7 @@ def cli(config_files=[], config_dotlist=[], include=[], backend=None,
         log.debug(f"config dependency {', '.join([filename] + attrs)}")
 
     # dump dependencies
-    filename = os.path.join(stimelogging.get_logfile_dir(log) or '.', "stimela.config.deps")
+    filename = os.path.join(stimelogging.get_logfile_dir(log) or ".", "stimela.config.deps")
     log.info(f"saving config dependencies to {filename}")
     config.CONFIG_DEPS.save(filename)
 

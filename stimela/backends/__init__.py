@@ -40,15 +40,16 @@ def get_backend_status(name: str):
     backend = __import__(f"stimela.backends.{name}", fromlist=[name])
     return backend.get_status()
 
-@dataclass 
+
+@dataclass
 class StimelaBackendOptions(object):
     default_registry: str = "quay.io/stimela2"
 
     # overrides registries -- useful if you have a pull-through cache set up
     override_registries: Dict[str, str] = EmptyDictDefault()
-    
-    select: Any = "singularity,native"   # should be Union[str, List[str]], but OmegaConf doesn't support it, so handle in __post_init__ for now
-    
+
+    select: Any = "singularity,native"  # should be Union[str, List[str]], but OmegaConf doesn't support it, so handle in __post_init__ for now
+
     singularity: Optional[SingularityBackendOptions] = EmptyClassDefault(SingularityBackendOptions)
     kube: Optional[KubeBackendOptions] = EmptyClassDefault(KubeBackendOptions)
     native: Optional[NativeBackendOptions] = EmptyClassDefault(NativeBackendOptions)
@@ -59,7 +60,7 @@ class StimelaBackendOptions(object):
     rlimits: Dict[str, Any] = EmptyDictDefault()
 
     verbose: int = 0  # be verbose about backend selections. Higher levels mean more verbosity
-    
+
     def __post_init__(self):
         # resolve "select" field
         if type(self.select) is str:
@@ -81,10 +82,11 @@ class StimelaBackendOptions(object):
         if self.slurm is None:
             self.slurm = SlurmOptions()
 
+
 StimelaBackendSchema = OmegaConf.structured(StimelaBackendOptions)
 
 
-def resolve_image_name(backend: StimelaBackendOptions, image: 'stimela.kitchen.Cab.ImageInfo'):
+def resolve_image_name(backend: StimelaBackendOptions, image: "stimela.kitchen.Cab.ImageInfo"):
     """
     Resolves image name -- applies override registries, if any exist
     """
@@ -96,7 +98,7 @@ def resolve_image_name(backend: StimelaBackendOptions, image: 'stimela.kitchen.C
     if registry_name == "DEFAULT" or not registry_name:
         registry_name = backend.default_registry
     elif registry_name == "LOCAL":
-        registry_name = ''
+        registry_name = ""
     # apply any registry overrides
     if registry_name in backend.override_registries:
         registry_name = backend.override_registries[registry_name]
@@ -106,12 +108,14 @@ def resolve_image_name(backend: StimelaBackendOptions, image: 'stimela.kitchen.C
         return f"{image_name}:{version}"
 
 
-def _call_backends(backend_opts: StimelaBackendOptions, log: logging.Logger, method: str, desc: str, raise_exc: bool=True):
-    selected = backend_opts.select or ['native']
+def _call_backends(
+    backend_opts: StimelaBackendOptions, log: logging.Logger, method: str, desc: str, raise_exc: bool = True
+):
+    selected = backend_opts.select or ["native"]
     if type(selected) is str:
         selected = [selected]
 
-    for engine in selected: 
+    for engine in selected:
         # check that backend has not been disabled
         opts = getattr(backend_opts, engine, None)
         if not opts or opts.enable:
@@ -127,13 +131,16 @@ def _call_backends(backend_opts: StimelaBackendOptions, log: logging.Logger, met
                     else:
                         log_exception(exc1, log=log)
 
+
 initialized = None
+
 
 def init_backends(backend_opts: StimelaBackendOptions, log: logging.Logger):
     global initialized
     if initialized is None:
         initialized = backend_opts
         return _call_backends(backend_opts, log, "init", "initializing")
+
 
 def close_backends(log: logging.Logger):
     global initialized
@@ -142,7 +149,6 @@ def close_backends(log: logging.Logger):
         initialized = None
         return result
 
+
 def cleanup_backends(backend_opts: StimelaBackendOptions, log: logging.Logger):
     return _call_backends(backend_opts, log, "cleanup", "cleaning up")
-
-

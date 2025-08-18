@@ -12,13 +12,20 @@ from .resolvers import resolve_config_refs
 from .cache import load_cache, save_cache
 from .common import *
 
-def load(path: str, use_sources: Optional[List[DictConfig]] = [], name: Optional[str]=None,
-        location: Optional[str]=None,
-        includes: bool=True, selfrefs: bool=True, include_path: str=None,
-        use_cache: bool = True,
-        no_toplevel_cache = False,
-        include_stack = [],
-        verbose: bool = False):
+
+def load(
+    path: str,
+    use_sources: Optional[List[DictConfig]] = [],
+    name: Optional[str] = None,
+    location: Optional[str] = None,
+    includes: bool = True,
+    selfrefs: bool = True,
+    include_path: str = None,
+    use_cache: bool = True,
+    no_toplevel_cache=False,
+    include_stack=[],
+    verbose: bool = False,
+):
     """Loads config file, using a previously loaded config to resolve _use references.
 
     Args:
@@ -44,24 +51,21 @@ def load(path: str, use_sources: Optional[List[DictConfig]] = [], name: Optional
 
     if conf is None:
         # create self:xxx resolver
-        self_namespace = dict(
-            path = path,
-            dirname = os.path.dirname(path),
-            basename = os.path.basename(path)
-        )
+        self_namespace = dict(path=path, dirname=os.path.dirname(path), basename=os.path.basename(path))
+
         def self_namespace_resolver(arg):
             if arg in self_namespace:
                 return self_namespace[arg]
             raise KeyError(f"invalid '${{self:arg}}' substitution in {path}")
-        
-        OmegaConf.register_new_resolver('self', self_namespace_resolver)
+
+        OmegaConf.register_new_resolver("self", self_namespace_resolver)
         try:
             subconf = OmegaConf.load(path)
             # force resolution of interpolations at this point (otherwise they happen lazily)
             resolved = OmegaConf.to_container(subconf, resolve=True)
             subconf = OmegaConf.create(resolved)
         finally:
-            OmegaConf.clear_resolver('self')
+            OmegaConf.clear_resolver("self")
 
         name = name or os.path.basename(path)
         dependencies = ConfigDependencies()
@@ -69,9 +73,17 @@ def load(path: str, use_sources: Optional[List[DictConfig]] = [], name: Optional
         # include ourself into sources, if _use is in effect, and we've enabled selfrefs
         if use_sources is not None and selfrefs:
             use_sources = [subconf] + list(use_sources)
-        conf, deps = resolve_config_refs(subconf, pathname=path, location=location, name=name,
-                            includes=includes, use_cache=use_cache, use_sources=use_sources, include_path=include_path,
-                            include_stack=include_stack + [path])
+        conf, deps = resolve_config_refs(
+            subconf,
+            pathname=path,
+            location=location,
+            name=name,
+            includes=includes,
+            use_cache=use_cache,
+            use_sources=use_sources,
+            include_path=include_path,
+            include_stack=include_stack + [path],
+        )
         # update overall dependencies
         dependencies.update(deps)
 
@@ -83,16 +95,19 @@ def load(path: str, use_sources: Optional[List[DictConfig]] = [], name: Optional
 
     return conf, dependencies
 
-def load_nested(filelist: List[str],
-                structured: Optional[DictConfig] = None,
-                typeinfo = None,
-                use_sources: Optional[List[DictConfig]] = [],
-                location: Optional[str] = None,
-                nameattr: Union[Callable, str, None] = None,
-                config_class: Optional[str] = None,
-                include_path: Optional[str] = None,
-                use_cache: bool = True,
-                verbose: bool = False):
+
+def load_nested(
+    filelist: List[str],
+    structured: Optional[DictConfig] = None,
+    typeinfo=None,
+    use_sources: Optional[List[DictConfig]] = [],
+    location: Optional[str] = None,
+    nameattr: Union[Callable, str, None] = None,
+    config_class: Optional[str] = None,
+    include_path: Optional[str] = None,
+    use_cache: bool = True,
+    verbose: bool = False,
+):
     """Builds nested configuration from a set of YAML files corresponding to sub-sections
 
     Parameters
@@ -131,7 +146,7 @@ def load_nested(filelist: List[str],
     section_content, dependencies = load_cache(filelist, verbose=verbose) if use_cache else (None, None)
 
     if section_content is None:
-        section_content = {} # OmegaConf.create()
+        section_content = {}  # OmegaConf.create()
         dependencies = ConfigDependencies()
 
         for path in filelist:
@@ -235,7 +250,9 @@ def check_requirements(conf: DictConfig, bases: List[DictConfig], strict: bool =
             # check requirements and contingencies
             for req in reqs:
                 if not _check_item(section, req):
-                    unresolved.append((location, req, ConfigurattError(f"section '{location}' has missing requirement '{req}'")))
+                    unresolved.append(
+                        (location, req, ConfigurattError(f"section '{location}' has missing requirement '{req}'"))
+                    )
             for cont in contingents:
                 if not _check_item(section, cont):
                     unresolved.append((location, cont, None))
@@ -261,6 +278,7 @@ def check_requirements(conf: DictConfig, bases: List[DictConfig], strict: bool =
                 del section[i]
             delete_self = False
         return unresolved, delete_self
+
     # build list of unresolved items
     unresolved, delete = _scan(conf)
 

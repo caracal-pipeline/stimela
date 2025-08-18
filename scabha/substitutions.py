@@ -11,6 +11,7 @@ from .basetypes import EmptyDictDefault, Unresolved
 
 from omegaconf import DictConfig
 
+
 # thanks to https://gist.github.com/bgusach/a967e0587d6e01e889fd1d776c5f3729
 def multireplace(string, replacements, ignore_case=False):
     """
@@ -24,13 +25,17 @@ def multireplace(string, replacements, ignore_case=False):
     # can be found. For instance with {"HEY": "lol"} we should match and find a replacement for "hey",
     # "HEY", "hEy", etc.
     if ignore_case:
+
         def normalize_old(s):
             return s.lower()
+
         re_mode = re.IGNORECASE
 
     else:
+
         def normalize_old(s):
             return s
+
         re_mode = 0
 
     replacements = {normalize_old(key): val for key, val in replacements.items()}
@@ -45,9 +50,7 @@ def multireplace(string, replacements, ignore_case=False):
     pattern = re.compile("|".join(rep_escaped), re_mode)
 
     # For each match, look up the new string in the replacements, being the key the normalized old string
-    return pattern.sub(
-        lambda match: replacements[normalize_old(match.group(0))], string
-    )
+    return pattern.sub(lambda match: replacements[normalize_old(match.group(0))], string)
 
 
 class SubstitutionNS(OrderedDict):
@@ -60,9 +63,10 @@ class SubstitutionNS(OrderedDict):
         looks up "x", it gets back a wrapper, in which it proceeds to look up "y" and "z", eventually evaluating to
         the given value that the wrapper was constructed with.
         """
-        def __init__(self,  value):
+
+        def __init__(self, value):
             self.value = str(value)
-        
+
         def __getitem__(self, key):
             return self
 
@@ -70,7 +74,7 @@ class SubstitutionNS(OrderedDict):
             return self
 
         def __str__(self):
-            return getattr(self, 'value')
+            return getattr(self, "value")
 
     def __init__(self, **kw):
         """Initializes the namespace. Keywords are _add_'ed as items in the namespace"""
@@ -100,8 +104,9 @@ class SubstitutionNS(OrderedDict):
                 SubstitutionNS._add_(self, name, value)
             else:
                 old_value = super().get(name)
-                if isinstance(old_value, SubstitutionNS) and \
-                    isinstance(value, (dict, OrderedDict, SubstitutionNS, DictConfig)):
+                if isinstance(old_value, SubstitutionNS) and isinstance(
+                    value, (dict, OrderedDict, SubstitutionNS, DictConfig)
+                ):
                     old_value._merge_(value)
                 else:
                     SubstitutionNS._add_(self, name, value)
@@ -115,8 +120,8 @@ class SubstitutionNS(OrderedDict):
             nosubst (bool): use this as the nosubst property of the sub-namespace
         """
         # names with dots turned into sub-namespaces
-        if '.' in name:
-            subns_name, key = name.split('.', 1)
+        if "." in name:
+            subns_name, key = name.split(".", 1)
             if subns_name in self:
                 subns = super().__getitem__(subns_name)
                 if type(subns) is not SubstitutionNS:
@@ -143,7 +148,7 @@ class SubstitutionNS(OrderedDict):
         context = SubstitutionContext.current()
         # keep track of nested lookups, if doing substitutions
         nestloc = context.nested_location if context else None
-        value = None # set to None, in case exception handler is invoked before value is set
+        value = None  # set to None, in case exception handler is invoked before value is set
         try:
             if nestloc is not None:
                 nestloc.append(name)
@@ -152,7 +157,7 @@ class SubstitutionNS(OrderedDict):
                     if otherloc == nestloc:
                         raise CyclicSubstitutionError(context.loc_stack[-1][1], otherfrom)
             # check wildcards, substitute last
-            if name not in self and ('*' in name or '?' in name):
+            if name not in self and ("*" in name or "?" in name):
                 names = sorted(fnmatch.filter(super().keys(), name))
                 if names:
                     name = names[-1]
@@ -175,7 +180,9 @@ class SubstitutionNS(OrderedDict):
             if context is not None:
                 forgive = context.forgive_errors.get(type(exc))
                 if type(forgive) is str:
-                    return SubstitutionNS.StringWrapper(forgive.format(name=''.join(nestloc or []), value=value, target=name, exc=exc))
+                    return SubstitutionNS.StringWrapper(
+                        forgive.format(name="".join(nestloc or []), value=value, target=name, exc=exc)
+                    )
                 elif forgive:
                     return SubstitutionNS.StringWrapper(f"({type(exc).__name__}: {exc})")
             # else re-raise exception
@@ -201,9 +208,9 @@ class SubstitutionNS(OrderedDict):
 
 
 class SubstitutionFormatter(string.Formatter):
-    def __init__(self, context: 'SubstitutionContext'):
+    def __init__(self, context: "SubstitutionContext"):
         self.context = context
-    
+
     def get_value(self, key, args, kwargs):
         return self.context.get_value(key, args, kwargs)
 
@@ -220,7 +227,7 @@ class SubstitutionContext(object):
         self.nested_location = []
         # current location stack. A new element is inserted every time a nested substitution starts
         self.loc_stack = []
-        # 
+        #
         self.enabled = True
         # list of erros and list of forgiven errors
         self.errors = []
@@ -229,7 +236,7 @@ class SubstitutionContext(object):
     _current_contexts = {}
 
     @staticmethod
-    def current() -> 'SubstitutionContext':
+    def current() -> "SubstitutionContext":
         return SubstitutionContext._current_contexts.get(threading.get_ident())
 
     def evaluate(self, value: Any, location: List[str] = [], recursive=True):
@@ -248,8 +255,7 @@ class SubstitutionContext(object):
 
         # not a string, or an Error, or no "{" symbol -- return as is
         if self.ns is not None and isinstance(value, (str, list, tuple, dict, OrderedDict)):
-
-            # an evaluate() call means a new substitution is being done. 
+            # an evaluate() call means a new substitution is being done.
             # add a location list to the stack. This list will be appended to as we look up sub-attributes
             nesting = len(self.loc_stack)
             self.nested_location = []
@@ -265,7 +271,7 @@ class SubstitutionContext(object):
 
         return value
 
-    def _evaluate_element(self, value: Any, location: List[str], nesting:int):
+    def _evaluate_element(self, value: Any, location: List[str], nesting: int):
         newvalue = value
         if isinstance(value, str):
             if isinstance(value, Error) or "{" not in value:
@@ -287,20 +293,19 @@ class SubstitutionContext(object):
                     newvalue[key] = newelement
         return newvalue
 
-
-    def _evaluate_str(self, value: str, location: List[str], nesting:int):
+    def _evaluate_str(self, value: str, location: List[str], nesting: int):
         try:
             # if we're doing a nested substitution, protect "{{" and "}}" from getting converted to a single brace by pre-replacing them
             if nesting:
-                newvalue = multireplace(value, {"{{": "\u00AB", "}}": "\u00BB"})
+                newvalue = multireplace(value, {"{{": "\u00ab", "}}": "\u00bb"})
             newvalue = self.formatter.format(value)
             if nesting:
-                newvalue = multireplace(newvalue, {"\u00AB": "{{", "\u00BB": "}}"})
+                newvalue = multireplace(newvalue, {"\u00ab": "{{", "\u00bb": "}}"})
         except Exception as exc:
             # name is the object being formatted
-            name = '.'.join(location)
+            name = ".".join(location)
             # target is the object that failed to be substituted in
-            target = '.'.join(self.nested_location)
+            target = ".".join(self.nested_location)
             # this gives us the current forgiveness policy for failed substitutions
             forgive = self.forgive_errors.get(type(exc))
             if type(forgive) is str:
@@ -311,27 +316,22 @@ class SubstitutionContext(object):
             else:
                 locstr = f"{name}='{value}'" if name else f"'{value}'"
                 if type(exc) is AttributeError:
-                    err = SubstitutionError(
-                        f"'{{{target}}} unresolved, in {locstr}"
-                    )
+                    err = SubstitutionError(f"'{{{target}}} unresolved, in {locstr}")
                 elif type(exc) is CyclicSubstitutionError:
-                    err = SubstitutionError(
-                        f"{{{target}}}: {exc}, in {locstr}"
-                    )
+                    err = SubstitutionError(f"{{{target}}}: {exc}, in {locstr}")
                 else:
                     err = SubstitutionError(
-#                            f"{type(exc)} in {{{target}}}: {exc}, in {name}='{value}'"
+                        #                            f"{type(exc)} in {{{target}}}: {exc}, in {name}='{value}'"
                         f"{type(exc).__name__} at {{{target}}}: {exc}, in {locstr}"
                     )
                 self.errors.append(err)
                 if self.raise_errors:
                     raise
-                return ''
+                return ""
             # dropped here, so forgive the error
             self.forgivens.append(name)
         return newvalue
 
-            
     def get_value(self, key, args, kwargs):
         """Implements get_value for string formatter"""
         if type(key) is int:
@@ -351,7 +351,7 @@ class SubstitutionContext(object):
 
 
 @contextmanager
-def substitutions_from(ns: Optional[SubstitutionNS], raise_errors=False, forgive_errors: dict={}):
+def substitutions_from(ns: Optional[SubstitutionNS], raise_errors=False, forgive_errors: dict = {}):
     thread = threading.get_ident()
 
     previous = SubstitutionContext._current_contexts.get(thread)
@@ -373,9 +373,9 @@ def forgiving_substitutions_from(ns: SubstitutionNS, forgive="", raise_errors=Fa
     return substitutions_from(ns, raise_errors=raise_errors, forgive_errors=forgive_errors)
 
 
-
-def perform_ll_substitutions(subst: Dict[str, Any], params: Dict[str, Any], 
-                             raise_exceptions: bool=False) -> List[Exception]:
+def perform_ll_substitutions(
+    subst: Dict[str, Any], params: Dict[str, Any], raise_exceptions: bool = False
+) -> List[Exception]:
     """performs <<-substitutions on dict of parameters
 
     Args:
@@ -385,13 +385,13 @@ def perform_ll_substitutions(subst: Dict[str, Any], params: Dict[str, Any],
 
     Returns:
         List[Exception]: list of errors (if raise_exceptions is False), or [] on success
-    """    
+    """
 
     errors = OrderedDict()
     repeat = True
     while repeat:
         repeat = False  # will reraise if need to run again (going to add that feature)
-        
+
         for name, value in list(params.items()):
             if name not in errors and type(value) is str:
                 # << is escape character -- maps back to single <
@@ -418,7 +418,7 @@ def perform_ll_substitutions(subst: Dict[str, Any], params: Dict[str, Any],
                             elif comp.startswith("!"):
                                 undef_value = comp[1:]
                                 # add trailing ? to target if it was missing
-                                if '?' not in target:
+                                if "?" not in target:
                                     target = target + "?"
                             else:
                                 exc = SubstitutionError(f"{name} = '{value}': invalid component '{comp}'")
@@ -428,13 +428,13 @@ def perform_ll_substitutions(subst: Dict[str, Any], params: Dict[str, Any],
                             raise exc
                         errors[name] = exc
                         continue
-                    keys = target.split('.')
+                    keys = target.split(".")
                     # look up keys in substitution dict recursively
                     # a ?-lookup is optional
                     target_value = subst
                     while keys:
                         key = keys.pop(0)
-                        optional = key.endswith('?')
+                        optional = key.endswith("?")
                         if optional:
                             key = key[:-1]
                         target_value = target_value.get(key, SubstitutionError)
@@ -461,5 +461,5 @@ def perform_ll_substitutions(subst: Dict[str, Any], params: Dict[str, Any],
                         params[name] = true_value if true_value is not None else target_value
                     else:
                         params[name] = false_value if false_value is not None else target_value
-                
+
     return list(errors.values())

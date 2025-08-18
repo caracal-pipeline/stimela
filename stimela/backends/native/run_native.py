@@ -29,16 +29,25 @@ def update_rlimits(rlimits: Dict[str, Any], log: logging.Logger):
         log.debug(f"setting soft limit {name}={limit} (hard limit is {hard})")
 
 
-
-def build_command_line(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], subst: Optional[Dict[str, Any]] = None,
-                        virtual_env: Optional[str] = None, log: Optional[logging.Logger] = None):
+def build_command_line(
+    cab: "stimela.kitchen.cab.Cab",
+    params: Dict[str, Any],
+    subst: Optional[Dict[str, Any]] = None,
+    virtual_env: Optional[str] = None,
+    log: Optional[logging.Logger] = None,
+):
     return cab.flavour.get_arguments(cab, params, subst, virtual_env=virtual_env, log=log)
 
 
-def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
-        backend: 'stimela.backend.StimelaBackendOptions',
-        log: logging.Logger, subst: Optional[Dict[str, Any]] = None,
-        wrapper: Optional['stimela.backends.runner.BackendWrapper'] = None):
+def run(
+    cab: "stimela.kitchen.cab.Cab",
+    params: Dict[str, Any],
+    fqname: str,
+    backend: "stimela.backend.StimelaBackendOptions",
+    log: logging.Logger,
+    subst: Optional[Dict[str, Any]] = None,
+    wrapper: Optional["stimela.backends.runner.BackendWrapper"] = None,
+):
     """
     Runs cab contents
 
@@ -58,8 +67,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     if backend.native and backend.native.virtual_env:
         try:
             with substitutions_from(subst, raise_errors=True) as context:
-                venv = context.evaluate(backend.native.virtual_env, 
-                                        location=["backend.native.virtual_env"])
+                venv = context.evaluate(backend.native.virtual_env, location=["backend.native.virtual_env"])
         except Exception as exc:
             raise BackendSpecificationError(f"error evaluating backend.native.virtual_env", exc)
         if venv:
@@ -76,23 +84,30 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
     # run command
     start_time = datetime.datetime.now()
+
     def elapsed(since=None):
         """Returns string representing elapsed time"""
-        return str(datetime.datetime.now() - (since or start_time)).split('.', 1)[0]
+        return str(datetime.datetime.now() - (since or start_time)).split(".", 1)[0]
 
     # log.info(f"argument lengths are {[len(a) for a in args]}")
-    
+
     if wrapper:
         args, log_args = wrapper.wrap_run_command(args, log_args, fqname=fqname, log=log)
-        
+
     log.debug(f"command line is {' '.join(log_args)}")
 
-    retcode = xrun(args[0], args[1:], shell=False, log=log,
-                output_wrangler=cabstat.apply_wranglers,
-                return_errcode=True, command_name=command_name, 
-                gentle_ctrl_c=True,
-                log_command=' '.join(log_args), 
-                log_result=False)
+    retcode = xrun(
+        args[0],
+        args[1:],
+        shell=False,
+        log=log,
+        output_wrangler=cabstat.apply_wranglers,
+        return_errcode=True,
+        command_name=command_name,
+        gentle_ctrl_c=True,
+        log_command=" ".join(log_args),
+        log_result=False,
+    )
 
     # check if output marked it as a fail
     if cabstat.success is False:

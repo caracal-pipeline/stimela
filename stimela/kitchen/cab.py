@@ -22,18 +22,19 @@ from scabha.substitutions import substitutions_from
 ParameterPassingMechanism = Enum("ParameterPassingMechanism", "args yaml", module=__name__)
 
 
-@dataclass 
-class CabManagement(object):        # defines common cab management behaviours
+@dataclass
+class CabManagement(object):  # defines common cab management behaviours
     environment: Optional[Dict[str, str]] = EmptyDictDefault()
-    cleanup: Optional[Dict[str, ListOrString]]     = EmptyDictDefault()   
-    wranglers: Optional[Dict[str, ListOrString]]   = EmptyDictDefault()   
+    cleanup: Optional[Dict[str, ListOrString]] = EmptyDictDefault()
+    wranglers: Optional[Dict[str, ListOrString]] = EmptyDictDefault()
+
 
 @dataclass
 class ImageInfo(object):
-    name: Optional[str] = None          # image name
-    registry: Optional[str] = None      # registry/org or org (for Dockerhub)
+    name: Optional[str] = None  # image name
+    registry: Optional[str] = None  # registry/org or org (for Dockerhub)
     version: str = "latest"
-    path: Optional[str] = None          # prebuilt image path (for some backends only)
+    path: Optional[str] = None  # prebuilt image path (for some backends only)
 
     def __post_init__(self):
         if not self.name:
@@ -55,17 +56,19 @@ class ImageInfo(object):
         else:
             registry, name = None, spec
         return ImageInfo(name, registry, version)
-    
+
     def to_string(self):
         if self.registry:
             return f"{self.registry}/{self.name}:{self.version}"
-        else:        
+        else:
             return f"{self.name}:{self.version}"
-        
+
     def __str__(self):
         return self.to_string()
 
+
 ImageInfoSchema = OmegaConf.structured(ImageInfo)
+
 
 @dataclass
 class Cab(Cargo):
@@ -76,13 +79,14 @@ class Cab(Cargo):
 
         self.input_output:      combined parameter dict (self.input + self.output), maps name to Parameter
         self.missing_params:    dict (name to Parameter) of required parameters that have not been specified
-    
+
     Raises:
         CabValidationError: [description]
     """
+
     # if set, the cab is run in a container, and this is the image name
     # if not set, commands are run by the native runner
-    image: Optional[Any] = None                   
+    image: Optional[Any] = None
 
     # command to run, inside the container or natively
     # this is not split into individual arguments, but passed to sh -c as is
@@ -111,12 +115,12 @@ class Cab(Cargo):
     # default parameter conversion policies
     policies: ParameterPolicies = EmptyClassDefault(ParameterPolicies)
 
-    def __post_init__ (self):
+    def __post_init__(self):
         Cargo.__post_init__(self)
         for param in self.inputs.keys():
             if param in self.outputs:
                 raise CabValidationError(f"cab {self.name}: parameter '{param}' appears in both inputs and outputs")
-            
+
         # check image setting
         if self.image:
             if type(self.image) is str:
@@ -155,13 +159,15 @@ class Cab(Cargo):
             except OmegaConfBaseException as exc:
                 raise CabValidationError(f"cab {self.name}: invalid backend setting", exc)
 
-
     def summary(self, params=None, recursive=True, ignore_missing=False):
-        lines = [f"cab {self.name}:"] 
+        lines = [f"cab {self.name}:"]
         if params is not None:
             Cargo.add_parameter_summary(params, lines)
-            lines += [f"  {name} = ???" for name, schema in self.inputs_outputs.items()
-                        if name not in params and (not ignore_missing or schema.required)]
+            lines += [
+                f"  {name} = ???"
+                for name, schema in self.inputs_outputs.items()
+                if name not in params and (not ignore_missing or schema.required)
+            ]
         return lines
 
     def rich_help(self, tree, max_category=ParameterCategory.Optional):
@@ -184,11 +190,13 @@ class Cab(Cargo):
         else:
             return default
 
-    def build_command_line(self, params: Dict[str, Any], 
-                        subst: Optional[Dict[str, Any]] = None, 
-                        virtual_env: Optional[str] = None,
-                        check_executable: bool = True):
-        
+    def build_command_line(
+        self,
+        params: Dict[str, Any],
+        subst: Optional[Dict[str, Any]] = None,
+        virtual_env: Optional[str] = None,
+        check_executable: bool = True,
+    ):
         try:
             with substitutions_from(subst, raise_errors=True) as context:
                 command = context.evaluate(self.command, location=["command"])
@@ -216,15 +224,13 @@ class Cab(Cargo):
         try:
             with substitutions_from(subst, raise_errors=True) as context:
                 environ = CabManagement().environment
-                for key,val in self.management.environment.items():
-                    environ[key] = context.evaluate(val,
-                                location=["management", "environment"])
+                for key, val in self.management.environment.items():
+                    environ[key] = context.evaluate(val, location=["management", "environment"])
         except Exception as exc:
             raise CabValidationError(f"Error applying environment variables", exc)
 
         if environ:
             self.management.environment = environ
-
 
     def filter_input_params(self, params: Dict[str, Any], apply_nom_de_guerre=True):
         """Filters dict of params, returning only those that should be passed to a cab
@@ -233,9 +239,9 @@ class Cab(Cargo):
         filtered_params = OrderedDict()
         for name, schema in self.inputs_outputs.items():
             # get skip setting
-            skip = self.get_schema_policy(schema, 'skip')
+            skip = self.get_schema_policy(schema, "skip")
             if skip is None and schema.implicit:
-                skip = self.get_schema_policy(schema, 'skip_implicits')
+                skip = self.get_schema_policy(schema, "skip_implicits")
             # skip if explicitly True
             if skip:
                 continue
@@ -246,10 +252,9 @@ class Cab(Cargo):
             output_name = (apply_nom_de_guerre and schema.nom_de_guerre) or name
             if name in params:
                 filtered_params[output_name] = params[name]
-            elif self.get_schema_policy(schema, 'pass_missing_as_none'):
+            elif self.get_schema_policy(schema, "pass_missing_as_none"):
                 filtered_params[output_name] = None
         return filtered_params
-
 
     def build_argument_list(self, params: Dict[str, Any]):
         """
@@ -278,19 +283,19 @@ class Cab(Cargo):
             return self.get_schema_policy(schema, policy, default)
 
         def stringify_argument(name, value, schema, option=None):
-            key_value = get_policy(schema, 'key_value')
+            key_value = get_policy(schema, "key_value")
 
             if value is None:
                 return None
-            if schema.dtype == "bool" and not value and get_policy(schema, 'explicit_false') is None:
+            if schema.dtype == "bool" and not value and get_policy(schema, "explicit_false") is None:
                 return None
 
-            is_list = hasattr(value, '__iter__') and type(value) is not str
-            format_policy = get_policy(schema, 'format')
-            format_list_policy = get_policy(schema, 'format_list')
-            format_scalar_policy = get_policy(schema, 'format_list_scalar')
-            split_policy = get_policy(schema, 'split')
-            
+            is_list = hasattr(value, "__iter__") and type(value) is not str
+            format_policy = get_policy(schema, "format")
+            format_list_policy = get_policy(schema, "format_list")
+            format_scalar_policy = get_policy(schema, "format_list_scalar")
+            split_policy = get_policy(schema, "split")
+
             if type(value) is str and split_policy:
                 value = value.split(split_policy or None)
                 is_list = True
@@ -315,10 +320,12 @@ class Cab(Cargo):
 
             if is_list:
                 # check repeat policy and form up representation
-                repeat_policy = get_policy(schema, 'repeat')
+                repeat_policy = get_policy(schema, "repeat")
                 if repeat_policy == "list":
                     if key_value:
-                        raise CabValidationError(f"Repeat policy 'list' is incompatible with schema policy 'key_value' for parameter '{name}'")
+                        raise CabValidationError(
+                            f"Repeat policy 'list' is incompatible with schema policy 'key_value' for parameter '{name}'"
+                        )
                     return [option] + list(value) if option else list(value)
                 elif repeat_policy == "[]":
                     val = "[" + ",".join(value) + "]"
@@ -328,7 +335,9 @@ class Cab(Cargo):
                 elif type(repeat_policy) is str:
                     return [option, repeat_policy.join(value)] if option else repeat_policy.join(value)
                 elif repeat_policy is None:
-                    raise CabValidationError(f"list-type parameter '{name}' does not have a repeat policy set", log=self.log)
+                    raise CabValidationError(
+                        f"list-type parameter '{name}' does not have a repeat policy set", log=self.log
+                    )
                 else:
                     raise SchemaError(f"unknown repeat policy '{repeat_policy}'", log=self.log)
             else:
@@ -342,8 +351,8 @@ class Cab(Cargo):
             if schema.required and name not in value_dict:
                 raise CabValidationError(f"required parameter '{name}' is missing", log=self.log)
             if name in value_dict:
-                positional_first = get_policy(schema, 'positional_head') 
-                positional = get_policy(schema, 'positional') or positional_first
+                positional_first = get_policy(schema, "positional_head")
+                positional = get_policy(schema, "positional") or positional_first
                 if positional:
                     pargs = pos_args[0 if positional_first else 1]
                     value = stringify_argument(name, value_dict[name], schema)
@@ -354,37 +363,39 @@ class Cab(Cargo):
                     value_dict.pop(name)
 
         args = []
-                    
+
         # now check for optional parameters that remain in the dict
         for name, value in value_dict.items():
             if name not in self.inputs_outputs:
                 raise RuntimeError(f"unknown parameter '{name}'")
             schema = self.inputs_outputs[name]
 
-            key_value = get_policy(schema, 'key_value')
+            key_value = get_policy(schema, "key_value")
 
             # apply replacementss
-            replacements = get_policy(schema, 'replace')
+            replacements = get_policy(schema, "replace")
             if replacements:
                 for rep_from, rep_to in replacements.items():
                     try:
                         name = name.replace(rep_from, rep_to)
                     except TypeError:
-                        raise TypeError(f"Could not perform policy replacement for parameter [{name}] : {rep_from} => {rep_to}")
+                        raise TypeError(
+                            f"Could not perform policy replacement for parameter [{name}] : {rep_from} => {rep_to}"
+                        )
 
-            prefix = get_policy(schema, 'prefix')
+            prefix = get_policy(schema, "prefix")
             if prefix is None:
                 prefix = "--"
             option = prefix + (schema.nom_de_guerre or name)
 
             if schema.dtype == "bool":
-                explicit = get_policy(schema, "explicit_" + str(value).lower()) 
+                explicit = get_policy(schema, "explicit_" + str(value).lower())
                 # if explicit setting is given, this also becomes the option value
                 # in key=value mode, just give that value directly
                 strval = str(value) if explicit is None else str(explicit)
                 if key_value:
                     args += [f"{option}={strval}"]
-                # in option mode, use --option value for explicit settings, 
+                # in option mode, use --option value for explicit settings,
                 # else give option for True and omit for False. TODO: some tools may eventually need a policy for
                 # passing --no-option for False.
                 else:
@@ -453,7 +464,7 @@ class Cab(Cargo):
             output = rich.markup.escape(output)
             suppress = False
             for regex, wranglers in self.wranglers:
-                match = regex.search(output) 
+                match = regex.search(output)
                 if match:
                     for wrangler in wranglers:
                         mod_output, mod_severity = wrangler.apply(self, output, match)
@@ -468,7 +479,9 @@ class Cab(Cargo):
 
             return (None, 0) if suppress else (output, severity)
 
+
 CabSchema = None
+
 
 def get_cab_schema():
     global CabSchema

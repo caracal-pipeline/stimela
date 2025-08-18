@@ -33,7 +33,7 @@ def _lookup_nameseq(name_seq: List[str], source_dict: Dict):
         source = source.get(names.pop(0), None)
         if source is None:
             return None
-    return source        
+    return source
 
 
 def _lookup_name(name: str, *sources: List[Dict]):
@@ -81,7 +81,7 @@ def _flatten_subsections(conf, depth: int = 1, sep: str = "__"):
     for name, subsection in subsections:
         pop_conf(conf, name)
         if depth > 1:
-            _flatten_subsections(subsection, depth-1, sep)
+            _flatten_subsections(subsection, depth - 1, sep)
         for key, value in subsection.items():
             conf[f"{name}{sep}{key}"] = value
 
@@ -96,14 +96,14 @@ def _scrub_subsections(conf: DictConfig, scrubs: Union[str, List[str]]):
     """
     if isinstance(scrubs, str):
         scrubs = [scrubs]
-    
+
     for scrub in scrubs:
-        if '.' in scrub:
+        if "." in scrub:
             name, remainder = scrub.split(".", 1)
         else:
             name, remainder = scrub, None
         # apply name as pattern
-        is_pattern = '*' in name or '?' in name
+        is_pattern = "*" in name or "?" in name
         matches = fnmatch.filter(conf.keys(), name)
         if not matches:
             # if no matches to pattern, it's ok, otherwise raise error
@@ -121,11 +121,18 @@ def _scrub_subsections(conf: DictConfig, scrubs: Union[str, List[str]]):
             else:
                 del conf[key]
 
-def resolve_config_refs(conf, pathname: str, location: str, name: str, includes: bool, 
-                        use_sources: Optional[List[DictConfig]],
-                        use_cache = True, 
-                        include_path: Optional[str]=None,
-                        include_stack=[]):
+
+def resolve_config_refs(
+    conf,
+    pathname: str,
+    location: str,
+    name: str,
+    includes: bool,
+    use_sources: Optional[List[DictConfig]],
+    use_cache=True,
+    include_path: Optional[str] = None,
+    include_stack=[],
+):
     """Resolves cross-references ("_use" and "_include" statements) in config object
 
     Parameters
@@ -150,7 +157,7 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
     Returns
     -------
     Tuple of (conf, dependencies)
-    conf : OmegaConf object    
+    conf : OmegaConf object
         This may be a new object if a _use key was resolved, or it may be the existing object
     dependencies : ConfigDependencies
         Set of filenames that were _included
@@ -163,18 +170,17 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
     errloc = f"config error at {location or 'top level'} in {name}"
     dependencies = ConfigDependencies()
     # self-referencing enabled if first source is ourselves
-    selfrefs =  use_sources and conf is use_sources[0]
+    selfrefs = use_sources and conf is use_sources[0]
 
     from scabha.configuratt import load, PATH
 
     if isinstance(conf, DictConfig):
-        
         ## NB: perhaps have _use and _include take effect at the point they're inserted?
         ## also add an _all statement to insert a section into all section that follow
-        # since _use and _include statements can be nested, keep on processing until all are resolved        
+        # since _use and _include statements can be nested, keep on processing until all are resolved
         updated = True
         recurse = 0
-        
+
         while updated:
             updated = False
             # check for infinite recursion
@@ -192,10 +198,12 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                             process_include_directive(include_files, keyword, dir1, subpath)
                     elif isinstance(directive, DictConfig):
                         for key, value in directive.items_ex():
-                            process_include_directive(include_files, keyword, value, subpath=key if subpath is None else f"{subpath}/{key}")
+                            process_include_directive(
+                                include_files, keyword, value, subpath=key if subpath is None else f"{subpath}/{key}"
+                            )
                     else:
                         raise ConfigurattError(f"{errloc}: {keyword} contains invalid entry of type {type(directive)}")
-                
+
                 # helper function: load list of _include or _include_post files, returns accumulated DictConfig
                 def load_include_files(keyword):
                     # pop include directive, return if None
@@ -217,18 +225,18 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                         if not incl:
                             raise ConfigurattError(f"{errloc}: empty {keyword} specifier")
                         # check for [flags] at end of specifier
-                        match = re.match(r'^(.*)\[(.*)\]$', incl)
+                        match = re.match(r"^(.*)\[(.*)\]$", incl)
                         if match:
                             incl = match.group(1)
                             flags = set([x.strip().lower() for x in match.group(2).split(",")])
-                            warn = 'warn' in flags
-                            optional = 'optional' in flags
+                            warn = "warn" in flags
+                            optional = "optional" in flags
                         else:
                             flags = {}
                             warn = optional = False
 
                         # helper function -- finds given include file (including trying an implicit .yml or .yaml extension)
-                        # returns full name of file if found, else return None if include is optional, else 
+                        # returns full name of file if found, else return None if include is optional, else
                         # adds fail record and raises exception.
                         # If opt=True, this is stronger than optional (no warnings raised)
                         def find_include_file(path: str, opt: bool = False):
@@ -267,24 +275,34 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                                     mod = importlib.import_module(modulename)
                                 except ImportError as exc:
                                     if optional:
-                                        dependencies.add_fail(FailRecord(incl, pathname, modulename=modulename, 
-                                                                         fname=filename, warn=warn))
+                                        dependencies.add_fail(
+                                            FailRecord(incl, pathname, modulename=modulename, fname=filename, warn=warn)
+                                        )
                                         if warn:
                                             print(f"Warning: unable to import module for optional include {incl}")
                                         continue
-                                    raise ConfigurattError(f"{errloc}: {keyword} {incl}: can't import {modulename} ({exc})")
+                                    raise ConfigurattError(
+                                        f"{errloc}: {keyword} {incl}: can't import {modulename} ({exc})"
+                                    )
                                 if mod.__file__ is not None:
                                     path = os.path.dirname(mod.__file__)
                                 else:
-                                    path = getattr(mod, '__path__', None)
+                                    path = getattr(mod, "__path__", None)
                                     if path is None:
                                         if optional:
-                                            dependencies.add_fail(FailRecord(incl, pathname, modulename=modulename, 
-                                                                             fname=filename, warn=warn))
+                                            dependencies.add_fail(
+                                                FailRecord(
+                                                    incl, pathname, modulename=modulename, fname=filename, warn=warn
+                                                )
+                                            )
                                             if warn:
-                                                print(f"Warning: unable to resolve path for optional include {incl}, does {modulename} contain __init__.py?")
+                                                print(
+                                                    f"Warning: unable to resolve path for optional include {incl}, does {modulename} contain __init__.py?"
+                                                )
                                             continue
-                                        raise ConfigurattError(f"{errloc}: {keyword} {incl}: can't resolve path for {modulename}, does it contain __init__.py?")
+                                        raise ConfigurattError(
+                                            f"{errloc}: {keyword} {incl}: can't resolve path for {modulename}, does it contain __init__.py?"
+                                        )
                                     path = path[0]
 
                                 filename = find_include_file(os.path.join(path, filename))
@@ -297,8 +315,8 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                                 continue
                         # relative path -- scan PATH for candidates
                         else:
-                            paths = ['.', os.path.dirname(pathname)] + PATH
-                            candidates = [os.path.join(p, incl) for p in paths] 
+                            paths = [".", os.path.dirname(pathname)] + PATH
+                            candidates = [os.path.join(p, incl) for p in paths]
                             for filename in candidates:
                                 filename = find_include_file(filename, opt=True)
                                 if filename is not None:
@@ -317,12 +335,15 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                             if os.path.samefile(path, filename):
                                 raise ConfigurattError(f"{errloc}: {filename} is included recursively")
                         # load included file
-                        incl_conf, deps = load(filename, location=location, 
-                                            name=f"{filename}, included from {name}",
-                                            includes=True, 
-                                            include_stack=include_stack,
-                                            use_cache=use_cache,
-                                            use_sources=None)   # do not expand _use statements in included files, this is done below
+                        incl_conf, deps = load(
+                            filename,
+                            location=location,
+                            name=f"{filename}, included from {name}",
+                            includes=True,
+                            include_stack=include_stack,
+                            use_cache=use_cache,
+                            use_sources=None,
+                        )  # do not expand _use statements in included files, this is done below
 
                         dependencies.update(deps)
                         if include_path is not None:
@@ -336,7 +357,7 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                             _scrub_subsections(accum_incl_conf, scrub)
                         except ConfigurattError as exc:
                             raise ConfigurattError(f"{errloc}: error scrubbing {', '.join(scrub)}", exc)
-                    
+
                     return accum_incl_conf
 
                 accum_pre = load_include_files("_include")
@@ -351,6 +372,7 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
 
             # handle _use entries
             if use_sources is not None:
+
                 def load_use_sections(keyword):
                     merge_sections = pop_conf(conf, keyword, None)
                     if merge_sections is None:
@@ -367,11 +389,16 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                         base = merge_sections[0].copy()
                         base.merge_with(*merge_sections[1:])
                         # resolve references before flattening
-                        base, deps = resolve_config_refs(base, pathname=pathname, name=name, 
-                                                location=f"{location}.{keyword}" if location else keyword, 
-                                                includes=includes, 
-                                                use_sources=use_sources, use_cache=use_cache,
-                                                include_path=include_path)
+                        base, deps = resolve_config_refs(
+                            base,
+                            pathname=pathname,
+                            name=name,
+                            location=f"{location}.{keyword}" if location else keyword,
+                            includes=includes,
+                            use_sources=use_sources,
+                            use_cache=use_cache,
+                            include_path=include_path,
+                        )
                         dependencies.update(deps)
                         if scrub:
                             try:
@@ -380,7 +407,7 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                                 raise ConfigurattError(f"{errloc}: error scrubbing {', '.join(scrub)}", exc)
                         return base
                     return None
-                
+
                 base = load_use_sections("_use")
                 if base is not None:
                     base.merge_with(conf)
@@ -388,35 +415,45 @@ def resolve_config_refs(conf, pathname: str, location: str, name: str, includes:
                 post = load_use_sections("_use_post")
                 if post is not None:
                     conf.merge_with(post)
-                
+
                 if selfrefs:
                     use_sources[0] = conf
 
         # recurse into content
         for key, value in conf.items_ex(resolve=False):
             if isinstance(value, (DictConfig, ListConfig)):
-                value1, deps = resolve_config_refs(value, pathname=pathname, name=name, 
-                                                location=f"{location}.{key}" if location else key, 
-                                                includes=includes, 
-                                                include_stack=include_stack,
-                                                use_sources=use_sources, use_cache=use_cache,
-                                                include_path=include_path)
+                value1, deps = resolve_config_refs(
+                    value,
+                    pathname=pathname,
+                    name=name,
+                    location=f"{location}.{key}" if location else key,
+                    includes=includes,
+                    include_stack=include_stack,
+                    use_sources=use_sources,
+                    use_cache=use_cache,
+                    include_path=include_path,
+                )
                 dependencies.update(deps)
-                # reassigning is expensive, so only do it if there was an actual change 
+                # reassigning is expensive, so only do it if there was an actual change
                 if value1 is not value:
                     conf[key] = value1
-                    
+
     # recurse into lists
     elif isinstance(conf, ListConfig):
         # recurse in
         for i, value in enumerate(conf._iter_ex(resolve=False)):
             if isinstance(value, (DictConfig, ListConfig)):
-                value1, deps = resolve_config_refs(value, pathname=pathname, name=name, 
-                                                location=f"{location or ''}[{i}]", 
-                                                includes=includes, 
-                                                include_stack=include_stack,
-                                                use_sources=use_sources, use_cache=use_cache,
-                                                include_path=include_path)
+                value1, deps = resolve_config_refs(
+                    value,
+                    pathname=pathname,
+                    name=name,
+                    location=f"{location or ''}[{i}]",
+                    includes=includes,
+                    include_stack=include_stack,
+                    use_sources=use_sources,
+                    use_cache=use_cache,
+                    include_path=include_path,
+                )
                 dependencies.update(deps)
                 if value1 is not value:
                     conf[i] = value

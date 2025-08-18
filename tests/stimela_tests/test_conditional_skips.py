@@ -1,6 +1,7 @@
 import os, re, subprocess, pytest
 from .test_recipe import change_test_dir, run, verify_output
 
+
 def test_conditional_skips():
     os.system("rm -fr test_conditional_skips[1234].tmp")
     print("===== all three files touched =====")

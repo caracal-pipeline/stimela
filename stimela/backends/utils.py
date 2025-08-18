@@ -8,12 +8,14 @@ from scabha.basetypes import File, Directory, MS, URI, get_filelikes
 
 ## commenting out for now -- will need to fix when we reactive the kube backend (and have tests for it)
 
-def resolve_required_mounts(mounts: Dict[str, bool],
-                            params: Dict[str, Any], 
-                            inputs: Dict[str, Parameter], 
-                            outputs: Dict[str, Parameter],
-                            remappings: Dict[str, str] = {}
-                            ):
+
+def resolve_required_mounts(
+    mounts: Dict[str, bool],
+    params: Dict[str, Any],
+    inputs: Dict[str, Parameter],
+    outputs: Dict[str, Parameter],
+    remappings: Dict[str, str] = {},
+):
     # helper function to accumulate list of target paths to be mounted
     def add_target(param_name, path, must_exist, readwrite):
         if not os.path.isdir(path):
@@ -24,8 +26,8 @@ def resolve_required_mounts(mounts: Dict[str, bool],
                 raise SchemaError(f"parameter '{param_name}': path '{path}' does not exist")
             path = os.path.dirname(path)
         path = path.rstrip("/")
-        # check for remapping -- this can happen if bind_dirs already mounts this container path to a different 
-        # host path, in which case we have a conflict 
+        # check for remapping -- this can happen if bind_dirs already mounts this container path to a different
+        # host path, in which case we have a conflict
         if path in remappings:
             raise BackendError(f"{param_name}: {path} already bound to a different host path")
         # insert into mounts (with identical target path if not already present, and possibly upgrading RO to RW)
@@ -35,14 +37,16 @@ def resolve_required_mounts(mounts: Dict[str, bool],
     for name, value in params.items():
         schema = inputs.get(name) or outputs.get(name)
         if schema is None:
-            raise SchemaError(f"parameter {name} not in defined inputs or outputs for this cab. This should have been caught by validation earlier!")
+            raise SchemaError(
+                f"parameter {name} not in defined inputs or outputs for this cab. This should have been caught by validation earlier!"
+            )
 
         files = get_filelikes(schema._dtype, value)
 
         if not files:
             continue
 
-        must_exist = schema.must_exist and name in inputs 
+        must_exist = schema.must_exist and name in inputs
         readwrite = schema.writable or name in outputs
 
         for path in files:
@@ -56,11 +60,11 @@ def resolve_required_mounts(mounts: Dict[str, bool],
             add_target(name, path, must_exist=must_exist, readwrite=readwrite)
             # check if parent directory access is required
             if schema.path_policies.access_parent or schema.path_policies.write_parent:
-                add_target(name, os.path.dirname(path), must_exist=True, 
-                           readwrite=schema.path_policies.write_parent)
-                add_target(name, os.path.dirname(realpath), must_exist=True, 
-                           readwrite=schema.path_policies.write_parent)
-    
+                add_target(name, os.path.dirname(path), must_exist=True, readwrite=schema.path_policies.write_parent)
+                add_target(
+                    name, os.path.dirname(realpath), must_exist=True, readwrite=schema.path_policies.write_parent
+                )
+
     # now, for any mount that has a symlink in the path, add the symlink target to mounts
     for path, readwrite in list(mounts.items()):
         if path.startswith("::"):
@@ -94,12 +98,14 @@ def resolve_required_mounts(mounts: Dict[str, bool],
     for path in skip_targets:
         mounts.pop(path)
 
-def resolve_remote_mounts(params: Dict[str, Any], 
-                            inputs: Dict[str, Parameter], 
-                            outputs: Dict[str, Parameter],
-                            cwd: str = "/",
-                            mounts: set = set()):
 
+def resolve_remote_mounts(
+    params: Dict[str, Any],
+    inputs: Dict[str, Parameter],
+    outputs: Dict[str, Parameter],
+    cwd: str = "/",
+    mounts: set = set(),
+):
     must_exist_list = set()
     mkdir_list = set()
     remove_if_exists_list = set()
@@ -109,9 +115,11 @@ def resolve_remote_mounts(params: Dict[str, Any],
     for name, value in params.items():
         schema = inputs.get(name) or outputs.get(name)
         if schema is None:
-            raise SchemaError(f"parameter {name} not in defined inputs or outputs for this cab. This should have been caught by validation earlier!")
+            raise SchemaError(
+                f"parameter {name} not in defined inputs or outputs for this cab. This should have been caught by validation earlier!"
+            )
 
-        dtype = schema._dtype 
+        dtype = schema._dtype
         if dtype in (File, Directory, MS):
             files = [value]
         elif dtype in (List[File], List[Directory], List[MS]):
@@ -148,7 +156,3 @@ def resolve_remote_mounts(params: Dict[str, Any],
             remove_if_exists_list.update(checked_files)
 
     return must_exist_list, mkdir_list, remove_if_exists_list, active_mounts
-
-        
-
-        

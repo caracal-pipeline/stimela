@@ -25,7 +25,8 @@ from stimela import log_exception
 
 STATUS = VERSION = BINARY = None
 
-def is_available(opts = None):
+
+def is_available(opts=None):
     global STATUS, VERSION, BINARY
     if STATUS is None:
         BINARY = which("docker")
@@ -38,15 +39,17 @@ def is_available(opts = None):
             #     suffix = ".sif"
         else:
             STATUS = "not installed"
-            VERSION = None    
+            VERSION = None
             BINARY = None
     return False
     # return VERSION is not None
+
 
 def get_status():
     return "not implemented"
     # is_available()
     # return STATUS
+
 
 def is_remote():
     return False
@@ -56,7 +59,7 @@ def is_remote():
 # class ImageBuildInfo:
 #     info: Optional[str] = ""
 #     dockerfile: Optional[str] = "Dockerfile"
-#     production: Optional[bool] = True          # False can be used to mark test (non-production) images 
+#     production: Optional[bool] = True          # False can be used to mark test (non-production) images
 
 
 # @dataclass
@@ -68,7 +71,6 @@ def is_remote():
 
 #     # optional library of common parameter sets
 #     params: Dict[str, Any] = EmptyDictDefault()
-
 
 
 # class DockerError(Exception):
@@ -86,7 +88,7 @@ def is_remote():
 #     Returns
 #     -------
 #     dict
-#         dictionary: {image_name: {version: image_info}}  
+#         dictionary: {image_name: {version: image_info}}
 #     """
 #     from stimela.main import log
 #     global _available_images
@@ -94,14 +96,14 @@ def is_remote():
 
 #         # get list of image IDs which have the right label
 #         proc = subprocess.run(["docker", "images",
-#                             "--filter", "label=stimela.image.name", 
+#                             "--filter", "label=stimela.image.name",
 #                             "--format", "{{.ID}}"], stdout=subprocess.PIPE)
 #         _available_images = {}
 #         iids = proc.stdout.split()
 
 #         # inspect details of matching IDs
 #         if iids:
-#             proc = subprocess.run(["docker", "inspect"] + iids, 
+#             proc = subprocess.run(["docker", "inspect"] + iids,
 #                                 stdout=subprocess.PIPE)
 #             # parse output
 #             inspect_data = yaml.safe_load(proc.stdout)
@@ -122,9 +124,9 @@ def is_remote():
 #                     log.warning(f"failed to parse 'docker inspect' output element {num} {repotags}: missing key {keyerr}, skipping")
 #                     continue
 
-#                 _available_images.setdefault(name, {})[version] = StimelaImageInfo(name=name, version=version, iid=iid, 
+#                 _available_images.setdefault(name, {})[version] = StimelaImageInfo(name=name, version=version, iid=iid,
 #                                                                                    full_name=repotags[0], build=StimelaImageBuildInfo(**build))
-        
+
 #     return _available_images
 
 
@@ -166,12 +168,12 @@ def is_remote():
 #     log.info(f"building {fullname} using {dockerfile}")
 
 #     subprocess.run(["docker", "build", "-t", fullname, "-f", dockerfile,
-#                     "--label", f"stimela.image.name={image.name}", 
-#                     "--label", f"stimela.image.version={version}", 
-#                     "--label", f"stimela.build.stimela_version={stimela.__version__}", 
-#                     "--label", f"stimela.build.user={getpass.getuser()}", 
-#                     "--label", f"stimela.build.host={platform.node()}", 
-#                     "--label", f"stimela.build.date={datetime.datetime.now().ctime()}", 
+#                     "--label", f"stimela.image.name={image.name}",
+#                     "--label", f"stimela.image.version={version}",
+#                     "--label", f"stimela.build.stimela_version={stimela.__version__}",
+#                     "--label", f"stimela.build.user={getpass.getuser()}",
+#                     "--label", f"stimela.build.host={platform.node()}",
+#                     "--label", f"stimela.build.date={datetime.datetime.now().ctime()}",
 #                     cwd], check=True)
 
 #     # reset this to force a rescan in available_images()
@@ -195,7 +197,6 @@ def is_remote():
 #     log.info(f"pushing {fullname}")
 
 #     subprocess.run(["docker", "push", fullname], check=True)
-        
 
 
 # def pull(image, tag=None, force=False):
@@ -345,7 +346,7 @@ def is_remote():
 
 #     def image_exists(self):
 #         """
-#             Check if image exists 
+#             Check if image exists
 #         """
 #         image_ids = subprocess.check_output(f"docker images -q {self.image}".split())
 #         if image_ids:
