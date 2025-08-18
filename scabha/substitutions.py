@@ -1,15 +1,16 @@
-import re, string
-from collections import OrderedDict
-from dataclasses import dataclass
-from contextlib import contextmanager
-from typing import Any, Dict, Optional, Union, List
-import threading
 import fnmatch
-
-from .exceptions import Error, SubstitutionError, CyclicSubstitutionError
-from .basetypes import EmptyDictDefault, Unresolved
+import re
+import string
+import threading
+from collections import OrderedDict
+from contextlib import contextmanager
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Union
 
 from omegaconf import DictConfig
+
+from .basetypes import EmptyDictDefault, Unresolved
+from .exceptions import CyclicSubstitutionError, Error, SubstitutionError
 
 
 # thanks to https://gist.github.com/bgusach/a967e0587d6e01e889fd1d776c5f3729
@@ -116,7 +117,8 @@ class SubstitutionNS(OrderedDict):
 
         Args:
             name (str): item key
-            value (Any): item value. A dict or OrderedDict value becomes a SubstitutionNS automatically, with nosubst property
+            value (Any): item value. A dict or OrderedDict value becomes a SubstitutionNS automatically,
+                with nosubst property
             nosubst (bool): use this as the nosubst property of the sub-namespace
         """
         # names with dots turned into sub-namespaces
@@ -295,7 +297,8 @@ class SubstitutionContext(object):
 
     def _evaluate_str(self, value: str, location: List[str], nesting: int):
         try:
-            # if we're doing a nested substitution, protect "{{" and "}}" from getting converted to a single brace by pre-replacing them
+            # if we're doing a nested substitution, protect "{{" and "}}" from getting converted to a single brace
+            # by pre-replacing them
             if nesting:
                 newvalue = multireplace(value, {"{{": "\u00ab", "}}": "\u00bb"})
             newvalue = self.formatter.format(value)
