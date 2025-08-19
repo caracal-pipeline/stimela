@@ -1,4 +1,13 @@
-from scabha.exceptions import *
+from scabha.exceptions import AssignmentError as AssignmentError
+from scabha.exceptions import ConfigError as ConfigError
+from scabha.exceptions import CyclicSubstitutionError as CyclicSubstitutionError
+from scabha.exceptions import FormulaError as FormulaError
+from scabha.exceptions import NestedSchemaError as NestedSchemaError
+from scabha.exceptions import ParameterValidationError as ParameterValidationError
+from scabha.exceptions import ParserError as ParserError
+from scabha.exceptions import ScabhaBaseException as ScabhaBaseException
+from scabha.exceptions import SubstitutionError as SubstitutionError
+from scabha.exceptions import UnsetError as UnsetError
 
 
 class StimelaBaseException(ScabhaBaseException):
@@ -34,10 +43,6 @@ class StepSelectionError(StimelaBaseException):
 
 
 class RecipeValidationError(StimelaBaseException):
-    pass
-
-
-class CabValidationError(StimelaBaseException):
     pass
 
 

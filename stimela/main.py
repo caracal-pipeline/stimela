@@ -1,10 +1,7 @@
 import os
 import logging
-import glob
 import sys
 import click
-import datetime
-from dataclasses import dataclass
 from omegaconf import OmegaConf
 import stimela
 from stimela import config, stimelogging, backends
@@ -33,7 +30,7 @@ class RunExecGroup(click.Group):
 
         if cmd_name in _command_aliases:
             return click.Group.get_command(self, ctx, _command_aliases[cmd_name])
-        ctx.fail("Uknown command or alias")
+        ctx.fail("Unknown command or alias")
 
     def resolve_command(self, ctx, args):
         # always return the full command name
@@ -83,7 +80,7 @@ def cli(
 ):
     global log
     log = stimela.logger(loglevel=logging.DEBUG if verbose else logging.INFO, boring=boring)
-    log.info(f"starting")  # remove this eventually, but it's handy for timing things right now
+    log.info("starting")  # remove this eventually, but it's handy for timing things right now
 
     stimela.VERBOSE = verbose
     if verbose:
@@ -147,7 +144,7 @@ def cli(
 
 
 # import commands
-from stimela.commands import doc, run, build, save_config, cleanup
+from stimela.commands import doc, run, build, save_config, cleanup  # noqa: E405, E402, F401
 
 ## These one needs to be reimplemented, current backed auto-pulls and auto-builds:
 # images, pull, build, clean

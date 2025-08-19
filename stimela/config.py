@@ -1,20 +1,24 @@
 import importlib
-import os, os.path, time, platform, traceback
-from typing import Any, List, Dict, Optional
-from dataclasses import dataclass, field
-from omegaconf.omegaconf import OmegaConf
-from omegaconf.errors import OmegaConfBaseException
+import os
+import os.path
+import platform
+import time
+import traceback
 from collections import OrderedDict
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
+
 import psutil
-
+from omegaconf.errors import OmegaConfBaseException
+from omegaconf.omegaconf import OmegaConf
 from yaml.error import YAMLError
-import stimela
-from stimela.exceptions import *
-from stimela import log_exception
 
+import stimela
 from scabha import configuratt
-from scabha.basetypes import EmptyDictDefault, EmptyListDefault, EmptyClassDefault
+from scabha.basetypes import EmptyClassDefault, EmptyDictDefault, EmptyListDefault
+from stimela import log_exception
 from stimela.backends import StimelaBackendOptions
+from stimela.exceptions import ConfigError
 
 
 @dataclass
@@ -24,10 +28,9 @@ class StimelaLogConfig(object):
     ext: str = ".txt"  # Default extension for log file.
     dir: str = "."  # Default directory for log files
 
-    symlink: Optional[str] = (
-        None  # Will make named symlink to the log directory. A useful pattern is e.g. dir="logs-{config.run.datetime}", symlink="logs",
-    )
-    # then each run has its own log dir, and "logs" always points to the latest one
+    # Will make named symlink to the log directory. A useful pattern is e.g. dir="logs-{config.run.datetime}",
+    # symlink="logs", then each run has its own log dir, and "logs" always points to the latest one
+    symlink: Optional[str] = None
 
     # how deep to nest individual log files. 0 means one log per recipe, 1 means one per step, 2 per each substep, etc.
     nest: int = 999
@@ -36,8 +39,6 @@ class StimelaLogConfig(object):
 
 
 ## overall Stimela config schema
-
-import stimela.backends
 
 
 @dataclass
@@ -165,7 +166,7 @@ def load_config(
 
     extra_cache_keys = list(extra_dotlist) + configuratt.PATH
 
-    STIMELA_DIR = os.path.dirname(stimela.__file__)
+    # STIMELA_DIR = os.path.dirname(stimela.__file__)
     from stimela.kitchen.cab import Cab, ImageInfo
 
     global StimelaConfigSchema, StimelaLibrary, StimelaConfig
@@ -285,7 +286,7 @@ def load_config(
         except Exception as exc:
             if verbose:
                 traceback.print_exc()
-            log_exception(f"error applying command-line config settings", exc)
+            log_exception("error applying command-line config settings", exc)
             return None
 
     # add runtime info

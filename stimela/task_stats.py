@@ -2,10 +2,10 @@ import atexit
 from dataclasses import dataclass, fields
 import sys
 import os.path
-from datetime import datetime, timedelta
+from datetime import datetime
 import contextlib
 import asyncio
-from typing import OrderedDict, Any, List, Callable, Optional
+from typing import OrderedDict, List, Callable, Optional
 from scabha.basetypes import EmptyListDefault
 from omegaconf import OmegaConf
 import psutil
@@ -343,8 +343,12 @@ def update_process_status():
 
             if io is not None:
                 cpu_info += [
-                    f"R [green]{s.read_count:-4}[/green] [green]{s.read_gbps:2.2f}[/green]G [green]{s.read_ms:4}[/green]ms",
-                    f"W [green]{s.write_count:-4}[/green] [green]{s.write_gbps:2.2f}[/green]G [green]{s.write_ms:4}[/green]ms ",
+                    f"R [green]{s.read_count:-4}[/green] "
+                    f"[green]{s.read_gbps:2.2f}[/green]G "
+                    f"[green]{s.read_ms:4}[/green]ms",
+                    f"W [green]{s.write_count:-4}[/green] "
+                    f"[green]{s.write_gbps:2.2f}[/green]G "
+                    f"[green]{s.write_ms:4}[/green]ms ",
                 ]
         # add extra metering
         cpu_info += extra_metrics or []

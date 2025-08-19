@@ -17,7 +17,7 @@ from rich.padding import Padding
 from rich.syntax import Syntax
 from rich.pretty import Pretty
 from rich.errors import MarkupError
-from warnings import warn
+
 
 from . import task_stats
 
@@ -91,12 +91,12 @@ class StimelaConsoleHander(rich.logging.RichHandler):
         except MarkupError:
             record.msg = escape(record.msg)
             self._console.print(f"Malformed markup in log message: {record.msg}", markup=False, style="red")
-            self._console.print(f"This is a (probably harmless) bug -- but please report", markup=False, style="red")
+            self._console.print("This is a (probably harmless) bug -- but please report", markup=False, style="red")
             try:
                 rich.logging.RichHandler.emit(self, record)
             except MarkupError:
                 self._console.print(
-                    f"Malformed markup after escaping -- this is surely a bug -- please report",
+                    "Malformed markup after escaping -- this is surely a bug -- please report",
                     markup=False,
                     style="red",
                 )
@@ -283,8 +283,9 @@ def setup_file_logger(
         log (logging.Logger): Logger object
         logfile (str): logfile. May contain dirname, which will be created as needed.
         level (Optional[Union[int, str]], optional): Logging level, defaults to logging.INFO.
-        symlink (Optional[str], optional): if set, and logfile contains a dirname that is created, sets named symlink to point to it
-            (This is useful for patterns such as logfile="logs-YYMMDD/logfile.txt", then logs -> logs-YYMMDD)
+        symlink (Optional[str], optional): if set, and logfile contains a dirname that is created, sets named symlink
+            to point to it. This is useful for patterns such as logfile="logs-YYMMDD/logfile.txt", then
+            logs -> logs-YYMMDD.
 
     Returns:
         [logging.Logger]: logger object
