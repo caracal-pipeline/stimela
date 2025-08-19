@@ -38,7 +38,7 @@ class SlurmOptions(object):
                 if not _default_srun_path:
                     _default_srun_path = False
             if _default_srun_path is False:
-                raise BackendError(f"slurm 'srun' binary not found")
+                raise BackendError("slurm 'srun' binary not found")
             return _default_srun_path
         else:
             if not os.access(self.srun_path, os.X_OK):

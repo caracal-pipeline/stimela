@@ -181,7 +181,6 @@ class Container(object):
         return output
 
     def start(self, output_wrangler=None):
-        running = True
         tstart = time.time()
         self.status = "running"
 

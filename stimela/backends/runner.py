@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Optional, Any, List
+from typing import Dict, Optional, Any
 from dataclasses import dataclass
 from omegaconf import OmegaConf
 import stimela
@@ -40,8 +40,8 @@ class BackendRunner(object):
 def validate_backend_settings(backend_opts: Dict[str, Any], log: logging.Logger) -> BackendRunner:
     """Checks that backend settings refer to a valid backend
 
-    Returs tuple of options, main, wrapper, where 'main' the the main backend, and 'wrapper' is an optional wrapper backend
-    such as slurm.
+    Returs tuple of options, main, wrapper, where 'main' the the main backend, and 'wrapper' is an optional wrapper
+    backend such as slurm.
     """
     if not isinstance(backend_opts, StimelaBackendOptions):
         backend_opts = OmegaConf.to_object(backend_opts)

@@ -1,7 +1,7 @@
 import os
 
-from typing import Dict, List, Any, Dict, Tuple
-from stimela.kitchen.cab import Cab, Parameter
+from typing import Dict, List, Any
+from stimela.kitchen.cab import Parameter
 from scabha.exceptions import SchemaError
 from stimela.exceptions import BackendError
 from scabha.basetypes import File, Directory, MS, URI, get_filelikes
@@ -38,7 +38,8 @@ def resolve_required_mounts(
         schema = inputs.get(name) or outputs.get(name)
         if schema is None:
             raise SchemaError(
-                f"parameter {name} not in defined inputs or outputs for this cab. This should have been caught by validation earlier!"
+                f"parameter {name} not in defined inputs or outputs for this cab. "
+                f"This should have been caught by validation earlier!"
             )
 
         files = get_filelikes(schema._dtype, value)
@@ -116,7 +117,8 @@ def resolve_remote_mounts(
         schema = inputs.get(name) or outputs.get(name)
         if schema is None:
             raise SchemaError(
-                f"parameter {name} not in defined inputs or outputs for this cab. This should have been caught by validation earlier!"
+                f"parameter {name} not in defined inputs or outputs for this cab. "
+                f"This should have been caught by validation earlier!"
             )
 
         dtype = schema._dtype

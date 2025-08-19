@@ -119,7 +119,8 @@ def get_image_info(cab: "stimela.kitchen.cab.Cab", backend: "stimela.backend.Sti
         backend (stimela.backend.StimelaBackendOptions): _description_
 
     Returns:
-        name, path, enable_update: tuple of docker image name, path to singularity image on disk, and enable-updates flag
+        name, path, enable_update: tuple of docker image name, path to singularity image on disk, and
+            enable-updates flag
     """
 
     # prebuilt image
@@ -181,7 +182,7 @@ def build(
     if not cached_image_exists:
         log.info(f"singularity image {simg_path} does not exist")
         if not build:
-            raise BackendError(f"no image, and singularity build options not enabled")
+            raise BackendError("no image, and singularity build options not enabled")
     # else we have an image
     # if rebuild is enabled, delete it
     elif rebuild:
@@ -206,7 +207,10 @@ def build(
     #         # force check of docker binary
     #         docker.is_available()
     #         if docker.BINARY is None:
-    #             log.warn("a docker runtime is required for auto-update of singularity images: forcing unconditional rebuild")
+    #             log.warn(
+    #                 "a docker runtime is required for auto-update of singularity images: "
+    #                 "forcing unconditional rebuild"
+    #             )
     #             build = True
     #         else:
     #             log.info("singularity auto-update: pulling and inspecting docker image")
@@ -274,7 +278,7 @@ def build(
             raise BackendError(f"singularity build returns {retcode}")
 
         if not os.path.exists(simg_path):
-            raise BackendError(f"singularity build did not return an error code, but the image did not appear")
+            raise BackendError("singularity build did not return an error code, but the image did not appear")
 
         _rebuilt_images.add(simg_path)
 
@@ -345,7 +349,8 @@ def run(
             if bind.host == "empty":
                 if "tmp" not in ephem_classes:
                     raise BackendError(
-                        f"bind_dirs.{label}: deprecated 'host: empty' setting requires that a 'tmp' ephemeral storage class be defined"
+                        f"bind_dirs.{label}: deprecated 'host: empty' setting requires that a 'tmp' ephemeral storage "
+                        f"class be defined"
                     )
                 bind.host = "ephemeral:tmp"
             ephem_class = bind.host.startswith("ephemeral:")
@@ -513,7 +518,10 @@ def run(
 
 #     image_path = os.path.abspath(os.path.join(directory, name))
 #     if os.path.exists(image_path) and not force:
-#         stimela.logger().info(f"Singularity image already exists at '{image_path}'. To replace it, please re-run with the 'force' option")
+#         stimela.logger().info(
+#             f"Singularity image already exists at '{image_path}'. "
+#             f"To replace it, please re-run with the 'force' option"
+#         )
 #     else:
 #         utils.xrun(f"cd {directory} && singularity", ["pull",
 #         	"--force" if force else "", "--name",

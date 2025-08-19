@@ -1,27 +1,5 @@
 import subprocess
-import os
-import platform
-import getpass
-from io import StringIO
-from stimela import utils
-import json
-import stimela
-import time
-import datetime
-import subprocess
-import yaml
 from shutil import which
-from typing import Dict, Union, Optional
-from typing import Any, List, Dict, Optional, Union
-from dataclasses import dataclass
-from omegaconf.omegaconf import MISSING, OmegaConf
-from omegaconf.errors import OmegaConfBaseException
-from collections import OrderedDict
-from scabha.basetypes import EmptyDictDefault, EmptyListDefault
-
-import stimela
-from stimela.exceptions import *
-from stimela import log_exception
 
 STATUS = VERSION = BINARY = None
 
@@ -121,11 +99,19 @@ def is_remote():
 #                     for key in 'stimela_version', 'user', 'host', 'date':
 #                         build[key] = labels[f'stimela.build.{key}']
 #                 except KeyError as keyerr:
-#                     log.warning(f"failed to parse 'docker inspect' output element {num} {repotags}: missing key {keyerr}, skipping")
+#                     log.warning(
+#                         f"failed to parse 'docker inspect' output element {num} {repotags}: missing key {keyerr}, "
+#                         f"skipping"
+#                     )
 #                     continue
 
-#                 _available_images.setdefault(name, {})[version] = StimelaImageInfo(name=name, version=version, iid=iid,
-#                                                                                    full_name=repotags[0], build=StimelaImageBuildInfo(**build))
+#                 _available_images.setdefault(name, {})[version] = StimelaImageInfo(
+#                     name=name,
+#                     version=version,
+#                     iid=iid,
+#                     full_name=repotags[0],
+#                     build=StimelaImageBuildInfo(**build)
+#                 )
 
 #     return _available_images
 
