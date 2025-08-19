@@ -143,7 +143,8 @@ def cli(
     config.CONFIG_DEPS.save(filename)
 
 
-# import commands
+# import commands. TODO(JSKenyon): This is circular, as the commands are importing the cli.
+# Can easily be fixed by lazily adding the commands with cli.add_command(command).
 from stimela.commands import doc, run, build, save_config, cleanup  # noqa: E405, E402, F401
 
 ## These one needs to be reimplemented, current backed auto-pulls and auto-builds:
