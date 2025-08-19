@@ -1,15 +1,11 @@
 import shlex
 import logging
-from typing import Optional, Any, Union, Dict
+from typing import Optional, Any, Dict
 from dataclasses import dataclass
 
-from stimela.exceptions import CabValidationError
 from stimela.kitchen.cab import Cab
-from scabha.cab_utils import CAB_OUTPUT_PREFIX
-from stimela.kitchen import wranglers
-from scabha.substitutions import substitutions_from
 
-from . import _CallableFlavour, _BaseFlavour
+from . import _BaseFlavour
 import stimela
 
 

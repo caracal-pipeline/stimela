@@ -1,9 +1,7 @@
-import re
-from typing import Optional, Any, Union, Dict
+from typing import Optional, Any, Dict
 import logging
 from dataclasses import dataclass
-from dataclasses import dataclass
-from omegaconf import MISSING, OmegaConf, DictConfig
+from omegaconf import OmegaConf, DictConfig
 from omegaconf.errors import OmegaConfBaseException
 from stimela.exceptions import CabValidationError
 from scabha.exceptions import ScabhaBaseException
@@ -121,7 +119,7 @@ def init_cab_flavour(cab: "stimela.kitchen.cab.Cab"):
         flavour = cls()
     elif isinstance(flavour, DictConfig):
         if "kind" not in flavour:
-            raise CabValidationError(f"flavour.kind not specified")
+            raise CabValidationError("flavour.kind not specified")
         cls, schema = lookup_flavour(flavour.kind)
         if cab is None:
             raise CabValidationError(f"unknown flavour.kind '{flavour.kind}'")
@@ -129,8 +127,8 @@ def init_cab_flavour(cab: "stimela.kitchen.cab.Cab"):
             defs = OmegaConf.merge(schema, flavour)
             flavour = cls(**defs)
         except (OmegaConfBaseException, ScabhaBaseException) as exc:
-            raise CabValidationError(f"error in flavour definition", exc)
+            raise CabValidationError("error in flavour definition", exc)
     else:
-        raise CabValidationError(f"flavour must be a string or a mapping")
+        raise CabValidationError("flavour must be a string or a mapping")
     flavour.finalize(cab)
     return flavour

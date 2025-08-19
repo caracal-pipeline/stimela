@@ -1,6 +1,6 @@
 import re
 import logging
-from typing import Optional, Any, Union, Dict, List
+from typing import Optional, Any, Dict, List
 from dataclasses import dataclass
 
 import stimela
@@ -75,7 +75,7 @@ class CasaTaskFlavour(_CallableFlavour):
 
         # log invocation
         if log:
-            log.info(f"preparing CASA task call:", extra=dict(prefix="###", style="dim"))
+            log.info("preparing CASA task call:", extra=dict(prefix="###", style="dim"))
             for line in format_dict_as_function_call(command, pass_params, indent=4):
                 log.info(f"    {line}", extra=dict(prefix="###", style="dim"))
 

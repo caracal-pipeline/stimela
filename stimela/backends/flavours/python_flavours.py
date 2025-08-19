@@ -1,5 +1,10 @@
-import re, os.path, json, zlib, codecs, base64, logging
-from typing import Optional, Any, Union, Dict
+import re
+import os.path
+import json
+import zlib
+import base64
+import logging
+from typing import Optional, Any, Dict
 from dataclasses import dataclass
 
 import stimela
@@ -148,16 +153,19 @@ class PythonCallableFlavour(_CallableFlavour):
 
         # log invocation
         if log:
-            log.info(f"preparing function call:", extra=dict(prefix="###", style="dim"))
+            log.info("preparing function call:", extra=dict(prefix="###", style="dim"))
             for line in format_dict_as_function_call(cab.command, pass_params, indent=4):
                 log.info(f"    {line}", extra=dict(prefix="###", style="dim"))
 
         # form up command string
         if stimela.VERBOSE:
-            msg1 = f"""print("## importing {py_module}.{py_function}")"""
-            msg2 = f"""print(f"## invoking callable {command}({{repr(_inputs)}}) (as click command) using external interpreter")"""
-            msg3 = f"""print(f"## invoking callable {command}({{repr(_inputs)}}) using external interpreter")"""
-            msg4 = f"""print("## return value is ", _result)"""
+            msg1 = f"print('## importing {py_module}.{py_function}')"
+            msg2 = (
+                f"print(f'## invoking callable {command}({{repr(_inputs)}}) "
+                f"(as click command) using external interpreter')"
+            )
+            msg3 = f"print(f'## invoking callable {command}({{repr(_inputs)}}) using external interpreter')"
+            msg4 = "print('## return value is ', _result)"
         else:
             msg1 = msg2 = msg3 = msg4 = ""
 
@@ -261,7 +269,7 @@ class PythonCodeFlavour(_BaseFlavour):
 
         # log invocation
         if log:
-            log.info(f"preparing python code invocation with arguments:", extra=dict(prefix="###", style="dim"))
+            log.info("preparing python code invocation with arguments:", extra=dict(prefix="###", style="dim"))
             for line in format_dict_as_function_call("", pass_params, indent=4):
                 log.info(f"{line}", extra=dict(prefix="###", style="dim"))
 
