@@ -28,4 +28,4 @@ Path(LOG_HOME).mkdir(exist_ok=True)
 # This is is the default log file. It logs stimela images, containers and processes
 LOG_FILE = "{0:s}/stimela_logfile.json".format(LOG_HOME)
 
-from .stimelogging import logger, log_exception
+from .stimelogging import logger, log_exception  # noqa
