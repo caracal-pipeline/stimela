@@ -1,16 +1,14 @@
-import os.path
-import importlib
-import hashlib
 import datetime
 import fnmatch
+import hashlib
+import importlib
+import os.path
 import subprocess
-from shutil import which
 from dataclasses import dataclass
+from shutil import which
+from typing import List, Optional, OrderedDict
 
-from omegaconf.omegaconf import OmegaConf, DictConfig, ListConfig
-from typing import Any, List, Dict, Optional, OrderedDict, Union, Callable
-
-from .common import *
+from omegaconf.omegaconf import OmegaConf
 
 
 @dataclass
@@ -118,7 +116,7 @@ class ConfigDependencies(object):
             branches = subprocess.check_output(
                 "git -c color.ui=never branch -a -v -v".split(), cwd=dirname, stderr=subprocess.DEVNULL
             )
-        except subprocess.CalledProcessError as exc:
+        except subprocess.CalledProcessError:
             self._git_cache[dirname] = None
             return None
         # use git to get the info
@@ -132,13 +130,13 @@ class ConfigDependencies(object):
         try:
             describe = subprocess.check_output("git describe --abbrev=16 --always --long --all".split(), cwd=dirname)
             gitinfo.describe = describe.decode().strip()
-        except subprocess.CalledProcessError as exc:
+        except subprocess.CalledProcessError:
             pass
         # get remote info
         try:
             remotes = subprocess.check_output("git remote -v".split(), cwd=dirname)
             gitinfo.remotes = remotes.decode().strip().split("\n")
-        except subprocess.CalledProcessError as exc:
+        except subprocess.CalledProcessError:
             pass
 
         self._git_cache[dirname] = gitinfo
@@ -176,7 +174,7 @@ class ConfigDependencies(object):
                     fname = os.path.join(os.path.dirname(mod.__file__), dep.fname)
                     if os.path.exists(fname):
                         return True
-                except ImportError as exc:
+                except ImportError:
                     pass
             elif not dep.missing_parent:
                 if os.path.exists(filename):
@@ -225,7 +223,9 @@ class ConfigDependencies(object):
     #                 if not strict or req.optional:
     #                     optional[loc, name] = req
     #                 else:
-    #                     unmet.append(ConfigurattError(f"requirement '{name}' not met for section '{loc}' in {req.filename}"))
+    #                     unmet.append(ConfigurattError(
+    #                         f"requirement '{name}' not met for section '{loc}' in {req.filename}"
+    #                     ))
     #     if unmet:
     #         raise ConfigurattError("configuration has missing requirements", nested=unmet)
 

@@ -7,7 +7,6 @@ from typing import List
 
 import dill as pickle
 
-
 from .common import PACKAGE_VERSION
 from .deps import ConfigDependencies
 
