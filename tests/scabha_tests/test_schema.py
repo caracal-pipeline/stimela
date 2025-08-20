@@ -1,9 +1,8 @@
 from dataclasses import dataclass
 import sys
-import pytest
 from scabha import configuratt, cargo
 from omegaconf import OmegaConf
-from typing import *
+from typing import Dict
 import os
 
 testdir = os.path.dirname(os.path.abspath(__file__))

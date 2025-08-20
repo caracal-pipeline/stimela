@@ -1,7 +1,12 @@
-import pytest
 import traceback
+from collections import OrderedDict
 from scabha.exceptions import SubstitutionError
-from scabha.substitutions import *
+from scabha.substitutions import (
+    SubstitutionNS,
+    substitutions_from,
+    forgiving_substitutions_from,
+    CyclicSubstitutionError,
+)
 from omegaconf import OmegaConf
 from scabha.evaluator import UNSET, Evaluator
 from scabha.validate import Unresolved
@@ -90,7 +95,7 @@ def test_subst():
             val = context.evaluate("{bar.d}")
             assert val == "not allowed"
             print("{bar.d} is ", val)
-        except CyclicSubstitutionError as exc:
+        except CyclicSubstitutionError:
             traceback.print_exc()
 
     try:
@@ -163,17 +168,17 @@ def test_formulas():
         assert r["e1"] == 1
         assert "f" not in r
         assert r["g"] == 2
-        assert r["h"] == True
+        assert r["h"] is True
         assert r["i"] == "False"
         assert "j" not in r
         assert type(r["k"]) is UNSET
         assert "l" not in r
-        assert r["m"] == True
-        assert r["n"] == True
+        assert r["m"] is True
+        assert r["n"] is True
         assert r["o"] == "z"
         assert type(r["p"]) is Unresolved
         assert r["q"] == ["a1", "=escaped", 2, 0]
-        assert r["r"] == False
+        assert r["r"] is False
         assert r["t"] == "zz"
         assert r["v1"] == 1
         assert r["v2"] == 2

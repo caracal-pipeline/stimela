@@ -4,7 +4,7 @@ import pytest
 from scabha import configuratt
 from scabha.configuratt import ConfigurattError
 from omegaconf import OmegaConf
-from typing import *
+from typing import Dict, Any
 
 # testdir = os.path.dirname(os.path.abspath(__file__))
 
