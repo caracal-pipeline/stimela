@@ -96,7 +96,8 @@ class Cab(Cargo):
     args: List[str] = EmptyListDefault()
 
     ## moved to backend: native
-    # # if set, activates this virtual environment first before running the command (not much sense doing this inside the container)
+    ## if set, activates this virtual environment first before running the command (not much sense doing this
+    ## inside the container)
     # virtual_env: Optional[str] = None
 
     # cab flavour. Default will run the command as a binary (inside image or virtual_env). Otherwise specify
@@ -202,7 +203,7 @@ class Cab(Cargo):
                 command = context.evaluate(self.command, location=["command"])
                 args = [context.evaluate(arg, location=[f"args[{i}]"]) for i, arg in enumerate(self.args)]
         except Exception as exc:
-            raise CabValidationError(f"error constructing cab command", exc)
+            raise CabValidationError("error constructing cab command", exc)
 
         # # collect command
         # if check_executable:
@@ -227,7 +228,7 @@ class Cab(Cargo):
                 for key, val in self.management.environment.items():
                     environ[key] = context.evaluate(val, location=["management", "environment"])
         except Exception as exc:
-            raise CabValidationError(f"Error applying environment variables", exc)
+            raise CabValidationError("Error applying environment variables", exc)
 
         if environ:
             self.management.environment = environ
@@ -324,7 +325,8 @@ class Cab(Cargo):
                 if repeat_policy == "list":
                     if key_value:
                         raise CabValidationError(
-                            f"Repeat policy 'list' is incompatible with schema policy 'key_value' for parameter '{name}'"
+                            f"Repeat policy 'list' is incompatible with schema policy 'key_value' for "
+                            f"parameter '{name}'"
                         )
                     return [option] + list(value) if option else list(value)
                 elif repeat_policy == "[]":
@@ -463,10 +465,11 @@ class Cab(Cargo):
             # make sure any unintended [rich style] tags are escaped in output
             output = rich.markup.escape(output)
             suppress = False
-            for regex, wranglers in self.wranglers:
+            # NOTE(JSKenyon): Changed to _wranglers to avoid shadowing import.
+            for regex, _wranglers in self.wranglers:
                 match = regex.search(output)
                 if match:
-                    for wrangler in wranglers:
+                    for wrangler in _wranglers:
                         mod_output, mod_severity = wrangler.apply(self, output, match)
                         # has wrangler asked to suppress the output?
                         if mod_output is None:

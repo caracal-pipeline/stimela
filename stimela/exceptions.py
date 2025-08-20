@@ -8,6 +8,7 @@ from scabha.exceptions import ParserError as ParserError
 from scabha.exceptions import ScabhaBaseException as ScabhaBaseException
 from scabha.exceptions import SubstitutionError as SubstitutionError
 from scabha.exceptions import UnsetError as UnsetError
+from scabha.exceptions import FormattedTraceback as FormattedTraceback
 
 
 class StimelaBaseException(ScabhaBaseException):

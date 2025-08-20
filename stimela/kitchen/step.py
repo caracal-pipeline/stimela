@@ -1,23 +1,36 @@
-import os, os.path, re, logging, copy, shutil, time
-from typing import Any, Tuple, List, Dict, Optional, Union
-from dataclasses import dataclass
-from omegaconf import MISSING, OmegaConf, DictConfig, ListConfig
-from omegaconf.errors import OmegaConfBaseException
+import copy
+import logging
+import os
+import os.path
+import shutil
+import time
 from collections import OrderedDict
 from contextlib import nullcontext
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
+
+from omegaconf import DictConfig, OmegaConf
+from omegaconf.errors import OmegaConfBaseException
 from rich.markup import escape
 
-from stimela.config import EmptyDictDefault, EmptyListDefault
-import stimela
-from stimela import log_exception, stimelogging, task_stats
-from stimela.stimelogging import log_rich_payload
-from stimela.backends import StimelaBackendSchema, runner
-from stimela.exceptions import *
 import scabha.exceptions
+import stimela
+from scabha.basetypes import UNSET, Placeholder, SkippedOutput
 from scabha.exceptions import SubstitutionError, SubstitutionErrorList
-from scabha.validate import evaluate_and_substitute, evaluate_and_substitute_object, Unresolved, join_quote
-from scabha.substitutions import SubstitutionNS, substitutions_from
-from scabha.basetypes import UNSET, Placeholder, MS, File, Directory, SkippedOutput
+from scabha.substitutions import SubstitutionNS
+from scabha.validate import Unresolved, evaluate_and_substitute_object, join_quote
+from stimela import log_exception, stimelogging, task_stats
+from stimela.backends import StimelaBackendSchema, runner
+from stimela.config import EmptyDictDefault, EmptyListDefault
+from stimela.exceptions import (
+    AssignmentError,
+    BackendError,
+    ScabhaBaseException,
+    StepValidationError,
+    StimelaCabRuntimeError,
+)
+from stimela.stimelogging import log_rich_payload
+
 from .cab import Cab, get_cab_schema
 
 Conditional = Optional[str]
@@ -307,7 +320,8 @@ class Step:
         )
         if self.invalid_params:
             raise StepValidationError(
-                f"step '{self.name}': {self.cargo.name} has the following invalid parameters: {join_quote(self.invalid_params)}"
+                f"step '{self.name}': {self.cargo.name} has the following invalid parameters: "
+                f"{join_quote(self.invalid_params)}"
             )
         return params
 
@@ -388,7 +402,8 @@ class Step:
         Args:
             backend (Dict, optional): Backend settings inherited from parent.
             subst (Dict[str, Any], optional): Substitution namespace. Defaults to None.
-            parent_log (logging.Logger, optional): parent logger for parent-related messages. Defaults to using the step logger if not supplied.
+            parent_log (logging.Logger, optional): parent logger for parent-related messages. Defaults to using the
+                step logger if not supplied.
 
         Raises:
             StepValidationError: _description_
@@ -457,9 +472,9 @@ class Step:
                             SubstitutionError(f"unknown variable '{skip.value}'"),
                         )
 
-            # Since prevalidation will have populated default values for potentially missing parameters, use those values
-            # For parameters that aren't missing, use whatever value that was suplied
-            # preserve order of specified params, to allow ordered substitutions to occur
+            # Since prevalidation will have populated default values for potentially missing parameters, use those
+            # values. For parameters that aren't missing, use whatever value that was suplied. {reserve order of
+            # specified params, to allow ordered substitutions to occur
             params = self.params.copy()
             params.update([(key, value) for key, value in self.validated_params.items() if key not in params])
 
@@ -479,13 +494,13 @@ class Step:
                 if not exc.logged and not explicit_skip:
                     if type(exc) is SubstitutionErrorList:
                         self.log_exception(
-                            StepValidationError(f"unresolved {{}}-substitution(s) in inputs:", exc.nested),
+                            StepValidationError("unresolved {}-substitution(s) in inputs:", exc.nested),
                             severity=severity,
                         )
                         # for err in exc.errors:
                         #     self.log.log(level, f"  {err}")
                     else:
-                        self.log_exception(StepValidationError(f"error validating inputs:", exc), severity=severity)
+                        self.log_exception(StepValidationError("error validating inputs:", exc), severity=severity)
                     exc.logged = True
                 if not explicit_skip:
                     self.log_summary(level, "summary of inputs follows", color="WARNING", inputs=True)
@@ -568,7 +583,8 @@ class Step:
                 ## or is older than an input
                 all_exist = True
                 for name, schema in self.outputs.items():
-                    # ignore outputs not in params (implicit outputs will be already in there thanks to validation above)
+                    # ignore outputs not in params (implicit outputs will be already in there thanks to validation
+                    # above)
                     if name in params:
                         # check for files or lists of files, and skip otherwise
                         if schema.is_file_type:
@@ -655,11 +671,11 @@ class Step:
                     raise RuntimeError("step '{self.name}': unknown cargo type")
             else:
                 if self._skip is None and subst is not None:
-                    parent_log_info(f"skipping step based on conditonal settings")
+                    parent_log_info("skipping step based on conditonal settings")
                 else:
                     parent_log.debug("skipping step based on explicit setting")
 
-            self.log.debug(f"validating outputs")
+            self.log.debug("validating outputs")
             validated = False
 
             try:
@@ -673,13 +689,13 @@ class Step:
                 if not exc.logged:
                     if type(exc) is SubstitutionErrorList:
                         self.log_exception(
-                            StepValidationError(f"unresolved {{}}-substitution(s) in outputs:", exc.nested),
+                            StepValidationError("unresolved {}-substitution(s) in outputs:", exc.nested),
                             severity=severity,
                         )
                         # for err in exc.errors:
                         #     self.log.log(level, f"  {err}")
                     else:
-                        self.log_exception(StepValidationError(f"error validating outputs:", exc), severity=severity)
+                        self.log_exception(StepValidationError("error validating outputs:", exc), severity=severity)
                     exc.logged = True
                 # raise up, unless step is being skipped
                 if skip:
@@ -704,7 +720,8 @@ class Step:
                 if skip:
                     parent_log_warning(f"invalid outputs: {join_quote(invalid)}")
                     parent_log_warning(
-                        "since the step was skipped, this is not treated as an error for now, but may cause errors downstream"
+                        "since the step was skipped, this is not treated as an error for now, but may cause errors "
+                        "downstream"
                     )
                     for key in invalid:
                         params[key] = SkippedOutput(key)
@@ -715,7 +732,8 @@ class Step:
                         raise StepValidationError(f"invalid outputs: {join_quote(truly_invalid)}", log=self.log)
                     parent_log_warning(f"invalid outputs: {join_quote(invalid)}")
                     parent_log_warning(
-                        "since some sub-steps were skipped, this is not treated as an error for now, but may cause errors downstream"
+                        "since some sub-steps were skipped, this is not treated as an error for now, but may cause "
+                        "errors downstream"
                     )
 
         return params

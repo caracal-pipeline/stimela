@@ -1,7 +1,6 @@
-from typing import Any, List, Dict, Optional, Union
+from typing import Any, Dict, Optional
 from dataclasses import dataclass
 
-from scabha.basetypes import EmptyDictDefault, EmptyListDefault
 import stimela.kitchen
 
 
