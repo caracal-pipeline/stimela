@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from omegaconf import OmegaConf
 import stimela
 from stimela import config, stimelogging, backends
+from stimela.display.display import display
 
 UID = stimela.UID
 GID = stimela.GID
@@ -29,7 +30,7 @@ class RunExecGroup(click.Group):
         if rv is not None:
             return rv
 
-        if cmd_name in _command_aliases:  
+        if cmd_name in _command_aliases:
             return click.Group.get_command(self, ctx, _command_aliases[cmd_name])
         ctx.fail("Uknown command or alias")
 
@@ -40,28 +41,43 @@ class RunExecGroup(click.Group):
 
 
 @click.group(cls=RunExecGroup)
-@click.option('--backend', '-b', type=click.Choice(backends.SUPPORTED_BACKENDS), 
+@click.option('--backend', '-b', type=click.Choice(backends.SUPPORTED_BACKENDS),
                  help="Backend to use.")
 @click.option('--config', '-c', 'config_files', metavar='FILE', multiple=True,
                 help="Extra user-defined config file(s) to load.")
 @click.option('--set', '-s', 'config_dotlist', metavar='SECTION.VAR=VALUE', multiple=True,
                 help="Extra user-defined config settings to apply.")
-@click.option('--no-sys-config', is_flag=True, 
+@click.option('--no-sys-config', is_flag=True,
                 help="Do not load standard config files.")
-@click.option('-I', '--include', metavar="DIR", multiple=True, 
+@click.option('-I', '--include', metavar="DIR", multiple=True,
                 help="Add directory to _include paths. Can be given multiple times.")
-@click.option('--clear-cache', '-C', is_flag=True, 
+@click.option('--clear-cache', '-C', is_flag=True,
                 help="Reset the configuration cache. First thing to try in case of strange configuration errors.")
-@click.option('--boring', '-B', is_flag=True, 
+@click.option('--boring', '-B', is_flag=True,
                 help="Disables progress bar and any other fancy console outputs.")
-@click.option('--verbose', '-v', is_flag=True, 
+@click.option('--simple', '-S', is_flag=True,
+                help="Use simplified (single-line) displays.")
+@click.option('--verbose', '-v', is_flag=True,
               help='Be extra verbose in output.')
 @click.version_option(str(stimela.__version__))
-def cli(config_files=[], config_dotlist=[], include=[], backend=None, 
-        verbose=False, no_sys_config=False, clear_cache=False, boring=False):
+def cli(
+    config_files=[],
+    config_dotlist=[],
+    include=[],
+    backend=None,
+    verbose=False,
+    no_sys_config=False,
+    clear_cache=False,
+    boring=False,
+    simple=False
+):
     global log
     log = stimela.logger(loglevel=logging.DEBUG if verbose else logging.INFO, boring=boring)
     log.info(f"starting")        # remove this eventually, but it's handy for timing things right now
+
+    # Force simple displays when provided.
+    if simple:
+        display.set_variant_override("simple")
 
     stimela.VERBOSE = verbose
     if verbose:
@@ -87,7 +103,7 @@ def cli(config_files=[], config_dotlist=[], include=[], backend=None,
         sys.exit(1)
 
     if config.CONFIG_LOADED:
-        log.info(f"loaded config from {config.CONFIG_LOADED}") 
+        log.info(f"loaded config from {config.CONFIG_LOADED}")
 
     # select backend, passing it any config options that have been set up
     if backend:
@@ -103,7 +119,7 @@ def cli(config_files=[], config_dotlist=[], include=[], backend=None,
             stimela.CONFIG.opts.log.level = "DEBUG"
         # setup file logging
         subst = OmegaConf.create(dict(
-                    info=OmegaConf.create(dict(fqname='stimela', taskname='stimela')), 
+                    info=OmegaConf.create(dict(fqname='stimela', taskname='stimela')),
                     config=stimela.CONFIG))
         stimelogging.update_file_logger(log, stimela.CONFIG.opts.log, nesting=-1, subst=subst)
 
