@@ -9,7 +9,7 @@ from rich.markup import escape
 
 from stimela import stimelogging, task_stats
 
-from stimela.exceptions import StimelaCabRuntimeError, StimelaProcessRuntimeError
+from stimela.exceptions import StimelaCabRuntimeError
 
 DEBUG = 0
 
@@ -134,7 +134,7 @@ def xrun(
                 task.cancel()
 
         reporter = asyncio.Task(task_stats.run_process_status_update())
-        ctrl_c_caught = job_interrupted = False
+        ctrl_c_caught = job_interrupted = False  # noqa: F841 - Keep for now.
         try:
             job = asyncio.gather(
                 proc_awaiter(proc, reporter),
@@ -142,17 +142,18 @@ def xrun(
                 stream_reader(proc.stderr, "stderr"),
                 reporter,
             )
-            results = loop.run_until_complete(job)
+            results = loop.run_until_complete(job)  # noqa: F841 - Keep for now.
             status = proc.returncode
             if log_result:
                 log.info(f"{command_name} exited with code {status} after {elapsed()}")
-        except SystemExit as exc:
+        except SystemExit:
             loop.run_until_complete(proc.wait())
         except KeyboardInterrupt:
             if callable(kill_callback):
                 command_context.ctrl_c()
                 log.warning(
-                    f"Ctrl+C caught after {elapsed()}, shutting down {command_name} process, please give it a few moments"
+                    f"Ctrl+C caught after {elapsed()}, shutting down {command_name} process, please give it a few "
+                    f"moments"
                 )
                 kill_callback()
                 log.info(
@@ -164,15 +165,16 @@ def xrun(
                 try:
                     raise KeyboardInterrupt
                     # below doesn't work -- figure out later
-                    if not gentle_ctrl_c or ctrl_c_caught:
-                        raise KeyboardInterrupt
-                    command_context.ctrl_c()
-                    ctrl_c_caught = True
-                    log.warning(
-                        f"Ctrl+C caught after {elapsed()}, job will error out when {command_name} process {proc.pid} completes"
-                    )
-                    log.warning(f"Use Ctrl+C again to interrupt the job")
-                    results = loop.run_until_complete(job)
+                    # if not gentle_ctrl_c or ctrl_c_caught:
+                    #     raise KeyboardInterrupt
+                    # command_context.ctrl_c()
+                    # ctrl_c_caught = True
+                    # log.warning(
+                    #     f"Ctrl+C caught after {elapsed()}, job will error out when {command_name} process {proc.pid} "
+                    #     f"completes"
+                    # )
+                    # log.warning("Use Ctrl+C again to interrupt the job")
+                    # results = loop.run_until_complete(job)
                 except KeyboardInterrupt:
                     log.warning(f"Ctrl+C caught after {elapsed()}, interrupting {command_name} process {proc.pid}")
                     job_interrupted = True

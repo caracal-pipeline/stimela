@@ -1,19 +1,18 @@
-import select
-import traceback
-import subprocess
 import errno
-import re
-import time
 import logging
-import sys
+import select
 import signal
+import subprocess
+import sys
+import time
+import traceback
 
-DEBUG = 0
 from stimela.exceptions import StimelaCabRuntimeError, StimelaProcessRuntimeError
 
-log = None
+from .xrun_asyncio import dispatch_to_log, get_stimela_logger
 
-from .xrun_asyncio import get_stimela_logger, dispatch_to_log
+DEBUG = 0
+log = None
 
 
 def global_logger():
@@ -22,7 +21,8 @@ def global_logger():
     if log is None:
         log = get_stimela_logger()
         if log is None:
-            # no stimela => running payload inside a cab -- just use the global logger and make it echo everything to the console
+            # no stimela => running payload inside a cab -- just use the global logger and make it echo everything to
+            # the console
             logging.basicConfig(format="%(message)s", level=logging.INFO, stream=sys.stdout)
             log = logging.getLogger()
     return log
@@ -252,7 +252,7 @@ def xrun(
                     proc.wait(1)
                     log.info(f"Process {proc.pid} has exited with return code {proc.returncode}")
                     break
-                except subprocess.TimeoutExpired as exc:
+                except subprocess.TimeoutExpired:
                     if retry == 4:
                         log.warning(f"Terminating process {proc.pid}")
                         proc.terminate()
