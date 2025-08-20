@@ -2,7 +2,8 @@ from dataclasses import fields
 from typing import List, Dict
 import logging
 import os.path
-import time, datetime
+import time
+import datetime
 import threading
 from stimela.exceptions import BackendError
 from stimela.utils.xrun_asyncio import dispatch_to_log
@@ -176,7 +177,7 @@ class PodProxy(object):
                         dispatch_to_log(
                             self.log, line, contname, "stdout", prefix=f"{contname}#", style=style, output_wrangler=None
                         )
-            except ApiException as exc:
+            except ApiException:
                 dispatch_to_log(
                     self.log, "no logs", contname, "stdout", prefix=f"{contname}#", style=style, output_wrangler=None
                 )
@@ -211,13 +212,21 @@ class PodProxy(object):
                             style=style,
                             output_wrangler=None,
                         )
-                except ApiException as exc:
-                    # dispatch_to_log(log, f"error reading log: {exc}", command_name, "stdout", prefix=prefix, style=style, output_wrangler=None)
+                except ApiException:
+                    # dispatch_to_log(
+                    #     log,
+                    #     f"error reading log: {exc}",
+                    #     command_name,
+                    #     "stdout",
+                    #     prefix=prefix,
+                    #     style=style,
+                    #     output_wrangler=None,
+                    # )
                     pass
                 time.sleep(2)
         finally:
             dispatch_to_log(
-                self.log, f"exiting logging thread", name, "stdout", prefix=prefix, style=style, output_wrangler=None
+                self.log, "exiting logging thread", name, "stdout", prefix=prefix, style=style, output_wrangler=None
             )
 
     def add_file_check_commands(self, params: Dict[str, Parameter], cab: Cab):
@@ -232,13 +241,19 @@ class PodProxy(object):
                 error = f"VALIDATION ERROR: mkdir {path} failed"
                 self.add_init_container_command(
                     cont,
-                    f"ls {path} >/dev/null; if mkdir -p {path}; then echo Created directory {path}; else echo {error}; exit 1; fi; ",
+                    (
+                        f"ls {path} >/dev/null; if mkdir -p {path}; then echo Created directory {path}; "
+                        f"else echo {error}; exit 1; fi; "
+                    ),
                 )
             for path in must_exist_list:
                 error = f"VALIDATION ERROR: {path} doesn\\'t exist"
                 self.add_init_container_command(
                     cont,
-                    f"ls {path} >/dev/null; if test -e '{path}'; then echo Checking {path}: exists; else echo {error}; exit 1; fi; ",
+                    (
+                        f"ls {path} >/dev/null; if test -e '{path}'; then echo Checking {path}: exists; "
+                        f"else echo {error}; exit 1; fi; "
+                    ),
                 )
             for path in remove_if_exists_list:
                 self.add_init_container_command(
@@ -283,7 +298,8 @@ class PodProxy(object):
                 time.sleep(0.5)
         if self._aux_pod_threads:
             self.log.info(
-                f"{len(self._aux_pod_threads)} auxiliary threads still alive after {cleanup_elapsed():.1}s, giving up on the cleanup"
+                f"{len(self._aux_pod_threads)} auxiliary threads still alive after {cleanup_elapsed():.1}s, "
+                f"giving up on the cleanup"
             )
 
     def run_pod_command(self, command, cmdname, input=None, wrangler=None):
@@ -336,7 +352,9 @@ class PodProxy(object):
         #                 content = OmegaConf.to_container(content)
         #             content = formatter(content)
         #             log.info(f"injecting {filename} into pod {podname}")
-        #             retcode = run_pod_command(f"mkdir -p {os.path.dirname(filename)}; cat >{filename}", "inject", input=content)
+        #             retcode = run_pod_command(
+        #                 f"mkdir -p {os.path.dirname(filename)}; cat >{filename}", "inject", input=content
+        #             )
         #             if retcode:
         #                 log.warning(f"injection returns exit code {retcode} after {elapsed()}")
         #             else:
@@ -356,11 +374,12 @@ class PodProxy(object):
         # # add local mounts
         # def add_local_mount(name, path, dest, readonly):
         #     name = name.replace("_", "-")  # sanitize name
-        #     pod_manifest['spec']['volumes'].append(dict(
-        #         name = name,
-        #         hostPath = dict(path=path, type='Directory' if os.path.isdir(path) else 'File')
-        #     ))
-        #     pod_manifest['spec']['containers'][0]['volumeMounts'].append(dict(name=name, mountPath=dest, readOnly=readonly))
+        #     pod_manifest["spec"]["volumes"].append(
+        #         dict(name=name, hostPath=dict(path=path, type="Directory" if os.path.isdir(path) else "File"))
+        #     )
+        #     pod_manifest["spec"]["containers"][0]["volumeMounts"].append(
+        #         dict(name=name, mountPath=dest, readOnly=readonly)
+        #     )
 
         # # this will accumulate mounted paths from runtime spec
         # prior_mounts = {}
@@ -376,7 +395,7 @@ class PodProxy(object):
         #         prior_mounts[path] = not mount.readonly
 
         # # add local mounts to support parameters
-        # req_mounts = {} # resolve_required_mounts(params, cab.inputs, cab.outputs, prior_mounts=prior_mounts)
+        # req_mounts = {}  # resolve_required_mounts(params, cab.inputs, cab.outputs, prior_mounts=prior_mounts)
         # for i, (path, readwrite) in enumerate(req_mounts.items()):
         #     log.info(f"adding local mount {path} (readwrite={readwrite})")
         #     add_local_mount(f"automount-{i}", path, path, not readwrite)

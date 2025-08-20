@@ -1,16 +1,22 @@
-import logging, time, json, datetime, os.path, pathlib, secrets, shlex
-from typing import Dict, Optional, Any, List, Callable
-from dataclasses import fields
+import logging
+import time
+import json
+import datetime
+import os.path
+import pathlib
+import secrets
+import shlex
+from typing import Dict, Optional, Any
 from requests import ConnectionError
 from urllib3.exceptions import HTTPError
 import subprocess
 import yaml
 import traceback
 
-from omegaconf import OmegaConf, DictConfig, ListConfig
+from omegaconf import OmegaConf
 
 from stimela.utils.xrun_asyncio import dispatch_to_log
-from stimela.exceptions import StimelaCabParameterError, StimelaCabRuntimeError, BackendError
+from stimela.exceptions import StimelaCabRuntimeError, BackendError
 from stimela.stimelogging import log_exception, log_rich_payload
 from stimela.task_stats import declare_subcommand, declare_subtask, update_process_status
 from stimela.backends import StimelaBackendOptions
@@ -20,12 +26,8 @@ from stimela.kitchen.cab import Cab
 
 from . import (
     get_kube_api,
-    InjectedFileFormatters,
-    session_id,
     session_user,
     resource_labels,
-    session_user_info,
-    KubeBackendOptions,
 )
 from .kube_utils import StatusReporter
 
@@ -33,7 +35,6 @@ from kubernetes.client.rest import ApiException
 
 from .kube_utils import apply_pod_spec
 from . import infrastructure, pod_proxy
-from stimela.backends.utils import resolve_remote_mounts
 
 
 def run(
@@ -88,26 +89,32 @@ def run(
     pathlib.Path(numba_cache_dir).mkdir(parents=True, exist_ok=True)
 
     pod_created = dask_job_created = volumes_provisioned = port_forward_proc = None
-    bailout_with_exceptions = []
 
     def k8s_event_handler(event):
         objkind = event.involved_object.kind
         objname = event.involved_object.name
         if event.message.startswith("Error: ErrImagePull"):
             raise BackendError(
-                f"{objkind} '{objname}': failed to pull the image '{image_name}'. Preceding log messages may contain extra information.",
+                f"{objkind} '{objname}': failed to pull the image '{image_name}'. "
+                f"Preceding log messages may contain extra information.",
                 event.to_dict(),
             )
         if event.reason == "Failed":
             raise BackendError(
-                f"{objkind} '{objname}' reported a 'Failed' event. Preceding log messages may contain extra information.",
+                f"{objkind} '{objname}' reported a 'Failed' event. "
+                f"Preceding log messages may contain extra information.",
                 event.to_dict(),
             )
         # if event.reason == "ProvisioningFailed":
-        #     raise BackendError(f"{objkind} '{objname}' reported a 'ProvisioningFailed' event. Preceding log messages may contain extra information.",
-        #                       event.to_dict())
+        #     raise BackendError(
+        #         f"{objkind} '{objname}' reported a 'ProvisioningFailed' event. "
+        #         f"Preceding log messages may contain extra information.",
+        #         event.to_dict(),
+        #     )
         # if event.reason == "FailedScheduling":
-        #     raise StimelaCabRuntimeError(f"k8s has reported a 'FailedScheduling' event. Preceding log messages may contain extra information.")
+        #     raise StimelaCabRuntimeError(
+        #         f"k8s has reported a 'FailedScheduling' event. Preceding log messages may contain extra information."
+        #     )
 
     # define debug-print function
     if kube.debug.verbose:
@@ -236,14 +243,20 @@ def run(
                         session_init = pvc.init_commands or []
                         if session_init:
                             # if pvc0.owner != session_user:
-                            #     log.warning(f"skipping session initialization on PVC '{name}': owned by {pvc0.owner} not {session_user}")
+                            #     log.warning(
+                            #         f"skipping session initialization on PVC '{name}': "
+                            #         f"owned by {pvc0.owner} not {session_user}"
+                            #     )
                             # else:
                             pod.add_volume_init(pvc.mount, session_init, root=True)
                             volumes_initialized.append(pvc0)
                     # add step init
                     if pvc.step_init_commands:
                         # if pvc0.owner != session_user:
-                        #     log.warning(f"skipping step initialization on PVC '{name}': owned by {pvc0.owner} not {session_user}")
+                        #     log.warning(
+                        #         f"skipping step initialization on PVC '{name}': "
+                        #         f"owned by {pvc0.owner} not {session_user}"
+                        #     )
                         # else:
                         pod.add_volume_init(pvc.mount, pvc.step_init_commands, root=False)
 
@@ -273,7 +286,7 @@ def run(
                             resp = kube_api.read_namespaced_pod_status(
                                 name=podname, namespace=namespace, _request_timeout=(1, 1)
                             )
-                        except (ConnectionError, HTTPError) as exc:
+                        except (ConnectionError, HTTPError):
                             if connected:
                                 log.warn("lost connection to k8s cluster while waiting for the pod to start")
                                 log.warn("this is not fatal if the connection eventually resumes")
@@ -329,7 +342,7 @@ def run(
                             resp = custom_obj_api.get_namespaced_custom_object_status(
                                 group, version, namespace, plural, name=dask_job_name, _request_timeout=(1, 1)
                             )
-                        except (ConnectionError, HTTPError) as exc:
+                        except (ConnectionError, HTTPError):
                             if connected:
                                 log.warn("lost connection to k8s cluster while waiting for the daskjob to start")
                                 log.warn("this is not fatal if the connection eventually resumes")
@@ -374,7 +387,8 @@ def run(
                     # start port forwarding
                     if kube.dask_cluster.forward_dashboard_port:
                         log.info(
-                            f"starting port-forward process for http-dashboard to local port {kube.dask_cluster.forward_dashboard_port}"
+                            f"starting port-forward process for http-dashboard to local port "
+                            f"{kube.dask_cluster.forward_dashboard_port}"
                         )
                         port_forward_proc = subprocess.Popen(
                             [
@@ -399,9 +413,9 @@ def run(
 
             if kube.debug.pause_on_start:
                 log.warning("kube.debug.pause_on_start is enabled")
-                log.warning(f"to access the pod, run")
+                log.warning("to access the pod, run")
                 log.warning(f"  $ kubectl exec -it {podname} -- /bin/bash")
-                log.warning(f"your command line inside the pod is:")
+                log.warning("your command line inside the pod is:")
                 if kube.dir:
                     log.warning(f"  $ cd {kube.dir}")
                 log.warning(f"  $ {' '.join(args)}")
@@ -413,7 +427,7 @@ def run(
         with declare_subtask(f"{cab.name}.kube-run", status_reporter=statrep.update):
             retcode = None
             connected = True
-            last_log_timestamp = None
+            # last_log_timestamp = None
             seen_logs = set()
             while retcode is None and pod.check_status():
                 try:
@@ -437,7 +451,7 @@ def run(
                             else:
                                 timestamp, content = line, ""
                             key = timestamp, hash(content)
-                            last_log_timestamp = timestamp
+                            # last_log_timestamp = timestamp
                             if key in seen_logs:
                                 continue
                             seen_logs.add(key)
@@ -456,14 +470,14 @@ def run(
                         log.info("container state is 'waiting'")
                         dprint(2, "waiting", waiting)
                     elif running:
-                        log.info(f"container state is 'running'")
+                        log.info("container state is 'running'")
                         dprint(2, "running", running)
                     elif terminated:
                         retcode = terminated.exit_code
                         log.info(f"container state is 'terminated', exit code is {retcode}")
                         dprint(2, "terminated", terminated)
                         break
-                except (ConnectionError, HTTPError) as exc:
+                except (ConnectionError, HTTPError):
                     # this could be a real connection error, or maybe the process has gone quiet
                     # so check with the statrep object, since that maintains its own connection status
                     if not statrep.connected:
@@ -483,7 +497,7 @@ def run(
                 cabstat.declare_failure(f"{command_name} returns error code {retcode} after {elapsed()}")
                 if retcode == 137:
                     log.error(
-                        f"the pod was killed with an out-of-memory condition. Check your kube.job_pod.memory settings"
+                        "the pod was killed with an out-of-memory condition. Check your kube.job_pod.memory settings"
                     )
             else:
                 log.info(f"{command_name} returns exit code {retcode} after {elapsed()}")

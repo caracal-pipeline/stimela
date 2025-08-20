@@ -19,13 +19,13 @@ from . import (
     get_context_namespace,
 )
 
-Lifecycle = KubeBackendOptions.Volume.Lifecycle
-
 from kubernetes import client
 from kubernetes.client.rest import ApiException
 from kubernetes.config import ConfigException
 
 from .kube_utils import resolve_unit
+
+Lifecycle = KubeBackendOptions.Volume.Lifecycle
 
 # Note that transient PVCs have a stimela claim name (without ID suffix) and an actual name (with ID suffix)
 # Non-transient PVCs have the same name (no suffix in each case)
@@ -88,7 +88,7 @@ def init(backend: StimelaBackendOptions, log: logging.Logger, cleanup: bool = Fa
         try:
             pods = kube_api.list_namespaced_pod(namespace=namespace, label_selector=f"stimela_user={session_user}")
         except ApiException as exc:
-            raise BackendError(f"k8s API error while listing pods", json.loads(exc.body))
+            raise BackendError("k8s API error while listing pods", json.loads(exc.body))
 
         running_pods = []
         for pod in pods.items:
@@ -99,13 +99,13 @@ def init(backend: StimelaBackendOptions, log: logging.Logger, cleanup: bool = Fa
             if cleanup or kube.infrastructure.on_startup.cleanup_pods:
                 klog.warning(f"you have {len(running_pods)} pod(s) running from another stimela session")
                 if not cleanup:
-                    klog.warning(f"since kube.infrastructure.on_starup.cleanup_pods is set, these will be terminated")
+                    klog.warning("since kube.infrastructure.on_starup.cleanup_pods is set, these will be terminated")
                 for podname in running_pods:
                     _delete_pod(kube_api, podname, namespace, klog)
 
             elif kube.infrastructure.on_startup.report_pods:
                 klog.warning(f"you have {len(running_pods)} pod(s) running from another stimela session")
-                klog.warning(f"set kube.infrastructure.on_startup.report_pods to false to disable this warning")
+                klog.warning("set kube.infrastructure.on_startup.report_pods to false to disable this warning")
         else:
             klog.info("no pods running")
 
@@ -122,13 +122,13 @@ def init(backend: StimelaBackendOptions, log: logging.Logger, cleanup: bool = Fa
         if cleanup or kube.infrastructure.on_startup.cleanup_pvcs:
             klog.warning(f"you have {len(transient_pvcs)} transient PVC(s) from another stimela session")
             if not cleanup:
-                klog.warning(f"since kube.infrastructure.on_starup.cleanup_pvcs is set, these will be deleted")
+                klog.warning("since kube.infrastructure.on_starup.cleanup_pvcs is set, these will be deleted")
             delete_pvcs(kube, transient_pvcs.keys(), log=log, refresh=False, force=True)
             refresh_pvc_list(kube)
 
         elif kube.infrastructure.on_startup.report_pvcs:
             klog.warning(f"you have {len(transient_pvcs)} transient PVC(s) from another stimela session")
-            klog.warning(f"set kube.infrastructure.on_startup.report_pvcs to false to disable this warning")
+            klog.warning("set kube.infrastructure.on_startup.report_pvcs to false to disable this warning")
     elif cleanup:
         klog.info("checking for transient PVCs: none found")
 
@@ -146,7 +146,7 @@ def refresh_pvc_list(kube: KubeBackendOptions):
     try:
         list_pvcs = kube_api.list_namespaced_persistent_volume_claim(namespace)
     except ApiException as exc:
-        raise BackendError(f"k8s API error while listing PVCs", json.loads(exc.body)) from None
+        raise BackendError("k8s API error while listing PVCs", json.loads(exc.body)) from None
     pvc_names = []
     terminating_pvcs = {}
     # convert to PVC entry
@@ -252,7 +252,7 @@ def resolve_volumes(kube: KubeBackendOptions, log: logging.Logger, step_token=No
                 resources=client.V1ResourceRequirements(requests={"storage": pvc.capacity}),
             )
             try:
-                resp = kube_api.create_namespaced_persistent_volume_claim(namespace, newpvc)
+                resp = kube_api.create_namespaced_persistent_volume_claim(namespace, newpvc)  # noqa: F841
             except ApiException as exc:
                 raise BackendError(f"k8s API error while creating PVC '{pvc.name}'", json.loads(exc.body)) from None
             pvc.owner = session_user
@@ -382,7 +382,7 @@ def close(backend: StimelaBackendOptions, log: logging.Logger):
             pods = kube_api.list_namespaced_pod(namespace=namespace, label_selector=f"stimela_session_id={session_id}")
         except ApiException as exc:
             body = json.loads(exc.body)
-            log_exception(BackendError(f"k8s API error while listing pods", (exc, body)), severity="error", log=klog)
+            log_exception(BackendError("k8s API error while listing pods", (exc, body)), severity="error", log=klog)
             return
 
         running_pods = []
@@ -392,7 +392,7 @@ def close(backend: StimelaBackendOptions, log: logging.Logger):
 
         if running_pods:
             klog.warning(f"you have {len(running_pods)} pod(s) still pending or running from this session")
-            klog.warning(f"since kube.infrastructure.on_exit.cleanup_pods is set, these will be terminated")
+            klog.warning("since kube.infrastructure.on_exit.cleanup_pods is set, these will be terminated")
             for podname in running_pods:
                 _delete_pod(kube_api, podname, namespace, klog)
 

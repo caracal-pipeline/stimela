@@ -171,7 +171,7 @@ class StatusReporter(object):
                     if self.event_handler:
                         try:
                             self.event_handler(event)
-                        except Exception as exc:
+                        except Exception:
                             self.log.error(self.kube.debug.event_format.format(event=event))
                             raise
                     # no error from handler, report event if configured to
@@ -215,7 +215,10 @@ class StatusReporter(object):
                     else:
                         pod_status = pod.status.phase
                     # if pod.status.container_statuses:
-                    #     print(f"Pod: {pname}, status: {pod_status}, {[st.state for st in pod.status.container_statuses]}")
+                    #     print(
+                    #         f"Pod: {pname}, status: {pod_status}, "
+                    #         f"{[st.state for st in pod.status.container_statuses]}"
+                    #     )
                     # get container states
                     if pod.status.container_statuses:
                         for cst in pod.status.container_statuses:
@@ -231,7 +234,7 @@ class StatusReporter(object):
                     )
                 except ApiException as exc:
                     self.report_api_error("metrics.k8s.io", exc)
-        except (ConnectionError, HTTPError) as exc:
+        except (ConnectionError, HTTPError):
             self.connected = False
             # self.log.warning(f"disconnected: {exc}")
         # add connection status

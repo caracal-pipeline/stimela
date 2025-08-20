@@ -8,7 +8,6 @@ import json
 import secrets
 import getpass
 import logging
-import time
 import pwd
 import grp
 import os

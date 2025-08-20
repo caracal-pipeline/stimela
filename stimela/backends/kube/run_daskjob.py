@@ -1,8 +1,5 @@
-from contextlib import contextmanager
 from kubernetes import client, config, watch
 from kubernetes.client.rest import ApiException
-from pprint import pprint
-import yaml
 import time
 
 from stimela.backends.kube.daskjob import render, create_parser, split_args
@@ -25,15 +22,15 @@ def find_daskjob_components(daskjob, namespace):
     )
     runner_pod_name = runner_pod.items[0].metadata.name
 
-    scheduler_pod = v1.list_namespaced_pod(
-        namespace=namespace, label_selector=f"dask.org/cluster-name={job_name},dask.org/component=scheduler"
-    )
-    scheduler_pod_name = scheduler_pod.items[0].metadata.name
+    # scheduler_pod = v1.list_namespaced_pod(
+    #     namespace=namespace, label_selector=f"dask.org/cluster-name={job_name},dask.org/component=scheduler"
+    # )
+    # scheduler_pod_name = scheduler_pod.items[0].metadata.name
 
-    worker_pods = v1.list_namespaced_pod(
-        namespace=namespace, label_selector=f"dask.org/cluster-name={job_name},dask.org/component=worker"
-    )
-    worker_pod_names = [wp.metadata.name for wp in worker_pods.items]
+    # worker_pods = v1.list_namespaced_pod(
+    #     namespace=namespace, label_selector=f"dask.org/cluster-name={job_name},dask.org/component=worker"
+    # )
+    # worker_pod_names = [wp.metadata.name for wp in worker_pods.items]
 
     w = watch.Watch()
     for e in w.stream(v1.read_namespaced_pod_log, name=runner_pod_name, namespace=namespace):
