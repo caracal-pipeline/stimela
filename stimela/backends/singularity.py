@@ -1,20 +1,23 @@
-import subprocess
-import os
+import datetime
 import logging
+import os
 import pathlib
 import shutil
-from tempfile import mkdtemp
+import subprocess
 from contextlib import ExitStack
-from enum import Enum
-import stimela
-from shutil import which
 from dataclasses import dataclass
+from enum import Enum
+from shutil import which
+from tempfile import mkdtemp
+from typing import Any, Dict, Optional, Union
+
 from omegaconf import OmegaConf
-from typing import Dict, Any, Optional, Union
+
+import stimela
 from scabha.basetypes import EmptyDictDefault
-import datetime
-from stimela.utils.xrun_asyncio import xrun
 from stimela.exceptions import BackendError
+from stimela.utils.xrun_asyncio import xrun
+
 from . import native
 
 ReadWrite = Enum("BindMode", "ro rw", module=__name__)

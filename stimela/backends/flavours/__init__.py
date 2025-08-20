@@ -1,11 +1,13 @@
-from typing import Optional, Any, Dict
 import logging
 from dataclasses import dataclass
-from omegaconf import OmegaConf, DictConfig
+from typing import Any, Dict, Optional
+
+from omegaconf import DictConfig, OmegaConf
 from omegaconf.errors import OmegaConfBaseException
-from stimela.exceptions import CabValidationError
-from scabha.exceptions import ScabhaBaseException
+
 import stimela
+from scabha.exceptions import ScabhaBaseException
+from stimela.exceptions import CabValidationError
 
 
 class _BaseFlavour(object):
@@ -83,8 +85,8 @@ def lookup_flavour(kind):
     # init map the first time we're called
     if _flavour_map is None:
         from .binary import BinaryFlavour
-        from .python_flavours import PythonCallableFlavour, PythonCodeFlavour
         from .casa import CasaTaskFlavour
+        from .python_flavours import PythonCallableFlavour, PythonCodeFlavour
 
         _flavour_map = {
             "binary": BinaryFlavour,

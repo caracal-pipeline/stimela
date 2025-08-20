@@ -1,15 +1,14 @@
-import logging
 import datetime
-import resource
+import logging
 import os.path
-
-from typing import Dict, Optional, Any
+import resource
+from typing import Any, Dict, Optional
 
 import stimela
 import stimela.kitchen
-from stimela.utils.xrun_asyncio import xrun
-from stimela.exceptions import StimelaProcessRuntimeError, BackendSpecificationError
 from scabha.substitutions import substitutions_from
+from stimela.exceptions import BackendSpecificationError, StimelaProcessRuntimeError
+from stimela.utils.xrun_asyncio import xrun
 
 
 def update_rlimits(rlimits: Dict[str, Any], log: logging.Logger):

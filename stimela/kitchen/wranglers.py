@@ -1,10 +1,10 @@
-import re
-import logging
 import json
-import yaml
+import logging
+import re
 from typing import Optional, Union
-from omegaconf import ListConfig
 
+import yaml
+from omegaconf import ListConfig
 
 from scabha.cargo import ListOrString
 from stimela.exceptions import CabValidationError, StimelaCabOutputError, StimelaCabRuntimeError

@@ -1,12 +1,13 @@
-import subprocess
-import os
-from io import StringIO
-from stimela import utils
-import json
-import stimela
-import time
 import datetime
+import json
+import os
+import subprocess
 import tempfile
+import time
+from io import StringIO
+
+import stimela
+from stimela import utils
 
 
 def is_available(opts=None):

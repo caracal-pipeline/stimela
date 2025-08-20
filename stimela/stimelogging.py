@@ -1,23 +1,24 @@
+import copy
+import logging
 import os.path
 import re
-import logging
 import traceback
-import copy
 from types import TracebackType
-from typing import Optional, OrderedDict, Union, Any
-from omegaconf import DictConfig
-from scabha.exceptions import ScabhaBaseException, FormattedTraceback
-from scabha.substitutions import SubstitutionNS, forgiving_substitutions_from
-import rich.progress
+from typing import Any, Optional, OrderedDict, Union
+
 import rich.logging
-from rich.tree import Tree
+import rich.progress
+from omegaconf import DictConfig
 from rich import print as rich_print
+from rich.errors import MarkupError
 from rich.markup import escape
 from rich.padding import Padding
-from rich.syntax import Syntax
 from rich.pretty import Pretty
-from rich.errors import MarkupError
+from rich.syntax import Syntax
+from rich.tree import Tree
 
+from scabha.exceptions import FormattedTraceback, ScabhaBaseException
+from scabha.substitutions import SubstitutionNS, forgiving_substitutions_from
 
 from . import task_stats
 

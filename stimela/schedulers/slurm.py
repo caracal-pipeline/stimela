@@ -1,8 +1,8 @@
-from stimela.kitchen.batch import Batch
-from stimela.utils.xrun_poll import xrun
-from stimela.exceptions import StimelaCabRuntimeError
 import subprocess
 
+from stimela.exceptions import StimelaCabRuntimeError
+from stimela.kitchen.batch import Batch
+from stimela.utils.xrun_poll import xrun
 
 binary = "srun"
 

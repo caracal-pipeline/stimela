@@ -1,17 +1,17 @@
 import logging
-from typing import Dict, Any
 import re
 from datetime import datetime
-from rich.markup import escape
-from requests import ConnectionError
-from urllib3.exceptions import HTTPError
+from typing import Any, Dict
 
+from kubernetes.client.rest import ApiException
 from omegaconf import OmegaConf
+from requests import ConnectionError
+from rich.markup import escape
+from urllib3.exceptions import HTTPError
 
 from stimela.exceptions import StimelaCabRuntimeError
 
-from kubernetes.client.rest import ApiException
-from . import get_kube_api, KubeBackendOptions
+from . import KubeBackendOptions, get_kube_api
 
 k8s_cpu_units = {
     "": 1,

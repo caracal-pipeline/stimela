@@ -1,14 +1,14 @@
-import traceback
-import os
-import signal
-import datetime
 import asyncio
+import datetime
 import logging
+import os
 import re
+import signal
+import traceback
+
 from rich.markup import escape
 
 from stimela import stimelogging, task_stats
-
 from stimela.exceptions import StimelaCabRuntimeError
 
 DEBUG = 0

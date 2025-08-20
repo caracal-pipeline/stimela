@@ -1,23 +1,25 @@
-import os.path
 import itertools
-import yaml
-import shlex
+import os.path
 import re
-from typing import Any, List, Dict, Optional, Union
+import shlex
 from collections import OrderedDict
-from enum import Enum
 from dataclasses import dataclass
-from omegaconf import MISSING, OmegaConf, DictConfig
-from omegaconf.errors import OmegaConfBaseException
-import rich.markup
+from enum import Enum
+from typing import Any, Dict, List, Optional, Union
 
-from scabha.cargo import Parameter, Cargo, ListOrString, ParameterPolicies, ParameterCategory
-from stimela.exceptions import CabValidationError, StimelaCabRuntimeError, StimelaBaseImageError
+import rich.markup
+import yaml
+from omegaconf import MISSING, DictConfig, OmegaConf
+from omegaconf.errors import OmegaConfBaseException
+
+from scabha.basetypes import EmptyClassDefault, EmptyDictDefault, EmptyListDefault
+from scabha.cargo import Cargo, ListOrString, Parameter, ParameterCategory, ParameterPolicies
 from scabha.exceptions import SchemaError
-from scabha.basetypes import EmptyDictDefault, EmptyListDefault, EmptyClassDefault
-from stimela.backends import flavours, StimelaBackendSchema
-from . import wranglers
 from scabha.substitutions import substitutions_from
+from stimela.backends import StimelaBackendSchema, flavours
+from stimela.exceptions import CabValidationError, StimelaBaseImageError, StimelaCabRuntimeError
+
+from . import wranglers
 
 ParameterPassingMechanism = Enum("ParameterPassingMechanism", "args yaml", module=__name__)
 

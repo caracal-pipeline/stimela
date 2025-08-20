@@ -1,6 +1,8 @@
-from scabha.basetypes import get_filelikes, File, URI, Directory, MS
-from typing import Dict, List, Set, Tuple, Union, Optional
+from typing import Dict, List, Optional, Set, Tuple, Union
+
 import pytest
+
+from scabha.basetypes import MS, URI, Directory, File, get_filelikes
 
 
 @pytest.fixture(scope="module", params=[File, URI, Directory, MS])

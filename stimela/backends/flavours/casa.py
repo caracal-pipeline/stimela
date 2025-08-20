@@ -1,14 +1,14 @@
-import re
 import logging
-from typing import Optional, Any, Dict, List
+import re
 from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
 import stimela
 from scabha.basetypes import EmptyListDefault
 from scabha.exceptions import SubstitutionError
-from stimela.kitchen.cab import Cab
-from stimela.kitchen import wranglers
 from scabha.substitutions import substitutions_from
+from stimela.kitchen import wranglers
+from stimela.kitchen.cab import Cab
 
 from . import _CallableFlavour
 from .python_flavours import format_dict_as_function_call

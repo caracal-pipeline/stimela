@@ -1,10 +1,12 @@
-import sys
 import os.path
+import sys
+from typing import Any, Dict
+
 import pytest
+from omegaconf import OmegaConf
+
 from scabha import configuratt
 from scabha.configuratt import ConfigurattError
-from omegaconf import OmegaConf
-from typing import Dict, Any
 
 # testdir = os.path.dirname(os.path.abspath(__file__))
 

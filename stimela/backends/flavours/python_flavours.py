@@ -1,21 +1,21 @@
-import re
-import os.path
-import json
-import zlib
 import base64
+import json
 import logging
-from typing import Optional, Any, Dict
+import os.path
+import re
+import zlib
 from dataclasses import dataclass
+from typing import Any, Dict, Optional
 
 import stimela
-from scabha.exceptions import SubstitutionError
-from stimela.exceptions import CabValidationError
-from stimela.kitchen.cab import Cab
 from scabha.cab_utils import CAB_OUTPUT_PREFIX
-from stimela.kitchen import wranglers
+from scabha.exceptions import SubstitutionError
 from scabha.substitutions import substitutions_from
+from stimela.exceptions import CabValidationError
+from stimela.kitchen import wranglers
+from stimela.kitchen.cab import Cab
 
-from . import _CallableFlavour, _BaseFlavour
+from . import _BaseFlavour, _CallableFlavour
 
 
 def form_python_function_call(function: str, cab: Cab, params: Dict[str, Any]):

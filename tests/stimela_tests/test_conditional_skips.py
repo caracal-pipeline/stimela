@@ -1,5 +1,7 @@
 import os
-from .test_recipe import change_test_dir as change_test_dir, run, verify_output
+
+from .test_recipe import change_test_dir as change_test_dir
+from .test_recipe import run, verify_output
 
 
 def test_conditional_skips():

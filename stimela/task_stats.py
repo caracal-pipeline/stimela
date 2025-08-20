@@ -1,20 +1,20 @@
-import atexit
-from dataclasses import dataclass, fields
-import sys
-import os.path
-from datetime import datetime
-import contextlib
 import asyncio
-from typing import OrderedDict, List, Callable, Optional
-from scabha.basetypes import EmptyListDefault
-from omegaconf import OmegaConf
-import psutil
+import atexit
+import contextlib
+import os.path
+import sys
+from dataclasses import dataclass, fields
+from datetime import datetime
+from typing import Callable, List, Optional, OrderedDict
 
-import rich.progress
+import psutil
 import rich.logging
+import rich.progress
+from omegaconf import OmegaConf
 from rich.table import Table
 from rich.text import Text
 
+from scabha.basetypes import EmptyListDefault
 from stimela import stimelogging
 
 # this is "" for the main process, ".0", ".1", for subprocesses, ".0.0" for nested subprocesses

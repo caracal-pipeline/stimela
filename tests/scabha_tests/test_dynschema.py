@@ -1,6 +1,6 @@
-from scabha.cargo import Parameter
-from typing import Dict, Any
+from typing import Any, Dict
 
+from scabha.cargo import Parameter
 
 _jones_schema = dict(
     t_int=Parameter(dtype="Union[str, int]", info="time solution interval"),

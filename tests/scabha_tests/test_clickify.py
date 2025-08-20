@@ -1,8 +1,10 @@
 #!/usr/bin/env python
-from typing import Tuple, List, Optional
-import sys
 import os.path
+import sys
+from typing import List, Optional, Tuple
+
 import click
+
 from scabha.schema_utils import clickify_parameters
 
 schema_file = os.path.join(os.path.dirname(__file__), "test_clickify.yaml")

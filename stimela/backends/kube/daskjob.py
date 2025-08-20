@@ -1,9 +1,9 @@
 import argparse
-import yaml
-
 import os
 import sys
 from uuid import uuid4
+
+import yaml
 
 
 def create_parser():

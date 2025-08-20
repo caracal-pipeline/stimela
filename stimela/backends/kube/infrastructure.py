@@ -1,28 +1,27 @@
-import logging
 import atexit
 import json
+import logging
 import time
-from typing import Optional, Dict, List
-
-from stimela.backends import StimelaBackendOptions
-from stimela.stimelogging import log_exception
-from stimela.task_stats import update_process_status
-
-from stimela.exceptions import BackendError
-from . import (
-    session_id,
-    session_user,
-    resource_labels,
-    run_kube,
-    KubeBackendOptions,
-    get_kube_api,
-    get_context_namespace,
-)
+from typing import Dict, List, Optional
 
 from kubernetes import client
 from kubernetes.client.rest import ApiException
 from kubernetes.config import ConfigException
 
+from stimela.backends import StimelaBackendOptions
+from stimela.exceptions import BackendError
+from stimela.stimelogging import log_exception
+from stimela.task_stats import update_process_status
+
+from . import (
+    KubeBackendOptions,
+    get_context_namespace,
+    get_kube_api,
+    resource_labels,
+    run_kube,
+    session_id,
+    session_user,
+)
 from .kube_utils import resolve_unit
 
 Lifecycle = KubeBackendOptions.Volume.Lifecycle

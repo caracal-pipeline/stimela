@@ -1,12 +1,12 @@
-import shlex
 import logging
-from typing import Optional, Any, Dict
+import shlex
 from dataclasses import dataclass
+from typing import Any, Dict, Optional
 
+import stimela
 from stimela.kitchen.cab import Cab
 
 from . import _BaseFlavour
-import stimela
 
 
 @dataclass
@@ -37,7 +37,7 @@ class BinaryFlavour(_BaseFlavour):
         return args, args
 
     def get_image_name(self, cab: Cab, backend: "stimela.backend.StimelaBackendOptions"):
-        from stimela.backends import resolve_image_name
         from stimela import CONFIG
+        from stimela.backends import resolve_image_name
 
         return resolve_image_name(backend, cab.image or CONFIG.images["default-python"])

@@ -7,8 +7,9 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 
-import stimela
 from datetime import date
+
+import stimela
 
 author = "Oleg Smirnov, Sphesihle Makhathini and RATT"
 project = "stimela"

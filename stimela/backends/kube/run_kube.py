@@ -1,40 +1,37 @@
-import logging
-import time
-import json
 import datetime
+import json
+import logging
 import os.path
 import pathlib
 import secrets
 import shlex
-from typing import Dict, Optional, Any
+import subprocess
+import time
+import traceback
+from typing import Any, Dict, Optional
+
+import yaml
+from kubernetes.client.rest import ApiException
+from omegaconf import OmegaConf
 from requests import ConnectionError
 from urllib3.exceptions import HTTPError
-import subprocess
-import yaml
-import traceback
 
-from omegaconf import OmegaConf
-
-from stimela.utils.xrun_asyncio import dispatch_to_log
-from stimela.exceptions import StimelaCabRuntimeError, BackendError
+from stimela.backends import StimelaBackendOptions
+from stimela.exceptions import BackendError, StimelaCabRuntimeError
+from stimela.kitchen.cab import Cab
 from stimela.stimelogging import log_exception, log_rich_payload
 from stimela.task_stats import declare_subcommand, declare_subtask, update_process_status
-from stimela.backends import StimelaBackendOptions
-from stimela.kitchen.cab import Cab
+from stimela.utils.xrun_asyncio import dispatch_to_log
 
 # needs pip install kubernetes dask-kubernetes
-
 from . import (
     get_kube_api,
-    session_user,
+    infrastructure,
+    pod_proxy,
     resource_labels,
+    session_user,
 )
-from .kube_utils import StatusReporter
-
-from kubernetes.client.rest import ApiException
-
-from .kube_utils import apply_pod_spec
-from . import infrastructure, pod_proxy
+from .kube_utils import StatusReporter, apply_pod_spec
 
 
 def run(

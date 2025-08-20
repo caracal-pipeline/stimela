@@ -1,4 +1,4 @@
-from stimela import logger, LOG_FILE
+from stimela import LOG_FILE, logger
 
 
 def make_parser(subparsers):

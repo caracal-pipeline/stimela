@@ -1,9 +1,11 @@
-from dataclasses import dataclass
-import sys
-from scabha import configuratt, cargo
-from omegaconf import OmegaConf
-from typing import Dict
 import os
+import sys
+from dataclasses import dataclass
+from typing import Dict
+
+from omegaconf import OmegaConf
+
+from scabha import cargo, configuratt
 
 testdir = os.path.dirname(os.path.abspath(__file__))
 

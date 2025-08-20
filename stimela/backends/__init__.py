@@ -1,18 +1,19 @@
 import logging
 from dataclasses import dataclass
-from typing import Dict, Any, Optional
 from enum import Enum
-from omegaconf import ListConfig, OmegaConf
-from stimela.exceptions import BackendSpecificationError, BackendError
-from stimela.stimelogging import log_exception
-from scabha.basetypes import EmptyDictDefault, EmptyClassDefault
+from typing import Any, Dict, Optional
 
-from .singularity import SingularityBackendOptions
-from .kube import KubeBackendOptions
-from .native import NativeBackendOptions
-from .slurm import SlurmOptions
+from omegaconf import ListConfig, OmegaConf
 
 import stimela
+from scabha.basetypes import EmptyClassDefault, EmptyDictDefault
+from stimela.exceptions import BackendError, BackendSpecificationError
+from stimela.stimelogging import log_exception
+
+from .kube import KubeBackendOptions
+from .native import NativeBackendOptions
+from .singularity import SingularityBackendOptions
+from .slurm import SlurmOptions
 
 ## left as memo to self
 # Backend = Enum("Backend", "docker singularity podman kubernetes native", module=__name__)

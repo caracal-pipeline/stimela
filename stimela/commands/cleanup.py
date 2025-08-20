@@ -1,11 +1,12 @@
-import click
-from omegaconf import OmegaConf
 from typing import List
 
+import click
+from omegaconf import OmegaConf
+
 import stimela
-from stimela import logger, log_exception
-from stimela.main import cli
+from stimela import log_exception, logger
 from stimela.exceptions import BackendError
+from stimela.main import cli
 
 from .run import load_recipe_files
 

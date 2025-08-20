@@ -1,18 +1,19 @@
 import fnmatch
 import sys
+from typing import Dict, List
+
 import click
-from typing import List, Dict
-from rich.tree import Tree
-from rich.table import Table
 from rich import print as rich_print
+from rich.table import Table
+from rich.tree import Tree
 
 import stimela
-from stimela import logger, log_exception
-from stimela.main import cli
 from scabha.cargo import ParameterCategory
-from stimela.kitchen.recipe import Recipe
+from stimela import log_exception, logger
+from stimela.exceptions import CabValidationError, RecipeValidationError
 from stimela.kitchen.cab import Cab
-from stimela.exceptions import RecipeValidationError, CabValidationError
+from stimela.kitchen.recipe import Recipe
+from stimela.main import cli
 from stimela.task_stats import destroy_progress_bar
 
 from .run import load_recipe_files, resolve_recipe_files

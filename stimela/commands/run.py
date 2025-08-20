@@ -1,36 +1,35 @@
-import itertools
-import click
-import logging
-import os.path
-import yaml
-import sys
-import traceback
-import re
 import glob
 import importlib
-from datetime import datetime
-from typing import List, Optional, Tuple
+import itertools
+import logging
+import os.path
+import re
+import sys
+import traceback
 from collections import OrderedDict
-from omegaconf.omegaconf import OmegaConf, OmegaConfBaseException
-from benedict import benedict
+from datetime import datetime
 from pathlib import Path
+from typing import List, Optional, Tuple
+
+import click
+import yaml
+from benedict import benedict
+from omegaconf.omegaconf import OmegaConf, OmegaConfBaseException
 
 import stimela
+import stimela.backends
+import stimela.config
 from scabha import configuratt
 from scabha.basetypes import UNSET
+from scabha.configuratt.common import IMPLICIT_EXTENSIONS
 from scabha.exceptions import ScabhaBaseException
 from scabha.substitutions import SubstitutionNS
-from stimela import stimelogging
-import stimela.config
+from stimela import log_exception, logger, stimelogging, task_stats
 from stimela.config import ConfigExceptionTypes
-from stimela import logger, log_exception
-from stimela.exceptions import RecipeValidationError, StimelaRuntimeError, StepSelectionError, StepValidationError
-from stimela.main import cli
-from stimela.kitchen.recipe import Recipe, Step, RecipeSchema
+from stimela.exceptions import RecipeValidationError, StepSelectionError, StepValidationError, StimelaRuntimeError
+from stimela.kitchen.recipe import Recipe, RecipeSchema, Step
 from stimela.kitchen.run_state import graph_to_constraints
-from stimela import task_stats
-import stimela.backends
-from scabha.configuratt.common import IMPLICIT_EXTENSIONS
+from stimela.main import cli
 
 
 def resolve_recipe_files(filename: str, log: logging.Logger, use_manifest: bool = True):

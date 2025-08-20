@@ -1,7 +1,9 @@
-import click
 from typing import List
-from stimela.main import cli
+
+import click
+
 import stimela
+from stimela.main import cli
 
 
 @cli.command(
@@ -15,8 +17,8 @@ import stimela
 @click.argument("images", nargs=-1, metavar="NAME[:VERSION]", required=False)
 @click.option("-a", "--all", is_flag=True, help="push all images")
 def push(images: List[str], all=False):
-    from stimela.main import BACKEND
     from stimela import CONFIG
+    from stimela.main import BACKEND
 
     log = stimela.logger()
 

@@ -1,9 +1,9 @@
-import os
 import logging
+import os
 import subprocess
 
-from .logging_utils import MultiplexingHandler
 from . import exceptions
+from .logging_utils import MultiplexingHandler
 
 
 def init_logger(name="SCABHA", fmt="{asctime}: {message}", datefmt="%Y-%m-%d %H:%M:%S", loglevel="INFO"):

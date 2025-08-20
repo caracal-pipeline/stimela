@@ -1,11 +1,12 @@
-import os
 import logging
-from shutil import which
+import os
 from dataclasses import dataclass
-from omegaconf import OmegaConf
-from typing import Dict, List, Any, Optional
-from scabha.basetypes import EmptyDictDefault
+from shutil import which
+from typing import Any, Dict, List, Optional
 
+from omegaconf import OmegaConf
+
+from scabha.basetypes import EmptyDictDefault
 from stimela.exceptions import BackendError
 
 # path to default srun binary

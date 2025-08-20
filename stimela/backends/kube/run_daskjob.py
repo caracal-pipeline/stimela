@@ -1,9 +1,9 @@
-from kubernetes import client, config, watch
-from kubernetes.client.rest import ApiException
 import time
 
-from stimela.backends.kube.daskjob import render, create_parser, split_args
+from kubernetes import client, config, watch
+from kubernetes.client.rest import ApiException
 
+from stimela.backends.kube.daskjob import create_parser, render, split_args
 
 # Define custom resource details
 DASKJOB_GROUP = "kubernetes.dask.org"  # the CRD's group name

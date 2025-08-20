@@ -5,9 +5,9 @@ import glob
 import operator
 import os.path
 import typing
+from collections import OrderedDict
 from functools import reduce
 from typing import Any, Dict, List
-from collections import OrderedDict
 
 import pyparsing as pp
 from omegaconf import DictConfig, ListConfig

@@ -1,14 +1,16 @@
 import traceback
 from collections import OrderedDict
+
+from omegaconf import OmegaConf
+
+from scabha.evaluator import UNSET, Evaluator
 from scabha.exceptions import SubstitutionError
 from scabha.substitutions import (
-    SubstitutionNS,
-    substitutions_from,
-    forgiving_substitutions_from,
     CyclicSubstitutionError,
+    SubstitutionNS,
+    forgiving_substitutions_from,
+    substitutions_from,
 )
-from omegaconf import OmegaConf
-from scabha.evaluator import UNSET, Evaluator
 from scabha.validate import Unresolved
 
 

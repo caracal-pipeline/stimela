@@ -1,9 +1,11 @@
-import click
-import stimela
-from stimela.main import cli
-from omegaconf.omegaconf import OmegaConf
 from datetime import datetime
 from enum import Enum
+
+import click
+from omegaconf.omegaconf import OmegaConf
+
+import stimela
+from stimela.main import cli
 
 
 @cli.command(

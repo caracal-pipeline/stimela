@@ -1,5 +1,6 @@
 from itertools import chain
-from typing import Optional, List, Tuple, Set
+from typing import List, Optional, Set, Tuple
+
 import networkx as nx
 
 from stimela.exceptions import StepSelectionError
