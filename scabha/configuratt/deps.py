@@ -1,16 +1,15 @@
-import os.path
-import importlib
-import hashlib
 import datetime
 import fnmatch
+import hashlib
+import importlib
+import os.path
 import subprocess
-from shutil import which
 from dataclasses import dataclass
+from shutil import which
+from typing import List, Optional, OrderedDict
 
-from omegaconf.omegaconf import OmegaConf, DictConfig, ListConfig
-from typing import Any, List, Dict, Optional, OrderedDict, Union, Callable
+from omegaconf.omegaconf import OmegaConf
 
-from .common import *
 
 @dataclass
 class FailRecord(object):
@@ -19,6 +18,7 @@ class FailRecord(object):
     modulename: Optional[str] = None
     fname: Optional[str] = None
     warn: bool = True
+
 
 @dataclass
 class RequirementRecord(object):
@@ -37,8 +37,8 @@ class ConfigDependencies(object):
         self._git = which("git")
         # self.provides = OmegaConf.create()
         # self.requires = OmegaConf.create()
-    
-    def add(self, filename: str, origin: Optional[str]=None, missing=False, **extra_attrs):
+
+    def add(self, filename: str, origin: Optional[str] = None, missing=False, **extra_attrs):
         """Adds a file to the set of dependencies
 
         Args:
@@ -55,19 +55,19 @@ class ConfigDependencies(object):
             depinfo.origin = origin
         else:
             if missing or not os.path.exists(filename):
-                depinfo.mtime     = 0 
+                depinfo.mtime = 0
                 depinfo.mtime_str = "n/a"
                 self.deps[filename] = depinfo
                 return
             # get mtime and hash
-            depinfo.mtime     = os.path.getmtime(filename) 
-            depinfo.mtime_str = datetime.datetime.fromtimestamp(depinfo.mtime).strftime('%c')
+            depinfo.mtime = os.path.getmtime(filename)
+            depinfo.mtime_str = datetime.datetime.fromtimestamp(depinfo.mtime).strftime("%c")
             if not os.path.isdir(filename):
-                depinfo.md5hash   = hashlib.md5(open(filename, "rb").read()).hexdigest()
+                depinfo.md5hash = hashlib.md5(open(filename, "rb").read()).hexdigest()
             # add git info
             dirname = os.path.realpath(filename)
             if not os.path.isdir(dirname):
-                dirname = os.path.dirname(dirname) 
+                dirname = os.path.dirname(dirname)
             gitinfo = self._get_git_info(dirname)
             if gitinfo:
                 depinfo.git = gitinfo
@@ -113,10 +113,10 @@ class ConfigDependencies(object):
         if not self._git:
             return None
         try:
-            branches = subprocess.check_output("git -c color.ui=never branch -a -v -v".split(), 
-                                                cwd=dirname, 
-                                                stderr=subprocess.DEVNULL)
-        except subprocess.CalledProcessError as exc:
+            branches = subprocess.check_output(
+                "git -c color.ui=never branch -a -v -v".split(), cwd=dirname, stderr=subprocess.DEVNULL
+            )
+        except subprocess.CalledProcessError:
             self._git_cache[dirname] = None
             return None
         # use git to get the info
@@ -130,13 +130,13 @@ class ConfigDependencies(object):
         try:
             describe = subprocess.check_output("git describe --abbrev=16 --always --long --all".split(), cwd=dirname)
             gitinfo.describe = describe.decode().strip()
-        except subprocess.CalledProcessError as exc:
+        except subprocess.CalledProcessError:
             pass
         # get remote info
         try:
             remotes = subprocess.check_output("git remote -v".split(), cwd=dirname)
-            gitinfo.remotes = remotes.decode().strip().split('\n')
-        except subprocess.CalledProcessError as exc:
+            gitinfo.remotes = remotes.decode().strip().split("\n")
+        except subprocess.CalledProcessError:
             pass
 
         self._git_cache[dirname] = gitinfo
@@ -145,10 +145,13 @@ class ConfigDependencies(object):
     def get_description(self):
         desc = OrderedDict()
         for filename, attrs in self.deps.items():
-            attrs_items = attrs.items() if attrs else [] 
-            attrs_str = [f"mtime: {datetime.datetime.fromtimestamp(value).strftime('%c')}" 
-                            if attr == "mtime" else f"{attr}: {value}"
-                            for attr, value in attrs_items]
+            attrs_items = attrs.items() if attrs else []
+            attrs_str = [
+                f"mtime: {datetime.datetime.fromtimestamp(value).strftime('%c')}"
+                if attr == "mtime"
+                else f"{attr}: {value}"
+                for attr, value in attrs_items
+            ]
             desc[filename] = attrs_str
         return desc
 
@@ -171,7 +174,7 @@ class ConfigDependencies(object):
                     fname = os.path.join(os.path.dirname(mod.__file__), dep.fname)
                     if os.path.exists(fname):
                         return True
-                except ImportError as exc:
+                except ImportError:
                     pass
             elif not dep.missing_parent:
                 if os.path.exists(filename):
@@ -220,7 +223,9 @@ class ConfigDependencies(object):
     #                 if not strict or req.optional:
     #                     optional[loc, name] = req
     #                 else:
-    #                     unmet.append(ConfigurattError(f"requirement '{name}' not met for section '{loc}' in {req.filename}"))
+    #                     unmet.append(ConfigurattError(
+    #                         f"requirement '{name}' not met for section '{loc}' in {req.filename}"
+    #                     ))
     #     if unmet:
     #         raise ConfigurattError("configuration has missing requirements", nested=unmet)
 
@@ -233,5 +238,5 @@ class ConfigDependencies(object):
     #             del section[loc_elem[-1]]
     #         except KeyError as exc:
     #             pass
-        
+
     #     return optional

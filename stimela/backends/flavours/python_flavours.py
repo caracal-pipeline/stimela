@@ -1,16 +1,21 @@
-import re, os.path, json, zlib, codecs, base64, logging
-from typing import Optional, Any, Union, Dict
+import base64
+import json
+import logging
+import os.path
+import re
+import zlib
 from dataclasses import dataclass
+from typing import Any, Dict, Optional
 
 import stimela
-from scabha.exceptions import SubstitutionError
-from stimela.exceptions import CabValidationError
-from stimela.kitchen.cab import Cab
 from scabha.cab_utils import CAB_OUTPUT_PREFIX
-from stimela.kitchen import wranglers
+from scabha.exceptions import SubstitutionError
 from scabha.substitutions import substitutions_from
+from stimela.exceptions import CabValidationError
+from stimela.kitchen import wranglers
+from stimela.kitchen.cab import Cab
 
-from . import _CallableFlavour, _BaseFlavour
+from . import _BaseFlavour, _CallableFlavour
 
 
 def form_python_function_call(function: str, cab: Cab, params: Dict[str, Any]):
@@ -36,12 +41,12 @@ def form_python_function_call(function: str, cab: Cab, params: Dict[str, Any]):
 def format_dict_as_function_call(func_name: Optional[str], d: Dict[str, Any], indent=4):
     """formats dict as a function call"""
     if func_name:
-        lines = [f"{func_name}("] 
+        lines = [f"{func_name}("]
         comma = ","
     else:
         lines = []
-        comma = ''
-    pad = ' ' * indent
+        comma = ""
+    pad = " " * indent
     for k, v in d.items():
         lines.append(f"{pad}{k}={repr(v)}{comma}")
     # strip trailing comma
@@ -50,7 +55,7 @@ def format_dict_as_function_call(func_name: Optional[str], d: Dict[str, Any], in
     return lines
 
 
-def get_python_interpreter_args(cab: Cab, subst: Dict[str, Any], virtual_env: Optional[str]=None):
+def get_python_interpreter_args(cab: Cab, subst: Dict[str, Any], virtual_env: Optional[str] = None):
     """
     Helper. Given a cab definition, forms up appropriate argument list to
     invoke the interpreter. Invokes a virtual environment as appropriate.
@@ -74,7 +79,7 @@ def get_python_interpreter_args(cab: Cab, subst: Dict[str, Any], virtual_env: Op
     else:
         interpreter = cab.flavour.interpreter_binary
 
-    args =  cab.flavour.interpreter_command.format(python=interpreter).split()
+    args = cab.flavour.interpreter_command.format(python=interpreter).split()
 
     return args
 
@@ -85,8 +90,9 @@ class PythonCallableFlavour(_CallableFlavour):
     Represents a cab flavour that is a Python callable. Cab command field is
     expected to be in the form of [package.]module.function
     """
+
     kind: str = "python"
-    # name of python binary to use  
+    # name of python binary to use
     interpreter_binary: str = "python"
     # Full command used to launch interpreter. {python} gets substituted for the interpreter path
     interpreter_command: str = "{python} -u"
@@ -104,7 +110,7 @@ class PythonCallableFlavour(_CallableFlavour):
             if self.output_dict:
                 wrangler = wranglers.ParseJSONOutputDict(pattern, "PARSE_JSON")
             else:
-                wrangler = wranglers.ParseOutput(pattern, "PARSE_OUTPUT", self.output, '1', "json")
+                wrangler = wranglers.ParseOutput(pattern, "PARSE_OUTPUT", self.output, "1", "json")
             wrangs = [wrangler]
             if not stimela.VERBOSE:
                 wrangs.append(wranglers.Suppress(pattern, "SUPPRESS"))
@@ -112,14 +118,21 @@ class PythonCallableFlavour(_CallableFlavour):
         else:
             self._yield_output = ""
 
-    def get_image_name(self, cab: Cab, backend: 'stimela.backend.StimelaBackendOptions'):
+    def get_image_name(self, cab: Cab, backend: "stimela.backend.StimelaBackendOptions"):
         from stimela import CONFIG
         from stimela.backends import resolve_image_name
-        return resolve_image_name(backend, cab.image or CONFIG.images['default-python'])
 
-    def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any],
-                      virtual_env: Optional[str]=None, check_executable: bool = True,
-                      log: Optional[logging.Logger] = None):
+        return resolve_image_name(backend, cab.image or CONFIG.images["default-python"])
+
+    def get_arguments(
+        self,
+        cab: Cab,
+        params: Dict[str, Any],
+        subst: Dict[str, Any],
+        virtual_env: Optional[str] = None,
+        check_executable: bool = True,
+        log: Optional[logging.Logger] = None,
+    ):
         # substitute command and split into module/function
         with substitutions_from(subst, raise_errors=True) as context:
             try:
@@ -127,31 +140,32 @@ class PythonCallableFlavour(_CallableFlavour):
             except Exception as exc:
                 raise SubstitutionError(f"error substituting Python callable '{cab.command}'", exc)
 
-        if '.' in command:
-            py_module, py_function = cab.command.rsplit('.', 1)
+        if "." in command:
+            py_module, py_function = cab.command.rsplit(".", 1)
         else:
             raise CabValidationError(f"cab {cab.name}: python flavour requires a command of the form module.function")
         self.command_name = py_function
 
         # convert inputs into a JSON string
         pass_params = cab.filter_input_params(params)
-        pass_params = {key.replace("-","_").replace(".","__"): value for key, value in pass_params.items()}
-        params_string = base64.b64encode(
-                            zlib.compress(json.dumps(pass_params).encode('ascii'), 2)
-                        ).decode('ascii')
-        
+        pass_params = {key.replace("-", "_").replace(".", "__"): value for key, value in pass_params.items()}
+        params_string = base64.b64encode(zlib.compress(json.dumps(pass_params).encode("ascii"), 2)).decode("ascii")
+
         # log invocation
         if log:
-            log.info(f"preparing function call:", extra=dict(prefix="###", style="dim"))
+            log.info("preparing function call:", extra=dict(prefix="###", style="dim"))
             for line in format_dict_as_function_call(cab.command, pass_params, indent=4):
                 log.info(f"    {line}", extra=dict(prefix="###", style="dim"))
 
         # form up command string
         if stimela.VERBOSE:
-            msg1 = f"""print("## importing {py_module}.{py_function}")"""
-            msg2 = f"""print(f"## invoking callable {command}({{repr(_inputs)}}) (as click command) using external interpreter")"""
-            msg3 = f"""print(f"## invoking callable {command}({{repr(_inputs)}}) using external interpreter")"""
-            msg4 = f"""print("## return value is ", _result)"""
+            msg1 = f"print('## importing {py_module}.{py_function}')"
+            msg2 = (
+                f"print(f'## invoking callable {command}({{repr(_inputs)}}) "
+                f"(as click command) using external interpreter')"
+            )
+            msg3 = f"print(f'## invoking callable {command}({{repr(_inputs)}}) using external interpreter')"
+            msg4 = "print('## return value is ', _result)"
         else:
             msg1 = msg2 = msg3 = msg4 = ""
 
@@ -197,6 +211,7 @@ class PythonCodeFlavour(_BaseFlavour):
     Represents a cab flavour that is inlined Python code. Cab command field is
     Python code. Parameters can be passed in as local variables, or a dict
     """
+
     kind: str = "python-code"
     # if set to a string, inputs will be passed in as a dict assigned to a variable of that name
     input_dict: Optional[str] = None
@@ -206,7 +221,7 @@ class PythonCodeFlavour(_BaseFlavour):
     output_vars: bool = True
     # if True, command will have {}-substitutions done on it
     subst: bool = False
-    # name of python binary to use  
+    # name of python binary to use
     interpreter_binary: str = "python"
     # Full command used to launch interpreter. {python} gets substituted for the interpreter path
     interpreter_command: str = "{python} -u"
@@ -224,14 +239,21 @@ class PythonCodeFlavour(_BaseFlavour):
         cab._wranglers.append((pattern, wrangs))
         self.command_name = "[python]"
 
-    def get_image_name(self, cab: Cab, backend: 'stimela.backend.StimelaBackendOptions'):
+    def get_image_name(self, cab: Cab, backend: "stimela.backend.StimelaBackendOptions"):
         from stimela import CONFIG
         from stimela.backends import resolve_image_name
-        return resolve_image_name(backend, cab.image or CONFIG.images['default-python'])
 
-    def get_arguments(self, cab: Cab, params: Dict[str, Any], subst: Dict[str, Any],
-                      virtual_env: Optional[str]=None, check_executable: bool = True,
-                      log: Optional[logging.Logger] = None):
+        return resolve_image_name(backend, cab.image or CONFIG.images["default-python"])
+
+    def get_arguments(
+        self,
+        cab: Cab,
+        params: Dict[str, Any],
+        subst: Dict[str, Any],
+        virtual_env: Optional[str] = None,
+        check_executable: bool = True,
+        log: Optional[logging.Logger] = None,
+    ):
         # do substitutions on command, if necessary
         if self.subst:
             with substitutions_from(subst, raise_errors=True) as context:
@@ -247,7 +269,7 @@ class PythonCodeFlavour(_BaseFlavour):
 
         # log invocation
         if log:
-            log.info(f"preparing python code invocation with arguments:", extra=dict(prefix="###", style="dim"))
+            log.info("preparing python code invocation with arguments:", extra=dict(prefix="###", style="dim"))
             for line in format_dict_as_function_call("", pass_params, indent=4):
                 log.info(f"{line}", extra=dict(prefix="###", style="dim"))
 
@@ -269,15 +291,16 @@ import sys, json
 
         # form up code to print outputs in JSON
         post_command_str = ""
-        pass_outputs = [name for name, schema in cab.outputs.items()
-                        if not schema.is_named_output and not schema.implicit]
+        pass_outputs = [
+            name for name, schema in cab.outputs.items() if not schema.is_named_output and not schema.implicit
+        ]
         if pass_outputs:
             post_command_str += "from scabha.cab_utils import yield_output\n"
             if self.output_vars:
                 for name in pass_outputs:
                     var_name = name.replace("-", "_").replace(".", "__")
                     post_command_str += f"yield_output(**{{'{name}': {var_name}}})\n"
-        
+
         if self.post_commands:
             post_command_str += "\n".join(self.post_commands.values())
 

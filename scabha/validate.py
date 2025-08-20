@@ -1,47 +1,49 @@
+# ruff: noqa: E731 - ignore assignment of lambda expressions. TODO(JSKenyon): Fix this.
 import dataclasses
+import keyword
 import os
 import os.path
-import yaml
-import re
-import keyword
 import pathlib
-from typing import *
+import re
 from collections import OrderedDict
+from typing import Any, Dict, List, Optional
 
 import pydantic
 import pydantic.dataclasses
-
-from omegaconf import OmegaConf, ListConfig, DictConfig
+import yaml
+from omegaconf import DictConfig, ListConfig, OmegaConf
 
 from scabha.basetypes import Unresolved
-from .exceptions import Error, ParameterValidationError, SchemaError, SubstitutionErrorList
-from .substitutions import SubstitutionNS, substitutions_from
-from .basetypes import URI, File, Directory, MS, UNSET
+
+from .basetypes import MS, UNSET, URI, Directory, File
 from .evaluator import Evaluator
+from .exceptions import Error, ParameterValidationError, SubstitutionErrorList
+from .substitutions import SubstitutionNS, substitutions_from
+
 
 def join_quote(values):
     return "'" + "', '".join(values) + "'" if values else ""
 
 
-def evaluate_and_substitute_object(obj: Any,  
-                                    subst: SubstitutionNS, 
-                                    recursion_level: int = 1,
-                                    location: List[str] = []):
+def evaluate_and_substitute_object(obj: Any, subst: SubstitutionNS, recursion_level: int = 1, location: List[str] = []):
     with substitutions_from(subst, raise_errors=True) as context:
         evaltor = Evaluator(subst, context, location=location, allow_unresolved=False)
         return evaltor.evaluate_object(obj, raise_substitution_errors=True, recursion_level=recursion_level)
 
 
-def evaluate_and_substitute(inputs: Dict[str, Any], 
-                            subst: SubstitutionNS, 
-                            corresponding_ns: SubstitutionNS,
-                            defaults: Dict[str, Any] = {},
-                            ignore_subst_errors: bool = False, 
-                            location: List[str] = []):
+def evaluate_and_substitute(
+    inputs: Dict[str, Any],
+    subst: SubstitutionNS,
+    corresponding_ns: SubstitutionNS,
+    defaults: Dict[str, Any] = {},
+    ignore_subst_errors: bool = False,
+    location: List[str] = [],
+):
     with substitutions_from(subst, raise_errors=True) as context:
         evaltor = Evaluator(subst, context, location=location, allow_unresolved=True)
-        inputs = evaltor.evaluate_dict(inputs, corresponding_ns=corresponding_ns, defaults=defaults,
-                                        raise_substitution_errors=False)
+        inputs = evaltor.evaluate_dict(
+            inputs, corresponding_ns=corresponding_ns, defaults=defaults, raise_substitution_errors=False
+        )
         # collect errors
         if not ignore_subst_errors:
             errors = []
@@ -54,34 +56,37 @@ def evaluate_and_substitute(inputs: Dict[str, Any],
     return inputs
 
 
-def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any], 
-                        defaults: Optional[Dict[str, Any]] = None,
-                        subst: Optional[SubstitutionNS] = None,
-                        fqname: str = "",
-                        check_unknowns=True,    
-                        check_required=True,
-                        check_inputs_exist=True,
-                        check_outputs_exist=True,
-                        create_dirs=False,
-                        ignore_subst_errors=False,
-                        ) -> Dict[str, Any]:
-    """Validates a dict of parameter values against a given schema 
+def validate_parameters(
+    params: Dict[str, Any],
+    schemas: Dict[str, Any],
+    defaults: Optional[Dict[str, Any]] = None,
+    subst: Optional[SubstitutionNS] = None,
+    fqname: str = "",
+    check_unknowns=True,
+    check_required=True,
+    check_inputs_exist=True,
+    check_outputs_exist=True,
+    create_dirs=False,
+    ignore_subst_errors=False,
+) -> Dict[str, Any]:
+    """Validates a dict of parameter values against a given schema
 
     Args:
         params (Dict[str, Any]):   map of input parameter values
-        schemas (Dict[str, Any]):   map of parameter names to schemas. Each schema must contain a dtype field and a choices field.
+        schemas (Dict[str, Any]):   map of parameter names to schemas. Each schema must contain a dtype field and a
+            choices field.
         defaults (Dict[str, Any], optional): dictionary of default values to be used when a value is missing
         subst (SubsititionNS, optional): namespace to do {}-substitutions on parameter values
-        fqname: fully-qualified name of the parameter set (e.g. "recipe_name.step_name"), used in error messages. If not given,
-                errors will report parameter names only
+        fqname: fully-qualified name of the parameter set (e.g. "recipe_name.step_name"), used in error messages. If
+            not given, errors will report parameter names only
 
         check_unknowns (bool): if True, unknown parameters (not in schema) raise an error
         check_required (bool): if True, missing parameters with required=True will raise an error
-        check_inputs_exist (bool): if True, input files with must_exist={None,True} in schema must exist, or will raise an error. 
-                                   If False, doesn't check.
-        check_outputs_exist (bool): if True, output files with must_exist=True in schema must exist, or will raise an error. 
-                                   If False, doesn't check.
-        create_dirs (bool): if True, non-existing directories in filenames (and parameters with mkdir=True in schema) 
+        check_inputs_exist (bool): if True, input files with must_exist={None,True} in schema must exist, or will
+            raise an error. If False, doesn't check.
+        check_outputs_exist (bool): if True, output files with must_exist=True in schema must exist, or will raise an
+            error. If False, doesn't check.
+        create_dirs (bool): if True, non-existing directories in filenames (and parameters with mkdir=True in schema)
                             will be created.
         ignore_subst_errors (bool): if True, substitution errors will be ignored
 
@@ -108,12 +113,16 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
         for name in params:
             if name not in schemas:
                 raise ParameterValidationError(f"unknown parameter '{mkname(name)}'")
-    
+
     # only evaluate the subset for which we have schemas
     inputs = OrderedDict((name, value) for name, value in params.items() if name in schemas)
-    
-    # build dict of all defaults 
-    all_defaults = {name: schema.default for name, schema in schemas.items() if schema.default is not UNSET and schema.default != "UNSET"}
+
+    # build dict of all defaults
+    all_defaults = {
+        name: schema.default
+        for name, schema in schemas.items()
+        if schema.default is not UNSET and schema.default != "UNSET"
+    }
     if defaults:
         all_defaults.update(**{name: value for name, value in defaults.items() if name in schemas})
 
@@ -121,13 +130,18 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
     inputs.update(**{name: value for name, value in all_defaults.items() if name not in inputs})
 
     # update implicit values
-    #  
+    #
 
     # perform substitution
     if subst is not None:
-        inputs = evaluate_and_substitute(inputs, subst, subst.current, defaults=all_defaults, 
-                                        ignore_subst_errors=ignore_subst_errors, 
-                                        location=[fqname])
+        inputs = evaluate_and_substitute(
+            inputs,
+            subst,
+            subst.current,
+            defaults=all_defaults,
+            ignore_subst_errors=ignore_subst_errors,
+            location=[fqname],
+        )
 
     # split inputs into unresolved substitutions, and proper inputs
     unresolved = {name: value for name, value in inputs.items() if isinstance(value, Unresolved)}
@@ -135,8 +149,11 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
 
     # check that required args are present
     if check_required:
-        missing = [mkname(name) for name, schema in schemas.items() 
-                    if schema.required and inputs.get(name) is UNSET and name not in unresolved]
+        missing = [
+            mkname(name)
+            for name, schema in schemas.items()
+            if schema.required and inputs.get(name) is UNSET and name not in unresolved
+        ]
         if missing:
             raise ParameterValidationError(f"missing required parameters: {join_quote(missing)}")
 
@@ -155,9 +172,11 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
             fldname = orig_fldname = re.sub("\\W", "_", name)
             # avoid Python keywords and clashes with other field names by adding _x as needed
             num = 0
-            while keyword.iskeyword(fldname) or \
-                    (hasattr(keyword, 'issoftkeyword') and keyword.issoftkeyword(fldname)) or \
-                    fldname in field2name:
+            while (
+                keyword.iskeyword(fldname)
+                or (hasattr(keyword, "issoftkeyword") and keyword.issoftkeyword(fldname))
+                or fldname in field2name
+            ):
                 fldname += f"{orig_fldname}_{num}"
                 num += 1
             # add to mapping
@@ -165,7 +184,7 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
             name2field[name] = fldname
 
             fields.append((fldname, schema._dtype))
-            
+
             # OmegaConf dicts/lists need to be converted to standard containers for pydantic to take them
             if isinstance(value, (ListConfig, DictConfig)):
                 inputs[name] = OmegaConf.to_container(value)
@@ -175,7 +194,7 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
     # convert this to a pydantic dataclass which does validation
     pcls = pydantic.dataclasses.dataclass(dcls)
 
-    # check Files etc. 
+    # check Files etc.
     for name, value in list(inputs.items()):
         # get schema from those that need validation, skip if not in schemas
         schema = schemas.get(name)
@@ -200,21 +219,20 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
                     files = yaml.safe_load(value)
                     if type(files) is not list:
                         files = [value]
-                except Exception as exc:
+                except Exception:
                     files = [value]
             elif isinstance(value, (list, tuple)):
                 files = value
             else:
                 raise ParameterValidationError(f"'{mkname(name)}={value}': invalid type '{type(value)}'")
-            # convert to appropriate type 
+            # convert to appropriate type
             files = [URI(f) for f in files]
-          
+
             # check for existence of all files in list, if needed
-            if must_exist: 
+            if must_exist:
                 if not files:
                     raise ParameterValidationError(f"'{mkname(name)}': file(s) don't exist")
-                not_exists = [uri.path for uri in files 
-                              if not uri.remote and not os.path.exists(uri.path)]
+                not_exists = [uri.path for uri in files if not uri.remote and not os.path.exists(uri.path)]
                 if not_exists:
                     raise ParameterValidationError(f"'{mkname(name)}': {','.join(not_exists)} doesn't exist")
 
@@ -224,8 +242,8 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
                     raise ParameterValidationError(f"'{mkname(name)}': multiple files given ({value})")
                 # no files? must_exist was checked above, so return empty filename
                 elif not files:
-                    inputs[name] = "" 
-                # else one file/dir as expected, check it                   
+                    inputs[name] = ""
+                # else one file/dir as expected, check it
                 else:
                     # check that files are files and dirs are dirs
                     uri = files[0]
@@ -241,26 +259,28 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
             else:
                 # check that files are files and dirs are dirs
                 if dtype == List[File]:
-                    if not all(os.path.isfile(uri.path) for uri in files 
-                               if not uri.remote and os.path.exists(uri.path)):
+                    if not all(
+                        os.path.isfile(uri.path) for uri in files if not uri.remote and os.path.exists(uri.path)
+                    ):
                         raise ParameterValidationError(f"{mkname(name)}: {value} contains non-files")
                 elif dtype == List[Directory] or dtype == List[MS]:
-                    if not all(os.path.isdir(uri.path) for uri in files 
-                               if not uri.remote and os.path.exists(uri.path)):
+                    if not all(os.path.isdir(uri.path) for uri in files if not uri.remote and os.path.exists(uri.path)):
                         raise ParameterValidationError(f"{mkname(name)}: {value} contains non-directories")
                 inputs[name] = list(map(str, files))
 
     # validate
-    try:   
-        validated = pcls(**{name2field[name]: value for name, value in inputs.items() if name in schemas and value is not UNSET})
+    try:
+        validated = pcls(
+            **{name2field[name]: value for name, value in inputs.items() if name in schemas and value is not UNSET}
+        )
     except pydantic.ValidationError as exc:
         errors = []
-        for err  in exc.errors():
-            loc = '.'.join([field2name.get(x, str(x)) for x in err['loc']])
+        for err in exc.errors():
+            loc = ".".join([field2name.get(x, str(x)) for x in err["loc"]])
             if loc in inputs:
-                errors.append(ParameterValidationError(f"{loc} = {inputs[loc]}: {err['msg']}")) 
+                errors.append(ParameterValidationError(f"{loc} = {inputs[loc]}: {err['msg']}"))
             else:
-                errors.append(ParameterValidationError(f"{loc}: {err['msg']}")) 
+                errors.append(ParameterValidationError(f"{loc}: {err['msg']}"))
         raise ParameterValidationError(f"{len(errors)} parameter(s) failed validation:", errors)
 
     validated = {field2name[fld]: value for fld, value in dataclasses.asdict(validated).items()}
@@ -292,7 +312,7 @@ def validate_parameters(params: Dict[str, Any], schemas: Dict[str, Any],
                 for uri in files:
                     if not uri.remote:
                         path = pathlib.Path(uri.path)
-                        # Directory-type outputs 
+                        # Directory-type outputs
                         if schema.mkdir and (schema._dtype == Directory or schema._dtype == List[Directory]):
                             path.mkdir(parents=True, exist_ok=True)
                         elif schema.path_policies.mkdir_parent:

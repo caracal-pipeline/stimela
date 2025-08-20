@@ -1,5 +1,5 @@
-import os
 from omegaconf import DictConfig
+
 from scabha.exceptions import ScabhaBaseException
 
 
@@ -8,7 +8,7 @@ class ConfigurattError(ScabhaBaseException):
 
 
 # paths to search for _include statements
-PATH = ['.']
+PATH = ["."]
 
 # package version info stored with code dependencies
 PACKAGE_VERSION = None
