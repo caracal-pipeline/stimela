@@ -1,4 +1,7 @@
-import logging, datetime, resource, os.path
+import logging
+import datetime
+import resource
+import os.path
 
 from typing import Dict, Optional, Any
 
@@ -63,13 +66,13 @@ def run(
     """
     update_rlimits(backend.rlimits, log)
 
-    venv = search = None
+    venv = None
     if backend.native and backend.native.virtual_env:
         try:
             with substitutions_from(subst, raise_errors=True) as context:
                 venv = context.evaluate(backend.native.virtual_env, location=["backend.native.virtual_env"])
         except Exception as exc:
-            raise BackendSpecificationError(f"error evaluating backend.native.virtual_env", exc)
+            raise BackendSpecificationError("error evaluating backend.native.virtual_env", exc)
         if venv:
             venv = os.path.expanduser(venv)
             if not os.path.isfile(f"{venv}/bin/activate"):
