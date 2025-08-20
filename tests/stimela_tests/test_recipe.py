@@ -1,4 +1,7 @@
-import os, re, subprocess, pytest
+import os
+import re
+import subprocess
+import pytest
 
 
 # Change into directory where test_recipy.py lives
@@ -47,7 +50,7 @@ def verify_output(output, *regexes):
 
 def test_test_aliasing():
     print("===== expecting an error since required parameters are missing =====")
-    retcode, _ = run(f"stimela -v -b native exec test_aliasing.yml")
+    retcode, _ = run("stimela -v -b native exec test_aliasing.yml")
     assert retcode != 0
 
     print("===== expecting no errors now =====")

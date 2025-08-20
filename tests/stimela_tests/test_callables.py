@@ -1,5 +1,4 @@
-import os, re, subprocess, pytest
-from .test_recipe import change_test_dir, run, verify_output
+from .test_recipe import change_test_dir as change_test_dir, run, verify_output
 
 
 def callable_function(a: int, b: str):
