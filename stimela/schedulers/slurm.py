@@ -1,7 +1,4 @@
-import shlex
-from typing import Dict, Optional, Any
 from stimela.kitchen.batch import Batch
-from stimela import logger
 from stimela.utils.xrun_poll import xrun
 from stimela.exceptions import StimelaCabRuntimeError
 import subprocess
@@ -24,8 +21,8 @@ class SlurmBatch(Batch):
         with open(jobfile, "w") as fh:
             fh.writelines("#!/bin/bash\n")
             fh.writelines(f"#SBATCH --job-name={jobname}\n")
-            fh.writelines(f"#SBATCH --qos=normal\n")
-            fh.writelines(f"#SBATCH --mail-type=ALL\n")
+            fh.writelines("#SBATCH --qos=normal\n")
+            fh.writelines("#SBATCH --mail-type=ALL\n")
             fh.writelines(f"#SBATCH --error=stimela_slurm_{self.name}.err\n")
             # fh.writelines(f"#SBATCH --time=2-00:00\n")
             if self.mem:
