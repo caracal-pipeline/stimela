@@ -1,7 +1,3 @@
-from stimela import logger, LOG_FILE, BASE, utils
-from stimela.backends import docker, singularity, podman
-
-
 def make_parser(subparsers):
     parser = subparsers.add_parser("pull", help="Pull docker stimela base images")
 
@@ -21,8 +17,10 @@ def make_parser(subparsers):
         "-s",
         "--singularity",
         action="store_true",
-        help="Pull base images using singularity."
-        "Images will be pulled into the directory specified by the enviroment varaible, STIMELA_PULLFOLDER. $PWD by default",
+        help=(
+            "Pull base images using singularity. Images will be pulled into the directory specified by the enviroment "
+            "varaible, STIMELA_PULLFOLDER. $PWD by default"
+        ),
     )
 
     add("-d", "--docker", action="store_true", help="Pull base images using docker.")
@@ -34,8 +32,10 @@ def make_parser(subparsers):
     add(
         "-pf",
         "--pull-folder",
-        help="Images will be placed in this folder. Else, if the environmnental variable 'STIMELA_PULLFOLDER' is set, then images will be placed there. "
-        "Else, images will be placed in the current directory",
+        help=(
+            "Images will be placed in this folder. Else, if the environmnental variable 'STIMELA_PULLFOLDER' is set, "
+            "then images will be placed there. Else, images will be placed in the current directory"
+        ),
     )
 
     parser.set_defaults(func=pull)

@@ -1,7 +1,3 @@
-from stimela.main import get_cab_definition
-from stimela import logger, LOG_HOME, CAB_USERNAME, CAB_PATH
-
-
 def make_parser(subparsers):
     parser = subparsers.add_parser("cabs", help="List executor (a.k.a cab) images")
 

@@ -1,12 +1,10 @@
 import fnmatch
-import os, sys
+import sys
 import click
-from typing import *
+from typing import List, Dict
 from rich.tree import Tree
 from rich.table import Table
-from rich import box
 from rich import print as rich_print
-from omegaconf import OmegaConf
 
 import stimela
 from stimela import logger, log_exception
@@ -100,7 +98,7 @@ def doc(what: List[str] = [], do_list=False, implicit=False, obscure=False, all=
     destroy_progress_bar()
 
     if not files_to_load:
-        log.error(f"No YAML documents were specified")
+        log.error("No YAML documents were specified")
         sys.exit(2)
 
     if errcode:
@@ -109,7 +107,7 @@ def doc(what: List[str] = [], do_list=False, implicit=False, obscure=False, all=
     log.info(f"loaded {len(stimela.CONFIG.cabs)} cab definition(s) and {len(stimela.CONFIG.lib.recipes)} recipe(s)")
 
     if not stimela.CONFIG.lib.recipes and not stimela.CONFIG.cabs:
-        log.error(f"Loaded YAML documents do not contain any cab definitions or recipes")
+        log.error("Loaded YAML documents do not contain any cab definitions or recipes")
         sys.exit(2)
 
     recipes_to_document = []
@@ -129,7 +127,8 @@ def doc(what: List[str] = [], do_list=False, implicit=False, obscure=False, all=
         if len(top_level_recipes) == 1:
             recipes_to_document = top_level_recipes
             log.info(
-                "a single top-level recipe is defined, documenting it by default. Use -l to list all defined recipes/cabs"
+                "a single top-level recipe is defined, documenting it by default. "
+                "Use -l to list all defined recipes/cabs"
             )
         elif len(stimela.CONFIG.cabs) == 1 and not top_level_recipes:
             cabs_to_document = list(stimela.CONFIG.cabs.keys())

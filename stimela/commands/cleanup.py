@@ -1,13 +1,11 @@
-import os, sys
 import click
 from omegaconf import OmegaConf
-from typing import Dict, List
+from typing import List
 
 import stimela
 from stimela import logger, log_exception
 from stimela.main import cli
-from stimela.kitchen.recipe import Recipe
-from stimela.exceptions import RecipeValidationError, BackendError
+from stimela.exceptions import BackendError
 
 from .run import load_recipe_files
 
@@ -31,7 +29,7 @@ def cleanup(items: List[str] = []):
     if type(backends_list) is str:
         backends_list = [backends_list]
     if not backends_list:
-        log.info(f"configuration does not specify any backends, nothing to clean up")
+        log.info("configuration does not specify any backends, nothing to clean up")
     else:
         log.info(f"invoking cleanup procedure, selected backends: {', '.join(backends_list)}")
         try:

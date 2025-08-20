@@ -1,12 +1,10 @@
-import click
-from typing import List
-from stimela.main import cli
+from typing import List, Tuple
 
 import click
-from typing import List, Optional, Tuple
+
+from stimela.main import cli
+
 from .run import run
-
-from stimela.main import cli
 
 
 @cli.command(
@@ -31,9 +29,9 @@ from stimela.main import cli
     "step_ranges",
     metavar="STEP(s)",
     multiple=True,
-    help="""only build images for specific step(s) from the recipe. Use commas, or give multiple times to cherry-pick steps.
-                Use [BEGIN]:[END] to specify a range of steps. Note that cherry-picking an individual step via this option
-                also impies --enable-step.""",
+    help="""only build images for specific step(s) from the recipe. Use commas, or give multiple times to cherry-pick
+            steps. Use [BEGIN]:[END] to specify a range of steps. Note that cherry-picking an individual step via this
+            option also impies --enable-step.""",
 )
 @click.option(
     "-t",
@@ -41,7 +39,7 @@ from stimela.main import cli
     "tags",
     metavar="TAG(s)",
     multiple=True,
-    help="""only build images for steps wth the given tags (and also steps tagged as "always"). 
+    help="""only build images for steps wth the given tags (and also steps tagged as "always").
                 Use commas, or give multiple times for multiple tags.""",
 )
 @click.option(
@@ -49,7 +47,7 @@ from stimela.main import cli
     "skip_tags",
     metavar="TAG(s)",
     multiple=True,
-    help="""explicitly skips steps wth the given tags. 
+    help="""explicitly skips steps wth the given tags.
                 Use commas, or give multiple times for multiple tags.""",
 )
 @click.option(
@@ -58,7 +56,7 @@ from stimela.main import cli
     "enable_steps",
     metavar="STEP(s)",
     multiple=True,
-    help="""Build image for step(s) even if the recipe marks them as skipped. Use commas, or give multiple times 
+    help="""Build image for step(s) even if the recipe marks them as skipped. Use commas, or give multiple times
                 for multiple steps.""",
 )
 @click.option(
@@ -76,7 +74,7 @@ from stimela.main import cli
     metavar="X.Y.Z VALUE",
     nargs=2,
     multiple=True,
-    help="""tweak configuration options: same function -c/--config, but plays nicer with the shell's 
+    help="""tweak configuration options: same function -c/--config, but plays nicer with the shell's
                 tab completion feature.""",
 )
 @click.option(

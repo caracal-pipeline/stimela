@@ -5,9 +5,10 @@ import stimela
 
 
 @cli.command(
-    help="""Push stimela base images. Specify a list of image names and versions (if a version is omitted, pushes all known versions of image),
-            or else use --all to push everything. 
-         """,
+    help="""
+        Push stimela base images. Specify a list of image names and versions (if a version is omitted, pushes all
+        known versions of image), or else use --all to push everything.
+    """,
     short_help="push stimela images to registry",
     no_args_is_help=True,
 )

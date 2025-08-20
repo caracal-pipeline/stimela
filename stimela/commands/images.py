@@ -4,14 +4,13 @@ from stimela.main import cli
 
 
 @cli.command(
-    help="""Lists all known stimela images. 
+    help="""Lists all known stimela images.
          """,
     short_help="list known stimela images",
 )
 @click.option("-i", "--print-ids", is_flag=True, help="list in the more terse image+ID format.")
 def images(print_ids=False):
     from stimela.main import BACKEND
-    from stimela import CONFIG
 
     log = stimela.logger()
     available = BACKEND.available_images()
@@ -28,7 +27,10 @@ def images(print_ids=False):
         for version, versinfo in baseinfo.images.items():
             if name0 in available and version in available[name0]:
                 image = available[name0][version]
-                status = f"{image.build.user}@{image.build.host} on {image.build.date} using stimela {image.build.stimela_version}"
+                status = (
+                    f"{image.build.user}@{image.build.host} on {image.build.date} "
+                    f"using stimela {image.build.stimela_version}"
+                )
             else:
                 image = None
                 status = "not found: please pull or build"

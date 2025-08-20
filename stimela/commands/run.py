@@ -8,7 +8,6 @@ import traceback
 import re
 import glob
 import importlib
-import itertools
 from datetime import datetime
 from typing import List, Optional, Tuple
 from collections import OrderedDict
@@ -27,7 +26,7 @@ from stimela.config import ConfigExceptionTypes
 from stimela import logger, log_exception
 from stimela.exceptions import RecipeValidationError, StimelaRuntimeError, StepSelectionError, StepValidationError
 from stimela.main import cli
-from stimela.kitchen.recipe import Recipe, Step, RecipeSchema, join_quote
+from stimela.kitchen.recipe import Recipe, Step, RecipeSchema
 from stimela.kitchen.run_state import graph_to_constraints
 from stimela import task_stats
 import stimela.backends
@@ -61,7 +60,7 @@ def resolve_recipe_files(filename: str, log: logging.Logger, use_manifest: bool 
         else:
             try:
                 resolved_filename = mod.__path__[0]
-            except:
+            except:  # noqa: E722 - TODO(JSKenyon): What is this actually catching?
                 raise FileNotFoundError(f"{filename} not found ({modulename} is not a proper Python module)")
         # append filename, if supplied
         if fname:
@@ -199,9 +198,11 @@ def load_recipe_files(filenames: List[str]):
     "step_ranges",
     metavar="STEP(s)",
     multiple=True,
-    help="""only runs specific step(s) from the recipe. Use commas, or give multiple times to cherry-pick steps.
-                Use [BEGIN]:[END] to specify a range of steps. Note that cherry-picking an individual step via this option
-                also impies --enable-step.""",
+    help="""
+        only runs specific step(s) from the recipe. Use commas, or give multiple times to cherry-pick steps.
+        Use [BEGIN]:[END] to specify a range of steps. Note that cherry-picking an individual step via this option
+        also impies --enable-step.
+    """,
 )
 @click.option(
     "-k",
@@ -411,7 +412,7 @@ def run(
                 files_to_load += filenames
                 log.info(f"will load recipe/config file(s) {', '.join(filenames)}")
             elif recipe_or_cab is not None:
-                log_exception(f"multiple recipe/cab names given")
+                log_exception("multiple recipe/cab names given")
                 errcode = 2
             else:
                 recipe_or_cab = pp
@@ -430,13 +431,13 @@ def run(
     try:
         stimela.CONFIG.merge_with(OmegaConf.from_dotlist(config_equals))
     except OmegaConfBaseException as exc:
-        log_exception(f"error loading -c/--config assignments", exc)
+        log_exception("error loading -c/--config assignments", exc)
         sys.exit(2)
     try:
         dotlist = [f"{key}={value}" for key, value in config_assign]
         stimela.CONFIG.merge_with(OmegaConf.from_dotlist(dotlist))
     except OmegaConfBaseException as exc:
-        log_exception(f"error loading -C/--config-assign assignments", exc)
+        log_exception("error loading -C/--config-assign assignments", exc)
         sys.exit(2)
 
     # enable backends
@@ -467,7 +468,7 @@ def run(
         # -l specified, pick the last recipe
         if last_recipe:
             if not available_recipes:
-                log.error(f"-l/--last-recipe specified, but no valid recipes were loaded")
+                log.error("-l/--last-recipe specified, but no valid recipes were loaded")
                 sys.exit(2)
             else:
                 recipe_name = available_recipes[-1]

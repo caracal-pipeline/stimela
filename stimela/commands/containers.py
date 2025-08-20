@@ -1,5 +1,4 @@
-from stimela import logger, LOG_FILE, BASE, utils
-from stimela.backends import docker, singularity, podman
+from stimela import logger, LOG_FILE
 
 
 def make_parser(subparsers):

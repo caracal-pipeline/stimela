@@ -2,15 +2,15 @@ import click
 import stimela
 from stimela.main import cli
 from omegaconf.omegaconf import OmegaConf
-import stimela
 from datetime import datetime
 from enum import Enum
 
 
 @cli.command(
-    help="""With no arguments, lists stimela configuration settings. With KEY=VALUE arguments, changes the configuration file.
-            Default is to change whichever configuration file was loaded (local, virtual env, or user-level).
-            """,
+    help="""
+        With no arguments, lists stimela configuration settings. With KEY=VALUE arguments, changes the configuration
+        file. Default is to change whichever configuration file was loaded (local, virtual env, or user-level).
+    """,
     short_help="manipulate configuration settings",
 )
 @click.argument("settings", nargs=-1, metavar="KEY=VALUE", required=False)
@@ -26,7 +26,7 @@ def config(settings, save=None):
     if CONFIG_LOADED:
         log.info(f"configuration loaded from {CONFIG_LOADED}")
     else:
-        log.info(f"no configuration files found, using built-in defaults")
+        log.info("no configuration files found, using built-in defaults")
 
     # print config, if no key=value args specified
     if not settings:
