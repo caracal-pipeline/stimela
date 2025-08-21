@@ -7,6 +7,11 @@ from omegaconf import OmegaConf
 
 import stimela
 from stimela import backends, config, stimelogging
+from stimela.commands.build import build
+from stimela.commands.cleanup import cleanup
+from stimela.commands.doc import doc
+from stimela.commands.run import run
+from stimela.commands.save_config import config as save_config
 
 UID = stimela.UID
 GID = stimela.GID
@@ -145,9 +150,9 @@ def cli(
     config.CONFIG_DEPS.save(filename)
 
 
-# import commands. TODO(JSKenyon): This is circular, as the commands are importing the cli.
-# Can easily be fixed by lazily adding the commands with cli.add_command(command).
-from stimela.commands import build, cleanup, doc, run, save_config  # noqa: E402, F401
+# Add all the subcommands to the main CLI group.
+for cmd in (build, cleanup, doc, run, save_config):
+    cli.add_command(cmd)
 
 ## These one needs to be reimplemented, current backed auto-pulls and auto-builds:
 # images, pull, build, clean

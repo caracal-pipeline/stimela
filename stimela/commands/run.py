@@ -29,7 +29,6 @@ from stimela.config import ConfigExceptionTypes
 from stimela.exceptions import RecipeValidationError, StepSelectionError, StepValidationError, StimelaRuntimeError
 from stimela.kitchen.recipe import Recipe, RecipeSchema, Step
 from stimela.kitchen.run_state import graph_to_constraints
-from stimela.main import cli
 
 
 def resolve_recipe_files(filename: str, log: logging.Logger, use_manifest: bool = True):
@@ -181,7 +180,7 @@ def load_recipe_files(filenames: List[str]):
     return recipe_names
 
 
-@cli.command(
+@click.command(
     "run",
     help="""
     Execute a single cab, or a recipe from a YML file.
