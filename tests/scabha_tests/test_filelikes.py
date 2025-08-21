@@ -1,13 +1,14 @@
-from scabha.basetypes import get_filelikes, File, URI, Directory, MS
-from typing import Dict, List, Set, Tuple, Union, Optional
+from typing import Dict, List, Optional, Set, Tuple, Union
+
 import pytest
+
+from scabha.basetypes import MS, URI, Directory, File, get_filelikes
 
 
 @pytest.fixture(scope="module", params=[File, URI, Directory, MS])
 def templates(request):
-    
     ft = request.param
-    
+
     TEMPLATES = (
         (Tuple, (), set()),
         (Tuple[int, ...], [1, 2], set()),
@@ -30,13 +31,12 @@ def templates(request):
         (Optional[ft], "foo", {"foo"}),
         (Optional[Union[ft, int]], 1, set()),
         (Optional[Union[ft, int]], "foo", {"foo"}),
-        (Dict[str, Tuple[ft, str]], {"a": ("foo", "bar")}, {"foo"})
+        (Dict[str, Tuple[ft, str]], {"a": ("foo", "bar")}, {"foo"}),
     )
 
     return TEMPLATES
 
 
 def test_get_filelikes(templates):
-
     for dt, v, res in templates:
         assert get_filelikes(dt, v) == res, f"Failed for dtype {dt} and value {v}."

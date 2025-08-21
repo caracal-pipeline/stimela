@@ -1,40 +1,44 @@
 import importlib
-import os, os.path, time, platform, traceback
-from typing import Any, List, Dict, Optional
-from dataclasses import dataclass, field
-from omegaconf.omegaconf import OmegaConf
-from omegaconf.errors import OmegaConfBaseException
+import os
+import os.path
+import platform
+import time
+import traceback
 from collections import OrderedDict
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
+
 import psutil
-
+from omegaconf.errors import OmegaConfBaseException
+from omegaconf.omegaconf import OmegaConf
 from yaml.error import YAMLError
+
 import stimela
-from stimela.exceptions import *
-from stimela import log_exception
-
 from scabha import configuratt
-from scabha.basetypes import EmptyDictDefault, EmptyListDefault, EmptyClassDefault
+from scabha.basetypes import EmptyClassDefault, EmptyDictDefault, EmptyListDefault
+from stimela import log_exception
 from stimela.backends import StimelaBackendOptions
+from stimela.exceptions import ConfigError
 
-@dataclass 
+
+@dataclass
 class StimelaLogConfig(object):
-    enable: bool = True                          
-    name: str = "log-{info.fqname}"          # Default name for log file. info dict and {config.x.y} is substituted.
-    ext: str = ".txt"                        # Default extension for log file.
-    dir: str = "."                               # Default directory for log files
+    enable: bool = True
+    name: str = "log-{info.fqname}"  # Default name for log file. info dict and {config.x.y} is substituted.
+    ext: str = ".txt"  # Default extension for log file.
+    dir: str = "."  # Default directory for log files
 
-    symlink: Optional[str] = None                # Will make named symlink to the log directory. A useful pattern is e.g. dir="logs-{config.run.datetime}", symlink="logs",
-                                            # then each run has its own log dir, and "logs" always points to the latest one
+    # Will make named symlink to the log directory. A useful pattern is e.g. dir="logs-{config.run.datetime}",
+    # symlink="logs", then each run has its own log dir, and "logs" always points to the latest one
+    symlink: Optional[str] = None
 
-    # how deep to nest individual log files. 0 means one log per recipe, 1 means one per step, 2 per each substep, etc. 
-    nest: int = 999                             
-    
-    level: str = "INFO"                          # level at which we log
-    
+    # how deep to nest individual log files. 0 means one log per recipe, 1 means one per step, 2 per each substep, etc.
+    nest: int = 999
+
+    level: str = "INFO"  # level at which we log
+
 
 ## overall Stimela config schema
-
-import stimela.backends
 
 
 @dataclass
@@ -42,10 +46,12 @@ class StimelaProfilingOptions(object):
     print_depth: int = 9999
     unroll_loops: bool = False
 
+
 @dataclass
 class StimelaDisableSkipOptions(object):
     fresh: bool = False
     exist: bool = False
+
 
 @dataclass
 class StimelaOptions(object):
@@ -53,15 +59,17 @@ class StimelaOptions(object):
     log: StimelaLogConfig = EmptyClassDefault(StimelaLogConfig)
     ## list of paths to search with _include
     include: List[str] = EmptyListDefault()
-    ## Miscellaneous runtime options (runtime.casa, etc.)     
-    runtime: Dict[str, Any] = EmptyDictDefault()    
+    ## Miscellaneous runtime options (runtime.casa, etc.)
+    runtime: Dict[str, Any] = EmptyDictDefault()
     ## Profiling options
     profile: StimelaProfilingOptions = EmptyClassDefault(StimelaProfilingOptions)
     ## Disables skip_if_outputs checks
     disable_skips: StimelaDisableSkipOptions = EmptyClassDefault(StimelaDisableSkipOptions)
 
+
 def DefaultDirs():
-    return field(default_factory=lambda:dict(indir='.', outdir='.'))
+    return field(default_factory=lambda: dict(indir=".", outdir="."))
+
 
 _CONFIG_BASENAME = "stimela.conf"
 _STIMELA_CONFDIR = os.path.os.path.expanduser("~/.stimela")
@@ -74,12 +82,12 @@ except ImportError:
 
 # dict of config file locations to check, in order of preference
 CONFIG_LOCATIONS = OrderedDict(
-    package = os.path.join(os.path.dirname(__file__), _CONFIG_BASENAME),
-    local   = _CONFIG_BASENAME,
-    venv    = os.environ.get('VIRTUAL_ENV', None) and os.path.join(os.environ['VIRTUAL_ENV'], _CONFIG_BASENAME),
-    stimela = os.path.isdir(_STIMELA_CONFDIR) and os.path.join(_STIMELA_CONFDIR, _CONFIG_BASENAME),
-    cultcargo = ccmod and os.path.join(os.path.dirname(ccmod.__file__), _CONFIG_BASENAME),
-    user    = os.path.join(os.path.expanduser("~/.config"), _CONFIG_BASENAME),
+    package=os.path.join(os.path.dirname(__file__), _CONFIG_BASENAME),
+    local=_CONFIG_BASENAME,
+    venv=os.environ.get("VIRTUAL_ENV", None) and os.path.join(os.environ["VIRTUAL_ENV"], _CONFIG_BASENAME),
+    stimela=os.path.isdir(_STIMELA_CONFDIR) and os.path.join(_STIMELA_CONFDIR, _CONFIG_BASENAME),
+    cultcargo=ccmod and os.path.join(os.path.dirname(ccmod.__file__), _CONFIG_BASENAME),
+    user=os.path.join(os.path.expanduser("~/.config"), _CONFIG_BASENAME),
 )
 
 # set to the config file that was actually found
@@ -95,7 +103,7 @@ STIMELA_DIR = os.path.dirname(stimela.__file__)
 def merge_extra_config(conf, newconf):
     from stimela import logger
 
-    if 'cabs' in newconf:
+    if "cabs" in newconf:
         for cab in newconf.cabs:
             if cab in conf.cabs:
                 logger().warning(f"changing definition of cab '{cab}'")
@@ -106,20 +114,25 @@ StimelaConfigSchema = None
 
 ConfigExceptionTypes = (configuratt.ConfigurattError, OmegaConfBaseException, YAMLError)
 
+
 def get_initial_deps():
     dependencies = configuratt.ConfigDependencies()
 
     # add ourselves to dependencies
-    dependencies.add(STIMELA_DIR, version=stimela.__version__)              
-    dependencies.add(__file__, origin=STIMELA_DIR)              
-    dependencies.add(configuratt.__file__, origin=STIMELA_DIR)  
+    dependencies.add(STIMELA_DIR, version=stimela.__version__)
+    dependencies.add(__file__, origin=STIMELA_DIR)
+    dependencies.add(configuratt.__file__, origin=STIMELA_DIR)
 
     return dependencies
 
 
-def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include_paths: List[str] = [],
-                verbose: bool = False, use_sys_config: bool = True):
-
+def load_config(
+    extra_configs: List[str],
+    extra_dotlist: List[str] = [],
+    include_paths: List[str] = [],
+    verbose: bool = False,
+    use_sys_config: bool = True,
+):
     # # disable OmegaConf resolvers
     # for name in "oc.create", "oc.decode", "oc.deprecated", "oc.env", "oc.select", "oc.dict.keys", "oc.dict.values":
     #     print(f"clearing {name}")
@@ -132,9 +145,9 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
 
     # stadard system paths
     configuratt.PATH[0:0] = [os.path.expanduser("~/lib/stimela"), "/usr/lib/stimela", "/usr/local/lib/stimela"]
-    if 'VIRTUAL_ENV' in os.environ:
-        configuratt.PATH.insert(0, os.environ['VIRTUAL_ENV'])
-        configuratt.PATH.insert(0, os.path.join(os.environ['VIRTUAL_ENV'], "lib/stimela"))
+    if "VIRTUAL_ENV" in os.environ:
+        configuratt.PATH.insert(0, os.environ["VIRTUAL_ENV"])
+        configuratt.PATH.insert(0, os.path.join(os.environ["VIRTUAL_ENV"], "lib/stimela"))
     if os.path.isdir(_STIMELA_CONFDIR):
         configuratt.PATH.insert(0, _STIMELA_CONFDIR)
 
@@ -142,7 +155,7 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
     paths = [os.path.expanduser(path) for path in include_paths]
     envpaths = os.environ.get("STIMELA_INCLUDE")
     if envpaths:
-        paths += envpaths.split(':')
+        paths += envpaths.split(":")
 
     if paths:
         log.info(f"added include paths: {' '.join(paths)}")
@@ -153,10 +166,11 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
 
     extra_cache_keys = list(extra_dotlist) + configuratt.PATH
 
-    STIMELA_DIR = os.path.dirname(stimela.__file__)
+    # STIMELA_DIR = os.path.dirname(stimela.__file__)
     from stimela.kitchen.cab import Cab, ImageInfo
 
     global StimelaConfigSchema, StimelaLibrary, StimelaConfig
+
     @dataclass
     class StimelaLibrary(object):
         params: Dict[str, Any] = EmptyDictDefault()
@@ -164,29 +178,28 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
         steps: Dict[str, Any] = EmptyDictDefault()
         misc: Dict[str, Any] = EmptyDictDefault()
         wisdom: Dict[str, Any] = EmptyDictDefault()
-        
 
-    @dataclass 
+    @dataclass
     class StimelaConfig:
         images: Dict[str, ImageInfo] = EmptyDictDefault()
         lib: StimelaLibrary = EmptyClassDefault(StimelaLibrary)
         cabs: Dict[str, Cab] = EmptyDictDefault()
         opts: StimelaOptions = EmptyClassDefault(StimelaOptions)
         vars: Dict[str, Any] = EmptyDictDefault()
-        run:  Dict[str, Any] = EmptyDictDefault()
-        
+        run: Dict[str, Any] = EmptyDictDefault()
 
     base_configs = lib_configs = cab_configs = []
 
     if use_sys_config:
-        sys_configs = [config_file for config_file in CONFIG_LOCATIONS.values()
-                        if config_file and os.path.exists(config_file)]
+        sys_configs = [
+            config_file for config_file in CONFIG_LOCATIONS.values() if config_file and os.path.exists(config_file)
+        ]
     else:
         sys_configs = []
 
     all_configs = base_configs + lib_configs + cab_configs + sys_configs + list(extra_configs)
 
-    conf, dependencies = configuratt.load_cache(all_configs, extra_keys=extra_cache_keys, verbose=verbose) 
+    conf, dependencies = configuratt.load_cache(all_configs, extra_keys=extra_cache_keys, verbose=verbose)
 
     if conf is not None:
         log.info("loaded full configuration from cache")
@@ -204,8 +217,9 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
 
         # merge lib/params/*yaml files into the config
         try:
-            conf.lib.params, deps = configuratt.load_nested(lib_configs,  use_sources=[conf], 
-                                                                location='lib.params', include_path='_path') 
+            conf.lib.params, deps = configuratt.load_nested(
+                lib_configs, use_sources=[conf], location="lib.params", include_path="_path"
+            )
             dependencies.update(deps)
         except Exception as exc:
             if verbose:
@@ -215,9 +229,16 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
 
         # merge all cab/*/*yaml files into the config, under cab.taskname
         try:
-            conf.cabs, deps = configuratt.load_nested(cab_configs, use_sources=[conf], structured=cab_schema, 
-                                                        nameattr='name', include_path='_path', location='cabs', 
-                                                        use_cache=False, verbose=verbose)
+            conf.cabs, deps = configuratt.load_nested(
+                cab_configs,
+                use_sources=[conf],
+                structured=cab_schema,
+                nameattr="name",
+                include_path="_path",
+                location="cabs",
+                use_cache=False,
+                verbose=verbose,
+            )
             dependencies.update(deps)
         except Exception as exc:
             if verbose:
@@ -242,7 +263,7 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
                 log_exception(ConfigError("error reading {config_file}", exc))
             return conf
 
-        # add standard configs 
+        # add standard configs
         for config_file in sys_configs:
             conf = _load(conf, config_file)
 
@@ -265,21 +286,23 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
         except Exception as exc:
             if verbose:
                 traceback.print_exc()
-            log_exception(f"error applying command-line config settings", exc)
+            log_exception("error applying command-line config settings", exc)
             return None
 
     # add runtime info
     _ds = time.strftime("%Y%m%d")
     _ts = time.strftime("%H%M%S")
     runtime = dict(
-        date=_ds, 
-        time=_ts, datetime=f"{_ds}-{_ts}", 
+        date=_ds,
+        time=_ts,
+        datetime=f"{_ds}-{_ts}",
         ncpu=psutil.cpu_count(logical=True),
-        node=platform.node().split('.', 1)[0],
-        hostname=platform.node(), 
-        env={key: value.replace('${', r'\${') for key, value in os.environ.items()})
-    runtime['ncpu-logical'] = psutil.cpu_count(logical=True)
-    runtime['ncpu-physical'] = psutil.cpu_count(logical=False)
+        node=platform.node().split(".", 1)[0],
+        hostname=platform.node(),
+        env={key: value.replace("${", r"\${") for key, value in os.environ.items()},
+    )
+    runtime["ncpu-logical"] = psutil.cpu_count(logical=True)
+    runtime["ncpu-physical"] = psutil.cpu_count(logical=False)
 
     conf.run = OmegaConf.create(runtime)
 
@@ -293,8 +316,7 @@ def load_config(extra_configs: List[str], extra_dotlist: List[str] = [], include
 
     # check for missing requirements
     missing = configuratt.check_requirements(conf, [], strict=True)
-    for (loc, name, _) in missing:
+    for loc, name, _ in missing:
         log.warn(f"optional config section '{loc}' omitted due to unmet requirement '{name}'")
 
     return conf
-

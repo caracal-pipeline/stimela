@@ -38,6 +38,10 @@ docs = [
     "sphinx-copybutton>=0.5.0,<0.6",
     "furo>=2022.9.15,<2023",
 ]
+dev = [
+    "pre-commit>=4.3.0",
+    "ruff>=0.12.9",
+]
 
 [tool.uv]
 default-groups = [

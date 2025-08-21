@@ -1,12 +1,15 @@
 import logging
-from typing import Dict, Optional, Any, List
 from dataclasses import dataclass
+from typing import Any, Dict, Optional
+
 from omegaconf import OmegaConf
+
 import stimela
 from stimela.backends import StimelaBackendOptions
 from stimela.exceptions import BackendError
 
 from . import get_backend
+
 
 @dataclass
 class BackendRunner(object):
@@ -17,32 +20,38 @@ class BackendRunner(object):
     backend_name: str
     wrapper: Any
 
-    def run(self, cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
-            log: logging.Logger, subst: Optional[Dict[str, Any]] = None):
-        return self.backend.run(cab, params, fqname=fqname, backend=self.opts, log=log, subst=subst, 
-                                wrapper=self.wrapper)
-        
-    def build(self, cab: 'stimela.kitchen.cab.Cab', log: logging.Logger, rebuild=False):
-        if not hasattr(self.backend, 'build'):
+    def run(
+        self,
+        cab: "stimela.kitchen.cab.Cab",
+        params: Dict[str, Any],
+        fqname: str,
+        log: logging.Logger,
+        subst: Optional[Dict[str, Any]] = None,
+    ):
+        return self.backend.run(
+            cab, params, fqname=fqname, backend=self.opts, log=log, subst=subst, wrapper=self.wrapper
+        )
+
+    def build(self, cab: "stimela.kitchen.cab.Cab", log: logging.Logger, rebuild=False):
+        if not hasattr(self.backend, "build"):
             log.warning(f"the {self.backend_name} backend does support or require image builds")
         else:
-            return self.backend.build(cab, backend=self.opts, log=log, rebuild=rebuild,
-                                wrapper=self.wrapper)
-    
+            return self.backend.build(cab, backend=self.opts, log=log, rebuild=rebuild, wrapper=self.wrapper)
+
 
 def validate_backend_settings(backend_opts: Dict[str, Any], log: logging.Logger) -> BackendRunner:
     """Checks that backend settings refer to a valid backend
-    
-    Returs tuple of options, main, wrapper, where 'main' the the main backend, and 'wrapper' is an optional wrapper backend 
-    such as slurm.
+
+    Returs tuple of options, main, wrapper, where 'main' the the main backend, and 'wrapper' is an optional wrapper
+    backend such as slurm.
     """
     if not isinstance(backend_opts, StimelaBackendOptions):
         backend_opts = OmegaConf.to_object(backend_opts)
 
     backend_name = backend = None
-    selected = backend_opts.select or ['singularity', 'native']
+    selected = backend_opts.select or ["singularity", "native"]
     # select containerization engine, if any
-    for name in selected: 
+    for name in selected:
         # check that backend has not been disabled
         opts = getattr(backend_opts, name, None)
         if not opts or opts.enable:
@@ -67,6 +76,11 @@ def validate_backend_settings(backend_opts: Dict[str, Any], log: logging.Logger)
     else:
         wrapper = None
 
-    return BackendRunner(opts=backend_opts, is_remote=is_remote, is_remote_fs=is_remote_fs, 
-                        backend=backend, backend_name=backend_name,
-                        wrapper=wrapper)
+    return BackendRunner(
+        opts=backend_opts,
+        is_remote=is_remote,
+        is_remote_fs=is_remote_fs,
+        backend=backend,
+        backend_name=backend_name,
+        wrapper=wrapper,
+    )
