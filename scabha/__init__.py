@@ -1,21 +1,19 @@
-import os
 import logging
+import os
 import subprocess
 
+from . import exceptions
 from .logging_utils import MultiplexingHandler
-from .  import exceptions
 
 
-def init_logger(name="SCABHA",
-           fmt="{asctime}: {message}",
-           datefmt="%Y-%m-%d %H:%M:%S", loglevel="INFO"):
+def init_logger(name="SCABHA", fmt="{asctime}: {message}", datefmt="%Y-%m-%d %H:%M:%S", loglevel="INFO"):
     """Returns the global Stimela logger (initializing if not already done so, with the given values)"""
     global log
     if log is None:
         log = logging.getLogger(name)
         log.propagate = False
 
-        level = os.environ.get('SCABHA_LOG_LEVEL') or 'INFO'
+        level = os.environ.get("SCABHA_LOG_LEVEL") or "INFO"
         log.setLevel(getattr(logging, level, logging.INFO))
 
         global log_console_handler, log_formatter
@@ -36,8 +34,10 @@ def set_logger(logger):
     log = logger
     exceptions.set_logger(logger)
 
+
 def logger():
     return init_logger()
+
 
 def report_memory():
     """Reports memory status"""
