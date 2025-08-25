@@ -36,4 +36,3 @@ def merge_dataclass_instances(inst1: object, inst2: object):
         kwargs[field_name] = val_inst2 if val_inst2 is not None else val_inst1
 
     return _type(**kwargs)
-
