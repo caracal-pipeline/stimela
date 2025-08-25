@@ -7,10 +7,15 @@ import zlib
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
+from omegaconf import OmegaConf
+
 import stimela
 from scabha.cab_utils import CAB_OUTPUT_PREFIX
+from scabha.dataclass_utils import merge_dataclass_instances
 from scabha.exceptions import SubstitutionError
 from scabha.substitutions import substitutions_from
+from stimela import CONFIG
+from stimela.backends import resolve_image_name
 from stimela.exceptions import CabValidationError
 from stimela.kitchen import wranglers
 from stimela.kitchen.cab import Cab
@@ -118,11 +123,11 @@ class PythonCallableFlavour(_CallableFlavour):
         else:
             self._yield_output = ""
 
-    def get_image_name(self, cab: Cab, backend: "stimela.backend.StimelaBackendOptions"):
-        from stimela import CONFIG
-        from stimela.backends import resolve_image_name
+        default_image_info = OmegaConf.to_object(CONFIG.images["default-python"])
+        cab.image = merge_dataclass_instances(default_image_info, cab.image)
 
-        return resolve_image_name(backend, cab.image or CONFIG.images["default-python"])
+    def get_image_name(self, cab: Cab, backend: "stimela.backend.StimelaBackendOptions"):
+        return resolve_image_name(backend, cab.image)
 
     def get_arguments(
         self,
@@ -239,11 +244,11 @@ class PythonCodeFlavour(_BaseFlavour):
         cab._wranglers.append((pattern, wrangs))
         self.command_name = "[python]"
 
-    def get_image_name(self, cab: Cab, backend: "stimela.backend.StimelaBackendOptions"):
-        from stimela import CONFIG
-        from stimela.backends import resolve_image_name
+        default_image_info = OmegaConf.to_object(CONFIG.images["default-python"])
+        cab.image = merge_dataclass_instances(default_image_info, cab.image)
 
-        return resolve_image_name(backend, cab.image or CONFIG.images["default-python"])
+    def get_image_name(self, cab: Cab, backend: "stimela.backend.StimelaBackendOptions"):
+        return resolve_image_name(backend, cab.image)
 
     def get_arguments(
         self,
