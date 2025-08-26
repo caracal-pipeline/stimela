@@ -14,7 +14,7 @@ class EmptyBackendWrapper(object):
         return args, log_args
 
     def wrap_build_command(self, args: List[str], fqname: Optional[str]=None, log: Optional[logging.Logger]=None) -> List[str]:
-        return args
+        return args, args
 
 @dataclass
 class BackendRunner(object):

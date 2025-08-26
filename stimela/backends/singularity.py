@@ -237,7 +237,10 @@ def build(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBacke
         args = [BINARY, "build", simg_path, f"docker://{image_name}"]
 
         if wrapper:
-            args = wrapper.wrap_build_command(args, log=log)
+            # args, log_args = wrapper.wrap_build_command(args, log=log)
+            ret = wrapper.wrap_build_command(args, log=log)
+            print(ret)
+            args, log_args = ret
 
         retcode = xrun(args[0], args[1:], shell=False, log=log,
                     return_errcode=True, command_name="(singularity build)", 
