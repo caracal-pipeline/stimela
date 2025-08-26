@@ -204,7 +204,7 @@ class LocalDisplay(DisplayStyle):
 
             self.task_status.update(
                 self.task_status_id,
-                value=f"[dim]{task_info.status or '--'}[/dim]"
+                value=f"[dim]{task_info.status or 'running'}[/dim]"
             )
             # Sometimes the command contains square brackets which rich
             # interprets as formatting. Remove them. # TODO: Figure out
@@ -342,7 +342,7 @@ class SimpleLocalDisplay(DisplayStyle):
 
             self.task_status.update(
                 self.task_status_id,
-                value=f"[dim]{task_info.status or '--'}[/dim]"
+                value=f"[dim]{task_info.status or 'running'}[/dim]"
             )
 
         self.task_cpu_usage.update(
