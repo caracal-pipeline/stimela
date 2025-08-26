@@ -78,7 +78,7 @@ class LocalDisplay(DisplayStyle):
 
         for k, v in self.tracked_values.items():
             status = status_element(width=width)
-            status_id = status.add_task(v, value="Pending...")
+            status_id = status.add_task(v, value="--")
             setattr(self, k, status)
             setattr(self, f"{k}_id", status_id)
 
@@ -183,7 +183,7 @@ class LocalDisplay(DisplayStyle):
             self.disk_read_id,
             value=(
                 f"[green]{task_stats.read_gbps:2.2f}[/green]GB/s "
-                f"[green]{task_stats.read_ms:4}[/green]ms "
+                f"[green]{task_stats.read_ms:5}[/green]ms "
                 f"[green]{task_stats.read_count:-4}[/green] reads"
             )
         )
@@ -191,7 +191,7 @@ class LocalDisplay(DisplayStyle):
             self.disk_write_id,
             value=(
                 f"[green]{task_stats.write_gbps:2.2f}[/green]GB/s "
-                f"[green]{task_stats.write_ms:4}[/green]ms "
+                f"[green]{task_stats.write_ms:5}[/green]ms "
                 f"[green]{task_stats.write_count:-4}[/green] writes"
             )
         )
@@ -204,14 +204,14 @@ class LocalDisplay(DisplayStyle):
 
             self.task_status.update(
                 self.task_status_id,
-                value=f"[dim]{task_info.status or 'N/A'}[/dim]"
+                value=f"[dim]{task_info.status or '--'}[/dim]"
             )
             # Sometimes the command contains square brackets which rich
             # interprets as formatting. Remove them. # TODO: Figure out
             # why the command has square brackets in the first place.
             self.task_command.update(
                 self.task_command_id,
-                value=f"{(task_info.command or 'N/A').strip('[]')}"
+                value=f"{(task_info.command or '--').strip('[]')}"
             )
 
         self.task_cpu_usage.update(
@@ -287,7 +287,7 @@ class SimpleLocalDisplay(DisplayStyle):
 
         for k, v in self.tracked_values.items():
             status = status_element(has_description=v is not None)
-            status_id = status.add_task(v, value="*")
+            status_id = status.add_task(v, value="--")
             setattr(self, k, status)
             setattr(self, f"{k}_id", status_id)
 
@@ -342,7 +342,7 @@ class SimpleLocalDisplay(DisplayStyle):
 
             self.task_status.update(
                 self.task_status_id,
-                value=f"[dim]{task_info.status or 'N/A'}[/dim]"
+                value=f"[dim]{task_info.status or '--'}[/dim]"
             )
 
         self.task_cpu_usage.update(

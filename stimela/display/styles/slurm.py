@@ -57,7 +57,7 @@ class SimpleSlurmDisplay(DisplayStyle):
 
         for k, v in self.tracked_values.items():
             status = status_element(has_description=v is not None)
-            status_id = status.add_task(v, value="Pending...")
+            status_id = status.add_task(v, value="--")
             setattr(self, k, status)
             setattr(self, f"{k}_id", status_id)
 
@@ -100,12 +100,12 @@ class SimpleSlurmDisplay(DisplayStyle):
 
             self.task_status.update(
                 self.task_status_id,
-                value=f"[dim]{task_info.status or 'N/A'}[/dim]"
+                value=f"[dim]{task_info.status or '--'}[/dim]"
             )
             # Sometimes the command contains square brackets which rich
             # interprets as formatting. Remove them. # TODO: Figure out
             # why the command has square brackets in the first place.
             self.task_command.update(
                 self.task_command_id,
-                value=f"{(task_info.command or 'N/A').strip('[]')}"
+                value=f"{(task_info.command or '--').strip('[]')}"
             )
