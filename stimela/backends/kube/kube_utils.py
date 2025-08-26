@@ -1,10 +1,11 @@
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import re
 from datetime import datetime
 from rich.markup import escape
 from requests import ConnectionError
 from urllib3.exceptions import HTTPError
+from dataclasses import dataclass
 
 from omegaconf import OmegaConf
 
@@ -37,6 +38,24 @@ k8s_memory_units_in_bytes = {
     "P": 10**15,
     "E": 10**18
 }
+
+@dataclass
+class KubeReport:
+    status: Optional[str] = None
+    running_pods: Optional[int] = None
+    pending_pods: Optional[int] = None
+    terminating_pods: Optional[int] = None
+    successful_pods: Optional[int] = None
+    failed_pods: Optional[int] = None
+    stateless_pods: Optional[int] = None
+    total_pods: Optional[int] = None
+    total_cores: Optional[float] = None
+    total_memory: Optional[float] = None
+    connection_status: str = "connected"
+
+    @property
+    def profiling_results(self):
+        return {"k8s_cores": self.total_cores, "k8s_mem": self.total_memory}
 
 def resolve_unit(quantity:str, units: Dict = k8s_memory_units_in_bytes):
     match = re.fullmatch(r"^(\d+)(.*)$", quantity)
@@ -217,11 +236,15 @@ class StatusReporter(object):
         except (ConnectionError, HTTPError) as exc:
             self.connected = False
             # self.log.warning(f"disconnected: {exc}")
+
+        # Init the report dataclass.
+        report = KubeReport()
         # add connection status
         if not self.connected:
             interval = str(datetime.now() - self._last_connected)
             interval = interval.split(".", 1)[0]
-            return [f"lost connection [red]{interval}[/red] ago"], None
+            report.connection_status = f"disconnected ({interval}s)"
+            return report
 
         # process metrics if we got them
         if metrics:
@@ -234,50 +257,36 @@ class StatusReporter(object):
                         totals['cpu'] += resolve_unit(usage.get('cpu'), k8s_cpu_units)
                         totals['memory'] += resolve_unit(usage.get('memory'), k8s_memory_units_in_bytes)
                     # print(f"Pod: {pname}, CPU: {usage.get('cpu')}, Memory: {usage.get('memory')}")
+
         # add main pod/job status
-        report_metrics = []
         if self.main_status:
-            report_metrics.append(f"[blue]{self.main_status}[/blue]")
+            report.status = self.main_status  # Blue
         elif self.podname in self.pod_statuses:
-            report_metrics.append(f"[blue]{self.pod_statuses[self.podname]}[/blue]")
+            report.status = self.pod_statuses[self.podname]  # Blue
+
         # add count of running pods
-        npods = len(self.pod_statuses)
-        pods = ""
-        nrun = sum([stat.startswith("Running") for stat in self.pod_statuses.values()])
-        if nrun:
-            pods += f"[green]{nrun}[/green]R"
-        npend = sum([stat.startswith("Pending") for stat in self.pod_statuses.values()])
-        if npend:
-            pods += f"[yellow]{npend}[/yellow]P"
-        nterm = sum([stat.startswith("Terminating") for stat in self.pod_statuses.values()])
-        if nterm:
-            pods += f"[blue]{nterm}[/blue]T"
-        nsucc = sum([stat.startswith("Succeeded") for stat in self.pod_statuses.values()])
-        if nsucc:
-            pods += f"[green]{nsucc}[/green]S"
+        report.total_pods = npods = len(self.pod_statuses)
+        nrun = sum([s.startswith("Running") for s in self.pod_statuses.values()])
+        report.running_pods = nrun  # Green
+        npend = sum([s.startswith("Pending") for s in self.pod_statuses.values()])
+        report.pending_pods = npend  # Yellow
+        nterm = sum([s.startswith("Terminating") for s in self.pod_statuses.values()])
+        report.terminating_pods = nterm  # Blue
+        nsucc = sum([s.startswith("Succeeded") for s in self.pod_statuses.values()])
+        report.successful_pods = nsucc  # Green
         nfail = sum([stat.startswith("Failed") for stat in self.pod_statuses.values()])
-        if nfail:
-            pods += f"[red]{nfail}[/red]F"
+        report.failed_pods = nfail # Red
         nuk = npods - nrun - npend - nterm - nsucc - nfail
-        if nuk:
-            pods += f"[red]{nuk}[/red]U"
-        if npods:
-            report_metrics.append(f"pods {pods}")
+        report.stateless_pods = nuk  # Red
+
         # add metrics
         if metrics:
-            cores = totals['cpu']
-            mem_gb = round(totals['memory'] / 2**30)
-            report_metrics += [
-                f"cores [green]{totals['cpu']:.2f}[/green]",
-                f"mem [green]{mem_gb}[/green]G"
-            ]
-            stats = dict(k8s_cores=cores, k8s_mem=mem_gb)
-        else:
-            stats = None
+            report.total_cores = totals['cpu']
+            report.total_memory = round(totals['memory'] / 2**30)
 
         if self._last_disconnected is not None:
-            report_metrics.append("reconnected")
+            report.connection_status = "reconnected"
 
-        return report_metrics, stats
+        return report
 
 
