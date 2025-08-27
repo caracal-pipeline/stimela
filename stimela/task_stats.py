@@ -39,6 +39,7 @@ class TaskInformation(object):
     task_attrs: List[str] = EmptyListDefault()
     command: Optional[str] = None
     status_reporter: Optional[Callable] = None
+    stats_mode: Optional[str] = None
 
     def __post_init__(self):
         self.names_orig = list(self.names)
@@ -82,6 +83,10 @@ def declare_subtask_status(status):
 def declare_subtask_attributes(*args, **kw):
     _task_stack[-1].task_attrs = [str(x) for x in args] + [f"{key} {value}" for key, value in kw.items()]
     update_process_status()
+
+
+def declare_subtask_stats_mode(stats_mode):
+    _task_stack[-1].stats_mode = stats_mode
 
 
 class _CommandContext(object):
@@ -242,6 +247,12 @@ def update_process_status():
 
     # form up sample datum
     task_stats = TaskStatsDatum(num_samples=1)
+
+    # Early return if we are in slurm mode.
+    if task_info and task_info.stats_mode == "slurm":
+        update_stats(now, task_stats)
+        return
+
     sys_stats = SystemStatsDatum()
 
     # Track the child processes (and retain their Process objects).
