@@ -95,6 +95,9 @@ class Display:
             transient=True
         )
 
+        # Configure a simple, local display as the default.
+        self.set_display_style(variant="simple")
+
     def reset_current_task(self):
         """Calls the reset method of the current DisplayStyle object."""
         self.current_display.reset()

@@ -211,7 +211,7 @@ class LocalDisplay(DisplayStyle):
             # why the command has square brackets in the first place.
             self.task_command.update(
                 self.task_command_id,
-                value=f"{(task_info.command or '--').strip('[]')}"
+                value=f"{(task_info.command or '--').strip('([])')}"
             )
 
         self.task_cpu_usage.update(
@@ -265,6 +265,7 @@ class SimpleLocalDisplay(DisplayStyle):
 
     tracked_values = {
         "task_name": None,
+        "task_command": None,
         "task_status": None,
         "task_cpu_usage": "CPU",
         "task_ram_usage": "RAM",
@@ -297,6 +298,7 @@ class SimpleLocalDisplay(DisplayStyle):
             self.task_elapsed,
             self.task_name,
             self.task_status,
+            self.task_command,
             self.task_cpu_usage,
             self.task_ram_usage,
             self.disk_read,
@@ -343,6 +345,14 @@ class SimpleLocalDisplay(DisplayStyle):
             self.task_status.update(
                 self.task_status_id,
                 value=f"[dim]{task_info.status or 'running'}[/dim]"
+            )
+
+            # Sometimes the command contains square brackets which rich
+            # interprets as formatting. Remove them. # TODO: Figure out
+            # why the command has square brackets in the first place.
+            self.task_command.update(
+                self.task_command_id,
+                value=f"{(task_info.command or '--').strip('([])')}"
             )
 
         self.task_cpu_usage.update(
