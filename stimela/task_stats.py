@@ -409,8 +409,8 @@ def render_profiling_summary(stats: TaskStatsDatum, max_depth, unroll_loops=Fals
             peak_row = avg_row.copy()
             for f, label in _printed_stats.items():
                 if f in available_stats:
-                    avg_row.append(f"{getattr(avg, f):.2f}" if hasattr(avg, f) else "")
-                    peak_row.append(f"{getattr(peak, f):.2f}" if hasattr(peak, f) else "")
+                    avg_row.append(f"{getattr(avg, f):.2f}" if getattr(avg, f, None) else "--")
+                    peak_row.append(f"{getattr(peak, f):.2f}" if getattr(peak, f, None) else "--")
 
             avg_row += [f"{sum.read_gb:.2f}", f"{sum.write_gb:.2f}"]
             table_avg.add_row(*avg_row)
