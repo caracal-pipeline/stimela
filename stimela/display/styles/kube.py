@@ -184,7 +184,7 @@ class KubeDisplay(DisplayStyle):
             # why the command has square brackets in the first place.
             self.task_command.update(
                 self.task_command_id,
-                value=f"{(task_info.command or '--').strip('[]')}"
+                value=f"{(task_info.command or '--').strip('([])')}"
             )
 
         if extra_info:
@@ -356,7 +356,7 @@ class SimpleKubeDisplay(DisplayStyle):
             # why the command has square brackets in the first place.
             self.task_command.update(
                 self.task_command_id,
-                value=f"{(task_info.command or '--').strip('[]')}"
+                value=f"{(task_info.command or '--').strip('([])')}"
             )
 
         if extra_info:
