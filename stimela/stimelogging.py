@@ -2,6 +2,7 @@ import copy
 import logging
 import os.path
 import re
+import sys
 import traceback
 from types import TracebackType
 from typing import Any, Optional, OrderedDict, Union
@@ -9,7 +10,7 @@ from typing import Any, Optional, OrderedDict, Union
 import rich.logging
 import rich.progress
 from omegaconf import DictConfig
-from rich import print as rich_print
+from rich.console import Console
 from rich.errors import MarkupError
 from rich.markup import escape
 from rich.padding import Padding
@@ -19,8 +20,6 @@ from rich.tree import Tree
 
 from scabha.exceptions import FormattedTraceback, ScabhaBaseException
 from scabha.substitutions import SubstitutionNS, forgiving_substitutions_from
-
-from . import task_stats
 
 CONSOLE_PRINT_OPTIONS = [
     "sep",
@@ -38,6 +37,8 @@ CONSOLE_PRINT_OPTIONS = [
     "soft_wrap",
     "new_line_start",
 ]
+
+rich_console = Console(file=sys.stdout, highlight=False, emoji=False)
 
 
 class FunkyMessage(object):
@@ -174,7 +175,7 @@ def is_logger_initialized():
 
 def declare_chapter(title: str, **kw):
     if not _boring:
-        progress_console.rule(title, **kw)
+        rich_console.rule(title, **kw)
 
 
 def apply_style(text: str, style: str):
@@ -201,7 +202,6 @@ def logger(name="STIMELA", propagate=False, boring=False, loglevel="INFO"):
             _log_file_formatter, \
             _log_boring_formatter, \
             _log_colourful_formatter
-        global progress_console, progress_bar
 
         _log_file_formatter = StimelaLogFormatter(boring=True, override_message_attr="logfile_message")
         _log_boring_formatter = StimelaLogFormatter(boring=True)
@@ -209,9 +209,7 @@ def logger(name="STIMELA", propagate=False, boring=False, loglevel="INFO"):
 
         _log_formatter = _log_boring_formatter if boring else _log_colourful_formatter
 
-        progress_bar, progress_console = task_stats.init_progress_bar(boring=boring)
-
-        _log_console_handler = StimelaConsoleHander(console=progress_console)
+        _log_console_handler = StimelaConsoleHander(console=rich_console)
 
         _log_console_handler.setFormatter(_log_formatter)
         _log_console_handler.setLevel(loglevel)
@@ -243,6 +241,10 @@ def disable_file_logger(log: logging.Logger):
         fh.close()
         log.removeHandler(fh)
         del _logger_file_handlers[log.name]
+
+
+def is_logging_boring():
+    return _boring
 
 
 class DelayedFileHandler(logging.FileHandler):
@@ -458,12 +460,10 @@ def log_exception(*errors, severity="error", log=None):
     if do_log:
         message_dispatch(": ".join(messages))
 
-    printfunc = task_stats.progress_bar.console.print if task_stats.progress_bar is not None else rich_print
-
     if has_nesting:
         declare_chapter("detailed error report follows", style="red")
         for tree in trees:
-            printfunc(Padding(tree, pad=(0, 0, 0, 8)))
+            rich_console.print(Padding(tree, pad=(0, 0, 0, 8)))
 
 
 def log_rich_payload(

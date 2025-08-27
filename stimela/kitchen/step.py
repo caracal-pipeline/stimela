@@ -22,6 +22,7 @@ from scabha.validate import Unresolved, evaluate_and_substitute_object, join_quo
 from stimela import log_exception, stimelogging, task_stats
 from stimela.backends import StimelaBackendSchema, runner
 from stimela.config import EmptyDictDefault, EmptyListDefault
+from stimela.display.display import display
 from stimela.exceptions import (
     AssignmentError,
     BackendError,
@@ -447,7 +448,7 @@ class Step:
             context = nullcontext()
             parent_log_info = parent_log_warning = parent_log.debug
         else:
-            context = task_stats.declare_subtask(self.name, hide_local_metrics=backend_runner.is_remote)
+            context = task_stats.declare_subtask(self.name)
             stimelogging.declare_chapter(f"{self.fqname}")
             parent_log_info, parent_log_warning = parent_log.info, parent_log.warning
 
@@ -658,6 +659,12 @@ class Step:
                 if type(self.cargo) is Recipe:
                     self.cargo._run(params, subst, backend=backend)
                 elif type(self.cargo) is Cab:
+                    if backend_runner.backend_name == "kube":
+                        display.set_display_style("kube")
+                    elif backend_runner.is_remote:
+                        display.set_display_style("slurm")
+                    else:
+                        display.set_display_style("local")
                     cabstat = backend_runner.run(
                         self.cargo, params=params, log=self.log, subst=subst, fqname=self.fqname
                     )

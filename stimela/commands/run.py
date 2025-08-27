@@ -26,10 +26,12 @@ from scabha.exceptions import ScabhaBaseException
 from scabha.substitutions import SubstitutionNS
 from stimela import log_exception, logger, stimelogging, task_stats
 from stimela.config import ConfigExceptionTypes
+from stimela.display.display import display
 from stimela.exceptions import RecipeValidationError, StepSelectionError, StepValidationError, StimelaRuntimeError
 from stimela.kitchen.recipe import Recipe, RecipeSchema, Step
 from stimela.kitchen.run_state import graph_to_constraints
 from stimela.main import cli
+from stimela.stimelogging import is_logging_boring
 
 
 def resolve_recipe_files(filename: str, log: logging.Logger, use_manifest: bool = True):
@@ -353,6 +355,8 @@ def run(
     parameter_file: List[str] = [],
 ):
     log = logger()
+    if not is_logging_boring():
+        display.enable()
     params = OrderedDict()
     errcode = 0
     recipe_or_cab = None
