@@ -17,7 +17,7 @@ A workflow management framework for radio interferometry data processing pipelin
 Installation (User)
 -------------------
 
-Stimela can be installed using `pip`. Simply run `pip install stimela`.
+Stimela can be installed using ``pip``. Simply run ``pip install stimela``.
 
 Installation (Developer)
 ------------------------
