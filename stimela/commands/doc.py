@@ -13,12 +13,11 @@ from stimela import log_exception, logger
 from stimela.exceptions import CabValidationError, RecipeValidationError
 from stimela.kitchen.cab import Cab
 from stimela.kitchen.recipe import Recipe
-from stimela.main import cli
 
 from .run import load_recipe_files, resolve_recipe_files
 
 
-@cli.command(
+@click.command(
     "doc",
     help="""
     Print documentation on a cab or a recipe.
