@@ -1,21 +1,19 @@
 from __future__ import annotations
-from typing import Optional, TYPE_CHECKING
+
 from collections import defaultdict
+from typing import TYPE_CHECKING, Optional
 
 from rich.console import Group
 from rich.panel import Panel
-from rich.table import Table, Column
 from rich.progress import Progress
+from rich.table import Column, Table
 
 from .base import DisplayStyle
-from .elements import timer_element, status_element
+from .elements import status_element, timer_element
 
 if TYPE_CHECKING:
-    from stimela.task_stats import (
-        TaskInformation,
-        TaskStatsDatum,
-        SystemStatsDatum
-    )
+    from stimela.task_stats import SystemStatsDatum, TaskInformation, TaskStatsDatum
+
 
 class LocalDisplay(DisplayStyle):
     """Styles a rich live display appropriately for local backends.
@@ -51,7 +49,7 @@ class LocalDisplay(DisplayStyle):
         "task_cpu_usage": "CPU",
         "task_ram_usage": "RAM",
         "task_peak_ram_usage": "Peak",
-        "task_peak_cpu_usage": "Peak"
+        "task_peak_cpu_usage": "Peak",
     }
 
     def __init__(self, run_timer: Progress):
@@ -83,40 +81,23 @@ class LocalDisplay(DisplayStyle):
             setattr(self, f"{k}_id", status_id)
 
         ram_columns = [Column(ratio=1), Column(ratio=1)]
-        ram_table = Table.grid(*ram_columns, expand=True, padding=(0,1))
+        ram_table = Table.grid(*ram_columns, expand=True, padding=(0, 1))
         ram_table.add_row(self.task_ram_usage, self.task_peak_ram_usage)
 
         cpu_columns = [Column(ratio=1), Column(ratio=1)]
-        cpu_table = Table.grid(*cpu_columns, expand=True, padding=(0,1))
+        cpu_table = Table.grid(*cpu_columns, expand=True, padding=(0, 1))
         cpu_table.add_row(self.task_cpu_usage, self.task_peak_cpu_usage)
 
-        task_group = Group(
-            self.task_elapsed,
-            self.task_name,
-            self.task_status,
-            self.task_command,
-            cpu_table,
-            ram_table
-        )
+        task_group = Group(self.task_elapsed, self.task_name, self.task_status, self.task_command, cpu_table, ram_table)
 
         system_group = Group(
-            self.run_elapsed,
-            self.cpu_usage,
-            self.ram_usage,
-            self.disk_read,
-            self.disk_write,
-            self.system_load
+            self.run_elapsed, self.cpu_usage, self.ram_usage, self.disk_read, self.disk_write, self.system_load
         )
 
         group_columns = [Column(ratio=1), Column(ratio=1)]
         table = Table.grid(*group_columns, expand=True)
         table.add_row(
-            Panel(
-                system_group,
-                title="System",
-                border_style="green",
-                expand=True
-            ),
+            Panel(system_group, title="System", border_style="green", expand=True),
             Panel(
                 task_group,
                 title="Task",
@@ -137,7 +118,7 @@ class LocalDisplay(DisplayStyle):
         sys_stats: SystemStatsDatum,
         task_stats: TaskStatsDatum,
         task_info: TaskInformation,
-        extra_info: Optional[object] = None
+        extra_info: Optional[object] = None,
     ):
         """Updates the progress elements using the provided values.
 
@@ -152,21 +133,14 @@ class LocalDisplay(DisplayStyle):
                 A Report object containing additional information. Typically
                 used for information originating from a backend.
         """
-        self.cpu_usage.update(
-            self.cpu_usage_id,
-            value=f"[green]{sys_stats.cpu}[/green]%"
-        )
+        self.cpu_usage.update(self.cpu_usage_id, value=f"[green]{sys_stats.cpu}[/green]%")
 
         used = sys_stats.mem_used
         total = sys_stats.mem_total
         percent = (used / total) * 100
 
         self.ram_usage.update(
-            self.ram_usage_id,
-            value=(
-                f"[green]{used}/{total}[/green]GB "
-                f"([green]{percent:.2f}[/green]%)"
-            )
+            self.ram_usage_id, value=(f"[green]{used}/{total}[/green]GB ([green]{percent:.2f}[/green]%)")
         )
 
         self.system_load.update(
@@ -176,7 +150,7 @@ class LocalDisplay(DisplayStyle):
                 f"[green]{task_stats.load_5m:.2f}[/green]%/"
                 f"[green]{task_stats.load_15m:.2f}[/green]% "
                 f"(1/5/15 min)"
-            )
+            ),
         )
 
         self.disk_read.update(
@@ -185,7 +159,7 @@ class LocalDisplay(DisplayStyle):
                 f"[green]{task_stats.read_gbps:2.2f}[/green]GB/s "
                 f"[green]{task_stats.read_ms:5}[/green]ms "
                 f"[green]{task_stats.read_count:-4}[/green] reads"
-            )
+            ),
         )
         self.disk_write.update(
             self.disk_write_id,
@@ -193,54 +167,29 @@ class LocalDisplay(DisplayStyle):
                 f"[green]{task_stats.write_gbps:2.2f}[/green]GB/s "
                 f"[green]{task_stats.write_ms:5}[/green]ms "
                 f"[green]{task_stats.write_count:-4}[/green] writes"
-            )
+            ),
         )
 
         if task_info is not None:
-            self.task_name.update(
-                self.task_name_id,
-                value=f"[bold]{task_info.description}[/bold]"
-            )
+            self.task_name.update(self.task_name_id, value=f"[bold]{task_info.description}[/bold]")
 
-            self.task_status.update(
-                self.task_status_id,
-                value=f"[dim]{task_info.status or 'running'}[/dim]"
-            )
+            self.task_status.update(self.task_status_id, value=f"[dim]{task_info.status or 'running'}[/dim]")
             # Sometimes the command contains square brackets which rich
             # interprets as formatting. Remove them. # TODO: Figure out
             # why the command has square brackets in the first place.
-            self.task_command.update(
-                self.task_command_id,
-                value=f"{(task_info.command or '--').strip('([])')}"
-            )
+            self.task_command.update(self.task_command_id, value=f"{(task_info.command or '--').strip('([])')}")
 
-        self.task_cpu_usage.update(
-            self.task_cpu_usage_id,
-            value=f"[green]{task_stats.cpu:2.1f}[/green]%"
-        )
+        self.task_cpu_usage.update(self.task_cpu_usage_id, value=f"[green]{task_stats.cpu:2.1f}[/green]%")
 
-        max_cpu = max(
-            task_stats.cpu, self.task_maxima["task_peak_cpu_usage"]
-        )
+        max_cpu = max(task_stats.cpu, self.task_maxima["task_peak_cpu_usage"])
         self.task_maxima["task_peak_cpu_usage"] = max_cpu
-        self.task_peak_cpu_usage.update(
-            self.task_peak_cpu_usage_id,
-            value=f"[green]{max_cpu:2.1f}[/green]%"
-        )
+        self.task_peak_cpu_usage.update(self.task_peak_cpu_usage_id, value=f"[green]{max_cpu:2.1f}[/green]%")
 
-        self.task_ram_usage.update(
-            self.task_ram_usage_id,
-            value=f"[green]{task_stats.mem_used}[/green]GB"
-        )
+        self.task_ram_usage.update(self.task_ram_usage_id, value=f"[green]{task_stats.mem_used}[/green]GB")
 
-        max_ram = max(
-            task_stats.mem_used, self.task_maxima["task_peak_ram_usage"]
-        )
+        max_ram = max(task_stats.mem_used, self.task_maxima["task_peak_ram_usage"])
         self.task_maxima["task_peak_ram_usage"] = max_ram
-        self.task_peak_ram_usage.update(
-            self.task_peak_ram_usage_id,
-            value=f"[green]{max_ram}[/green]GB"
-        )
+        self.task_peak_ram_usage.update(self.task_peak_ram_usage_id, value=f"[green]{max_ram}[/green]GB")
 
 
 class SimpleLocalDisplay(DisplayStyle):
@@ -302,7 +251,7 @@ class SimpleLocalDisplay(DisplayStyle):
             self.task_cpu_usage,
             self.task_ram_usage,
             self.disk_read,
-            self.disk_write
+            self.disk_write,
         )
 
         self.render_target = table
@@ -312,7 +261,7 @@ class SimpleLocalDisplay(DisplayStyle):
         sys_stats: SystemStatsDatum,
         task_stats: TaskStatsDatum,
         task_info: TaskInformation,
-        extra_info: Optional[object] = None
+        extra_info: Optional[object] = None,
     ):
         """Updates the progress elements using the provided values.
 
@@ -327,40 +276,19 @@ class SimpleLocalDisplay(DisplayStyle):
                 A Report object containing additional information. Typically
                 used for information originating from a backend.
         """
-        self.disk_read.update(
-            self.disk_read_id,
-            value=f"[green]{task_stats.read_gbps:2.2f}[/green]GB/s"
-        )
-        self.disk_write.update(
-            self.disk_write_id,
-            value=f"[green]{task_stats.write_gbps:2.2f}[/green]GB/s"
-        )
+        self.disk_read.update(self.disk_read_id, value=f"[green]{task_stats.read_gbps:2.2f}[/green]GB/s")
+        self.disk_write.update(self.disk_write_id, value=f"[green]{task_stats.write_gbps:2.2f}[/green]GB/s")
 
         if task_info is not None:
-            self.task_name.update(
-                self.task_name_id,
-                value=f"[bold]{task_info.description}[/bold]"
-            )
+            self.task_name.update(self.task_name_id, value=f"[bold]{task_info.description}[/bold]")
 
-            self.task_status.update(
-                self.task_status_id,
-                value=f"[dim]{task_info.status or 'running'}[/dim]"
-            )
+            self.task_status.update(self.task_status_id, value=f"[dim]{task_info.status or 'running'}[/dim]")
 
             # Sometimes the command contains square brackets which rich
             # interprets as formatting. Remove them. # TODO: Figure out
             # why the command has square brackets in the first place.
-            self.task_command.update(
-                self.task_command_id,
-                value=f"{(task_info.command or '--').strip('([])')}"
-            )
+            self.task_command.update(self.task_command_id, value=f"{(task_info.command or '--').strip('([])')}")
 
-        self.task_cpu_usage.update(
-            self.task_cpu_usage_id,
-            value=f"[green]{task_stats.cpu:2.1f}[/green]%"
-        )
+        self.task_cpu_usage.update(self.task_cpu_usage_id, value=f"[green]{task_stats.cpu:2.1f}[/green]%")
 
-        self.task_ram_usage.update(
-            self.task_ram_usage_id,
-            value=f"[green]{task_stats.mem_used}[/green]GB"
-        )
+        self.task_ram_usage.update(self.task_ram_usage_id, value=f"[green]{task_stats.mem_used}[/green]GB")
