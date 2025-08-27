@@ -7,6 +7,12 @@ from omegaconf import OmegaConf
 
 import stimela
 from stimela import backends, config, stimelogging
+from stimela.commands.build import build
+from stimela.commands.cleanup import cleanup
+from stimela.commands.doc import doc
+from stimela.commands.run import run
+from stimela.commands.save_config import config as save_config
+from stimela.display.display import display
 
 UID = stimela.UID
 GID = stimela.GID
@@ -67,6 +73,7 @@ class RunExecGroup(click.Group):
     is_flag=True,
     help="Reset the configuration cache. First thing to try in case of strange configuration errors.",
 )
+@click.option("--simple", "-S", is_flag=True, help="Use simplified (single-line) displays.")
 @click.option("--boring", "-B", is_flag=True, help="Disables progress bar and any other fancy console outputs.")
 @click.option("--verbose", "-v", is_flag=True, help="Be extra verbose in output.")
 @click.version_option(str(stimela.__version__))
@@ -79,10 +86,15 @@ def cli(
     no_sys_config=False,
     clear_cache=False,
     boring=False,
+    simple=False,
 ):
     global log
     log = stimela.logger(loglevel=logging.DEBUG if verbose else logging.INFO, boring=boring)
     log.info("starting")  # remove this eventually, but it's handy for timing things right now
+
+    # Force simple displays when provided.
+    if simple:
+        display.set_variant_override("simple")
 
     stimela.VERBOSE = verbose
     if verbose:
@@ -145,9 +157,9 @@ def cli(
     config.CONFIG_DEPS.save(filename)
 
 
-# import commands. TODO(JSKenyon): This is circular, as the commands are importing the cli.
-# Can easily be fixed by lazily adding the commands with cli.add_command(command).
-from stimela.commands import build, cleanup, doc, run, save_config  # noqa: E402, F401
+# Add all the subcommands to the main CLI group.
+for cmd in (build, cleanup, doc, run, save_config):
+    cli.add_command(cmd)
 
 ## These one needs to be reimplemented, current backed auto-pulls and auto-builds:
 # images, pull, build, clean

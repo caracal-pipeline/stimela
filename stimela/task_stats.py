@@ -1,21 +1,20 @@
 import asyncio
-import atexit
 import contextlib
 import os.path
-import sys
+import threading
+import time
 from dataclasses import dataclass, fields
 from datetime import datetime
 from typing import Callable, List, Optional, OrderedDict
 
 import psutil
-import rich.logging
-import rich.progress
 from omegaconf import OmegaConf
 from rich.table import Table
 from rich.text import Text
 
 from scabha.basetypes import EmptyListDefault
 from stimela import stimelogging
+from stimela.display.display import display, rich_console
 
 # this is "" for the main process, ".0", ".1", for subprocesses, ".0.0" for nested subprocesses
 _subprocess_identifier = ""
@@ -30,9 +29,6 @@ def add_subprocess_id(num: int):
     _subprocess_identifier += f".{num}"
 
 
-progress_bar = progress_task = None
-
-_start_time = datetime.now()
 _prev_disk_io = None, None
 
 
@@ -43,7 +39,6 @@ class TaskInformation(object):
     task_attrs: List[str] = EmptyListDefault()
     command: Optional[str] = None
     status_reporter: Optional[Callable] = None
-    hide_local_metrics: bool = False
 
     def __post_init__(self):
         self.names_orig = list(self.names)
@@ -61,59 +56,16 @@ class TaskInformation(object):
 
 # stack of task information -- most recent subtask is at the end
 _task_stack = []
-stimela_process = psutil.Process()
 child_processes = {}
 
 
-def init_progress_bar(boring=False):
-    global progress_console, progress_bar, progress_task
-    progress_console = rich.console.Console(file=sys.stdout, highlight=False, emoji=False)
-    progress_bar = rich.progress.Progress(
-        rich.progress.SpinnerColumn(),
-        "[yellow]{task.fields[elapsed_time]}[/yellow]",
-        "[bold]{task.description}[/bold]",
-        rich.progress.SpinnerColumn(),
-        "[dim]{task.fields[status]}[/dim]",
-        "{task.fields[command]}",
-        rich.progress.TimeElapsedColumn(),
-        "{task.fields[cpu_info]}",
-        refresh_per_second=2,
-        console=progress_console,
-        transient=True,
-        disable=boring,
-    )
-
-    progress_task = progress_bar.add_task(
-        "stimela", status="", command="starting", cpu_info=" ", elapsed_time="", start=True
-    )
-    progress_bar.__enter__()
-    atexit.register(destroy_progress_bar)
-    return progress_bar, progress_console
-
-
-def destroy_progress_bar():
-    global progress_bar
-    if progress_bar is not None:
-        progress_bar.__exit__(None, None, None)
-        progress_bar = None
-
-
-def restate_progress():
-    """Renders a snapshot of the progress bar onto the console"""
-    if progress_bar is not None:
-        progress_console.print(progress_bar.get_renderable())
-        progress_console.rule()
-
-
 @contextlib.contextmanager
-def declare_subtask(subtask_name, status_reporter=None, hide_local_metrics=False):
+def declare_subtask(subtask_name, status_reporter=None):
     task_names = []
     if _task_stack:
         task_names = _task_stack[-1].names + (_task_stack[-1].task_attrs or [])
     task_names.append(subtask_name)
-    _task_stack.append(
-        TaskInformation(task_names, status_reporter=status_reporter, hide_local_metrics=hide_local_metrics)
-    )
+    _task_stack.append(TaskInformation(task_names, status_reporter=status_reporter))
     update_process_status()
     try:
         yield subtask_name
@@ -149,7 +101,7 @@ class _CommandContext(object):
 
 @contextlib.contextmanager
 def declare_subcommand(command):
-    progress_bar and progress_bar.reset(progress_task)
+    display.reset_current_task()
     try:
         yield _CommandContext(command)
     finally:
@@ -158,11 +110,26 @@ def declare_subcommand(command):
 
 
 @dataclass
+class SystemStatsDatum:
+    n_cpu: int = 0
+    cpu: float = 0
+    mem_used: int = 0
+    mem_total: int = 0
+
+    def __post_init__(self):
+        self.n_cpu = psutil.cpu_count()
+        self.cpu = psutil.cpu_percent()
+        self.mem_used = round(psutil.virtual_memory().used / (2**30))
+        self.mem_total = round(psutil.virtual_memory().total / (2**30))
+
+
+@dataclass
 class TaskStatsDatum(object):
     cpu: float = 0
     mem_used: float = 0
-    mem_total: float = 0
-    load: float = 0
+    load_1m: float = 0
+    load_5m: float = 0
+    load_15m: float = 0
     read_count: int = 0
     read_gb: float = 0
     read_gbps: float = 0
@@ -257,7 +224,7 @@ def update_children():
     Process objects each time. These then fail to report CPU stats unless
     we make them block which has a large impact on performance.
     """
-    current_children = stimela_process.children(recursive=True)
+    current_children = psutil.Process().children(recursive=True)
     current_pids = {proc.pid for proc in current_children}
     child_processes.update({c.pid: c for c in current_children if c.pid not in child_processes})
     dropped_pids = {c for c in child_processes.keys() if c not in current_pids}
@@ -268,20 +235,19 @@ def update_children():
 
 def update_process_status():
     # current subtask info
-    ti = _task_stack[-1] if _task_stack else None
+    task_info = _task_stack[-1] if _task_stack else None
 
     # elapsed time since start
     now = datetime.now()
-    elapsed = str(now - _start_time).split(".", 1)[0]
 
     # form up sample datum
-    s = TaskStatsDatum(num_samples=1)
+    task_stats = TaskStatsDatum(num_samples=1)
+    sys_stats = SystemStatsDatum()
 
+    # Track the child processes (and retain their Process objects).
     update_children()
-    # Assume that all child processes belong to the same task.
-    # TODO(JSKenyon): Handling of children is rudimentary at present.
-    # How would this work for scattered/parallel steps?
-    if child_processes and ti:
+
+    if child_processes and task_info:
         processes = list(child_processes.values())
     else:
         processes = []  # Don't bother with cpu and mem for stimela itself.
@@ -289,17 +255,16 @@ def update_process_status():
     # CPU and memory
     for p in processes:
         try:
-            s.cpu += p.cpu_percent()
-            s.mem_used += p.memory_info().rss
+            task_stats.cpu += p.cpu_percent()
+            task_stats.mem_used += p.memory_info().rss
         except psutil.NoSuchProcess:
             pass  # Process ended before we could gather its stats.
 
-    s.mem_used = round(s.mem_used / (2**30))
-    system_memory = psutil.virtual_memory().total
-    s.mem_total = round(system_memory / (2**30))
+    task_stats.mem_used = round(task_stats.mem_used / (2**30))
 
     # load
-    s.load, _, _ = psutil.getloadavg()
+    load = [la / sys_stats.n_cpu * 100 for la in psutil.getloadavg()]
+    task_stats.load_1m, task_stats.load_5m, task_stats.load_15m = load
 
     # get disk I/O stats
     disk_io = psutil.disk_io_counters()
@@ -308,70 +273,79 @@ def update_process_status():
     if prev_io is not None:
         delta = (now - prev_time).total_seconds()
         io = {}
-        for key in "read_bytes", "read_count", "read_time", "write_bytes", "write_count", "write_time":
+        io_fields = ("read_bytes", "read_count", "read_time", "write_bytes", "write_count", "write_time")
+        for key in io_fields:
             io[key] = getattr(disk_io, key) - getattr(prev_io, key)
-        s.read_count = io["read_count"]
-        s.write_count = io["write_count"]
-        s.read_gb = io["read_bytes"] / 2**30
-        s.write_gb = io["write_bytes"] / 2**30
-        s.read_gbps = s.read_gb / delta
-        s.write_gbps = s.write_gb / delta
-        s.read_ms = io["read_time"]
-        s.write_ms = io["write_time"]
+        task_stats.read_count = io["read_count"]
+        task_stats.write_count = io["write_count"]
+        task_stats.read_gb = io["read_bytes"] / 2**30
+        task_stats.write_gb = io["write_bytes"] / 2**30
+        task_stats.read_gbps = task_stats.read_gb / delta
+        task_stats.write_gbps = task_stats.write_gb / delta
+        task_stats.read_ms = io["read_time"]
+        task_stats.write_ms = io["write_time"]
     else:
         io = None
     _prev_disk_io = disk_io, now
 
-    # call extra status reporter
-    if ti and ti.status_reporter:
-        extra_metrics, extra_stats = ti.status_reporter()
-        if extra_stats:
-            s.insert_extra_stats(**extra_stats)
+    # Call extra status reporter which should return stats which can be added
+    # to the task_stats object as well as a list of strings which can be used
+    # in the display. TODO(JSKenyon): All backends should produce a Report
+    # object which can be used here. At present, this only applies to the
+    # kube backend.
+    if task_info and task_info.status_reporter:
+        report = task_info.status_reporter()
+        task_stats.insert_extra_stats(**report.profiling_results)
     else:
-        extra_metrics = None
+        report = None
 
-    # if a progress bar exists, update it
-    if progress_bar is not None:
-        cpu_info = []
-        # add local metering, if not diabled by a task in the stack
-        if not any(t.hide_local_metrics for t in _task_stack):
-            cpu_info = [
-                f"CPU [green]{s.cpu:2.1f}%[/green]",
-                f"RAM [green]{round(s.mem_used):3}[/green]/[green]{round(s.mem_total)}[/green]G",
-                f"Load [green]{s.load:2.1f}[/green]",
-            ]
-
-            if io is not None:
-                cpu_info += [
-                    f"R [green]{s.read_count:-4}[/green] "
-                    f"[green]{s.read_gbps:2.2f}[/green]G "
-                    f"[green]{s.read_ms:4}[/green]ms",
-                    f"W [green]{s.write_count:-4}[/green] "
-                    f"[green]{s.write_gbps:2.2f}[/green]G "
-                    f"[green]{s.write_ms:4}[/green]ms ",
-                ]
-        # add extra metering
-        cpu_info += extra_metrics or []
-
-        updates = dict(elapsed_time=elapsed, cpu_info="|".join(cpu_info))
-
-        if ti is not None:
-            updates["description"] = ti.description
-            updates["status"] = ti.status or ""
-            updates["command"] = ti.command or ""
-
-        progress_bar.update(progress_task, **updates)
+    # Update the display using the stats and info objects.
+    if display.is_enabled:
+        display.update(sys_stats, task_stats, task_info, extra_info=report)
 
     # update stats
-    update_stats(now, s)
+    update_stats(now, task_stats)
 
 
 async def run_process_status_update():
-    if progress_bar:
-        with contextlib.suppress(asyncio.CancelledError):
-            while True:
-                update_process_status()
-                await asyncio.sleep(1)
+    with contextlib.suppress(asyncio.CancelledError):
+        while True:
+            update_process_status()
+            await asyncio.sleep(1)
+
+
+class MonitorThread:
+    """Starts a thread to monitor resource usage.
+
+    Attributes:
+        thread: A thread object.
+        event: An event object which can break the monitor loop.
+        interval: Wait interval in seconds between updates.
+    """
+
+    def __init__(self, interval: float = 1):
+        self.thread = threading.Thread(target=self._update)
+        self.event = threading.Event()
+        self.interval = interval
+
+    def _update(self):
+        """Code run in the thread. Updates resource usage based on interval."""
+        half_interval = self.interval / 2
+        # Sleep on either side to prevent rapid calls to psutil.
+        while not self.event.is_set():
+            time.sleep(half_interval)
+            update_process_status()
+            time.sleep(half_interval)
+
+    def start(self):
+        """Starts the monitor thread."""
+        self.event.clear()
+        self.thread.start()
+
+    def stop(self):
+        """Breaks the monitor loop and joins the thread."""
+        self.event.set()
+        self.thread.join()
 
 
 _printed_stats = dict(
@@ -379,7 +353,7 @@ _printed_stats = dict(
     k8s_mem="k8s mem GB",
     cpu="CPU %",
     mem_used="Mem GB",
-    load="Load",
+    load_1m="Load %",
     read_gbps="R GB/s",
     write_gbps="W GB/s",
 )
@@ -432,14 +406,15 @@ def render_profiling_summary(stats: TaskStatsDatum, max_depth, unroll_loops=Fals
             table_peak.add_row(*peak_row)
 
     stimelogging.declare_chapter("profiling results")
-    destroy_progress_bar()
+    # Disable display - ensures that it doesn't appear below the profiling.
+    display.disable()
     from rich.columns import Columns
-    # progress_console.print(table_avg, justify="center")
-    # progress_console.print(table_peak, justify="center")
-    # progress_console.print(Columns((table_avg, table_peak)), justify="center")
+    # rich_console.print(table_avg, justify="center")
+    # rich_console.print(table_peak, justify="center")
+    # rich_console.print(Columns((table_avg, table_peak)), justify="center")
 
-    with progress_console.capture() as capture:
-        progress_console.print(Columns((table_avg, table_peak)), justify="center")
+    with rich_console.capture() as capture:
+        rich_console.print(Columns((table_avg, table_peak)), justify="center")
 
     text = capture.get()
 
