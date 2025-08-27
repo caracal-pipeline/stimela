@@ -35,7 +35,7 @@ class CabManagement(object):  # defines common cab management behaviours
 class ImageInfo(object):
     name: Optional[str] = None  # image name
     registry: Optional[str] = None  # registry/org or org (for Dockerhub)
-    version: str = "latest"
+    version: Optional[str] = None
     path: Optional[str] = None  # prebuilt image path (for some backends only)
 
     def __post_init__(self):
