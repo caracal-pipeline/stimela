@@ -15,15 +15,16 @@ _default_srun_path = None
 
 @dataclass
 class SlurmOptions(object):
-    enable: bool = False  # enables passing off jobs to slurm via srun
-    srun_path: Optional[str] = None  # path to srun executable
-    srun_opts: Dict[str, str] = (
-        EmptyDictDefault()
-    )  # extra options passed to srun. "--" prepended, and "_" replaced by "-"
-    srun_opts_build: Optional[Dict[str, str]] = (
-        None  # extra options passed to srun for build commands. If None, use srun_opts
-    )
-    build_local: bool = True  # if True, images will be built locally (i.e. on the head node) even when slurm is enabled
+    # enables passing off jobs to slurm via srun
+    enable: bool = False
+    # path to srun executable
+    srun_path: Optional[str] = None
+    # extra options passed to srun. "--" prepended, and "_" replaced by "-"
+    srun_opts: Dict[str, str] = EmptyDictDefault()
+    # extra options passed to srun for build commands. If None, use srun_opts
+    srun_opts_build: Optional[Dict[str, str]] = None
+    # if True, images will be built locally (i.e. on the head node) even when slurm is enabled
+    build_local: bool = True
 
     # ## disabling this for now
     # # these will be checked for
