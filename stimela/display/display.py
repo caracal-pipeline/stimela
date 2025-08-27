@@ -1,33 +1,21 @@
 from __future__ import annotations
+
 import atexit
-from typing import Optional, List, TYPE_CHECKING
-from rich.progress import (
-    Progress,
-    SpinnerColumn,
-    TimeElapsedColumn,
-    TextColumn
-)
+from typing import TYPE_CHECKING, Optional
+
 from rich.console import Console
+from rich.control import Control
 from rich.live import Live
+from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.table import Column
 from rich.text import Text
-from rich.control import Control
 
+from stimela.display.styles import KubeDisplay, LocalDisplay, SimpleKubeDisplay, SimpleLocalDisplay, SimpleSlurmDisplay
 from stimela.stimelogging import rich_console
-from stimela.display.styles import (
-    SimpleLocalDisplay,
-    LocalDisplay,
-    SimpleKubeDisplay,
-    KubeDisplay,
-    SimpleSlurmDisplay
-)
 
 if TYPE_CHECKING:
-    from stimela.task_stats import (
-        TaskInformation,
-        TaskStatsDatum,
-        SystemStatsDatum
-    )
+    from stimela.task_stats import SystemStatsDatum, TaskInformation, TaskStatsDatum
+
 
 class Display:
     """Manages a rich live display.
@@ -55,13 +43,10 @@ class Display:
 
     run_elapsed = Progress(
         SpinnerColumn(),
-        TextColumn(
-            "[yellow][bold]{task.description}[/bold][/yellow]",
-            table_column=Column(no_wrap=True)
-        ),
+        TextColumn("[yellow][bold]{task.description}[/bold][/yellow]", table_column=Column(no_wrap=True)),
         TimeElapsedColumn(),
         refresh_per_second=2,
-        transient=True
+        transient=True,
     )
     run_elapsed_id = run_elapsed.add_task("", start=True)
 
@@ -71,7 +56,7 @@ class Display:
         ("kube", "simple"): SimpleKubeDisplay,
         ("kube", "fancy"): KubeDisplay,
         ("slurm", "simple"): SimpleSlurmDisplay,
-        ("slurm", "fancy"): SimpleSlurmDisplay  # No fancy variant as yet.
+        ("slurm", "fancy"): SimpleSlurmDisplay,  # No fancy variant as yet.
     }
 
     def __init__(self, console: Console):
@@ -88,12 +73,7 @@ class Display:
         msg = Text("DISPLAY HAS NOT BEEN CONFIGURED", justify="center")
         msg.stylize("bold red")
 
-        self.live_display = Live(
-            msg,
-            refresh_per_second=5,
-            console=self.console,
-            transient=True
-        )
+        self.live_display = Live(msg, refresh_per_second=5, console=self.console, transient=True)
 
         # Configure a simple, local display as the default.
         self.set_display_style(variant="simple")
@@ -147,10 +127,7 @@ class Display:
         new_display_type = self.style_map.get((style, variant))
 
         if new_display_type is None:
-            raise ValueError(
-                f"Unrecognised style ({style}) or variant ({variant}) when "
-                f"configuring display."
-            )
+            raise ValueError(f"Unrecognised style ({style}) or variant ({variant}) when configuring display.")
 
         if isinstance(self.current_display, new_display_type):
             return  # Already configured.
@@ -167,7 +144,7 @@ class Display:
         sys_stats: SystemStatsDatum,
         task_stats: TaskStatsDatum,
         task_info: TaskInformation,
-        extra_info: Optional[object] = None
+        extra_info: Optional[object] = None,
     ):
         """Calls the update method on current_display.
 
@@ -182,11 +159,7 @@ class Display:
                 A Report object containing additional information. Typically
                 used for information originating from a backend.
         """
-        return self.current_display.update(
-            sys_stats,
-            task_stats,
-            task_info,
-            extra_info
-        )
+        return self.current_display.update(sys_stats, task_stats, task_info, extra_info)
+
 
 display = Display(rich_console)

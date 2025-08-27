@@ -1,24 +1,37 @@
-import os, os.path, re, logging, copy, shutil, time
-from typing import Any, Tuple, List, Dict, Optional, Union
-from dataclasses import dataclass
-from omegaconf import MISSING, OmegaConf, DictConfig, ListConfig
-from omegaconf.errors import OmegaConfBaseException
+import copy
+import logging
+import os
+import os.path
+import shutil
+import time
 from collections import OrderedDict
 from contextlib import nullcontext
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
+
+from omegaconf import DictConfig, OmegaConf
+from omegaconf.errors import OmegaConfBaseException
 from rich.markup import escape
 
-from stimela.config import EmptyDictDefault, EmptyListDefault
-import stimela
-from stimela import log_exception, stimelogging, task_stats
-from stimela.display.display import display
-from stimela.stimelogging import log_rich_payload
-from stimela.backends import StimelaBackendSchema, runner
-from stimela.exceptions import *
 import scabha.exceptions
+import stimela
+from scabha.basetypes import UNSET, Placeholder, SkippedOutput
 from scabha.exceptions import SubstitutionError, SubstitutionErrorList
-from scabha.validate import evaluate_and_substitute, evaluate_and_substitute_object, Unresolved, join_quote
-from scabha.substitutions import SubstitutionNS, substitutions_from
-from scabha.basetypes import UNSET, Placeholder, MS, File, Directory, SkippedOutput
+from scabha.substitutions import SubstitutionNS
+from scabha.validate import Unresolved, evaluate_and_substitute_object, join_quote
+from stimela import log_exception, stimelogging, task_stats
+from stimela.backends import StimelaBackendSchema, runner
+from stimela.config import EmptyDictDefault, EmptyListDefault
+from stimela.display.display import display
+from stimela.exceptions import (
+    AssignmentError,
+    BackendError,
+    ScabhaBaseException,
+    StepValidationError,
+    StimelaCabRuntimeError,
+)
+from stimela.stimelogging import log_rich_payload
+
 from .cab import Cab, get_cab_schema
 
 Conditional = Optional[str]
@@ -26,7 +39,7 @@ Conditional = Optional[str]
 
 def resolve_dotted_reference(key, base, current, context):
     """helper function to look up a key like a.b.c in a nested dict-like structure"""
-    path = key.split('.')
+    path = key.split(".")
     if path[0]:
         section = base
     else:
@@ -46,27 +59,30 @@ def resolve_dotted_reference(key, base, current, context):
             raise NameError(f"{context}: '{element}' in '{key}' is not a valid config section")
     return section, varname
 
+
 OUTPUTS_EXISTS = "exist"
 OUTPUTS_FRESH = "fresh"
+
 
 @dataclass
 class Step:
     """Represents one processing step of a recipe"""
-    cab: Optional[Any] = None                       # if not None, this step is a cab and this is the cab name
-    recipe: Optional[Any] = None                    # if not None, this step is a nested recipe
-    params: Dict[str, Any] = EmptyDictDefault()     # assigns parameter values
-    info: Optional[str] = None                      # comment or info string
-    skip: Optional[str] = None                      # if this evaluates to True, step is skipped.
-    skip_if_outputs: Optional[str] = None           # skip if outputs "exist' or "fresh"
+
+    cab: Optional[Any] = None  # if not None, this step is a cab and this is the cab name
+    recipe: Optional[Any] = None  # if not None, this step is a nested recipe
+    params: Dict[str, Any] = EmptyDictDefault()  # assigns parameter values
+    info: Optional[str] = None  # comment or info string
+    skip: Optional[str] = None  # if this evaluates to True, step is skipped.
+    skip_if_outputs: Optional[str] = None  # skip if outputs "exist' or "fresh"
     tags: List[str] = EmptyListDefault()
 
-    name: str = ''                                  # step's internal name
-    fqname: str = ''                                # fully-qualified name e.g. recipe_name.step_label
+    name: str = ""  # step's internal name
+    fqname: str = ""  # fully-qualified name e.g. recipe_name.step_label
 
-    assign: Dict[str, Any] = EmptyDictDefault()     # assigns recipe-level variables when step is executed
+    assign: Dict[str, Any] = EmptyDictDefault()  # assigns recipe-level variables when step is executed
 
     assign_based_on: Dict[str, Any] = EmptyDictDefault()
-                                                    # assigns recipe-level variables when step is executed based on value of another variable
+    # assigns recipe-level variables when step is executed based on value of another variable
 
     # optional backend settings
     backend: Optional[Dict[str, Any]] = None
@@ -109,10 +125,11 @@ class Step:
         summary_params = OrderedDict()
         for name, value in (params or self.validated_params or self.params).items():
             schema = self.cargo.inputs_outputs[name]
-            if (inputs and (schema.is_input or schema.is_named_output)) or \
-                (outputs and schema.is_output):
+            if (inputs and (schema.is_input or schema.is_named_output)) or (outputs and schema.is_output):
                 summary_params[name] = value
-        return self.cargo and self.cargo.summary(recursive=recursive, params=summary_params, ignore_missing=ignore_missing)
+        return self.cargo and self.cargo.summary(
+            recursive=recursive, params=summary_params, ignore_missing=ignore_missing
+        )
 
     @property
     def finalized(self):
@@ -120,8 +137,13 @@ class Step:
 
     @property
     def missing_params(self):
-        return OrderedDict([(name, schema) for name, schema in self.cargo.inputs_outputs.items()
-                            if schema.required and name not in self.validated_params])
+        return OrderedDict(
+            [
+                (name, schema)
+                for name, schema in self.cargo.inputs_outputs.items()
+                if schema.required and name not in self.validated_params
+            ]
+        )
 
     @property
     def invalid_params(self):
@@ -129,7 +151,11 @@ class Step:
 
     @property
     def unresolved_params(self):
-        return [name for name, value in self.validated_params.items() if isinstance(value, Unresolved) and not isinstance(value, Placeholder)]
+        return [
+            name
+            for name, value in self.validated_params.items()
+            if isinstance(value, Unresolved) and not isinstance(value, Placeholder)
+        ]
 
     @property
     def inputs(self):
@@ -167,6 +193,7 @@ class Step:
 
     def update_log_options(self, **options):
         from .recipe import Recipe
+
         for setting, value in options.items():
             try:
                 self.logopts[setting] = value
@@ -180,6 +207,7 @@ class Step:
 
     def finalize(self, config=None, log=None, fqname=None, backend=None, nesting=0):
         from .recipe import Recipe, RecipeSchema
+
         if not self.finalized:
             if fqname is not None:
                 self.fqname = fqname
@@ -192,13 +220,15 @@ class Step:
                 if type(self.recipe) is str:
                     recipe_name = f"nested recipe '{self.recipe}'"
                     # undotted name -- look in lib.recipes
-                    if '.' not in self.recipe:
+                    if "." not in self.recipe:
                         if self.recipe not in self.config.lib.recipes:
                             raise StepValidationError(f"recipe '{self.recipe}' not found in lib.recipes")
                         self.recipe = self.config.lib.recipes[self.recipe]
                     # dotted name -- look in config
                     else:
-                        section, var = resolve_dotted_reference(self.recipe, config, current=None, context=f"step '{self.name}'")
+                        section, var = resolve_dotted_reference(
+                            self.recipe, config, current=None, context=f"step '{self.name}'"
+                        )
                         if var not in section:
                             raise StepValidationError(f"recipe '{self.recipe}' not found")
                         self.recipe = section[var]
@@ -210,7 +240,9 @@ class Step:
                     except OmegaConfBaseException as exc:
                         raise StepValidationError(f"error in recipe '{recipe_name}", exc)
                 elif not isinstance(self.recipe, Recipe):
-                    raise StepValidationError(f"recipe field must be a string or a nested recipe, got {type(self.recipe)}")
+                    raise StepValidationError(
+                        f"recipe field must be a string or a nested recipe, got {type(self.recipe)}"
+                    )
                 self.cargo = self.recipe
             else:
                 if type(self.cab) is str:
@@ -249,8 +281,11 @@ class Step:
             self.cargo.finalize(config, log=log, fqname=self.fqname, backend=backend, nesting=nesting)
 
             # build dictionary of defaults from cargo
-            self.defaults = {name: schema.default for name, schema in self.cargo.inputs_outputs.items()
-                             if schema.default is not UNSET and not isinstance(schema.default, Unresolved) }
+            self.defaults = {
+                name: schema.default
+                for name, schema in self.cargo.inputs_outputs.items()
+                if schema.default is not UNSET and not isinstance(schema.default, Unresolved)
+            }
             self.defaults.update(**self.cargo.defaults)
 
             # set missing parameters from defaults
@@ -259,14 +294,12 @@ class Step:
                     self.params[name] = value
 
             # check for valid backend
-            backend_opts = OmegaConf.to_object(OmegaConf.merge(
-                StimelaBackendSchema,
-                backend or {},
-                self.cargo.backend or {},
-                self.backend or {}))
+            backend_opts = OmegaConf.to_object(
+                OmegaConf.merge(StimelaBackendSchema, backend or {}, self.cargo.backend or {}, self.backend or {})
+            )
             runner.validate_backend_settings(backend_opts, log=log)
 
-    def prevalidate(self, subst: Optional[SubstitutionNS]=None, root=False, backend=None):
+    def prevalidate(self, subst: Optional[SubstitutionNS] = None, root=False, backend=None):
         self.finalize(backend=backend)
         # apply dynamic schemas
         params = self.params
@@ -281,11 +314,16 @@ class Step:
         for name, schema in self.cargo.outputs.items():
             if name not in params and schema.required:
                 params[name] = UNSET(name)
-        self.log.debug(f"{self.cargo.name}: {len(self.missing_params)} missing, "
-                        f"{len(self.invalid_params)} invalid and "
-                        f"{len(self.unresolved_params)} unresolved parameters")
+        self.log.debug(
+            f"{self.cargo.name}: {len(self.missing_params)} missing, "
+            f"{len(self.invalid_params)} invalid and "
+            f"{len(self.unresolved_params)} unresolved parameters"
+        )
         if self.invalid_params:
-            raise StepValidationError(f"step '{self.name}': {self.cargo.name} has the following invalid parameters: {join_quote(self.invalid_params)}")
+            raise StepValidationError(
+                f"step '{self.name}': {self.cargo.name} has the following invalid parameters: "
+                f"{join_quote(self.invalid_params)}"
+            )
         return params
 
     def log_summary(self, level, title, color=None, ignore_missing=True, inputs=False, outputs=False):
@@ -325,7 +363,6 @@ class Step:
             except ScabhaBaseException as exc:
                 raise AssignmentError(f"{self.name}: invalid assignment {key}={value}", exc)
 
-
     def build(self, backend=None, rebuild=False, build_skips=False, log: Optional[logging.Logger] = None):
         # skipping step? ignore the build
         if self.skip is True and not build_skips:
@@ -334,6 +371,7 @@ class Step:
         log = log or self.log
         # recurse into sub-recipe
         from .recipe import Recipe
+
         if type(self.cargo) is Recipe:
             return self.cargo.build(backend, rebuild=rebuild, build_skips=build_skips, log=log)
         # else build
@@ -341,7 +379,7 @@ class Step:
             # validate backend settings and call the build function
             try:
                 backend_opts = OmegaConf.merge(self.config.opts.backend, backend)
-                if getattr(backend_opts, 'verbose', 0):
+                if getattr(backend_opts, "verbose", 0):
                     opts_yaml = OmegaConf.to_yaml(backend_opts)
                     log_rich_payload(self.log, "effective backend settings are", opts_yaml, syntax="yaml")
                 backend_opts = OmegaConf.to_object(OmegaConf.merge(stimela.CONFIG.opts.backend, backend_opts))
@@ -353,16 +391,20 @@ class Step:
             with task_stats.declare_subtask(self.name):
                 return backend_runner.build(self.cargo, log=log, rebuild=rebuild)
 
-
-    def run(self, backend: Optional[Dict] = None, subst: Optional[Dict[str, Any]] = None,
-            is_outer_step: bool=False,
-            parent_log: Optional[logging.Logger] = None) -> Dict[str, Any]:
+    def run(
+        self,
+        backend: Optional[Dict] = None,
+        subst: Optional[Dict[str, Any]] = None,
+        is_outer_step: bool = False,
+        parent_log: Optional[logging.Logger] = None,
+    ) -> Dict[str, Any]:
         """executes the step
 
         Args:
             backend (Dict, optional): Backend settings inherited from parent.
             subst (Dict[str, Any], optional): Substitution namespace. Defaults to None.
-            parent_log (logging.Logger, optional): parent logger for parent-related messages. Defaults to using the step logger if not supplied.
+            parent_log (logging.Logger, optional): parent logger for parent-related messages. Defaults to using the
+                step logger if not supplied.
 
         Raises:
             StepValidationError: _description_
@@ -387,8 +429,9 @@ class Step:
         # validate backend settings
         try:
             backend_opts = OmegaConf.merge(self.config.opts.backend, backend)
-            backend_opts = evaluate_and_substitute_object(backend_opts, subst,
-                                                          recursion_level=-1, location=[self.fqname, "backend"])
+            backend_opts = evaluate_and_substitute_object(
+                backend_opts, subst, recursion_level=-1, location=[self.fqname, "backend"]
+            )
             if not is_outer_step and backend_opts.verbose:
                 opts_yaml = OmegaConf.to_yaml(backend_opts)
                 log_rich_payload(self.log, "current backend settings are", opts_yaml, syntax="yaml")
@@ -416,8 +459,7 @@ class Step:
             # evaluate the skip attribute (it can be a formula and/or a {}-substititon)
             skip = self._skip
             if self._skip is None and subst is not None:
-                skip = evaluate_and_substitute_object(self.skip, subst,
-                                                      location=[self.fqname, "skip"])
+                skip = evaluate_and_substitute_object(self.skip, subst, location=[self.fqname, "skip"])
                 if skip is UNSET:  # skip: =IFSET(recipe.foo) will return UNSET
                     skip = False
                 self.log.debug(f"dynamic skip attribute evaluation returns {skip}")
@@ -426,20 +468,25 @@ class Step:
                     if skip.errors:
                         raise StepValidationError(f"{self.fqname}.skip: error evaluating '{self.skip}'", skip.errors)
                     else:
-                        raise StepValidationError(f"{self.fqname}.skip: error evaluating '{self.skip}'", SubstitutionError(f"unknown variable '{skip.value}'"))
+                        raise StepValidationError(
+                            f"{self.fqname}.skip: error evaluating '{self.skip}'",
+                            SubstitutionError(f"unknown variable '{skip.value}'"),
+                        )
 
-            # Since prevalidation will have populated default values for potentially missing parameters, use those values
-            # For parameters that aren't missing, use whatever value that was suplied
-            # preserve order of specified params, to allow ordered substitutions to occur
+            # Since prevalidation will have populated default values for potentially missing parameters, use those
+            # values. For parameters that aren't missing, use whatever value that was suplied. {reserve order of
+            # specified params, to allow ordered substitutions to occur
             params = self.params.copy()
             params.update([(key, value) for key, value in self.validated_params.items() if key not in params])
 
-            skip_warned = False   # becomes True when warnings are given
+            skip_warned = False  # becomes True when warnings are given
 
             self.log.debug(f"validating inputs {subst and list(subst.keys())}")
             validated = None
             try:
-                params = self.cargo.validate_inputs(params, loosely=skip, remote_fs=backend_runner.is_remote_fs, subst=subst)
+                params = self.cargo.validate_inputs(
+                    params, loosely=skip, remote_fs=backend_runner.is_remote_fs, subst=subst
+                )
                 validated = True
 
             except ScabhaBaseException as exc:
@@ -447,13 +494,14 @@ class Step:
                 level = logging.WARNING if skip else logging.ERROR
                 if not exc.logged and not explicit_skip:
                     if type(exc) is SubstitutionErrorList:
-                        self.log_exception(StepValidationError(f"unresolved {{}}-substitution(s) in inputs:", exc.nested),
-                                           severity=severity)
+                        self.log_exception(
+                            StepValidationError("unresolved {}-substitution(s) in inputs:", exc.nested),
+                            severity=severity,
+                        )
                         # for err in exc.errors:
                         #     self.log.log(level, f"  {err}")
                     else:
-                        self.log_exception(StepValidationError(f"error validating inputs:", exc),
-                                           severity=severity)
+                        self.log_exception(StepValidationError("error validating inputs:", exc), severity=severity)
                     exc.logged = True
                 if not explicit_skip:
                     self.log_summary(level, "summary of inputs follows", color="WARNING", inputs=True)
@@ -486,7 +534,9 @@ class Step:
                         parent_log_warning("since the step was skipped, this is not fatal")
                         skip_warned = True
                 else:
-                    raise StepValidationError(f"step '{self.name}': invalid inputs: {join_quote(invalid)}", log=self.log)
+                    raise StepValidationError(
+                        f"step '{self.name}': invalid inputs: {join_quote(invalid)}", log=self.log
+                    )
 
             ## check if we need to skip based on existing/fresh file outputs
             skip_if_outputs = self.skip_if_outputs
@@ -498,8 +548,9 @@ class Step:
                 parent_log_info(f"ignoring skip_if_outputs: {skip_if_outputs} because backend has remote filesystem")
                 skip_if_outputs = None
             # don't check if force-disabled
-            elif (skip_if_outputs == OUTPUTS_EXISTS and stimela.CONFIG.opts.disable_skips.exist) or \
-                    (skip_if_outputs == OUTPUTS_FRESH and stimela.CONFIG.opts.disable_skips.fresh):
+            elif (skip_if_outputs == OUTPUTS_EXISTS and stimela.CONFIG.opts.disable_skips.exist) or (
+                skip_if_outputs == OUTPUTS_FRESH and stimela.CONFIG.opts.disable_skips.fresh
+            ):
                 parent_log_info(f"ignoring skip_if_outputs: {skip_if_outputs} because it has been force-disabled")
                 skip_if_outputs = None
 
@@ -533,7 +584,8 @@ class Step:
                 ## or is older than an input
                 all_exist = True
                 for name, schema in self.outputs.items():
-                    # ignore outputs not in params (implicit outputs will be already in there thanks to validation above)
+                    # ignore outputs not in params (implicit outputs will be already in there thanks to validation
+                    # above)
                     if name in params:
                         # check for files or lists of files, and skip otherwise
                         if schema.is_file_type:
@@ -550,7 +602,7 @@ class Step:
                                     parent_log_info(f"  {name}: no existing file(s), but they are not required")
                                     continue
                         else:
-                            continue # go on to next parameter
+                            continue  # go on to next parameter
                         # collect messages rather than logging them directly, to avoid log diarrhea for long file lists
                         messages = []
                         # ok, we have a list of files to check
@@ -613,7 +665,9 @@ class Step:
                         display.set_display_style("slurm")
                     else:
                         display.set_display_style("local")
-                    cabstat = backend_runner.run(self.cargo, params=params, log=self.log, subst=subst, fqname=self.fqname)
+                    cabstat = backend_runner.run(
+                        self.cargo, params=params, log=self.log, subst=subst, fqname=self.fqname
+                    )
                     # check for runstate
                     if cabstat.success is False:
                         raise StimelaCabRuntimeError(f"error running cab '{self.cargo.name}'", cabstat.errors)
@@ -624,26 +678,31 @@ class Step:
                     raise RuntimeError("step '{self.name}': unknown cargo type")
             else:
                 if self._skip is None and subst is not None:
-                    parent_log_info(f"skipping step based on conditonal settings")
+                    parent_log_info("skipping step based on conditonal settings")
                 else:
                     parent_log.debug("skipping step based on explicit setting")
 
-            self.log.debug(f"validating outputs")
+            self.log.debug("validating outputs")
             validated = False
 
             try:
-                params = self.cargo.validate_outputs(params, loosely=skip,remote_fs=backend_runner.is_remote_fs, subst=subst)
+                params = self.cargo.validate_outputs(
+                    params, loosely=skip, remote_fs=backend_runner.is_remote_fs, subst=subst
+                )
                 validated = True
             except ScabhaBaseException as exc:
                 severity = "warning" if skip else "error"
                 level = logging.WARNING if self.skip else logging.ERROR
                 if not exc.logged:
                     if type(exc) is SubstitutionErrorList:
-                        self.log_exception(StepValidationError(f"unresolved {{}}-substitution(s) in outputs:", exc.nested), severity=severity)
+                        self.log_exception(
+                            StepValidationError("unresolved {}-substitution(s) in outputs:", exc.nested),
+                            severity=severity,
+                        )
                         # for err in exc.errors:
                         #     self.log.log(level, f"  {err}")
                     else:
-                        self.log_exception(StepValidationError(f"error validating outputs:", exc), severity=severity)
+                        self.log_exception(StepValidationError("error validating outputs:", exc), severity=severity)
                     exc.logged = True
                 # raise up, unless step is being skipped
                 if skip:
@@ -659,12 +718,18 @@ class Step:
                 self.log_summary(logging.DEBUG, "validated outputs", ignore_missing=True, outputs=True)
 
             # bomb out if an output was invalid
-            invalid = [name for name in self.invalid_params + self.unresolved_params
-                        if name in self.cargo.outputs and self.cargo.outputs[name].required is not False]
+            invalid = [
+                name
+                for name in self.invalid_params + self.unresolved_params
+                if name in self.cargo.outputs and self.cargo.outputs[name].required is not False
+            ]
             if invalid:
                 if skip:
                     parent_log_warning(f"invalid outputs: {join_quote(invalid)}")
-                    parent_log_warning("since the step was skipped, this is not treated as an error for now, but may cause errors downstream")
+                    parent_log_warning(
+                        "since the step was skipped, this is not treated as an error for now, but may cause errors "
+                        "downstream"
+                    )
                     for key in invalid:
                         params[key] = SkippedOutput(key)
                 else:
@@ -673,7 +738,9 @@ class Step:
                     if truly_invalid:
                         raise StepValidationError(f"invalid outputs: {join_quote(truly_invalid)}", log=self.log)
                     parent_log_warning(f"invalid outputs: {join_quote(invalid)}")
-                    parent_log_warning("since some sub-steps were skipped, this is not treated as an error for now, but may cause errors downstream")
+                    parent_log_warning(
+                        "since some sub-steps were skipped, this is not treated as an error for now, but may cause "
+                        "errors downstream"
+                    )
 
         return params
-

@@ -1,32 +1,36 @@
-from dataclasses import dataclass, fields
-import os.path
-from datetime import datetime
-import contextlib
 import asyncio
-from typing import OrderedDict, Any, List, Callable, Optional
-from scabha.basetypes import EmptyListDefault
-from omegaconf import OmegaConf
-import psutil
+import contextlib
+import os.path
 import threading
 import time
+from dataclasses import dataclass, fields
+from datetime import datetime
+from typing import Callable, List, Optional, OrderedDict
 
+import psutil
+from omegaconf import OmegaConf
 from rich.table import Table
 from rich.text import Text
 
+from scabha.basetypes import EmptyListDefault
 from stimela import stimelogging
-from stimela.display.display import rich_console, display
+from stimela.display.display import display, rich_console
 
 # this is "" for the main process, ".0", ".1", for subprocesses, ".0.0" for nested subprocesses
 _subprocess_identifier = ""
 
+
 def get_subprocess_id():
     return _subprocess_identifier
+
 
 def add_subprocess_id(num: int):
     global _subprocess_identifier
     _subprocess_identifier += f".{num}"
 
+
 _prev_disk_io = None, None
+
 
 @dataclass
 class TaskInformation(object):
@@ -41,7 +45,7 @@ class TaskInformation(object):
 
     @property
     def description(self):
-        name = '.'.join(self.names)
+        name = ".".join(self.names)
         # if self.status:
         #     name += f": [dim]{self.status}[/dim]"
         ## OMS: omit attributes from task status for now
@@ -49,20 +53,19 @@ class TaskInformation(object):
         #     name += f"\[{', '.join(self.task_attrs)}]"
         return name
 
+
 # stack of task information -- most recent subtask is at the end
 _task_stack = []
 child_processes = {}
+
 
 @contextlib.contextmanager
 def declare_subtask(subtask_name, status_reporter=None):
     task_names = []
     if _task_stack:
-        task_names = _task_stack[-1].names + \
-                    (_task_stack[-1].task_attrs or [])
+        task_names = _task_stack[-1].names + (_task_stack[-1].task_attrs or [])
     task_names.append(subtask_name)
-    _task_stack.append(
-        TaskInformation(task_names, status_reporter=status_reporter)
-    )
+    _task_stack.append(TaskInformation(task_names, status_reporter=status_reporter))
     update_process_status()
     try:
         yield subtask_name
@@ -77,8 +80,7 @@ def declare_subtask_status(status):
 
 
 def declare_subtask_attributes(*args, **kw):
-    _task_stack[-1].task_attrs = [str(x) for x in args] + \
-                                 [f"{key} {value}" for key, value in kw.items()]
+    _task_stack[-1].task_attrs = [str(x) for x in args] + [f"{key} {value}" for key, value in kw.items()]
     update_process_status()
 
 
@@ -87,9 +89,11 @@ class _CommandContext(object):
         self.command = command
         _task_stack[-1].command = command
         update_process_status()
+
     def ctrl_c(self):
         _task_stack[-1].command = f"{self.command}(^C)"
         update_process_status()
+
     def update_status(self, status):
         _task_stack[-1].command = f"{self.command} ({status})"
         update_process_status()
@@ -104,6 +108,7 @@ def declare_subcommand(command):
         _task_stack[-1].command = None
         update_process_status()
 
+
 @dataclass
 class SystemStatsDatum:
     n_cpu: int = 0
@@ -114,25 +119,26 @@ class SystemStatsDatum:
     def __post_init__(self):
         self.n_cpu = psutil.cpu_count()
         self.cpu = psutil.cpu_percent()
-        self.mem_used = round(psutil.virtual_memory().used / (2 ** 30))
-        self.mem_total = round(psutil.virtual_memory().total / (2 ** 30))
+        self.mem_used = round(psutil.virtual_memory().used / (2**30))
+        self.mem_total = round(psutil.virtual_memory().total / (2**30))
+
 
 @dataclass
 class TaskStatsDatum(object):
-    cpu: float          = 0
-    mem_used: float     = 0
-    load_1m: float      = 0
-    load_5m: float      = 0
-    load_15m: float     = 0
-    read_count: int     = 0
-    read_gb: float      = 0
-    read_gbps: float    = 0
-    read_ms: float      = 0
-    write_count: int    = 0
-    write_gb: float     = 0
-    write_gbps: float   = 0
-    write_ms: float     = 0
-    num_samples: int    = 0
+    cpu: float = 0
+    mem_used: float = 0
+    load_1m: float = 0
+    load_5m: float = 0
+    load_15m: float = 0
+    read_count: int = 0
+    read_gb: float = 0
+    read_gbps: float = 0
+    read_ms: float = 0
+    write_count: int = 0
+    write_gb: float = 0
+    write_gbps: float = 0
+    write_ms: float = 0
+    num_samples: int = 0
 
     def __post_init__(self):
         self.extras = []
@@ -210,6 +216,7 @@ def update_stats(now: datetime, sample: TaskStatsDatum):
         start = _task_start_time.setdefault(key, now)
         _taskstats[key][0] = (now - start).total_seconds()
 
+
 def update_children():
     """Update the module level dictionary mapping child pid to process.
 
@@ -219,13 +226,12 @@ def update_children():
     """
     current_children = psutil.Process().children(recursive=True)
     current_pids = {proc.pid for proc in current_children}
-    child_processes.update(
-        {c.pid: c for c in current_children if c.pid not in child_processes}
-    )
+    child_processes.update({c.pid: c for c in current_children if c.pid not in child_processes})
     dropped_pids = {c for c in child_processes.keys() if c not in current_pids}
 
     for pid in dropped_pids:
         del child_processes[pid]
+
 
 def update_process_status():
     # current subtask info
@@ -254,10 +260,10 @@ def update_process_status():
         except psutil.NoSuchProcess:
             pass  # Process ended before we could gather its stats.
 
-    task_stats.mem_used = round(task_stats.mem_used  / (2 ** 30))
+    task_stats.mem_used = round(task_stats.mem_used / (2**30))
 
     # load
-    load = [l/sys_stats.n_cpu * 100 for l in psutil.getloadavg()]
+    load = [la / sys_stats.n_cpu * 100 for la in psutil.getloadavg()]
     task_stats.load_1m, task_stats.load_5m, task_stats.load_15m = load
 
     # get disk I/O stats
@@ -267,24 +273,17 @@ def update_process_status():
     if prev_io is not None:
         delta = (now - prev_time).total_seconds()
         io = {}
-        io_fields = (
-            'read_bytes',
-            'read_count',
-            'read_time',
-            'write_bytes',
-            'write_count',
-            'write_time'
-        )
+        io_fields = ("read_bytes", "read_count", "read_time", "write_bytes", "write_count", "write_time")
         for key in io_fields:
             io[key] = getattr(disk_io, key) - getattr(prev_io, key)
-        task_stats.read_count = io['read_count']
-        task_stats.write_count = io['write_count']
-        task_stats.read_gb = io['read_bytes']/2**30
-        task_stats.write_gb = io['write_bytes']/2**30
+        task_stats.read_count = io["read_count"]
+        task_stats.write_count = io["write_count"]
+        task_stats.read_gb = io["read_bytes"] / 2**30
+        task_stats.write_gb = io["write_bytes"] / 2**30
         task_stats.read_gbps = task_stats.read_gb / delta
         task_stats.write_gbps = task_stats.write_gb / delta
-        task_stats.read_ms = io['read_time']
-        task_stats.write_ms = io['write_time']
+        task_stats.read_ms = io["read_time"]
+        task_stats.write_ms = io["write_time"]
     else:
         io = None
     _prev_disk_io = disk_io, now
@@ -302,12 +301,7 @@ def update_process_status():
 
     # Update the display using the stats and info objects.
     if display.is_enabled:
-        display.update(
-            sys_stats,
-            task_stats,
-            task_info,
-            extra_info=report
-        )
+        display.update(sys_stats, task_stats, task_info, extra_info=report)
 
     # update stats
     update_stats(now, task_stats)
@@ -318,6 +312,7 @@ async def run_process_status_update():
         while True:
             update_process_status()
             await asyncio.sleep(1)
+
 
 class MonitorThread:
     """Starts a thread to monitor resource usage.
@@ -352,6 +347,7 @@ class MonitorThread:
         self.event.set()
         self.thread.join()
 
+
 _printed_stats = dict(
     k8s_cores="k8s cores",
     k8s_mem="k8s mem GB",
@@ -365,8 +361,8 @@ _printed_stats = dict(
 # these stats are written as sums
 _sum_stats = ("read_count", "read_gb", "read_ms", "write_count", "write_gb", "write_ms")
 
-def render_profiling_summary(stats: TaskStatsDatum, max_depth, unroll_loops=False):
 
+def render_profiling_summary(stats: TaskStatsDatum, max_depth, unroll_loops=False):
     table_avg = Table(title=Text("\naverages & total I/O", style="bold"))
     table_avg.add_column("")
     table_avg.add_column("time hms", justify="right")
@@ -431,6 +427,7 @@ def render_profiling_summary(stats: TaskStatsDatum, max_depth, unroll_loops=Fals
 #     console.print("[bold red]Hello[/] World")
 # str_output = capture.get()
 
+
 def save_profiling_stats(log, print_depth=2, unroll_loops=False):
     from . import stimelogging
 
@@ -439,13 +436,13 @@ def save_profiling_stats(log, print_depth=2, unroll_loops=False):
     if print_depth:
         print(summary)
 
-    filename = os.path.join(stimelogging.get_logfile_dir(log) or '.', "stimela.stats.full")
+    filename = os.path.join(stimelogging.get_logfile_dir(log) or ".", "stimela.stats.full")
 
     stats_dict = OmegaConf.create()
 
     for name, (elapsed, sum, peak) in stats.items():
         if name:
-            name = '.'.join(name)
+            name = ".".join(name)
             avg = sum.averaged()
             davg = {f: getattr(avg, f) for f in _taskstats_sample_names}
             dpeak = {f: getattr(peak, f) for f in _taskstats_sample_names}
@@ -457,7 +454,7 @@ def save_profiling_stats(log, print_depth=2, unroll_loops=False):
 
     log.info(f"saved full profiling stats to {filename}")
 
-    filename = os.path.join(stimelogging.get_logfile_dir(log) or '.', "stimela.stats.summary.txt")
+    filename = os.path.join(stimelogging.get_logfile_dir(log) or ".", "stimela.stats.summary.txt")
     open(filename, "wt").write(summary)
 
     log.info(f"saved summary to {filename}")

@@ -1,24 +1,25 @@
-import sys
+import copy
+import logging
 import os.path
 import re
-import logging
+import sys
 import traceback
-import copy
 from types import TracebackType
-from typing import Optional, OrderedDict, Union, Any
-from omegaconf import DictConfig
-from scabha.exceptions import ScabhaBaseException, FormattedTraceback
-from scabha.substitutions import SubstitutionNS, forgiving_substitutions_from
+from typing import Any, Optional, OrderedDict, Union
+
 import rich.logging
+import rich.progress
+from omegaconf import DictConfig
 from rich.console import Console
-from rich.tree import Tree
-from rich import print as rich_print
+from rich.errors import MarkupError
 from rich.markup import escape
 from rich.padding import Padding
-from rich.syntax import Syntax
 from rich.pretty import Pretty
-from rich.errors import MarkupError
-from warnings import warn
+from rich.syntax import Syntax
+from rich.tree import Tree
+
+from scabha.exceptions import FormattedTraceback, ScabhaBaseException
+from scabha.substitutions import SubstitutionNS, forgiving_substitutions_from
 
 CONSOLE_PRINT_OPTIONS = [
     "sep",
@@ -34,40 +35,48 @@ CONSOLE_PRINT_OPTIONS = [
     "height",
     "crop",
     "soft_wrap",
-    "new_line_start"
+    "new_line_start",
 ]
 
-rich_console = Console(
-    file=sys.stdout,
-    highlight=False,
-    emoji=False
-)
+rich_console = Console(file=sys.stdout, highlight=False, emoji=False)
+
 
 class FunkyMessage(object):
     """Class representing a message with two versions: funky (with markup), and boring (no markup)"""
+
     def __init__(self, funky, boring=None, prefix=None, escape_emojis=True):
         self.boring = boring if boring is not None else funky
         if escape_emojis:
             self.funky = re.sub(r":(\w+):", r":[bold][/bold]\1:", funky)
         self.funky = funky
         self.prefix = prefix
+
     def __str__(self):
         return self.funky
+
     def __add__(self, other):
         if isinstance(other, FunkyMessage):
             return FunkyMessage(f"{self}{other}", f"{self.boring}{other.boring}")
         else:
             return FunkyMessage(f"{self}{other}", f"{self.boring}{other}")
 
+
 def defunkify(arg: Union[str, FunkyMessage]):
     return arg.boring if isinstance(arg, FunkyMessage) else arg
 
+
 class StimelaConsoleHander(rich.logging.RichHandler):
     def __init__(self, console):
-        rich.logging.RichHandler.__init__(self, console=console,
-                    highlighter=rich.highlighter.NullHighlighter(),
-                    markup=True,
-                    show_level=False, show_path=False, show_time=False, keywords=[])
+        rich.logging.RichHandler.__init__(
+            self,
+            console=console,
+            highlighter=rich.highlighter.NullHighlighter(),
+            markup=True,
+            show_level=False,
+            show_path=False,
+            show_time=False,
+            keywords=[],
+        )
         self._console = console
 
     def emit(self, record):
@@ -75,8 +84,7 @@ class StimelaConsoleHander(rich.logging.RichHandler):
         # forward all known arguments to the _console.print method.
         if getattr(record, "custom_console_print", False):
             self._console.print(
-                record.msg,
-                **{k: getattr(record, k) for k in CONSOLE_PRINT_OPTIONS if hasattr(record, k)}
+                record.msg, **{k: getattr(record, k) for k in CONSOLE_PRINT_OPTIONS if hasattr(record, k)}
             )
             return
         try:
@@ -85,22 +93,27 @@ class StimelaConsoleHander(rich.logging.RichHandler):
         except MarkupError:
             record.msg = escape(record.msg)
             self._console.print(f"Malformed markup in log message: {record.msg}", markup=False, style="red")
-            self._console.print(f"This is a (probably harmless) bug -- but please report", markup=False, style="red")
+            self._console.print("This is a (probably harmless) bug -- but please report", markup=False, style="red")
             try:
                 rich.logging.RichHandler.emit(self, record)
             except MarkupError:
-                self._console.print(f"Malformed markup after escaping -- this is surely a bug -- please report", markup=False, style="red")
+                self._console.print(
+                    "Malformed markup after escaping -- this is surely a bug -- please report",
+                    markup=False,
+                    style="red",
+                )
 
-        if hasattr(record, 'console_payload'):
-            self._console.print(record.console_payload, highlight=getattr(record, 'console_highlight', None))
+        if hasattr(record, "console_payload"):
+            self._console.print(record.console_payload, highlight=getattr(record, "console_highlight", None))
+
 
 class StimelaLogFormatter(logging.Formatter):
-    DEBUG_STYLE   = "dim", ""
+    DEBUG_STYLE = "dim", ""
     WARNING_STYLE = "", "yellow"
-    ERROR_STYLE   = "bold", "red"
-    CRITICAL_STYLE  = "bold", "red"
+    ERROR_STYLE = "bold", "red"
+    CRITICAL_STYLE = "bold", "red"
 
-    _ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
+    _ansi_escape = re.compile(r"\x1B[@-_][0-?]*[ -/]*[@-~]")
 
     def __init__(self, boring=False, override_message_attr=None):
         datefmt = "%Y-%m-%d %H:%M:%S"
@@ -119,7 +132,7 @@ class StimelaLogFormatter(logging.Formatter):
         if self._override_attr is not None and hasattr(record, self._override_attr):
             record.msg = getattr(record, self._override_attr)
         # apply styling
-        if not hasattr(record, 'style'):
+        if not hasattr(record, "style"):
             if record.levelno <= logging.DEBUG:
                 font, color = self.DEBUG_STYLE
             elif record.levelno >= logging.CRITICAL:
@@ -130,29 +143,31 @@ class StimelaLogFormatter(logging.Formatter):
                 font, color = self.WARNING_STYLE
             else:
                 font = color = ""
-            if getattr(record, 'color', None):
+            if getattr(record, "color", None):
                 color = record.color.lower()
-            if hasattr(record, 'bold') or hasattr(record, 'boldface'):
+            if hasattr(record, "bold") or hasattr(record, "boldface"):
                 if "bold" not in font:
                     font = f"bold {font}"
-            setattr(record, 'style', f"{font} {color}".strip() or "normal")
+            setattr(record, "style", f"{font} {color}".strip() or "normal")
         # in boring mode, make funky messages boring, and strip ANSI codes
         if self.boring:
-            record.msg = self._ansi_escape.sub('', defunkify(record.msg))
+            record.msg = self._ansi_escape.sub("", defunkify(record.msg))
         # select format based on whether we have prefix or not
-        if hasattr(record, 'prefix'):
+        if hasattr(record, "prefix"):
             if self.boring:
                 record.prefix = defunkify(record.prefix)
             return self._prefix_fmt.format(record)
         else:
             return super().format(record)
 
+
 _logger = None
 _log_console_handler = _log_formatter = _log_file_formatter = _log_boring_formatter = _log_colourful_formatter = None
 
 _boring = False
 
-LOG_DIR = '.'
+LOG_DIR = "."
+
 
 def is_logger_initialized():
     return _logger is not None
@@ -161,6 +176,7 @@ def is_logger_initialized():
 def declare_chapter(title: str, **kw):
     if not _boring:
         rich_console.rule(title, **kw)
+
 
 def apply_style(text: str, style: str):
     if _boring:
@@ -180,9 +196,14 @@ def logger(name="STIMELA", propagate=False, boring=False, loglevel="INFO"):
         _logger.setLevel(loglevel)
         _logger.propagate = propagate
 
-        global _log_console_handler, _log_formatter, _log_file_formatter, _log_boring_formatter, _log_colourful_formatter
+        global \
+            _log_console_handler, \
+            _log_formatter, \
+            _log_file_formatter, \
+            _log_boring_formatter, \
+            _log_colourful_formatter
 
-        _log_file_formatter = StimelaLogFormatter(boring=True, override_message_attr='logfile_message')
+        _log_file_formatter = StimelaLogFormatter(boring=True, override_message_attr="logfile_message")
         _log_boring_formatter = StimelaLogFormatter(boring=True)
         _log_colourful_formatter = StimelaLogFormatter(boring=False)
 
@@ -197,9 +218,11 @@ def logger(name="STIMELA", propagate=False, boring=False, loglevel="INFO"):
         _logger_console_handlers[_logger.name] = _log_console_handler
 
         import scabha
+
         scabha.set_logger(_logger)
 
     return _logger
+
 
 _logger_file_handlers = {}
 _logger_console_handlers = {}
@@ -219,11 +242,14 @@ def disable_file_logger(log: logging.Logger):
         log.removeHandler(fh)
         del _logger_file_handlers[log.name]
 
+
 def is_logging_boring():
     return _boring
 
+
 class DelayedFileHandler(logging.FileHandler):
     """A version of FileHandler that also handles directory and symlink creation in a delayed way"""
+
     def __init__(self, logfile, symlink, mode):
         self.symlink, self.logfile = symlink, logfile
         self.is_open = False
@@ -250,15 +276,19 @@ class DelayedFileHandler(logging.FileHandler):
         self.get_logfile_dir()
         return super().emit(record)
 
-def setup_file_logger(log: logging.Logger, logfile: str, level: Optional[Union[int, str]] = logging.INFO, symlink: Optional[str] = None):
+
+def setup_file_logger(
+    log: logging.Logger, logfile: str, level: Optional[Union[int, str]] = logging.INFO, symlink: Optional[str] = None
+):
     """Sets up logging to file
 
     Args:
         log (logging.Logger): Logger object
         logfile (str): logfile. May contain dirname, which will be created as needed.
         level (Optional[Union[int, str]], optional): Logging level, defaults to logging.INFO.
-        symlink (Optional[str], optional): if set, and logfile contains a dirname that is created, sets named symlink to point to it
-            (This is useful for patterns such as logfile="logs-YYMMDD/logfile.txt", then logs -> logs-YYMMDD)
+        symlink (Optional[str], optional): if set, and logfile contains a dirname that is created, sets named symlink
+            to point to it. This is useful for patterns such as logfile="logs-YYMMDD/logfile.txt", then
+            logs -> logs-YYMMDD.
 
     Returns:
         [logging.Logger]: logger object
@@ -274,9 +304,9 @@ def setup_file_logger(log: logging.Logger, logfile: str, level: Optional[Union[i
             log.removeHandler(fh)
         # if file was previously open, append, else overwrite
         if logfile in _previous_logfiles:
-            mode = 'a'
+            mode = "a"
         else:
-            mode = 'w'
+            mode = "w"
             _previous_logfiles.add(logfile)
         # create new FH
         fh = DelayedFileHandler(logfile, symlink, mode)
@@ -293,7 +323,6 @@ def setup_file_logger(log: logging.Logger, logfile: str, level: Optional[Union[i
                 _logger_console_handlers[log.name] = _log_console_handler
                 log.addHandler(_log_console_handler)
 
-
     # resolve level
     if level is not None:
         if type(level) is str:
@@ -303,7 +332,9 @@ def setup_file_logger(log: logging.Logger, logfile: str, level: Optional[Union[i
     return log
 
 
-def update_file_logger(log: logging.Logger, logopts: DictConfig, nesting: int = 0, subst: Optional[SubstitutionNS] = None, location=[]):
+def update_file_logger(
+    log: logging.Logger, logopts: DictConfig, nesting: int = 0, subst: Optional[SubstitutionNS] = None, location=[]
+):
     """Updates logfiles associated with given logger based on option settings
 
     Args:
@@ -331,7 +362,7 @@ def update_file_logger(log: logging.Logger, logopts: DictConfig, nesting: int = 
         # Expand path before removing non-filename characters.
         path = os.path.expanduser(path)
         # substitute non-filename characters for _
-        path = re.sub(r'[^a-zA-Z0-9_./-]', '_', path)
+        path = re.sub(r"[^a-zA-Z0-9_./-]", "_", path)
 
         # setup the logger
         setup_file_logger(log, path, level=logopts.level, symlink=logopts.symlink)
@@ -352,6 +383,7 @@ def log_exception(*errors, severity="error", log=None):
     """Logs one or more error messages or exceptions (unless they are marked as already logged), and
     pretty-prints them to the console  as appropriate.
     """
+
     def exc_message(e):
         if isinstance(e, ScabhaBaseException):
             return escape(e.message)
@@ -408,17 +440,19 @@ def log_exception(*errors, severity="error", log=None):
             messages.append(exc.message)
             if not exc.logged:
                 do_log = exc.logged = True
-            tree = Tree(exc_message(exc) if _boring else
-                            f"[{colour}]{exc_message(exc)}[/{colour}]",
-                        guide_style="" if _boring else "dim")
+            tree = Tree(
+                exc_message(exc) if _boring else f"[{colour}]{exc_message(exc)}[/{colour}]",
+                guide_style="" if _boring else "dim",
+            )
             trees.append(tree)
             if exc.nested:
                 add_nested(exc.nested, tree)
                 has_nesting = True
         else:
-            tree = Tree(exc_message(exc) if _boring else
-                            f"[{colour}]{exc_message(exc)}[/{colour}]",
-                        guide_style="" if _boring else "dim")
+            tree = Tree(
+                exc_message(exc) if _boring else f"[{colour}]{exc_message(exc)}[/{colour}]",
+                guide_style="" if _boring else "dim",
+            )
             trees.append(tree)
             do_log = True
             messages.append(str(exc))
@@ -429,11 +463,17 @@ def log_exception(*errors, severity="error", log=None):
     if has_nesting:
         declare_chapter("detailed error report follows", style="red")
         for tree in trees:
-            rich_console.print(Padding(tree, pad=(0,0,0,8)))
+            rich_console.print(Padding(tree, pad=(0, 0, 0, 8)))
 
-def log_rich_payload(log: logging.Logger, message: str, payload: Any,
-                     console_payload: Optional[Any] = None, syntax: Optional[str] = None,
-                     level: int = logging.INFO):
+
+def log_rich_payload(
+    log: logging.Logger,
+    message: str,
+    payload: Any,
+    console_payload: Optional[Any] = None,
+    syntax: Optional[str] = None,
+    level: int = logging.INFO,
+):
     """Logs a message with a rich payload. File logger will get plain text version ("message: \npayload"),
     console logger will get a rich renderable console_payload object instead, or a Syntax object.
 
@@ -449,6 +489,8 @@ def log_rich_payload(log: logging.Logger, message: str, payload: Any,
         console_payload = Syntax(payload, syntax, padding=(0, 0, 0, 8))
     elif console_payload is None:
         console_payload = Pretty(payload, indent_size=8)
-    log.log(level, f"{message}:",
-            extra=dict(logfile_message=f"{message}: \n{str(payload)}",
-                        console_payload=console_payload))
+    log.log(
+        level,
+        f"{message}:",
+        extra=dict(logfile_message=f"{message}: \n{str(payload)}", console_payload=console_payload),
+    )

@@ -1,20 +1,14 @@
 from itertools import chain
-from typing import Optional, List, Tuple, Set
+from typing import List, Optional, Set, Tuple
+
 import networkx as nx
 
 from stimela.exceptions import StepSelectionError
 
-STATUS_HIERARCHY = (
-    "disabled",
-    "enabled",
-    "weakly_disabled",
-    "weakly_enabled"
-)
+STATUS_HIERARCHY = ("disabled", "enabled", "weakly_disabled", "weakly_enabled")
 
-def apply_tag_inclusions(
-    graph: nx.DiGraph,
-    tag_inclusions: Set[str]
-):
+
+def apply_tag_inclusions(graph: nx.DiGraph, tag_inclusions: Set[str]):
     """Given a graph, apply the 'enabled' status to steps associated with tags.
 
     Adds 'enabled' to the 'status' attribute of each graph node associated
@@ -37,18 +31,14 @@ def apply_tag_inclusions(
         step_name, tag = tag.rsplit(".", 1)
         for node_name in graph.successors(step_name):
             node = graph.nodes[node_name]
-            if tag in node['tags']:
-                node['status'] = node.get("status", set()) | {"enabled"}
+            if tag in node["tags"]:
+                node["status"] = node.get("status", set()) | {"enabled"}
                 successful = True
         if not successful:
-            raise StepSelectionError(
-                f"'{tag}' is not a valid tag of '{step_name}'."
-            )
+            raise StepSelectionError(f"'{tag}' is not a valid tag of '{step_name}'.")
 
-def apply_tag_exclusions(
-    graph: nx.DiGraph,
-    tag_exclusions: Set[str]
-):
+
+def apply_tag_exclusions(graph: nx.DiGraph, tag_exclusions: Set[str]):
     """Given a graph, apply the 'disabled' status to steps associated with tags.
 
     Adds 'disabled' to the 'status' attribute of each graph node associated
@@ -72,12 +62,11 @@ def apply_tag_exclusions(
         for node_name in graph.successors(step_name):
             node = graph.nodes[node_name]
             if tag in node["tags"]:
-                node['status'] = node.get("status", set()) | {"disabled"}
+                node["status"] = node.get("status", set()) | {"disabled"}
                 successful = True
         if not successful:
-            raise StepSelectionError(
-                f"'{tag}' is not a valid tag of '{step_name}'."
-            )
+            raise StepSelectionError(f"'{tag}' is not a valid tag of '{step_name}'.")
+
 
 def apply_always_tags(graph: nx.DiGraph):
     """Apply the 'weakly_enabled' status to graph nodes tagged with 'always'.
@@ -91,7 +80,8 @@ def apply_always_tags(graph: nx.DiGraph):
     """
     for node in graph.nodes.values():
         if "always" in node.get("tags", tuple()):
-            node['status'] = node.get("status", set()) | {"weakly_enabled"}
+            node["status"] = node.get("status", set()) | {"weakly_enabled"}
+
 
 def apply_never_tags(graph: nx.DiGraph):
     """Apply the 'weakly_disabled' status to graph nodes tagged with 'never'.
@@ -105,12 +95,10 @@ def apply_never_tags(graph: nx.DiGraph):
     """
     for node in graph.nodes.values():
         if "never" in node.get("tags", tuple()):
-            node['status'] = node.get("status", set()) | {"weakly_disabled"}
+            node["status"] = node.get("status", set()) | {"weakly_disabled"}
 
-def apply_step_inclusions(
-    graph: nx.DiGraph,
-    step_inclusions: Set[str]
-):
+
+def apply_step_inclusions(graph: nx.DiGraph, step_inclusions: Set[str]):
     """Update the status attributes on a graph based on step inclusions.
 
     Adds 'enabled' or 'weakly_enabled' to the 'status' attribute of each graph
@@ -161,9 +149,7 @@ def apply_step_inclusions(
         status = "enabled" if case == "single_step" else "weakly_enabled"
 
         if not (start in node_names and stop in node_names):
-            raise StepSelectionError(
-                f"Step/steps '{inclusion_str}' not in '{step_name}'."
-            )
+            raise StepSelectionError(f"Step/steps '{inclusion_str}' not in '{step_name}'.")
 
         start_ind = node_names.index(start)
         stop_ind = node_names.index(stop) + 1
@@ -177,12 +163,10 @@ def apply_step_inclusions(
 
         for node_name in selected_nodes:
             node = graph.nodes[node_name]
-            node['status'] = node.get("status", set()) | {status}
+            node["status"] = node.get("status", set()) | {status}
 
-def apply_step_exclusions(
-    graph: nx.DiGraph,
-    step_exclusions: Set[str]
-):
+
+def apply_step_exclusions(graph: nx.DiGraph, step_exclusions: Set[str]):
     """Update the status attributes on a graph based on step exclusions.
 
     Adds 'disabled' or 'weakly_disabled' to the 'status' attribute of each
@@ -233,9 +217,7 @@ def apply_step_exclusions(
         status = "disabled" if case == "single_step" else "weakly_disabled"
 
         if not (start in node_names and stop in node_names):
-            raise StepSelectionError(
-                f"Step/steps '{exclusion_str}' not in '{step_name}'."
-            )
+            raise StepSelectionError(f"Step/steps '{exclusion_str}' not in '{step_name}'.")
 
         start_ind = node_names.index(start)
         stop_ind = node_names.index(stop) + 1
@@ -249,12 +231,10 @@ def apply_step_exclusions(
 
         for node_name in selected_nodes:
             node = graph.nodes[node_name]
-            node['status'] = node.get("status", set()) | {status}
+            node["status"] = node.get("status", set()) | {status}
 
-def apply_step_unskips(
-    graph: nx.DiGraph,
-    step_unskips: Set[str]
-):
+
+def apply_step_unskips(graph: nx.DiGraph, step_unskips: Set[str]):
     """Add the 'unskip' attribute to graph nodes based on step_unskips.
 
     This adds the 'unskip' attribute to the graph nodes assosciated with
@@ -305,9 +285,7 @@ def apply_step_unskips(
         stop = f"{step_name}.{stop}" if stop else node_names[-1]
 
         if not (start in node_names and stop in node_names):
-            raise StepSelectionError(
-                f"Step/steps '{unskip_str}' not in '{step_name}'."
-            )
+            raise StepSelectionError(f"Step/steps '{unskip_str}' not in '{step_name}'.")
 
         start_ind = node_names.index(start)
         stop_ind = node_names.index(stop) + 1
@@ -321,12 +299,10 @@ def apply_step_unskips(
 
         for node_name in selected_nodes:
             node = graph.nodes[node_name]
-            node['unskip'] = True
+            node["unskip"] = True
 
-def resolve_states(
-    graph: nx.DiGraph,
-    default_status: str = "weakly_enabled"
-):
+
+def resolve_states(graph: nx.DiGraph, default_status: str = "weakly_enabled"):
     """Given a graph with statuses, resolve them into a boolean enable flag.
 
     This function is resposible for the potentially complicated resolution
@@ -448,7 +424,7 @@ def graph_to_constraints(
     tag_exclusions: Tuple[str] = (),
     step_inclusions: Tuple[str] = (),
     step_exclusions: Tuple[str] = (),
-    step_unskips: Tuple[str] = ()
+    step_unskips: Tuple[str] = (),
 ):
     """Convert a networkx.DiGraph into a stimela RunConstraints object.
 
@@ -560,21 +536,12 @@ class RunConstraints:
 
     def get_enabled_steps(self, fqname):
         """Returns a tuple of enabled steps."""
-        return tuple(
-            k[len(fqname) + 1:] for k in self.graph.adj[fqname].keys()
-            if k in self.enabled_nodes
-        )
+        return tuple(k[len(fqname) + 1 :] for k in self.graph.adj[fqname].keys() if k in self.enabled_nodes)
 
     def get_disabled_steps(self, fqname):
         """Returns a tuple of disabled steps."""
-        return tuple(
-            k[len(fqname) + 1:] for k in self.graph.adj[fqname].keys()
-            if k in self.disabled_nodes
-        )
+        return tuple(k[len(fqname) + 1 :] for k in self.graph.adj[fqname].keys() if k in self.disabled_nodes)
 
     def get_unskipped_steps(self, fqname):
         """Returns a tuple of unskipped steps."""
-        return tuple(
-            k[len(fqname) + 1:] for k in self.graph.adj[fqname].keys()
-            if k in self.unskipped_nodes
-        )
+        return tuple(k[len(fqname) + 1 :] for k in self.graph.adj[fqname].keys() if k in self.unskipped_nodes)

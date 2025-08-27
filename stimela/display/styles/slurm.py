@@ -1,17 +1,15 @@
 from __future__ import annotations
-from typing import Optional, TYPE_CHECKING
-from rich.table import Table
+
+from typing import TYPE_CHECKING, Optional
+
 from rich.progress import Progress
+from rich.table import Table
 
 from .base import DisplayStyle
 from .elements import status_element
 
 if TYPE_CHECKING:
-    from stimela.task_stats import (
-        TaskInformation,
-        TaskStatsDatum,
-        SystemStatsDatum
-    )
+    from stimela.task_stats import SystemStatsDatum, TaskInformation, TaskStatsDatum
 
 
 class SimpleSlurmDisplay(DisplayStyle):
@@ -62,13 +60,7 @@ class SimpleSlurmDisplay(DisplayStyle):
             setattr(self, f"{k}_id", status_id)
 
         table = Table.grid(expand=False, padding=(0, 1))
-        table.add_row(
-            self.run_elapsed,
-            self.task_elapsed,
-            self.task_name,
-            self.task_status,
-            self.task_command
-        )
+        table.add_row(self.run_elapsed, self.task_elapsed, self.task_name, self.task_status, self.task_command)
 
         self.render_target = table
 
@@ -77,7 +69,7 @@ class SimpleSlurmDisplay(DisplayStyle):
         sys_stats: SystemStatsDatum,
         task_stats: TaskStatsDatum,
         task_info: TaskInformation,
-        extra_info: Optional[object] = None
+        extra_info: Optional[object] = None,
     ):
         """Updates the progress elements using the provided values.
 
@@ -93,19 +85,10 @@ class SimpleSlurmDisplay(DisplayStyle):
                 used for information originating from a backend.
         """
         if task_info is not None:
-            self.task_name.update(
-                self.task_name_id,
-                value=f"[bold]{task_info.description}[/bold]"
-            )
+            self.task_name.update(self.task_name_id, value=f"[bold]{task_info.description}[/bold]")
 
-            self.task_status.update(
-                self.task_status_id,
-                value=f"[dim]{task_info.status or 'running'}[/dim]"
-            )
+            self.task_status.update(self.task_status_id, value=f"[dim]{task_info.status or 'running'}[/dim]")
             # Sometimes the command contains square brackets which rich
             # interprets as formatting. Remove them. # TODO: Figure out
             # why the command has square brackets in the first place.
-            self.task_command.update(
-                self.task_command_id,
-                value=f"{(task_info.command or '--').strip('([])')}"
-            )
+            self.task_command.update(self.task_command_id, value=f"{(task_info.command or '--').strip('([])')}")

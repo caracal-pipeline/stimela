@@ -1,15 +1,14 @@
 from __future__ import annotations
-from typing import Optional, TYPE_CHECKING
+
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, Optional
+
 from rich.progress import Progress
+
 from .elements import timer_element
 
 if TYPE_CHECKING:
-    from stimela.task_stats import (
-        TaskInformation,
-        TaskStatsDatum,
-        SystemStatsDatum
-    )
+    from stimela.task_stats import SystemStatsDatum, TaskInformation, TaskStatsDatum
 
 
 class BaseDisplayStyle(ABC):
@@ -18,6 +17,7 @@ class BaseDisplayStyle(ABC):
     This is the abstract base class for a number of display styles which can be
     rendered to the active console.
     """
+
     @abstractmethod
     def reset(self):
         """Reset elements of the display e.g. time elapsed in a task."""
@@ -29,7 +29,7 @@ class BaseDisplayStyle(ABC):
         sys_stats: SystemStatsDatum,
         task_stats: TaskStatsDatum,
         task_info: TaskInformation,
-        extra_info: Optional[object] = None
+        extra_info: Optional[object] = None,
     ):
         """Updates the progress elements using the provided values.
 
@@ -63,6 +63,7 @@ class DisplayStyle(BaseDisplayStyle):
         task_elapsed_id:
             The task ID of the task associcated with task_elapsed.
     """
+
     def __init__(self, run_timer: Progress):
         """Instantiates a DisplayStyle using the run_timer.
 

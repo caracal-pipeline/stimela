@@ -1,39 +1,38 @@
-import itertools
-import click
-import logging
-import os.path
-import yaml
-import sys
-import traceback
-import re
 import glob
 import importlib
 import itertools
-from datetime import datetime
-from typing import List, Optional, Tuple
+import logging
+import os.path
+import re
+import sys
+import traceback
 from collections import OrderedDict
-from omegaconf.omegaconf import OmegaConf, OmegaConfBaseException
-from benedict import benedict
+from datetime import datetime
 from pathlib import Path
+from typing import List, Optional, Tuple
+
+import click
+import yaml
+from benedict import benedict
+from omegaconf.omegaconf import OmegaConf, OmegaConfBaseException
 
 import stimela
+import stimela.backends
+import stimela.config
 from scabha import configuratt
 from scabha.basetypes import UNSET
+from scabha.configuratt.common import IMPLICIT_EXTENSIONS
 from scabha.exceptions import ScabhaBaseException
 from scabha.substitutions import SubstitutionNS
-from stimela import stimelogging
-import stimela.config
+from stimela import log_exception, logger, stimelogging, task_stats
 from stimela.config import ConfigExceptionTypes
-from stimela import logger, log_exception
-from stimela.stimelogging import is_logging_boring
 from stimela.display.display import display
-from stimela.exceptions import RecipeValidationError, StimelaRuntimeError, StepSelectionError, StepValidationError
-from stimela.main import cli
-from stimela.kitchen.recipe import Recipe, Step, RecipeSchema, join_quote
+from stimela.exceptions import RecipeValidationError, StepSelectionError, StepValidationError, StimelaRuntimeError
+from stimela.kitchen.recipe import Recipe, RecipeSchema, Step
 from stimela.kitchen.run_state import graph_to_constraints
-from stimela import task_stats
-import stimela.backends
-from scabha.configuratt.common import IMPLICIT_EXTENSIONS
+from stimela.main import cli
+from stimela.stimelogging import is_logging_boring
+
 
 def resolve_recipe_files(filename: str, log: logging.Logger, use_manifest: bool = True):
     """
@@ -62,7 +61,7 @@ def resolve_recipe_files(filename: str, log: logging.Logger, use_manifest: bool 
         else:
             try:
                 resolved_filename = mod.__path__[0]
-            except:
+            except:  # noqa: E722 - TODO(JSKenyon): What is this actually catching?
                 raise FileNotFoundError(f"{filename} not found ({modulename} is not a proper Python module)")
         # append filename, if supplied
         if fname:
@@ -107,7 +106,9 @@ def resolve_recipe_files(filename: str, log: logging.Logger, use_manifest: bool 
         if filename is resolved_filename:
             raise FileNotFoundError(f"{filename} doesn't match any YAML documents")
         else:
-            raise FileNotFoundError(f"{filename} resolves to {resolved_filename}, which doesn't match any YAML documents")
+            raise FileNotFoundError(
+                f"{filename} resolves to {resolved_filename}, which doesn't match any YAML documents"
+            )
 
 
 def load_recipe_files(filenames: List[str]):
@@ -154,7 +155,7 @@ def load_recipe_files(filenames: List[str]):
 
     # check for missing requirements
     missing = configuratt.check_requirements(full_conf, [stimela.CONFIG], strict=True)
-    for (loc, name, _) in missing:
+    for loc, name, _ in missing:
         logger().warning(f"optional config section '{loc}' omitted due to missing requirement '{name}'")
 
     # split content into config sections, and recipes:
@@ -181,77 +182,178 @@ def load_recipe_files(filenames: List[str]):
 
     return recipe_names
 
-@cli.command("run",
+
+@cli.command(
+    "run",
     help="""
     Execute a single cab, or a recipe from a YML file.
     If the YML files contains multiple recipes, specify the recipe name as an extra argument.
     Use PARAM=VALUE to specify parameters for the recipe or cab. You can also use X.Y.Z=FOO to
     change any and all config and/or recipe settings.
     """,
-    no_args_is_help=True)
-@click.option("-s", "--step", "step_ranges", metavar="STEP(s)", multiple=True,
-                help="""only runs specific step(s) from the recipe. Use commas, or give multiple times to cherry-pick steps.
-                Use [BEGIN]:[END] to specify a range of steps. Note that cherry-picking an individual step via this option
-                also impies --enable-step.""")
-@click.option("-k", "--skip-step", "skip_ranges", metavar="STEP(s)", multiple=True,
-                help="""forcefully skip specific recipe step(s). Use commas, or give multiple times to
-                cherry-pick steps. Use [BEGIN]:[END] to specify a range of steps.""")
-@click.option("-t", "--tags", "tags", metavar="TAG(s)", multiple=True,
-                help="""only runs steps wth the given tags (and also steps tagged as "always").
-                Use commas, or give multiple times for multiple tags.""")
-@click.option("--skip-tags", "skip_tags", metavar="TAG(s)", multiple=True,
-                help="""explicitly skips steps wth the given tags.
-                Use commas, or give multiple times for multiple tags.""")
-@click.option("-e", "--enable-step", "enable_steps", metavar="STEP(s)", multiple=True,
-                help="""force-enable steps even if the recipe marks them as skipped. Use commas, or give multiple times
-                for multiple steps.""")
-@click.option("-f", "--disable-fresh-skips", "disable_fresh_skips",  is_flag=True,
-                help="""forces execution of steps with a skip_if_outputs: fresh property.""")
-@click.option("-F", "--disable-exist-skips", "disable_exist_skips",  is_flag=True,
-                help="""forces execution of steps with a skip_if_outputs: exist property.""")
-@click.option("-c", "--config", "config_equals", metavar="X.Y.Z=VALUE", nargs=1, multiple=True,
-                help="""tweak configuration options.""")
-@click.option("-a", "--assign", metavar="PARAM VALUE", nargs=2, multiple=True,
-                help="""assigns values to parameters: equivalent to PARAM=VALUE, but plays nicer with the shell's
-                tab completion feature.""")
-@click.option("-C", "--config-assign", metavar="X.Y.Z VALUE", nargs=2, multiple=True,
-                help="""tweak configuration options: same function -c/--config, but plays nicer with the shell's
-                tab completion feature.""")
-@click.option("-l", "--last-recipe", is_flag=True,
-                help="""if multiple recipes are defined, selects the last one for execution.""")
-@click.option("-d", "--dry-run", is_flag=True,
-                help="""Doesn't actually run anything, only prints the selected steps.""")
-@click.option("-p", "--profile", metavar="DEPTH", type=int,
-                help="""Print per-step profiling stats to this depth. 0 disables.""")
-@click.option("-N", "--native", "enable_native", is_flag=True,
-                help="""Selects the native backend (shortcut for -C opts.backend.select=native)""")
-@click.option("-S", "--singularity", "enable_singularity", is_flag=True,
-                help="""Selects the singularity backend (shortcut for -C opts.backend.select=singularity)""")
-@click.option("-K", "--kube", "enable_kube", is_flag=True,
-                help="""Selects the kubernetes backend (shortcut for -C opts.backend.select=kube)""")
-@click.option("--slurm", "enable_slurm", is_flag=True,
-                help="""Enables the slurm backend wrapper (shortcut for -C backend.slurm.enable=True)""")
-@click.option("-dc", "--dump-config", is_flag=True,
-                help="""Dump the equivalent stimela config to a file""")
-@click.option("-pf", "--parameter-file", metavar="filename.yml", multiple=True,
-              help="""Use parameter values from the sepcified parameter file. These have lower precedence than
-              PARAM=VALUE specified on the CLI.""")
-@click.argument("parameters", nargs=-1, metavar="filename.yml ... [recipe or cab name] [PARAM=VALUE] ...", required=True)
-def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = False, last_recipe: bool = False, profile: Optional[int] = None,
+    no_args_is_help=True,
+)
+@click.option(
+    "-s",
+    "--step",
+    "step_ranges",
+    metavar="STEP(s)",
+    multiple=True,
+    help="""
+        only runs specific step(s) from the recipe. Use commas, or give multiple times to cherry-pick steps.
+        Use [BEGIN]:[END] to specify a range of steps. Note that cherry-picking an individual step via this option
+        also impies --enable-step.
+    """,
+)
+@click.option(
+    "-k",
+    "--skip-step",
+    "skip_ranges",
+    metavar="STEP(s)",
+    multiple=True,
+    help="""forcefully skip specific recipe step(s). Use commas, or give multiple times to
+                cherry-pick steps. Use [BEGIN]:[END] to specify a range of steps.""",
+)
+@click.option(
+    "-t",
+    "--tags",
+    "tags",
+    metavar="TAG(s)",
+    multiple=True,
+    help="""only runs steps wth the given tags (and also steps tagged as "always").
+                Use commas, or give multiple times for multiple tags.""",
+)
+@click.option(
+    "--skip-tags",
+    "skip_tags",
+    metavar="TAG(s)",
+    multiple=True,
+    help="""explicitly skips steps wth the given tags.
+                Use commas, or give multiple times for multiple tags.""",
+)
+@click.option(
+    "-e",
+    "--enable-step",
+    "enable_steps",
+    metavar="STEP(s)",
+    multiple=True,
+    help="""force-enable steps even if the recipe marks them as skipped. Use commas, or give multiple times
+                for multiple steps.""",
+)
+@click.option(
+    "-f",
+    "--disable-fresh-skips",
+    "disable_fresh_skips",
+    is_flag=True,
+    help="""forces execution of steps with a skip_if_outputs: fresh property.""",
+)
+@click.option(
+    "-F",
+    "--disable-exist-skips",
+    "disable_exist_skips",
+    is_flag=True,
+    help="""forces execution of steps with a skip_if_outputs: exist property.""",
+)
+@click.option(
+    "-c",
+    "--config",
+    "config_equals",
+    metavar="X.Y.Z=VALUE",
+    nargs=1,
+    multiple=True,
+    help="""tweak configuration options.""",
+)
+@click.option(
+    "-a",
+    "--assign",
+    metavar="PARAM VALUE",
+    nargs=2,
+    multiple=True,
+    help="""assigns values to parameters: equivalent to PARAM=VALUE, but plays nicer with the shell's
+                tab completion feature.""",
+)
+@click.option(
+    "-C",
+    "--config-assign",
+    metavar="X.Y.Z VALUE",
+    nargs=2,
+    multiple=True,
+    help="""tweak configuration options: same function -c/--config, but plays nicer with the shell's
+                tab completion feature.""",
+)
+@click.option(
+    "-l", "--last-recipe", is_flag=True, help="""if multiple recipes are defined, selects the last one for execution."""
+)
+@click.option(
+    "-d", "--dry-run", is_flag=True, help="""Doesn't actually run anything, only prints the selected steps."""
+)
+@click.option(
+    "-p", "--profile", metavar="DEPTH", type=int, help="""Print per-step profiling stats to this depth. 0 disables."""
+)
+@click.option(
+    "-N",
+    "--native",
+    "enable_native",
+    is_flag=True,
+    help="""Selects the native backend (shortcut for -C opts.backend.select=native)""",
+)
+@click.option(
+    "-S",
+    "--singularity",
+    "enable_singularity",
+    is_flag=True,
+    help="""Selects the singularity backend (shortcut for -C opts.backend.select=singularity)""",
+)
+@click.option(
+    "-K",
+    "--kube",
+    "enable_kube",
+    is_flag=True,
+    help="""Selects the kubernetes backend (shortcut for -C opts.backend.select=kube)""",
+)
+@click.option(
+    "--slurm",
+    "enable_slurm",
+    is_flag=True,
+    help="""Enables the slurm backend wrapper (shortcut for -C backend.slurm.enable=True)""",
+)
+@click.option("-dc", "--dump-config", is_flag=True, help="""Dump the equivalent stimela config to a file""")
+@click.option(
+    "-pf",
+    "--parameter-file",
+    metavar="filename.yml",
+    multiple=True,
+    help="""Use parameter values from the sepcified parameter file. These have lower precedence than
+              PARAM=VALUE specified on the CLI.""",
+)
+@click.argument(
+    "parameters", nargs=-1, metavar="filename.yml ... [recipe or cab name] [PARAM=VALUE] ...", required=True
+)
+def run(
+    parameters: List[str] = [],
+    dump_config: bool = False,
+    dry_run: bool = False,
+    last_recipe: bool = False,
+    profile: Optional[int] = None,
     assign: List[Tuple[str, str]] = [],
     config_equals: List[str] = [],
     config_assign: List[Tuple[str, str]] = [],
-    step_ranges: List[str] = [], tags: List[str] = [], skip_tags: List[str] = [], enable_steps: List[str] = [],
+    step_ranges: List[str] = [],
+    tags: List[str] = [],
+    skip_tags: List[str] = [],
+    enable_steps: List[str] = [],
     skip_ranges: List[str] = [],
-    disable_fresh_skips=False, disable_exist_skips=False,
-    build=False, rebuild=False, build_skips=False,
+    disable_fresh_skips=False,
+    disable_exist_skips=False,
+    build=False,
+    rebuild=False,
+    build_skips=False,
     enable_native=False,
     enable_singularity=False,
     enable_kube=False,
     enable_slurm=False,
-    parameter_file: List[str] = []
+    parameter_file: List[str] = [],
 ):
-
     log = logger()
     if not is_logging_boring():
         display.enable()
@@ -313,7 +415,7 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
                 files_to_load += filenames
                 log.info(f"will load recipe/config file(s) {', '.join(filenames)}")
             elif recipe_or_cab is not None:
-                log_exception(f"multiple recipe/cab names given")
+                log_exception("multiple recipe/cab names given")
                 errcode = 2
             else:
                 recipe_or_cab = pp
@@ -332,25 +434,25 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
     try:
         stimela.CONFIG.merge_with(OmegaConf.from_dotlist(config_equals))
     except OmegaConfBaseException as exc:
-        log_exception(f"error loading -c/--config assignments", exc)
+        log_exception("error loading -c/--config assignments", exc)
         sys.exit(2)
     try:
         dotlist = [f"{key}={value}" for key, value in config_assign]
         stimela.CONFIG.merge_with(OmegaConf.from_dotlist(dotlist))
     except OmegaConfBaseException as exc:
-        log_exception(f"error loading -C/--config-assign assignments", exc)
+        log_exception("error loading -C/--config-assign assignments", exc)
         sys.exit(2)
 
     # enable backends
     if enable_native:
         log.info("selecting the native backend")
-        stimela.CONFIG.opts.backend.select = 'native'
+        stimela.CONFIG.opts.backend.select = "native"
     elif enable_singularity:
         log.info("selecting the singularity backend")
-        stimela.CONFIG.opts.backend.select = 'singularity'
+        stimela.CONFIG.opts.backend.select = "singularity"
     elif enable_kube:
         log.info("selecting the kube backend")
-        stimela.CONFIG.opts.backend.select = 'kube'
+        stimela.CONFIG.opts.backend.select = "kube"
     if enable_slurm:
         log.info("enabling the slurm backend wrapper")
         stimela.CONFIG.opts.backend.slurm.enable = True
@@ -369,7 +471,7 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
         # -l specified, pick the last recipe
         if last_recipe:
             if not available_recipes:
-                log.error(f"-l/--last-recipe specified, but no valid recipes were loaded")
+                log.error("-l/--last-recipe specified, but no valid recipes were loaded")
                 sys.exit(2)
             else:
                 recipe_name = available_recipes[-1]
@@ -407,10 +509,10 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
         outer_step.name = cab_name
         # provide basic substitutions for running the step below
         subst = SubstitutionNS()
-        info = SubstitutionNS(fqname=cab_name, label=cab_name, label_parts=[], suffix='', taskname=cab_name)
-        subst._add_('info', info, nosubst=True)
-        subst._add_('config', stimela.CONFIG, nosubst=True)
-        subst._add_('current', SubstitutionNS(**params))
+        info = SubstitutionNS(fqname=cab_name, label=cab_name, label_parts=[], suffix="", taskname=cab_name)
+        subst._add_("info", info, nosubst=True)
+        subst._add_("config", stimela.CONFIG, nosubst=True)
+        subst._add_("current", SubstitutionNS(**params))
         # create step logger manually, since we won't be doing the normal recipe-level log management
         step_logger = stimela.logger().getChild(cab_name)
         step_logger.propagate = True
@@ -441,7 +543,7 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
     else:
         # create recipe object from the config
         kwargs = dict(**stimela.CONFIG.lib.recipes[recipe_name])
-        kwargs.setdefault('name', recipe_name)
+        kwargs.setdefault("name", recipe_name)
         try:
             recipe = Recipe(**kwargs)
         except Exception as exc:
@@ -494,7 +596,7 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
                 tag_exclusions=skip_tags,
                 step_inclusions=step_ranges,
                 step_exclusions=skip_ranges,
-                step_unskips=enable_steps
+                step_unskips=enable_steps,
             )
 
             try:
@@ -504,7 +606,7 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
                 log_exception(exc)
                 sys.exit(2)
 
-        logdir = stimelogging.get_logfile_dir(recipe.log) or '.'
+        logdir = stimelogging.get_logfile_dir(recipe.log) or "."
         log.info(f"recipe logs will be saved under {logdir}")
 
         filename = os.path.join(logdir, "stimela.recipe.deps")
@@ -530,8 +632,9 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
         sys.exit(0)
 
     start_time = datetime.now()
+
     def elapsed():
-        return str(datetime.now() - start_time).split('.', 1)[0]
+        return str(datetime.now() - start_time).split(".", 1)[0]
 
     # build the images
     if build:
@@ -541,13 +644,16 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
             stimela.backends.close_backends(log)
 
             if not isinstance(exc, ScabhaBaseException) or not exc.logged:
-                log_exception(StimelaRuntimeError(f"build failed after {elapsed()}", exc,
-                    tb=not isinstance(exc, ScabhaBaseException)))
+                log_exception(
+                    StimelaRuntimeError(
+                        f"build failed after {elapsed()}", exc, tb=not isinstance(exc, ScabhaBaseException)
+                    )
+                )
             else:
                 log.error("build failed, exiting with error code 1")
             for line in traceback.format_exc().split("\n"):
                 log.debug(line)
-            last_log_dir = stimelogging.get_logfile_dir(outer_step.log) or '.'
+            last_log_dir = stimelogging.get_logfile_dir(outer_step.log) or "."
             outer_step.log.info(f"last log directory was {stimelogging.apply_style(last_log_dir, 'bold green')}")
             sys.exit(1)
 
@@ -558,17 +664,22 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
         except Exception as exc:
             stimela.backends.close_backends(log)
 
-            task_stats.save_profiling_stats(outer_step.log,
+            task_stats.save_profiling_stats(
+                outer_step.log,
                 print_depth=profile if profile is not None else stimela.CONFIG.opts.profile.print_depth,
-                unroll_loops=stimela.CONFIG.opts.profile.unroll_loops)
+                unroll_loops=stimela.CONFIG.opts.profile.unroll_loops,
+            )
             if not isinstance(exc, ScabhaBaseException) or not exc.logged:
-                log_exception(StimelaRuntimeError(f"run failed after {elapsed()}", exc,
-                    tb=not isinstance(exc, ScabhaBaseException)))
+                log_exception(
+                    StimelaRuntimeError(
+                        f"run failed after {elapsed()}", exc, tb=not isinstance(exc, ScabhaBaseException)
+                    )
+                )
             else:
                 log.error("run failed, exiting with error code 1")
             for line in traceback.format_exc().split("\n"):
                 log.debug(line)
-            last_log_dir = stimelogging.get_logfile_dir(outer_step.log) or '.'
+            last_log_dir = stimelogging.get_logfile_dir(outer_step.log) or "."
             outer_step.log.info(f"last log directory was {stimelogging.apply_style(last_log_dir, 'bold green')}")
             sys.exit(1)
 
@@ -583,10 +694,12 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
     stimela.backends.close_backends(log)
 
     if not build:
-        task_stats.save_profiling_stats(outer_step.log,
-                print_depth=profile if profile is not None else stimela.CONFIG.opts.profile.print_depth,
-                unroll_loops=stimela.CONFIG.opts.profile.unroll_loops)
+        task_stats.save_profiling_stats(
+            outer_step.log,
+            print_depth=profile if profile is not None else stimela.CONFIG.opts.profile.print_depth,
+            unroll_loops=stimela.CONFIG.opts.profile.unroll_loops,
+        )
 
-    last_log_dir = stimelogging.get_logfile_dir(outer_step.log) or '.'
+    last_log_dir = stimelogging.get_logfile_dir(outer_step.log) or "."
     outer_step.log.info(f"last log directory was {stimelogging.apply_style(last_log_dir, 'bold green')}")
     return 0
