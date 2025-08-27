@@ -2,7 +2,7 @@
 ## recipes may define or redefine or augment cabs
 cabs:
   sleep:
-    command: sleep # just a dummy for now 
+    command: sleep # just a dummy for now
     inputs:
       seconds:
         dtype: int
@@ -10,7 +10,7 @@ cabs:
         policies:
           positional: true
   echo:
-    command: echo # just a dummy for now 
+    command: echo # just a dummy for now
     inputs:
       arg:
         dtype: str
@@ -31,19 +31,18 @@ lib:
         var: arg
         over: args
       assign:
-        log:
-          name: log-{recipe.arg}-{info.fqname}
-      steps: 
+        log.name: log-{recipe.arg}-{info.fqname}
+      steps:
         sleep:
           cab: sleep
-        echo: 
+        echo:
           cab: echo
           params:
             arg: =recipe.arg
 
 opts:
   log:
-    dir: test-logs/logs-{config.run.datetime} 
+    dir: test-logs/logs-{config.run.datetime}
     nest: 3
     symlink: logs
 
@@ -71,7 +70,7 @@ nested_loop:
         dtype: int
         default: -1
   steps:
-    subloop-1: 
+    subloop-1:
       recipe: basic_loop
     subloop-2:
       recipe: basic_loop

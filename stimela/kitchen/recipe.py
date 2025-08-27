@@ -7,6 +7,7 @@ from collections import OrderedDict
 from collections.abc import Mapping
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
+from io import StringIO
 from typing import Any, Dict, Optional, Tuple, Union
 
 import networkx as nx
@@ -21,6 +22,7 @@ from scabha.validate import Unresolved, evaluate_and_substitute, evaluate_and_su
 from stimela import backends, log_exception, stimelogging, task_stats
 from stimela.backends import StimelaBackendSchema
 from stimela.config import EmptyDictDefault
+from stimela.display.display import display
 from stimela.exceptions import (
     AssignmentError,
     BackendError,
@@ -34,7 +36,7 @@ from stimela.exceptions import (
     StimelaStepExecutionError,
 )
 from stimela.kitchen.run_state import RunConstraints
-from stimela.stimelogging import log_rich_payload
+from stimela.stimelogging import log_rich_payload, rich_console
 
 from .cab import Cab
 from .step import Step
@@ -1108,10 +1110,11 @@ class Recipe(Cargo):
         """ "
         Needed for concurrency
         """
-        # close progress bar in subprocesses
         if subprocess:
             task_stats.add_subprocess_id(count)
-            task_stats.destroy_progress_bar()
+            # When running in a processpool, gather log messages in a string
+            # which can be returned to the parent process.
+            rich_console.file = StringIO()
         subst.info.subprocess = task_stats.get_subprocess_id()
         taskname = subst.info.taskname
         outputs = {}
@@ -1121,7 +1124,6 @@ class Recipe(Cargo):
             # if for-loop, assign new value
             if self.for_loop:
                 self.log.info(f"for loop iteration {count}: {self.for_loop.var} = {iter_var}")
-                print(f"for loop iteration {count}: {self.for_loop.var} = {iter_var}")
                 if self.for_loop.var in self.inputs_outputs:
                     params[self.for_loop.var] = iter_var
                 else:
@@ -1225,8 +1227,13 @@ class Recipe(Cargo):
             # else will be returned
             exception = exc
             tb = FormattedTraceback(sys.exc_info()[2])
+        finally:
+            if subprocess:
+                subprocess_logs = rich_console.file.getvalue()
+            else:
+                subprocess_logs = None
 
-        return task_attrs, task_kwattrs, task_stats.collect_stats(), outputs, exception, tb
+        return task_attrs, task_kwattrs, task_stats.collect_stats(), outputs, exception, tb, subprocess_logs
 
     def build(self, backend={}, rebuild=False, build_skips=False, log: Optional[logging.Logger] = None):
         # set up backend
@@ -1325,25 +1332,81 @@ class Recipe(Cargo):
 
             # if scatter is enabled, use a process pool
             if self._for_loop_scatter:
+                self.log.info(
+                    f"[yellow]Scattering recipe {self.fqname} - terminal logs "
+                    f"will appear on the completion of a scattered step. Log "
+                    f"files will be updated in real time.[/yellow]"
+                )
+
                 nloop = len(loop_worker_args)
                 if self._for_loop_scatter < 0:
                     num_workers = nloop
                 else:
                     num_workers = min(self._for_loop_scatter, nloop)
-                inital_task_status = f"0/{nloop} complete, {num_workers} workers"
-                task_stats.declare_subtask_status(inital_task_status)
+
+                # NOTE(JSKenyon): We don't actually have the runner at this
+                # point so dynamically changing the display based on the
+                # backend is problematic. The loop being run may also use
+                # different backends for each step. However, in most cases a
+                # scattered loop will be either remote (kube, slurm) or local,
+                # and not a mixture of the two. This chooses the display based
+                # on the backend config at the recipe level - step level
+                # overrides are ignored.
+                backend_opts = OmegaConf.merge(stimela.CONFIG.opts.backend, backend)
+                requested_backends = backend_opts.select
+                if isinstance(requested_backends, (list, ListConfig)):
+                    selected_backend = next(b for b in requested_backends if backend_opts[b].enable)
+                else:
+                    selected_backend = requested_backends
+
+                # TODO(JSKenyon): For now, we default to a minimal display for
+                # the kube backend when scattering. This is consistent with
+                # the behaviour prior to the addition of multiple displays.
+                # At present, the status reporter for the kube backend is not
+                # configured at this point so we cannot track all the pods
+                # running in the scattered loop.
+                if selected_backend == "kube":
+                    display_style = "slurm"
+                elif backend_opts.slurm.enable:
+                    display_style = "slurm"
+                else:
+                    display_style = "local"
+
+                # If the display is disabled at this point, it implies that we
+                # should leave it that way (may be in a child process).
+                pause_display = display.is_enabled
+                # Disable display during pool creation so that it isn't
+                # enabled in the resulting processes.
+                if pause_display:
+                    display.disable(reset_cursor=True)
                 with ProcessPoolExecutor(num_workers) as pool:
                     # submit each iterant to pool
-                    futures = [
-                        pool.submit(self._iterate_loop_worker, *args, subprocess=True, raise_exc=False)
-                        for args in loop_worker_args
-                    ]
-                    # update task stats, since they're recorded independently within each step, as well
-                    # as get any exceptions from the nesting
+                    futures = []
+                    for args in loop_worker_args:
+                        future = pool.submit(self._iterate_loop_worker, *args, subprocess=True, raise_exc=False)
+                        futures.append(future)
+
+                    # Re-enable display after pool creation.
+                    if pause_display:
+                        display.set_display_style(display_style)
+                        display.enable()
+                    # Set status on scatter subtask once display is re-enabled.
+                    task_stats.declare_subtask_status(f"0/{nloop} complete, {num_workers} workers")
+
+                    # Start a thread to monitor resource usage.
+                    monitor = task_stats.MonitorThread()
+                    monitor.start()
+
+                    # update task stats, since they're recorded independently
+                    # within each step, as well as get any exceptions from the
+                    # nested steps/recipes.
                     errors = []
                     nfail = ncomplete = 0
                     for f in as_completed(futures):
-                        attrs, kwattrs, stats, outputs, exc, tb = f.result()
+                        attrs, kwattrs, stats, outputs, exc, tb, subprocess_logs = f.result()
+                        # Print the logs associated with the completed future.
+                        # These are already timestamped by the child process.
+                        rich_console.print(subprocess_logs, soft_wrap=True)
                         task_stats.declare_subtask_attributes(*attrs, **kwattrs)
                         task_stats.add_missing_stats(stats)
                         if exc is not None:
@@ -1361,15 +1424,16 @@ class Recipe(Cargo):
                             status = f"{status}, [red]{nfail}[/red] failed"
                         status = f"{status}, {num_workers} workers"
                         task_stats.declare_subtask_status(status)
+
+                    monitor.stop()  # Stop monitoring resource usage.
+
                     if errors:
                         pool.shutdown()
                         raise StimelaRuntimeError(f"{nfail}/{nloop} jobs have failed", errors)
-                # drop a rendering of the progress bar onto the console, to overwrite previous garbage if it's there
-                task_stats.restate_progress()
             # else just iterate directly
             else:
                 for args in loop_worker_args:
-                    _, _, _, outputs, _, _ = self._iterate_loop_worker(*args, raise_exc=True)
+                    _, _, _, outputs, _, _, _ = self._iterate_loop_worker(*args, raise_exc=True)
 
             # either way, outputs contains output aliases from the last iteration
             params.update(**outputs)

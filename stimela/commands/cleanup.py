@@ -6,12 +6,11 @@ from omegaconf import OmegaConf
 import stimela
 from stimela import log_exception, logger
 from stimela.exceptions import BackendError
-from stimela.main import cli
 
 from .run import load_recipe_files
 
 
-@cli.command(
+@click.command(
     "cleanup",
     help="""
     Cleans up backend resources associated with recipe(s).

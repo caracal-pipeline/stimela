@@ -13,13 +13,11 @@ from stimela import log_exception, logger
 from stimela.exceptions import CabValidationError, RecipeValidationError
 from stimela.kitchen.cab import Cab
 from stimela.kitchen.recipe import Recipe
-from stimela.main import cli
-from stimela.task_stats import destroy_progress_bar
 
 from .run import load_recipe_files, resolve_recipe_files
 
 
-@cli.command(
+@click.command(
     "doc",
     help="""
     Print documentation on a cab or a recipe.
@@ -95,8 +93,6 @@ def doc(what: List[str] = [], do_list=False, implicit=False, obscure=False, all=
     # load config and recipes from all given files
     if files_to_load:
         top_level_recipes = load_recipe_files(files_to_load)
-
-    destroy_progress_bar()
 
     if not files_to_load:
         log.error("No YAML documents were specified")

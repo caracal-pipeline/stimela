@@ -1,10 +1,9 @@
 import click
 
 import stimela
-from stimela.main import cli
 
 
-@cli.command(
+@click.command(
     help="""Lists all known stimela images.
          """,
     short_help="list known stimela images",

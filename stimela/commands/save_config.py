@@ -5,10 +5,9 @@ import click
 from omegaconf.omegaconf import OmegaConf
 
 import stimela
-from stimela.main import cli
 
 
-@cli.command(
+@click.command(
     help="""
         With no arguments, lists stimela configuration settings. With KEY=VALUE arguments, changes the configuration
         file. Default is to change whichever configuration file was loaded (local, virtual env, or user-level).

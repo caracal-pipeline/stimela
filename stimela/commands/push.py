@@ -3,10 +3,9 @@ from typing import List
 import click
 
 import stimela
-from stimela.main import cli
 
 
-@cli.command(
+@click.command(
     help="""
         Push stimela base images. Specify a list of image names and versions (if a version is omitted, pushes all
         known versions of image), or else use --all to push everything.
