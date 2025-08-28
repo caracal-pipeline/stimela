@@ -207,7 +207,13 @@ class StatusReporter(object):
                             self.kube.debug.event_format.format(event=event), extra=dict(color=color) if color else {}
                         )
 
-    def update(self):
+    def update(self, *args):
+        """Produce a report object containing resource monitoring.
+
+        NOTE(JSKenyon): I have introduced *args in the function signature to ensure compatibility
+        with the new code in stimela.monitoring. This code should eventually be adapted to live
+        in the monitoring module and be runnable outside of a particular step.
+        """
         from . import session_user
 
         metrics = []

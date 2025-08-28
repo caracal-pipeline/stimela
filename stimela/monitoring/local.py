@@ -9,9 +9,9 @@ _child_processes = {}
 def update_children():
     """Update the module level dictionary mapping child pid to process.
 
-    This is necessary as calling Process.children will return different
-    Process objects each time. These then fail to report CPU stats unless
-    we make them block which has a large impact on performance.
+    This is necessary as calling Process.children will return different Process objects each time.
+    These then fail to report CPU stats unless we make them block which has a large impact on
+    performance.
     """
     current_children = psutil.Process().children(recursive=True)
     current_pids = {proc.pid for proc in current_children}
@@ -23,7 +23,7 @@ def update_children():
 
 
 @dataclass
-class LocalStatsReport:
+class LocalReport:
     cpu: float = 0
     mem_used: float = 0
     load_1m: float = 0
@@ -55,7 +55,7 @@ class LocalStatsReport:
 
 def local_reporter(now, task_info):
     # form up sample datum
-    local_stats = LocalStatsReport()
+    local_stats = LocalReport()
 
     # Track the child processes (and retain their Process objects).
     update_children()
