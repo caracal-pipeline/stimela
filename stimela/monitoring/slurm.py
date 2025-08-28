@@ -5,7 +5,9 @@ from dataclasses import dataclass
 # able to add some reporting using the `sacct` command - investigate.
 @dataclass
 class SlurmReport:
-    pass
+    @property
+    def profiling_results(self):
+        return vars(self)
 
 
 def slurm_reporter(now, task_info):
