@@ -15,7 +15,6 @@ from omegaconf import OmegaConf
 
 import stimela
 from scabha.basetypes import EmptyDictDefault
-from stimela.backends.slurm import SlurmOptions
 from stimela.exceptions import BackendError
 from stimela.utils.xrun_asyncio import xrun
 
@@ -478,8 +477,6 @@ def run(
         if wrapper:
             args, log_args = wrapper.wrap_run_command(args, log_args, ephem_binds=ephem_binds, fqname=fqname, log=log)
 
-        stats_mode = "slurm" if isinstance(wrapper, SlurmOptions) else None
-
         log.debug(f"command line is {' '.join(log_args)}")
 
         retcode = xrun(
@@ -493,7 +490,6 @@ def run(
             gentle_ctrl_c=True,
             log_command=" ".join(log_args),
             log_result=False,
-            stats_mode=stats_mode,
         )
 
         # check if output marked it as a fail

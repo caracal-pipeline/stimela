@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from rich.console import Group
 from rich.panel import Panel
@@ -12,7 +12,7 @@ from .base import DisplayStyle
 from .elements import status_element, timer_element
 
 if TYPE_CHECKING:
-    from stimela.task_stats import SystemStatsDatum, TaskInformation, TaskStatsDatum
+    from stimela.task_stats import TaskInformation
 
 
 class LocalDisplay(DisplayStyle):
@@ -115,28 +115,21 @@ class LocalDisplay(DisplayStyle):
 
     def update(
         self,
-        sys_stats: SystemStatsDatum,
-        task_stats: TaskStatsDatum,
         task_info: TaskInformation,
-        extra_info: Optional[object] = None,
+        report: object,
     ):
         """Updates the progress elements using the provided values.
 
         Args:
-            sys_stats:
-                An object containing the current system status.
-            task_stats:
-                An object containing the current task stats.
             task_info:
                 An object containing information about the current task.
-            extra_info:
-                A Report object containing additional information. Typically
-                used for information originating from a backend.
+            report:
+                A Report object containing resource monitoring.
         """
-        self.cpu_usage.update(self.cpu_usage_id, value=f"[green]{sys_stats.cpu}[/green]%")
+        self.cpu_usage.update(self.cpu_usage_id, value=f"[green]{report.sys_cpu}[/green]%")
 
-        used = sys_stats.mem_used
-        total = sys_stats.mem_total
+        used = report.sys_mem_used
+        total = report.sys_mem_total
         percent = (used / total) * 100
 
         self.ram_usage.update(
@@ -146,9 +139,9 @@ class LocalDisplay(DisplayStyle):
         self.system_load.update(
             self.system_load_id,
             value=(
-                f"[green]{task_stats.load_1m:.2f}[/green]%/"
-                f"[green]{task_stats.load_5m:.2f}[/green]%/"
-                f"[green]{task_stats.load_15m:.2f}[/green]% "
+                f"[green]{report.load_1m:.2f}[/green]%/"
+                f"[green]{report.load_5m:.2f}[/green]%/"
+                f"[green]{report.load_15m:.2f}[/green]% "
                 f"(1/5/15 min)"
             ),
         )
@@ -156,17 +149,17 @@ class LocalDisplay(DisplayStyle):
         self.disk_read.update(
             self.disk_read_id,
             value=(
-                f"[green]{task_stats.read_gbps:2.2f}[/green]GB/s "
-                f"[green]{task_stats.read_ms:5}[/green]ms "
-                f"[green]{task_stats.read_count:-4}[/green] reads"
+                f"[green]{report.read_gbps:2.2f}[/green]GB/s "
+                f"[green]{report.read_ms:5}[/green]ms "
+                f"[green]{report.read_count:-4}[/green] reads"
             ),
         )
         self.disk_write.update(
             self.disk_write_id,
             value=(
-                f"[green]{task_stats.write_gbps:2.2f}[/green]GB/s "
-                f"[green]{task_stats.write_ms:5}[/green]ms "
-                f"[green]{task_stats.write_count:-4}[/green] writes"
+                f"[green]{report.write_gbps:2.2f}[/green]GB/s "
+                f"[green]{report.write_ms:5}[/green]ms "
+                f"[green]{report.write_count:-4}[/green] writes"
             ),
         )
 
@@ -179,15 +172,15 @@ class LocalDisplay(DisplayStyle):
             # why the command has square brackets in the first place.
             self.task_command.update(self.task_command_id, value=f"{(task_info.command or '--').strip('([])')}")
 
-        self.task_cpu_usage.update(self.task_cpu_usage_id, value=f"[green]{task_stats.cpu:2.1f}[/green]%")
+        self.task_cpu_usage.update(self.task_cpu_usage_id, value=f"[green]{report.cpu:2.1f}[/green]%")
 
-        max_cpu = max(task_stats.cpu, self.task_maxima["task_peak_cpu_usage"])
+        max_cpu = max(report.cpu, self.task_maxima["task_peak_cpu_usage"])
         self.task_maxima["task_peak_cpu_usage"] = max_cpu
         self.task_peak_cpu_usage.update(self.task_peak_cpu_usage_id, value=f"[green]{max_cpu:2.1f}[/green]%")
 
-        self.task_ram_usage.update(self.task_ram_usage_id, value=f"[green]{task_stats.mem_used}[/green]GB")
+        self.task_ram_usage.update(self.task_ram_usage_id, value=f"[green]{report.mem_used}[/green]GB")
 
-        max_ram = max(task_stats.mem_used, self.task_maxima["task_peak_ram_usage"])
+        max_ram = max(report.mem_used, self.task_maxima["task_peak_ram_usage"])
         self.task_maxima["task_peak_ram_usage"] = max_ram
         self.task_peak_ram_usage.update(self.task_peak_ram_usage_id, value=f"[green]{max_ram}[/green]GB")
 
@@ -258,26 +251,19 @@ class SimpleLocalDisplay(DisplayStyle):
 
     def update(
         self,
-        sys_stats: SystemStatsDatum,
-        task_stats: TaskStatsDatum,
         task_info: TaskInformation,
-        extra_info: Optional[object] = None,
+        report: object,
     ):
         """Updates the progress elements using the provided values.
 
         Args:
-            sys_stats:
-                An object containing the current system status.
-            task_stats:
-                An object containing the current task stats.
             task_info:
                 An object containing information about the current task.
-            extra_info:
-                A Report object containing additional information. Typically
-                used for information originating from a backend.
+            report:
+                A Report object containing resource monitoring.
         """
-        self.disk_read.update(self.disk_read_id, value=f"[green]{task_stats.read_gbps:2.2f}[/green]GB/s")
-        self.disk_write.update(self.disk_write_id, value=f"[green]{task_stats.write_gbps:2.2f}[/green]GB/s")
+        self.disk_read.update(self.disk_read_id, value=f"[green]{report.read_gbps:2.2f}[/green]GB/s")
+        self.disk_write.update(self.disk_write_id, value=f"[green]{report.write_gbps:2.2f}[/green]GB/s")
 
         if task_info is not None:
             self.task_name.update(self.task_name_id, value=f"[bold]{task_info.description}[/bold]")
@@ -289,6 +275,6 @@ class SimpleLocalDisplay(DisplayStyle):
             # why the command has square brackets in the first place.
             self.task_command.update(self.task_command_id, value=f"{(task_info.command or '--').strip('([])')}")
 
-        self.task_cpu_usage.update(self.task_cpu_usage_id, value=f"[green]{task_stats.cpu:2.1f}[/green]%")
+        self.task_cpu_usage.update(self.task_cpu_usage_id, value=f"[green]{report.cpu:2.1f}[/green]%")
 
-        self.task_ram_usage.update(self.task_ram_usage_id, value=f"[green]{task_stats.mem_used}[/green]GB")
+        self.task_ram_usage.update(self.task_ram_usage_id, value=f"[green]{report.mem_used}[/green]GB")

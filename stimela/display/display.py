@@ -14,7 +14,7 @@ from stimela.display.styles import KubeDisplay, LocalDisplay, SimpleKubeDisplay,
 from stimela.stimelogging import rich_console
 
 if TYPE_CHECKING:
-    from stimela.task_stats import SystemStatsDatum, TaskInformation, TaskStatsDatum
+    from stimela.task_stats import TaskInformation
 
 
 class Display:
@@ -141,25 +141,18 @@ class Display:
 
     def update(
         self,
-        sys_stats: SystemStatsDatum,
-        task_stats: TaskStatsDatum,
         task_info: TaskInformation,
-        extra_info: Optional[object] = None,
+        report: object,
     ):
         """Calls the update method on current_display.
 
         Args:
-            sys_stats:
-                An object containing the current system status.
-            task_stats:
-                An object containing the current task stats.
             task_info:
                 An object containing information about the current task.
-            extra_info:
-                A Report object containing additional information. Typically
-                used for information originating from a backend.
+            report:
+                A Report object containing resource monitoring.
         """
-        return self.current_display.update(sys_stats, task_stats, task_info, extra_info)
+        return self.current_display.update(task_info, report)
 
 
 display = Display(rich_console)

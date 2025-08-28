@@ -1393,9 +1393,6 @@ class Recipe(Cargo):
                     # Set status on scatter subtask once display is re-enabled.
                     task_stats.declare_subtask_status(f"0/{nloop} complete, {num_workers} workers")
 
-                    if backend_opts.slurm.enable:
-                        task_stats.declare_subtask_stats_mode("slurm")
-
                     # Start a thread to monitor resource usage.
                     monitor = task_stats.MonitorThread()
                     monitor.start()

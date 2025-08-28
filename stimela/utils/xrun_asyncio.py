@@ -70,7 +70,6 @@ def xrun(
     gentle_ctrl_c=False,
     log_command=True,
     log_result=True,
-    stats_mode=None,
 ):
     command_name = command_name or command
 
@@ -109,8 +108,6 @@ def xrun(
 
     with task_stats.declare_subcommand(os.path.basename(command_name)) as command_context:
         start_time = datetime.datetime.now()
-
-        task_stats.declare_subtask_stats_mode(stats_mode=stats_mode)
 
         def elapsed():
             """Returns string representing elapsed time"""

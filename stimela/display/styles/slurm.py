@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from rich.progress import Progress
 from rich.table import Table
@@ -9,7 +9,7 @@ from .base import DisplayStyle
 from .elements import status_element
 
 if TYPE_CHECKING:
-    from stimela.task_stats import SystemStatsDatum, TaskInformation, TaskStatsDatum
+    from stimela.task_stats import TaskInformation
 
 
 class SimpleSlurmDisplay(DisplayStyle):
@@ -66,23 +66,16 @@ class SimpleSlurmDisplay(DisplayStyle):
 
     def update(
         self,
-        sys_stats: SystemStatsDatum,
-        task_stats: TaskStatsDatum,
         task_info: TaskInformation,
-        extra_info: Optional[object] = None,
+        report: object,
     ):
         """Updates the progress elements using the provided values.
 
         Args:
-            sys_stats:
-                An object containing the current system status.
-            task_stats:
-                An object containing the current task stats.
             task_info:
                 An object containing information about the current task.
-            extra_info:
-                A Report object containing additional information. Typically
-                used for information originating from a backend.
+            report:
+                A Report object containing resource monitoring.
         """
         if task_info is not None:
             self.task_name.update(self.task_name_id, value=f"[bold]{task_info.description}[/bold]")
