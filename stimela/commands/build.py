@@ -2,12 +2,10 @@ from typing import List, Tuple
 
 import click
 
-from stimela.main import cli
-
 from .run import run
 
 
-@cli.command(
+@click.command(
     "build",
     help="""
     Builds singularity images required by the recipe. Only available if the singularity backend is selected.

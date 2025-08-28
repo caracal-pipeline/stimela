@@ -30,7 +30,6 @@ from stimela.display.display import display
 from stimela.exceptions import RecipeValidationError, StepSelectionError, StepValidationError, StimelaRuntimeError
 from stimela.kitchen.recipe import Recipe, RecipeSchema, Step
 from stimela.kitchen.run_state import graph_to_constraints
-from stimela.main import cli
 from stimela.stimelogging import is_logging_boring
 
 
@@ -183,7 +182,7 @@ def load_recipe_files(filenames: List[str]):
     return recipe_names
 
 
-@cli.command(
+@click.command(
     "run",
     help="""
     Execute a single cab, or a recipe from a YML file.
