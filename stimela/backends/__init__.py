@@ -84,6 +84,22 @@ class StimelaBackendOptions(object):
         if self.slurm is None:
             self.slurm = SlurmOptions()
 
+    @property
+    def current_backend(self):
+        selected_backends = self.select
+        if isinstance(selected_backends, (list, ListConfig)):
+            selected_backend = next(b for b in selected_backends if getattr(self, b).enable)
+        else:
+            selected_backend = selected_backends
+        return selected_backend
+
+    @property
+    def current_wrapper(self):
+        wrapper = None
+        if getattr(self, "slurm", None):
+            wrapper = "slurm" if self.slurm.enable else None
+        return wrapper
+
 
 StimelaBackendSchema = OmegaConf.structured(StimelaBackendOptions)
 

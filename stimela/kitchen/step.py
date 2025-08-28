@@ -30,6 +30,7 @@ from stimela.exceptions import (
     StepValidationError,
     StimelaCabRuntimeError,
 )
+from stimela.monitoring import REPORTERS
 from stimela.stimelogging import log_rich_payload
 
 from .cab import Cab, get_cab_schema
@@ -388,7 +389,8 @@ class Step:
                 newexc = BackendError("error validating backend settings", exc)
                 raise newexc from None
             log.info(f"building image for step '{self.fqname}' using the {backend_runner.backend_name} backend")
-            with task_stats.declare_subtask(self.name):
+            reporter = REPORTERS[backend_opts.current_wrapper or backend_opts.current_backend]
+            with task_stats.declare_subtask(self.name, reporter):
                 return backend_runner.build(self.cargo, log=log, rebuild=rebuild)
 
     def run(
@@ -448,7 +450,8 @@ class Step:
             context = nullcontext()
             parent_log_info = parent_log_warning = parent_log.debug
         else:
-            context = task_stats.declare_subtask(self.name)
+            reporter = REPORTERS[backend_opts.current_wrapper or backend_opts.current_backend]
+            context = task_stats.declare_subtask(self.name, reporter)
             stimelogging.declare_chapter(f"{self.fqname}")
             parent_log_info, parent_log_warning = parent_log.info, parent_log.warning
 
