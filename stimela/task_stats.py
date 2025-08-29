@@ -355,9 +355,9 @@ def save_profiling_stats(log, print_depth=2, unroll_loops=False):
         if name:
             name = ".".join(name)
             avg = sum.averaged()
-            davg = {f: getattr(avg, f) for f in _taskstats_sample_names}
-            dpeak = {f: getattr(peak, f) for f in _taskstats_sample_names}
-            dsum = {f: getattr(sum, f) for f in _sum_stats}
+            davg = {f: getattr(avg, f, "--") for f in _taskstats_sample_names}
+            dpeak = {f: getattr(peak, f, "--") for f in _taskstats_sample_names}
+            dsum = {f: getattr(sum, f, "--") for f in _sum_stats}
 
             stats_dict[name] = dict(elapsed=elapsed, avg=davg, peak=dpeak, total=dsum)
 
