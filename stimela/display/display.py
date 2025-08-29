@@ -73,7 +73,7 @@ class Display:
         msg = Text("DISPLAY HAS NOT BEEN CONFIGURED", justify="center")
         msg.stylize("bold red")
 
-        self.live_display = Live(msg, refresh_per_second=5, console=self.console, transient=True)
+        self.live_display = Live(msg, refresh_per_second=2, console=self.console, transient=True)
 
         # Configure a simple, local display as the default.
         self.set_display_style(variant="simple")
