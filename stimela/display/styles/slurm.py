@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING
 from rich.progress import Progress
 from rich.table import Table
 
+from stimela.monitoring.slurm import SlurmReport
+
 from .base import DisplayStyle
 from .elements import status_element
 
@@ -67,7 +69,7 @@ class SimpleSlurmDisplay(DisplayStyle):
     def update(
         self,
         task_info: TaskInformation,
-        report: object,
+        report: SlurmReport,
     ):
         """Updates the progress elements using the provided values.
 

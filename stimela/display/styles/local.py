@@ -8,6 +8,8 @@ from rich.panel import Panel
 from rich.progress import Progress
 from rich.table import Column, Table
 
+from stimela.monitoring.local import LocalReport
+
 from .base import DisplayStyle
 from .elements import status_element, timer_element
 
@@ -116,7 +118,7 @@ class LocalDisplay(DisplayStyle):
     def update(
         self,
         task_info: TaskInformation,
-        report: object,
+        report: LocalReport,
     ):
         """Updates the progress elements using the provided values.
 
@@ -126,6 +128,20 @@ class LocalDisplay(DisplayStyle):
             report:
                 A Report object containing resource monitoring.
         """
+
+        if task_info is not None:
+            self.task_name.update(self.task_name_id, value=f"[bold]{task_info.description}[/bold]")
+
+            self.task_status.update(self.task_status_id, value=f"[dim]{task_info.status or 'running'}[/dim]")
+            # Sometimes the command contains square brackets which rich
+            # interprets as formatting. Remove them. # TODO: Figure out
+            # why the command has square brackets in the first place.
+            self.task_command.update(self.task_command_id, value=f"{(task_info.command or '--').strip('([])')}")
+
+        # Require a LocalReport to update all fields.
+        if not isinstance(report, LocalReport):
+            return
+
         self.cpu_usage.update(self.cpu_usage_id, value=f"[green]{report.sys_cpu}[/green]%")
 
         used = report.sys_mem_used
@@ -162,15 +178,6 @@ class LocalDisplay(DisplayStyle):
                 f"[green]{report.write_count:-4}[/green] writes"
             ),
         )
-
-        if task_info is not None:
-            self.task_name.update(self.task_name_id, value=f"[bold]{task_info.description}[/bold]")
-
-            self.task_status.update(self.task_status_id, value=f"[dim]{task_info.status or 'running'}[/dim]")
-            # Sometimes the command contains square brackets which rich
-            # interprets as formatting. Remove them. # TODO: Figure out
-            # why the command has square brackets in the first place.
-            self.task_command.update(self.task_command_id, value=f"{(task_info.command or '--').strip('([])')}")
 
         self.task_cpu_usage.update(self.task_cpu_usage_id, value=f"[green]{report.cpu:2.1f}[/green]%")
 
@@ -252,7 +259,7 @@ class SimpleLocalDisplay(DisplayStyle):
     def update(
         self,
         task_info: TaskInformation,
-        report: object,
+        report: LocalReport,
     ):
         """Updates the progress elements using the provided values.
 
@@ -262,9 +269,6 @@ class SimpleLocalDisplay(DisplayStyle):
             report:
                 A Report object containing resource monitoring.
         """
-        self.disk_read.update(self.disk_read_id, value=f"[green]{report.read_gbps:2.2f}[/green]GB/s")
-        self.disk_write.update(self.disk_write_id, value=f"[green]{report.write_gbps:2.2f}[/green]GB/s")
-
         if task_info is not None:
             self.task_name.update(self.task_name_id, value=f"[bold]{task_info.description}[/bold]")
 
@@ -275,6 +279,11 @@ class SimpleLocalDisplay(DisplayStyle):
             # why the command has square brackets in the first place.
             self.task_command.update(self.task_command_id, value=f"{(task_info.command or '--').strip('([])')}")
 
-        self.task_cpu_usage.update(self.task_cpu_usage_id, value=f"[green]{report.cpu:2.1f}[/green]%")
+        # Require a LocalReport to update all fields.
+        if not isinstance(report, LocalReport):
+            return
 
+        self.disk_read.update(self.disk_read_id, value=f"[green]{report.read_gbps:2.2f}[/green]GB/s")
+        self.disk_write.update(self.disk_write_id, value=f"[green]{report.write_gbps:2.2f}[/green]GB/s")
+        self.task_cpu_usage.update(self.task_cpu_usage_id, value=f"[green]{report.cpu:2.1f}[/green]%")
         self.task_ram_usage.update(self.task_ram_usage_id, value=f"[green]{report.mem_used}[/green]GB")
