@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn
+from rich.text import Text
 
 from stimela.monitoring.slurm import SlurmReport
 
@@ -50,21 +52,26 @@ class SimpleSlurmDisplay(DisplayStyle):
 
         super().__init__(run_timer)
 
-        columns = []
-        columns.append(SpinnerColumn())
-        columns.append("[yellow][bold]R[/bold][/yellow]")
-        columns.append("[yellow]{task.fields[elapsed]}[/yellow]")
-        columns.append(SpinnerColumn())
-        columns.append("[yellow][bold]S[/bold][/yellow]")
-        columns.append(TimeElapsedColumn())
-        columns.append("[bold]{task.fields[name]}[/bold]")
-        columns.append("[dim]{task.fields[status]}[/dim]")
-        columns.append("{task.fields[command]}")
+        # NOTE(JSKenyon): This display has diverged from the others as it has
+        # been optimised for minimum CPU usage.
+        self.task_elapsed = Progress(
+            SpinnerColumn(),
+            "[yellow][bold]R[/bold][/yellow]",
+            "[yellow]{task.fields[elapsed]}[/yellow]",
+            SpinnerColumn(),
+            "[yellow][bold]S[/bold][/yellow]",
+            TimeElapsedColumn(),
+            "[bold]{task.fields[name]}[/bold]",
+            "[dim]{task.fields[status]}[/dim]",
+            "{task.fields[command]}",
+            auto_refresh=False,
+            transient=True,
+        )
+        self.task_elapsed_id = self.task_elapsed.add_task(
+            "stimela", name="--", status="--", command="--", elapsed="00:00:00", start=True
+        )
 
-        self.progress = Progress(*columns, auto_refresh=False, transient=True)
-        self.progress_id = self.progress.add_task("", start=True)
-
-        self.render_target = self.progress
+        self.render_target = self.task_elapsed
 
     def update(
         self,
@@ -79,11 +86,15 @@ class SimpleSlurmDisplay(DisplayStyle):
             report:
                 A Report object containing resource monitoring.
         """
+        updates = {}
+
+        run_elapsed_task = self.run_elapsed.tasks[self.run_elapsed_id]
+        elapsed = timedelta(seconds=int(run_elapsed_task.elapsed))
+        updates["elapsed"] = Text(str(elapsed), style="progress.elapsed")
+
         if task_info is not None:
-            self.progress.update(
-                self.progress_id,
-                elapsed=0,
-                name=task_info.description,
-                status=task_info.status or "running",
-                command=(task_info.command or "--").strip("([])"),
-            )
+            updates["name"] = task_info.description
+            updates["status"] = task_info.status or "running"
+            updates["command"] = (task_info.command or "--").strip("([])")
+
+        self.task_elapsed.update(self.task_elapsed_id, **updates)
