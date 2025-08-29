@@ -74,6 +74,7 @@ class RunExecGroup(click.Group):
     help="Reset the configuration cache. First thing to try in case of strange configuration errors.",
 )
 @click.option("--simple", "-S", is_flag=True, help="Use simplified (single-line) displays.")
+@click.option("--no-progress", "-np", is_flag=True, help="Disable the progress display.")
 @click.option("--boring", "-B", is_flag=True, help="Disables progress bar and any other fancy console outputs.")
 @click.option("--verbose", "-v", is_flag=True, help="Be extra verbose in output.")
 @click.version_option(str(stimela.__version__))
@@ -85,6 +86,7 @@ def cli(
     verbose=False,
     no_sys_config=False,
     clear_cache=False,
+    no_progress=False,
     boring=False,
     simple=False,
 ):
