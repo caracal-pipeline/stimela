@@ -2,13 +2,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from rich.progress import Progress
-from rich.table import Table
+from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn
 
 from stimela.monitoring.slurm import SlurmReport
 
 from .base import DisplayStyle
-from .elements import status_element
 
 if TYPE_CHECKING:
     from stimela.task_stats import TaskInformation
@@ -52,19 +50,21 @@ class SimpleSlurmDisplay(DisplayStyle):
 
         super().__init__(run_timer)
 
-        self.run_elapsed.update(self.run_elapsed_id, description="R")
-        self.task_elapsed.update(self.task_elapsed_id, description="S")
+        columns = []
+        columns.append(SpinnerColumn())
+        columns.append("[yellow][bold]R[/bold][/yellow]")
+        columns.append("[yellow]{task.fields[elapsed]}[/yellow]")
+        columns.append(SpinnerColumn())
+        columns.append("[yellow][bold]S[/bold][/yellow]")
+        columns.append(TimeElapsedColumn())
+        columns.append("[bold]{task.fields[name]}[/bold]")
+        columns.append("[dim]{task.fields[status]}[/dim]")
+        columns.append("{task.fields[command]}")
 
-        for k, v in self.tracked_values.items():
-            status = status_element(has_description=v is not None)
-            status_id = status.add_task(v, value="--")
-            setattr(self, k, status)
-            setattr(self, f"{k}_id", status_id)
+        self.progress = Progress(*columns, auto_refresh=False, transient=True)
+        self.progress_id = self.progress.add_task("", start=True)
 
-        table = Table.grid(expand=False, padding=(0, 1))
-        table.add_row(self.run_elapsed, self.task_elapsed, self.task_name, self.task_status, self.task_command)
-
-        self.render_target = table
+        self.render_target = self.progress
 
     def update(
         self,
@@ -80,10 +80,10 @@ class SimpleSlurmDisplay(DisplayStyle):
                 A Report object containing resource monitoring.
         """
         if task_info is not None:
-            self.task_name.update(self.task_name_id, value=f"[bold]{task_info.description}[/bold]")
-
-            self.task_status.update(self.task_status_id, value=f"[dim]{task_info.status or 'running'}[/dim]")
-            # Sometimes the command contains square brackets which rich
-            # interprets as formatting. Remove them. # TODO: Figure out
-            # why the command has square brackets in the first place.
-            self.task_command.update(self.task_command_id, value=f"{(task_info.command or '--').strip('([])')}")
+            self.progress.update(
+                self.progress_id,
+                elapsed=0,
+                name=task_info.description,
+                status=task_info.status or "running",
+                command=(task_info.command or "--").strip("([])"),
+            )
