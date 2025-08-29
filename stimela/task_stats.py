@@ -14,7 +14,7 @@ from rich.text import Text
 from scabha.basetypes import EmptyListDefault
 from stimela import stimelogging
 from stimela.display.display import display, rich_console
-from stimela.monitoring.local import local_reporter
+from stimela.monitoring import empty_reporter
 
 # this is "" for the main process, ".0", ".1", for subprocesses, ".0.0" for nested subprocesses
 _subprocess_identifier = ""
@@ -56,7 +56,7 @@ _task_stack = []
 
 
 @contextlib.contextmanager
-def declare_subtask(subtask_name, status_reporter=local_reporter):
+def declare_subtask(subtask_name, status_reporter=empty_reporter):
     task_names = []
     if _task_stack:
         task_names = _task_stack[-1].names + (_task_stack[-1].task_attrs or [])
@@ -199,7 +199,7 @@ def update_process_status():
     # object which can be used here. At present, this only applies to the
     # kube backend.
     if task_info is None:
-        report = local_reporter(now, task_info)
+        report = empty_reporter(now, task_info)
     elif task_info and task_info.status_reporter:
         report = task_info.status_reporter(now, task_info)
     else:
