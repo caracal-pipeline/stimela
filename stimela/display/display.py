@@ -45,7 +45,7 @@ class Display:
         SpinnerColumn(),
         TextColumn("[yellow][bold]{task.description}[/bold][/yellow]", table_column=Column(no_wrap=True)),
         TimeElapsedColumn(),
-        refresh_per_second=2,
+        auto_refresh=False,
         transient=True,
     )
     run_elapsed_id = run_elapsed.add_task("", start=True)
