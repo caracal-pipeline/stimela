@@ -1155,9 +1155,7 @@ class Recipe(Cargo):
                 subst.info.taskname = taskname
                 # task_stats.declare_subtask_attributes(count)
                 # task_attrs = (count,)
-                # NOTE(JSKenyon): Currently this always uses the default reporter but it may be
-                # possible that we can do better. This subtask usually doesn't have much work
-                # associated with it.
+                # NOTE(JSKenyon): This uses the default dummy_reporter i.e. won't update stats.
                 context = task_stats.declare_subtask(f"({count})")
             else:
                 from contextlib import nullcontext

@@ -14,7 +14,7 @@ from rich.text import Text
 from scabha.basetypes import EmptyListDefault
 from stimela import stimelogging
 from stimela.display.display import display, rich_console
-from stimela.monitoring import empty_reporter
+from stimela.monitoring import dummy_reporter
 
 # this is "" for the main process, ".0", ".1", for subprocesses, ".0.0" for nested subprocesses
 _subprocess_identifier = ""
@@ -56,7 +56,7 @@ _task_stack = []
 
 
 @contextlib.contextmanager
-def declare_subtask(subtask_name, status_reporter=empty_reporter):
+def declare_subtask(subtask_name, status_reporter=dummy_reporter):
     task_names = []
     if _task_stack:
         task_names = _task_stack[-1].names + (_task_stack[-1].task_attrs or [])
@@ -193,13 +193,9 @@ def update_process_status():
     # elapsed time since start
     now = datetime.now()
 
-    # Call extra status reporter which should return stats which can be added
-    # to the task_stats object as well as a list of strings which can be used
-    # in the display. TODO(JSKenyon): All backends should produce a Report
-    # object which can be used here. At present, this only applies to the
-    # kube backend.
+    # Call reporter which should return stats which can be added to the task_stats object.
     if task_info is None:
-        report = empty_reporter(now, task_info)
+        report = dummy_reporter(now, task_info)
     elif task_info and task_info.status_reporter:
         report = task_info.status_reporter(now, task_info)
     else:

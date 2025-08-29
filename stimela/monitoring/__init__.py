@@ -12,11 +12,11 @@ REPORTERS = {
 
 
 @dataclass
-class EmptyReport:
+class DummyReport:
     @property
     def profiling_results(self):
         return vars(self)
 
 
-def empty_reporter(now, task_info):
-    return EmptyReport()
+def dummy_reporter(now, task_info):
+    return DummyReport()
