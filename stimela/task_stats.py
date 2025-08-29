@@ -5,7 +5,7 @@ import threading
 import time
 from dataclasses import dataclass, fields
 from datetime import datetime
-from typing import Callable, List, Optional, OrderedDict
+from typing import Callable, List, Optional, OrderedDict, Union
 
 from omegaconf import OmegaConf
 from rich.table import Table
@@ -14,7 +14,7 @@ from rich.text import Text
 from scabha.basetypes import EmptyListDefault
 from stimela import stimelogging
 from stimela.display.display import display, rich_console
-from stimela.monitoring import dummy_reporter
+from stimela.monitoring import REPORTERS
 
 # this is "" for the main process, ".0", ".1", for subprocesses, ".0.0" for nested subprocesses
 _subprocess_identifier = ""
@@ -56,11 +56,17 @@ _task_stack = []
 
 
 @contextlib.contextmanager
-def declare_subtask(subtask_name, status_reporter=dummy_reporter):
+def declare_subtask(subtask_name: str, status_reporter: Union[str, Callable] = "dummy"):
     task_names = []
     if _task_stack:
         task_names = _task_stack[-1].names + (_task_stack[-1].task_attrs or [])
     task_names.append(subtask_name)
+    if isinstance(status_reporter, str):
+        status_reporter = REPORTERS[status_reporter]
+    elif isinstance(status_reporter, Callable):
+        status_reporter = status_reporter
+    else:
+        raise TypeError(f"Expected string or callable; got {type(status_reporter)}.")
     _task_stack.append(TaskInformation(task_names, status_reporter=status_reporter))
     update_process_status()
     try:
@@ -195,7 +201,7 @@ def update_process_status():
 
     # Call reporter which should return stats which can be added to the task_stats object.
     if task_info is None:
-        report = dummy_reporter(now, task_info)
+        report = REPORTERS["dummy"](now, task_info)
     elif task_info and task_info.status_reporter:
         report = task_info.status_reporter(now, task_info)
     else:

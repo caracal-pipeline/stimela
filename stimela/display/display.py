@@ -51,8 +51,10 @@ class Display:
     run_elapsed_id = run_elapsed.add_task("", start=True)
 
     style_map = {
-        ("local", "simple"): SimpleLocalDisplay,
-        ("local", "fancy"): LocalDisplay,
+        ("native", "simple"): SimpleLocalDisplay,
+        ("native", "fancy"): LocalDisplay,
+        ("singularity", "simple"): SimpleLocalDisplay,
+        ("singularity", "fancy"): LocalDisplay,
         ("kube", "simple"): SimpleKubeDisplay,
         ("kube", "fancy"): KubeDisplay,
         ("slurm", "simple"): SimpleSlurmDisplay,
@@ -109,7 +111,7 @@ class Display:
     def is_enabled(self):
         return self.live_display.is_started
 
-    def set_display_style(self, style: str = "local", variant: str = "fancy"):
+    def set_display_style(self, style: str = "native", variant: str = "fancy"):
         """Reconfigures the display style based on the provided string.
 
         Args:

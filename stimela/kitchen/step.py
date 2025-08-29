@@ -30,7 +30,6 @@ from stimela.exceptions import (
     StepValidationError,
     StimelaCabRuntimeError,
 )
-from stimela.monitoring import REPORTERS
 from stimela.stimelogging import log_rich_payload
 
 from .cab import Cab, get_cab_schema
@@ -389,8 +388,9 @@ class Step:
                 newexc = BackendError("error validating backend settings", exc)
                 raise newexc from None
             log.info(f"building image for step '{self.fqname}' using the {backend_runner.backend_name} backend")
-            reporter = REPORTERS[backend_opts.current_wrapper or backend_opts.current_backend]
-            with task_stats.declare_subtask(self.name, reporter):
+            wrapper_or_backend = backend_opts.current_wrapper or backend_opts.current_backend
+            display.set_display_style(wrapper_or_backend)
+            with task_stats.declare_subtask(self.name, wrapper_or_backend):
                 return backend_runner.build(self.cargo, log=log, rebuild=rebuild)
 
     def run(
@@ -450,8 +450,8 @@ class Step:
             context = nullcontext()
             parent_log_info = parent_log_warning = parent_log.debug
         else:
-            reporter = REPORTERS[backend_opts.current_wrapper or backend_opts.current_backend]
-            context = task_stats.declare_subtask(self.name, reporter)
+            wrapper_or_backend = backend_opts.current_wrapper or backend_opts.current_backend
+            context = task_stats.declare_subtask(self.name, wrapper_or_backend)
             stimelogging.declare_chapter(f"{self.fqname}")
             parent_log_info, parent_log_warning = parent_log.info, parent_log.warning
 
@@ -662,12 +662,7 @@ class Step:
                 if type(self.cargo) is Recipe:
                     self.cargo._run(params, subst, backend=backend)
                 elif type(self.cargo) is Cab:
-                    if backend_runner.backend_name == "kube":
-                        display.set_display_style("kube")
-                    elif backend_runner.is_remote:
-                        display.set_display_style("slurm")
-                    else:
-                        display.set_display_style("local")
+                    display.set_display_style(backend_opts.current_wrapper or backend_opts.current_backend)
                     cabstat = backend_runner.run(
                         self.cargo, params=params, log=self.log, subst=subst, fqname=self.fqname
                     )
