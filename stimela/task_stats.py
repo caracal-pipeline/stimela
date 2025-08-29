@@ -310,7 +310,9 @@ def render_profiling_summary(stats: TaskStatsDatum, max_depth, unroll_loops=Fals
                     avg_row.append(f"{getattr(avg, f):.2f}" if hasattr(avg, f) else "--")
                     peak_row.append(f"{getattr(peak, f):.2f}" if hasattr(peak, f) else "--")
 
-            avg_row += [f"{sum.read_gb:.2f}", f"{sum.write_gb:.2f}"]
+            avg_row.append(f"{getattr(sum, 'read_gb'):.2f}" if hasattr(sum, "read_gb") else "--")
+            avg_row.append(f"{getattr(sum, 'write_gb'):.2f}" if hasattr(sum, "write_gb") else "--")
+
             table_avg.add_row(*avg_row)
             table_peak.add_row(*peak_row)
 
