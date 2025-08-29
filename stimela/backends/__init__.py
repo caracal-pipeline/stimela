@@ -96,7 +96,7 @@ class StimelaBackendOptions(object):
     @property
     def current_wrapper(self):
         wrapper = None
-        if getattr(self, "slurm", None):
+        if hasattr(self, "slurm"):
             wrapper = "slurm" if self.slurm.enable else None
         return wrapper
 
