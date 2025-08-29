@@ -291,8 +291,10 @@ def render_profiling_summary(stats: TaskStatsDatum, max_depth, unroll_loops=Fals
             table_avg.add_column(label, justify="right")
             table_peak.add_column(label, justify="right")
 
-    table_avg.add_column("R GB", justify="right")
-    table_avg.add_column("W GB", justify="right")
+    if "read_gb" in available_stats:
+        table_avg.add_column("R GB", justify="right")
+    if "write_gb" in available_stats:
+        table_avg.add_column("W GB", justify="right")
 
     for name_tuple, (elapsed, sum, peak) in stats.items():
         if name_tuple and len(name_tuple) <= max_depth and elapsed > 0:
