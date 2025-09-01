@@ -64,6 +64,13 @@ def validate_backend_settings(backend_opts: Dict[str, Any], log: logging.Logger)
 
     is_remote = is_remote_fs = backend.is_remote()
 
+    if backend_opts.ssh.enable:
+        wrapper = backend_opts.ssh
+        is_remote = True
+        is_remote_fs = True
+    else:
+        wrapper = None
+
     # check if slurm wrapper is to be applied
     if backend_opts.slurm.enable:
         if is_remote:
@@ -72,9 +79,6 @@ def validate_backend_settings(backend_opts: Dict[str, Any], log: logging.Logger)
         is_remote_fs = False
         backend_opts.slurm.validate(log)
         wrapper = backend_opts.slurm
-    # otherwise use empty wrapper
-    else:
-        wrapper = None
 
     return BackendRunner(
         opts=backend_opts,

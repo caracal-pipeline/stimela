@@ -14,6 +14,7 @@ from .kube import KubeBackendOptions
 from .native import NativeBackendOptions
 from .singularity import SingularityBackendOptions
 from .slurm import SlurmOptions
+from .ssh import SSHOptions
 
 ## left as memo to self
 # Backend = Enum("Backend", "docker singularity podman kubernetes native", module=__name__)
@@ -57,6 +58,7 @@ class StimelaBackendOptions(object):
     native: Optional[NativeBackendOptions] = EmptyClassDefault(NativeBackendOptions)
     docker: Optional[Dict] = None  # placeholder for future impl
     slurm: Optional[SlurmOptions] = EmptyClassDefault(SlurmOptions)
+    ssh: Optional[SSHOptions] = EmptyClassDefault(SSHOptions)
 
     ## Resource limits applied during run -- see resource module
     rlimits: Dict[str, Any] = EmptyDictDefault()
@@ -83,6 +85,8 @@ class StimelaBackendOptions(object):
             self.kube = KubeBackendOptions()
         if self.slurm is None:
             self.slurm = SlurmOptions()
+        if self.ssh is None:
+            self.ssh = SSHOptions()
 
 
 StimelaBackendSchema = OmegaConf.structured(StimelaBackendOptions)
