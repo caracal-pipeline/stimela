@@ -37,6 +37,8 @@ class StimelaLogConfig(object):
 
     level: str = "INFO"  # level at which we log
 
+    messy: bool = False  # allow messy logging i.e. logging from multiple subprocesses simultaneously
+
 
 ## overall Stimela config schema
 
