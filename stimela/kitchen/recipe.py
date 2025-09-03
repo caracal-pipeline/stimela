@@ -1333,11 +1333,13 @@ class Recipe(Cargo):
 
             # if scatter is enabled, use a process pool
             if self._for_loop_scatter:
-                self.log.info(
-                    f"[yellow]Scattering recipe {self.fqname} - terminal logs "
-                    f"will appear on the completion of a scattered step. Log "
-                    f"files will be updated in real time.[/yellow]"
-                )
+                if not self.logopts.messy:
+                    self.log.info(
+                        f"[yellow]Scattering recipe '{self.fqname}' - terminal logs will appear "
+                        f"upon completion of a scattered step. Log files will be updated in real "
+                        f"time. Set opts.log.messy: true in your config to allow real time logging "
+                        f"from scattered processes.[/yellow]"
+                    )
 
                 nloop = len(loop_worker_args)
                 if self._for_loop_scatter < 0:
