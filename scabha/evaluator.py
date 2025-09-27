@@ -196,7 +196,7 @@ class FunctionHandler(ResultsHandler):
             raise FormulaError(f"{'.'.join(evaluator.location)}: VALID() expects one argument, got {len(args)}")
         try:
             result = evaluator._evaluate_result(args[0], allow_unset=True)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, IndexError):
             return False
         if isinstance(result, Unresolved):
             return False
