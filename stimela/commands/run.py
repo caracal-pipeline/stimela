@@ -232,7 +232,7 @@ def load_recipe_files(filenames: List[str]):
 @click.option("--slurm", "enable_slurm", is_flag=True,
                 help="""Enables the slurm backend wrapper (shortcut for -C backend.slurm.enable=True)""")
 @click.option("-dc", "--dump-config", is_flag=True,
-                help="""Dump the equivalent stimela config to a file""")
+                help="""Dump the full stimela config to dump-config.yaml in the logs directory""")
 @click.option("-pf", "--parameter-file", metavar="filename.yml", multiple=True,
               help="""Use parameter values from the sepcified parameter file. These have lower precedence than
               PARAM=VALUE specified on the CLI.""")
@@ -401,6 +401,11 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
             log_available_runnables()
         sys.exit(2)
 
+    if dump_config:
+        filename = os.path.join(stimelogging.LOG_DIR, "dump-config.yaml")
+        log.info(f"recipe config will be saved under {filename}")
+        OmegaConf.save(stimela.CONFIG, f=filename)
+
     # are we running a standalone cab?
     if cab_name is not None:
         # create step config by merging in settings (var=value pairs from the command line)
@@ -520,11 +525,6 @@ def run(parameters: List[str] = [], dump_config: bool = False, dry_run: bool = F
         log.debug("---------- prevalidated step follows ----------")
         for line in outer_step.summary(params=params):
             log.debug(line)
-
-    if dump_config:
-        filename = os.path.join(logdir, "stimela.recipe.config.yaml")
-        log.info(f"recipe config will be saved under {filename}")
-        OmegaConf.save(stimela.CONFIG, f=filename)
 
     if dry_run:
         log.info("dry run was requested, exiting")

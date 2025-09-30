@@ -78,4 +78,5 @@ class SlurmOptions(object):
         #     if not set(self.srun_opts.keys()).intersection(self.required_mem_opts):
         #         self.srun_opts['mem'] = self.default_mem_opt
 
+
 SlurmOptionsSchema = OmegaConf.structured(SlurmOptions)
