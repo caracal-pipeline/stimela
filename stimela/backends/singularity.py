@@ -1,45 +1,53 @@
-import subprocess
-import os
+import datetime
 import logging
+import os
 import pathlib
 import shutil
-from tempfile import mkdtemp
+import subprocess
 from contextlib import ExitStack
-from enum import Enum
-import stimela
-from shutil import which
 from dataclasses import dataclass
+from enum import Enum
+from shutil import which
+from tempfile import mkdtemp
+from typing import Any, Dict, Optional, Union
+
 from omegaconf import OmegaConf
-from typing import Dict, Any, Optional, Union
+
+import stimela
 from scabha.basetypes import EmptyDictDefault
-import datetime
-from stimela.utils.xrun_asyncio import xrun
 from stimela.exceptions import BackendError
+from stimela.utils.xrun_asyncio import xrun
+
 from . import native
 
 ReadWrite = Enum("BindMode", "ro rw", module=__name__)
+
 
 @dataclass
 class SingularityBackendOptions(object):
     @dataclass
     class BindDir(object):
-        host: Optional[str] = None      # host path, default uses label, or else "empty" for tmpdir or "shm" for shm tmpdir
-        target: Optional[str] = None    # container path: ==host by default
+        host: Optional[str] = None  # host path, default uses label, or else "empty" for tmpdir or "shm" for shm tmpdir
+        target: Optional[str] = None  # container path: ==host by default
         mode: ReadWrite = "rw"
-        mkdir: bool = False             # create host directory if it doesn't exist
-        conditional: Union[bool, str] = True # bind conditionally (will be formula-evaluated)
+        mkdir: bool = False  # create host directory if it doesn't exist
+        conditional: Union[bool, str] = True  # bind conditionally (will be formula-evaluated)
 
     enable: bool = True
     image_dir: str = os.path.expanduser("~/.singularity")
     auto_build: bool = True
     rebuild: bool = False
     executable: Optional[str] = None
-    remote_only: bool = False         # if True, won't look for singularity on local system -- useful in combination with slurm wrapper
+    remote_only: bool = (
+        False  # if True, won't look for singularity on local system -- useful in combination with slurm wrapper
+    )
 
-    contain: bool = True              # if True, runs with --contain
-    containall: bool = False          # if True, runs with --containall
-    bind_tmp: Union[bool, str] = True # binds /tmp to "tmp" class if True. If string, uses specified ephemeral storage class (e.g. "ram")
-    clean_tmp: bool = True            # if False, temporary directories will not be cleaned up. Useful for debugging.
+    contain: bool = True  # if True, runs with --contain
+    containall: bool = False  # if True, runs with --containall
+    bind_tmp: Union[bool, str] = (
+        True  # binds /tmp to "tmp" class if True. If string, uses specified ephemeral storage class (e.g. "ram")
+    )
+    clean_tmp: bool = True  # if False, temporary directories will not be cleaned up. Useful for debugging.
 
     # optional extra bindings
     bind_dirs: Dict[str, BindDir] = EmptyDictDefault()
@@ -60,6 +68,7 @@ _rebuilt_images = set()
 
 class CustomTemporaryDirectory(object):
     """Custom context manager for tempfile.mkdtemp()."""
+
     def __init__(self, clean_up=True, dir=None):
         self.name = mkdtemp(dir=dir)
         self.clean_up = clean_up  # Workaround for < Python3.12
@@ -88,20 +97,24 @@ def is_available(opts: Optional[SingularityBackendOptions] = None):
                 #     suffix = ".sif"
             else:
                 STATUS = "not installed"
-                VERSION = None    
+                VERSION = None
     return VERSION is not None
+
 
 def get_status():
     is_available()
     return STATUS
 
+
 def is_remote():
     return False
 
-def init(backend: 'stimela.backend.StimelaBackendOptions', log: logging.Logger):
+
+def init(backend: "stimela.backend.StimelaBackendOptions", log: logging.Logger):
     pass
 
-def get_image_info(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBackendOptions'):
+
+def get_image_info(cab: "stimela.kitchen.cab.Cab", backend: "stimela.backend.StimelaBackendOptions"):
     """returns image name/path corresponding to cab
 
     Args:
@@ -109,7 +122,8 @@ def get_image_info(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.Sti
         backend (stimela.backend.StimelaBackendOptions): _description_
 
     Returns:
-        name, path, enable_update: tuple of docker image name, path to singularity image on disk, and enable-updates flag
+        name, path, enable_update: tuple of docker image name, path to singularity image on disk, and
+            enable-updates flag
     """
 
     # prebuilt image
@@ -123,17 +137,22 @@ def get_image_info(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.Sti
 
     if not image_name:
         raise BackendError(f"cab '{cab.name}' does not define an image")
-    
+
     # convert to filename
     simg_name = image_name.replace("/", "-") + ".simg"
-    simg_path = os.path.join(backend.singularity.image_dir, simg_name) 
+    simg_path = os.path.join(backend.singularity.image_dir, simg_name)
 
     return image_name, simg_path
 
 
-def build(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBackendOptions', log: logging.Logger,
-            wrapper: Optional['stimela.backend.runner.BackendWrapper']=None,
-            build=True, rebuild=False):
+def build(
+    cab: "stimela.kitchen.cab.Cab",
+    backend: "stimela.backend.StimelaBackendOptions",
+    log: logging.Logger,
+    wrapper: Optional["stimela.backend.runner.BackendWrapper"] = None,
+    build=True,
+    rebuild=False,
+):
     """Builds image for cab, if necessary.
 
     build: if True, build missing images regardless of backend settings
@@ -156,17 +175,17 @@ def build(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBacke
     image_name, simg_path = get_image_info(cab, backend)
 
     # this is True if we're allowed to build missing images
-    build = build or rebuild or backend.singularity.auto_build   
+    build = build or rebuild or backend.singularity.auto_build
     # this is True if we're asked to force-rebuild images
     rebuild = rebuild or backend.singularity.rebuild
-    
+
     cached_image_exists = os.path.exists(simg_path)
 
     # no image? Better have builds enabled then
     if not cached_image_exists:
         log.info(f"singularity image {simg_path} does not exist")
         if not build:
-            raise BackendError(f"no image, and singularity build options not enabled")
+            raise BackendError("no image, and singularity build options not enabled")
     # else we have an image
     # if rebuild is enabled, delete it
     elif rebuild:
@@ -174,14 +193,14 @@ def build(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBacke
             log.info(f"singularity image {simg_path} was rebuilt earlier")
         else:
             log.info(f"singularity image {simg_path} exists but a rebuild was specified")
-            os.unlink(simg_path)        
+            os.unlink(simg_path)
             cached_image_exists = False
     else:
         log.info(f"singularity image {simg_path} exists")
 
     ## OMS: taking this out for now, need some better auto-update logic, let's come back to it later
     ## Please retain the code for now
-        
+
     # # else check if it need to be auto-updated
     # elif auto_update_allowed and backend.singularity.auto_update:
     #     if image_name in _auto_updated_images:
@@ -191,18 +210,21 @@ def build(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBacke
     #         # force check of docker binary
     #         docker.is_available()
     #         if docker.BINARY is None:
-    #             log.warn("a docker runtime is required for auto-update of singularity images: forcing unconditional rebuild")
+    #             log.warn(
+    #                 "a docker runtime is required for auto-update of singularity images: "
+    #                 "forcing unconditional rebuild"
+    #             )
     #             build = True
     #         else:
     #             log.info("singularity auto-update: pulling and inspecting docker image")
     #             # pull image from hub
-    #             retcode = xrun(docker.BINARY, ["pull", image_name], 
+    #             retcode = xrun(docker.BINARY, ["pull", image_name],
     #                         shell=False, log=log,
-    #                             return_errcode=True, command_name="(docker pull)", 
-    #                             log_command=True, 
+    #                             return_errcode=True, command_name="(docker pull)",
+    #                             log_command=True,
     #                             log_result=True)
     #             if retcode != 0:
-    #                 raise BackendError(f"docker pull failed with return code {retcode}") 
+    #                 raise BackendError(f"docker pull failed with return code {retcode}")
     #             if os.path.exists(simg_path):
     #                 # check timestamp
     #                 result = subprocess.run(
@@ -228,7 +250,7 @@ def build(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBacke
 
     #                 if dt.timestamp() > os.path.getmtime(simg_path):
     #                     log.warn("docker image is newer than cached singularity image, rebuilding")
-    #                     os.unlink(simg_path)        
+    #                     os.unlink(simg_path)
     #                     cached_image_exists = False
     #                 else:
     #                     log.info("cached singularity image appears to be up-to-date")
@@ -243,29 +265,38 @@ def build(cab: 'stimela.kitchen.cab.Cab', backend: 'stimela.backend.StimelaBacke
         if wrapper:
             args, log_args = wrapper.wrap_build_command(args, log=log)
 
-        retcode = xrun(args[0], args[1:], shell=False, log=log,
-                    return_errcode=True, command_name="(singularity build)", 
-                    gentle_ctrl_c=True,
-                    log_command=' '.join(log_args), 
-                    log_result=True)
+        retcode = xrun(
+            args[0],
+            args[1:],
+            shell=False,
+            log=log,
+            return_errcode=True,
+            command_name="(singularity build)",
+            gentle_ctrl_c=True,
+            log_command=" ".join(log_args),
+            log_result=True,
+        )
 
         if retcode:
             raise BackendError(f"singularity build returns {retcode}")
 
         if not os.path.exists(simg_path):
-            raise BackendError(f"singularity build did not return an error code, but the image did not appear")
-        
+            raise BackendError("singularity build did not return an error code, but the image did not appear")
+
         _rebuilt_images.add(simg_path)
-        
+
     return simg_path
 
 
-
-def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
-        backend: 'stimela.backend.StimelaBackendOptions',
-        log: logging.Logger, subst: Optional[Dict[str, Any]] = None,
-        wrapper: Optional['stimela.backends.runner.BackendWrapper'] = None):
-
+def run(
+    cab: "stimela.kitchen.cab.Cab",
+    params: Dict[str, Any],
+    fqname: str,
+    backend: "stimela.backend.StimelaBackendOptions",
+    log: logging.Logger,
+    subst: Optional[Dict[str, Any]] = None,
+    wrapper: Optional["stimela.backends.runner.BackendWrapper"] = None,
+):
     """Runs cab contents
 
     Args:
@@ -283,11 +314,9 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
     # get path to image, rebuilding if backend options allow this
     simg_path = build(cab, backend=backend, log=log, build=False, wrapper=wrapper)
 
-    # build up command line    
+    # build up command line
     cwd = os.getcwd()
-    args = [backend.singularity.executable or BINARY, 
-            "exec", 
-            "--pwd", cwd]
+    args = [backend.singularity.executable or BINARY, "exec", "--pwd", cwd]
     if backend.singularity.containall:
         args.append("--containall")
     elif backend.singularity.contain:
@@ -306,7 +335,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
         ephem_classes["tmp"] = "/tmp"
     ephem_binds = {}
 
-    with ExitStack() as exit_stack: 
+    with ExitStack() as exit_stack:
         # add extra binds
         for label, bind in backend.singularity.bind_dirs.items():
             # skip if conditional is False
@@ -322,7 +351,10 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
             # handle binding of ephemeral dirs
             if bind.host == "empty":
                 if "tmp" not in ephem_classes:
-                    raise BackendError(f"bind_dirs.{label}: deprecated 'host: empty' setting requires that a 'tmp' ephemeral storage class be defined")
+                    raise BackendError(
+                        f"bind_dirs.{label}: deprecated 'host: empty' setting requires that a 'tmp' ephemeral storage "
+                        f"class be defined"
+                    )
                 bind.host = "ephemeral:tmp"
             ephem_class = bind.host.startswith("ephemeral:")
             if ephem_class or bind.host == "ephemeral":
@@ -331,9 +363,11 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                 target = os.path.expanduser(bind.target)
                 # parse storage class specification, if given
                 if ephem_class:
-                    ephem_class = bind.host.split(':', 1)[1]
+                    ephem_class = bind.host.split(":", 1)[1]
                     if ephem_class not in ephem_classes:
-                        raise BackendError(f"bind_dirs.{label}: class '{ephem_class}' not present in 'singularity.ephemeral' section")
+                        raise BackendError(
+                            f"bind_dirs.{label}: class '{ephem_class}' not present in 'singularity.ephemeral' section"
+                        )
                     else:
                         ephem_target = ephem_classes[ephem_class]
                 else:
@@ -355,7 +389,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                 if os.path.exists(src) and os.path.realpath(src) != src:
                     src = os.path.realpath(src)
                     log.info(f"bind_dirs.{label}: binding symlink target {src}")
-                
+
                 # make directory if needed
                 if bind.mkdir:
                     # I think files can be bound too, so only do this check for directories
@@ -369,7 +403,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                             raise BackendError(f"bind_dirs.{label}: error creating directory {bind.host}", exc)
                 elif not os.path.exists(src):
                     raise BackendError(f"bind_dirs.{label}: host path '{src}' does not exist")
-                
+
                 # if already present in mounts, potentially upgrade to rw
                 mounts[src] = mounts.get(src, False) or rw
                 # if paths different, create a remapping
@@ -411,9 +445,9 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
                     mounts.append(("/tmp", tmpdir_name, True))
 
         # sort mount paths before iterating -- this ensures that parent directories come first
-        # (singularity doesn't like it if you specify a bind of a subdir before a bind of a parent) 
+        # (singularity doesn't like it if you specify a bind of a subdir before a bind of a parent)
         for dest, src, rw in sorted(mounts):
-            mode = 'rw' if rw else 'ro'
+            mode = "rw" if rw else "ro"
             if src == dest:
                 log.info(f"binding {src} as {mode}")
             else:
@@ -433,9 +467,10 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
         # run command
         start_time = datetime.datetime.now()
+
         def elapsed(since=None):
             """Returns string representing elapsed time"""
-            return str(datetime.datetime.now() - (since or start_time)).split('.', 1)[0]
+            return str(datetime.datetime.now() - (since or start_time)).split(".", 1)[0]
 
         # log.info(f"argument lengths are {[len(a) for a in args]}")
 
@@ -444,12 +479,18 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
         log.debug(f"command line is {' '.join(log_args)}")
 
-        retcode = xrun(args[0], args[1:], shell=False, log=log,
-                    output_wrangler=cabstat.apply_wranglers,
-                    return_errcode=True, command_name=command_name, 
-                    gentle_ctrl_c=True,
-                    log_command=' '.join(log_args), 
-                    log_result=False)
+        retcode = xrun(
+            args[0],
+            args[1:],
+            shell=False,
+            log=log,
+            output_wrangler=cabstat.apply_wranglers,
+            return_errcode=True,
+            command_name=command_name,
+            gentle_ctrl_c=True,
+            log_command=" ".join(log_args),
+            log_result=False,
+        )
 
         # check if output marked it as a fail
         if cabstat.success is False:
@@ -468,7 +509,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 #     pass
 
 # def pull(image, name, docker=True, directory=".", force=False):
-#     """ 
+#     """
 #         pull an image
 #     """
 #     if docker:
@@ -480,10 +521,13 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 
 #     image_path = os.path.abspath(os.path.join(directory, name))
 #     if os.path.exists(image_path) and not force:
-#         stimela.logger().info(f"Singularity image already exists at '{image_path}'. To replace it, please re-run with the 'force' option")
+#         stimela.logger().info(
+#             f"Singularity image already exists at '{image_path}'. "
+#             f"To replace it, please re-run with the 'force' option"
+#         )
 #     else:
-#         utils.xrun(f"cd {directory} && singularity", ["pull", 
-#         	"--force" if force else "", "--name", 
+#         utils.xrun(f"cd {directory} && singularity", ["pull",
+#         	"--force" if force else "", "--name",
 #          	name, fp])
 
 #     return 0
@@ -537,7 +581,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 #                     "in container {2}".format(key, value, self.name))
 #         self.environs.append("=".join([key, value]))
 #         key_ = f"SINGULARITYENV_{key}"
-	
+
 #         self.logger.debug(f"Setting singularity environmental variable {key_}={value} on host")
 #         self._env[key_] = value
 
@@ -561,7 +605,7 @@ def run(cab: 'stimela.kitchen.cab.Cab', params: Dict[str, Any], fqname: str,
 #         self.status = "running"
 #         self._print("Starting container [{0:s}]. Timeout set to {1:d}. The container ID is printed below.".format(
 #             self.name, self.time_out))
-        
+
 #         utils.xrun(f"cd {self.execdir} && singularity", ["run", "--workdir", self.execdir, "--containall"] \
 
 #                     + list(args) + [volumes, self.image, self.RUNSCRIPT],

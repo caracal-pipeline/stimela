@@ -1,25 +1,41 @@
 import dataclasses
-import warnings
-import re, importlib
+import importlib
+import re
 import traceback
+
+# Imports of typing and scabha.basetypes needed for calling eval on arbitrary type strings.
+import typing
+import warnings
 from collections import OrderedDict
-from enum import IntEnum
 from dataclasses import dataclass
-from omegaconf import ListConfig, DictConfig, OmegaConf
+from enum import IntEnum
+from typing import Any, Dict, List, Optional
 
 import rich.box
 import rich.markup
-from rich.table import Table
+from omegaconf import DictConfig, ListConfig, OmegaConf
 from rich.markdown import Markdown
+from rich.table import Table
 
-from .exceptions import ParameterValidationError, DefinitionError, SchemaError, AssignmentError, \
-                        StimelaDeprecationWarning, StimelaPendingDeprecationWarning
-from .validate import validate_parameters, Unresolved
+from scabha import basetypes
+from scabha.basetypes import (
+    UNSET,
+    EmptyClassDefault,
+    EmptyDictDefault,
+    EmptyListDefault,
+    is_file_list_type,
+    is_file_type,
+)
+
+from .exceptions import (
+    AssignmentError,
+    DefinitionError,
+    ParameterValidationError,
+    SchemaError,
+    StimelaPendingDeprecationWarning,
+)
 from .substitutions import SubstitutionNS
-
-# need * imports from both to make eval(self.dtype, globals()) work
-from typing import *
-from .basetypes import *
+from .validate import Unresolved, validate_parameters
 
 ## almost supported by omegaconf, see https://github.com/omry/omegaconf/issues/144, for now just use Any
 ListOrString = Any
@@ -33,12 +49,14 @@ _UNSET_DEFAULT = "<UNSET DEFAULT VALUE>"
 
 warnings.simplefilter("default", category=StimelaPendingDeprecationWarning)
 
+
 @dataclass
 class ParameterPolicies(object):
     """This class describes policies that determine how a Parameter is turned into
     cab arguments. Most policies refer to how command-line arguments are formed up,
     although some also apply to Python callable cabs.
     """
+
     # if true, parameter is passed as key=value, not command line option
     key_value: Optional[bool] = None
     # if true, value is passed as a positional argument, not an option
@@ -96,9 +114,11 @@ class ParameterPolicies(object):
     # if not set, missing parameters are not passed at all
     pass_missing_as_none: Optional[bool] = None
 
-@dataclass 
+
+@dataclass
 class PathPolicies(object):
     """This class describes policies for paths"""
+
     # if true, creates parent directories of output
     mkdir_parent: bool = True
     # if True, and parameter is a path, access to its parent directory is required
@@ -108,21 +128,25 @@ class PathPolicies(object):
     # If True, and the output exists, remove before running
     remove_if_exists: bool = False
 
+
 # This is used to classify parameters, for cosmetic and help purposes.
 # Usually set automatically based on whether a parameter is required, whether a default is provided, etc.
-ParameterCategory = IntEnum("ParameterCategory",
-                            dict(Required=0, Optional=1, Implicit=2, Obscure=3, Hidden=4),
-                            module=__name__)
+ParameterCategory = IntEnum(
+    "ParameterCategory", dict(Required=0, Optional=1, Implicit=2, Obscure=3, Hidden=4), module=__name__
+)
+
 
 @dataclass
 class Parameter(object):
     """Parameter (of cab or recipe)"""
+
     info: str = ""
     # for input parameters, this flag indicates a read-write (aka input-output aka mixed-mode) parameter e.g. an MS
     writable: bool = False
     # data type
     dtype: str = "str"
-    # specifies that the value is implicitly set inside the step (i.e. not a free parameter). Typically used with filenames
+    # specifies that the value is implicitly set inside the step (i.e. not a free parameter).
+    # Typically used with filenames,
     implicit: Any = None
     # optonal list of arbitrary tags, used to group parameters
     tags: List[str] = EmptyListDefault()
@@ -133,7 +157,7 @@ class Parameter(object):
     required: Optional[bool] = None
 
     # restrict value choices, i.e. making for an option-type parameter
-    choices:  Optional[List[Any]] = ()
+    choices: Optional[List[Any]] = ()
 
     # for List or Dict-type parameters, restict values of list elements or dict entries to a list of choices
     element_choices: Optional[List[Any]] = None
@@ -141,13 +165,13 @@ class Parameter(object):
     # default value
     default: Any = _UNSET_DEFAULT
 
-    # list of aliases for this parameter (i.e. references to other parameters whose schemas/values this parameter shares)
+    # list of aliases for this parameter (references to other parameters whose schemas/values this parameter shares)
     aliases: Optional[List[str]] = ()
 
     # if true, create empty directory for the output itself, if it doesn't exist
     # will probably be deprecated in favour of path_policies.mkdir in the future
     mkdir: bool = False
-    # additional policies related to path-type inputs and outputs 
+    # additional policies related to path-type inputs and outputs
     path_policies: PathPolicies = EmptyClassDefault(PathPolicies)
 
     # these are deprecated in favour of path_policies
@@ -160,7 +184,8 @@ class Parameter(object):
     # May be deprecated in favour of path_policies.must_exist in the future
     must_exist: Optional[bool] = None
 
-    # for file and dir-type parameters: if True, ignore them when making processing logic decisions based on file freshness
+    # for file and dir-type parameters: if True, ignore them when making processing logic decisions based
+    # on file freshness
     skip_freshness_checks: Optional[bool] = None
 
     # if command-line option for underlying binary has a different name, specify it here
@@ -197,6 +222,7 @@ class Parameter(object):
             elif value is _UNSET_DEFAULT:
                 return UNSET
             return value
+
         self.default = natify(self.default)
         self.choices = natify(self.choices)
 
@@ -205,27 +231,33 @@ class Parameter(object):
             warnings.warn(  # deprecated parameter definition
                 "the remove_if_exists parameter property will be deprecated "
                 "in favour of path_policies.remove_if_exists in a future release",
-                StimelaPendingDeprecationWarning, stacklevel=0)
+                StimelaPendingDeprecationWarning,
+                stacklevel=0,
+            )
             self.path_policies.remove_if_exists = self.remove_if_exists
         if self.access_parent_dir is not None:
             warnings.warn(  # deprecated parameter definition
                 "the access_parent_dir parameter property will be deprecated "
                 "in favour of path_policies.access_parent in a future release",
-                StimelaPendingDeprecationWarning, stacklevel=0)
+                StimelaPendingDeprecationWarning,
+                stacklevel=0,
+            )
             self.path_policies.access_parent = self.access_parent_dir
         if self.write_parent_dir is not None:
             warnings.warn(  # deprecated parameter definition
                 "the write_parent_dir parameter property will be deprecated "
                 "in favour of path_policies.write_parent in a future release",
-                StimelaPendingDeprecationWarning, stacklevel=0)
+                StimelaPendingDeprecationWarning,
+                stacklevel=0,
+            )
             self.path_policies.write_parent = self.write_parent_dir
 
-        # converts string dtype into proper type object
-        # yes I know eval() is naughty but this is the best we can do for now
-        # see e.g. https://stackoverflow.com/questions/67500755/python-convert-type-hint-string-representation-from-docstring-to-actual-type-t
+        # Converts string dtype into proper type object.
+        # NOTE(o-smirnov): yes I know eval() is naughty but this is the best we can do for now see e.g.
+        # https://stackoverflow.com/questions/67500755/python-convert-type-hint-string-representation-from-docstring-to-actual-type-t
         # The alternative is a non-standard API call i.e. typing._eval_type()
         try:
-            self._dtype = eval(self.dtype, globals())
+            self._dtype = eval(self.dtype, vars(typing) | vars(basetypes))
         except Exception as exc:
             raise SchemaError(f"'{self.dtype}' is not a valid dtype", exc)
 
@@ -268,29 +300,31 @@ class Parameter(object):
         """True if parameter is a named file or directory output"""
         return self.is_output and self.is_file_type and not self.implicit
 
+
 ParameterSchema = OmegaConf.structured(Parameter)
 
 ParameterFields = set(f.name for f in dataclasses.fields(Parameter))
 
+
 @dataclass
 class Cargo(object):
-    name: Optional[str] = None                    # cab name (if None, use image or command name)
-    fqname: Optional[str] = None                  # fully-qualified name (recipe_name.step_label.etc.etc.)
+    name: Optional[str] = None  # cab name (if None, use image or command name)
+    fqname: Optional[str] = None  # fully-qualified name (recipe_name.step_label.etc.etc.)
 
-    info: Optional[str] = None                    # help string
+    info: Optional[str] = None  # help string
 
-    extra_info: Dict[str, str] = EmptyDictDefault() # optional, additional help sections
+    extra_info: Dict[str, str] = EmptyDictDefault()  # optional, additional help sections
 
     # schemas are postentially nested (dicts of dicts), which omegaconf doesn't quite recognize,
     # (or in my ignorance I can't specify it -- in any case Union support is weak), so do a dict to Any
     # "Leaf" elements of the nested dict must be Parameters
-    inputs: Dict[str, Any]   = EmptyDictDefault()
-    outputs: Dict[str, Any]  = EmptyDictDefault()
+    inputs: Dict[str, Any] = EmptyDictDefault()
+    outputs: Dict[str, Any] = EmptyDictDefault()
     defaults: Dict[str, Any] = EmptyDictDefault()
 
-    backend: Optional[str] = None                 # backend, if not default
+    backend: Optional[str] = None  # backend, if not default
 
-    dynamic_schema: Optional[str] = None          # function to call to augment inputs/outputs dynamically
+    dynamic_schema: Optional[str] = None  # function to call to augment inputs/outputs dynamically
 
     @staticmethod
     def flatten_schemas(io_dest, io, label, prefix=""):
@@ -306,21 +340,22 @@ class Cargo(object):
                     if value.endswith('"') and '"' in value[:-1]:
                         value, info, _ = value.rsplit('"', 2)
                         value = value.strip()
-                        schema['info'] = info
+                        schema["info"] = info
                     # does value contain "="? Parse it as "type = default" then
                     if "=" in value:
-                        value, default  = value.split("=", 1)
+                        value, default = value.split("=", 1)
                         value = value.strip()
                         default = default.strip()
-                        if (default.startswith('"') and default.endswith('"')) or \
-                        (default.startswith("'") and default.endswith("'")):
+                        if (default.startswith('"') and default.endswith('"')) or (
+                            default.startswith("'") and default.endswith("'")
+                        ):
                             default = default[1:-1]
-                        schema['default'] = default
+                        schema["default"] = default
                     # does value end with "*"? Mark as required
                     elif value.endswith("*"):
-                        schema['required'] = True
+                        schema["required"] = True
                         value = value[:-1]
-                    schema['dtype'] = value
+                    schema["dtype"] = value
                     io_dest[name] = Parameter(**schema)
                 # else proper dict schema, or subsection
                 else:
@@ -338,7 +373,9 @@ class Cargo(object):
                         try:
                             Cargo.flatten_schemas(io_dest, value, label=label, prefix=f"{name}.")
                         except SchemaError as exc:
-                            raise SchemaError(f"{label}.{name} was interpreted as nested section, but contains errors", exc) from None
+                            raise SchemaError(
+                                f"{label}.{name} was interpreted as nested section, but contains errors", exc
+                            ) from None
         return io_dest
 
     def flatten_param_dict(self, output_params, input_params, prefix=""):
@@ -363,17 +400,17 @@ class Cargo(object):
             if name in self.outputs:
                 raise DefinitionError(f"parameter '{name}' appears in both inputs and outputs")
         self._inputs_outputs = None
-        self._implicit_params = set()   # marks implicitly set values
+        self._implicit_params = set()  # marks implicitly set values
         # flatten defaults and aliases
         self.defaults = self.flatten_param_dict(OrderedDict(), self.defaults)
         # pausterized name
-        self.name_ = re.sub(r'\W', '_', self.name or "")  # pausterized name
+        self.name_ = re.sub(r"\W", "_", self.name or "")  # pausterized name
         # config and logger objects
         self.config = self.log = self.logopts = None
         # resolve callable for dynamic schemas
         self._dyn_schema = None
         if self.dynamic_schema is not None:
-            if '.' not in self.dynamic_schema:
+            if "." not in self.dynamic_schema:
                 raise DefinitionError(f"{self.dynamic_schema}: module_name.function_name expected")
             modulename, funcname = self.dynamic_schema.rsplit(".", 1)
             try:
@@ -401,7 +438,6 @@ class Cargo(object):
         """Returns list of unresolved parameters"""
         return [name for name, value in params.items() if isinstance(value, Unresolved)]
 
-
     def finalize(self, config=None, log=None, fqname=None, backend=None, nesting=0):
         if not self.finalized:
             if fqname is not None:
@@ -415,7 +451,7 @@ class Cargo(object):
     def has_dynamic_schemas(self):
         return bool(self._dyn_schema)
 
-    def apply_dynamic_schemas(self, params, subst: Optional[SubstitutionNS]=None):
+    def apply_dynamic_schemas(self, params, subst: Optional[SubstitutionNS] = None):
         # update schemas, if dynamic schema is enabled
         if self._dyn_schema:
             # delete implicit parameters, since they may have come from older version of schema
@@ -424,17 +460,17 @@ class Cargo(object):
             params = {key: value for key, value in params.items() if value is not UNSET and type(value) is not UNSET}
             try:
                 self.inputs, self.outputs = self._dyn_schema(params, *self._original_inputs_outputs)
-            except Exception as exc:
+            except Exception:
                 lines = traceback.format_exc().strip().split("\n")
-                raise SchemaError(f"error evaluating dynamic schema", lines) # [exc, sys.exc_info()[2]])
+                raise SchemaError("error evaluating dynamic schema", lines)  # [exc, sys.exc_info()[2]])
             self._inputs_outputs = None  # to regenerate
             for io in self.inputs, self.outputs:
                 for name, schema in list(io.items()):
                     if isinstance(schema, DictConfig):
                         try:
                             schema = OmegaConf.unsafe_merge(ParameterSchema.copy(), schema)
-                        except Exception  as exc:
-                            raise SchemaError(f"error in dynamic schema for parameter 'name'", exc)
+                        except Exception as exc:
+                            raise SchemaError("error in dynamic schema for parameter 'name'", exc)
                         io[name] = Parameter(**schema)
             # new outputs may have been added
             for schema in self.outputs.values():
@@ -442,8 +478,8 @@ class Cargo(object):
             # re-resolve implicits
             self._resolve_implicit_parameters(params, subst)
 
-    def _delete_implicit_parameters(self, params, subst: Optional[SubstitutionNS]=None):
-        current = subst and getattr(subst, 'current', None)
+    def _delete_implicit_parameters(self, params, subst: Optional[SubstitutionNS] = None):
+        current = subst and getattr(subst, "current", None)
         for p in self._implicit_params:
             if p in params:
                 del params[p]
@@ -452,11 +488,11 @@ class Cargo(object):
         self._implicit_params = set()
         return params
 
-    def _resolve_implicit_parameters(self, params, subst: Optional[SubstitutionNS]=None):
+    def _resolve_implicit_parameters(self, params, subst: Optional[SubstitutionNS] = None):
         # remove previously defined implicits
         self._delete_implicit_parameters(params, subst)
         # regenerate
-        current = subst and getattr(subst, 'current', None)
+        current = subst and getattr(subst, "current", None)
         for name, schema in self.inputs_outputs.items():
             if schema.implicit is not None and type(schema.implicit) is not Unresolved:
                 if name in params and name not in self._implicit_params and params[name] != schema.implicit:
@@ -468,8 +504,9 @@ class Cargo(object):
                 if current:
                     current[name] = schema.implicit
 
-
-    def prevalidate(self, params: Optional[Dict[str, Any]], subst: Optional[SubstitutionNS]=None, backend=None, root=False):
+    def prevalidate(
+        self, params: Optional[Dict[str, Any]], subst: Optional[SubstitutionNS] = None, backend=None, root=False
+    ):
         """Does pre-validation.
         No parameter substitution is done, but will check for missing params and such.
         A dynamic schema, if defined, is applied at this point."""
@@ -480,50 +517,89 @@ class Cargo(object):
         for name, schema in self.inputs_outputs.items():
             schema.get_category()
 
-        params = validate_parameters(params, self.inputs_outputs, defaults=self.defaults, subst=subst, fqname=self.fqname,
-                                        check_unknowns=True, check_required=False,
-                                        check_inputs_exist=False, check_outputs_exist=False,
-                                        create_dirs=False, ignore_subst_errors=True)
+        params = validate_parameters(
+            params,
+            self.inputs_outputs,
+            defaults=self.defaults,
+            subst=subst,
+            fqname=self.fqname,
+            check_unknowns=True,
+            check_required=False,
+            check_inputs_exist=False,
+            check_outputs_exist=False,
+            create_dirs=False,
+            ignore_subst_errors=True,
+        )
 
         return params
 
-    def validate_inputs(self, params: Dict[str, Any], subst: Optional[SubstitutionNS]=None, loosely=False, remote_fs=False):
+    def validate_inputs(
+        self, params: Dict[str, Any], subst: Optional[SubstitutionNS] = None, loosely=False, remote_fs=False
+    ):
         """Validates inputs.
         If loosely is True, then doesn't check for required parameters, and doesn't check for files to exist etc.
         This is used when skipping a step.
         If remote_fs is True, doesn't check files and directories.
         """
-        assert(self.finalized)
+        assert self.finalized
         self._resolve_implicit_parameters(params, subst)
 
         # check inputs
-        params1 = validate_parameters(params, self.inputs, defaults=self.defaults, subst=subst, fqname=self.fqname,
-                                                check_unknowns=False, check_required=not loosely,
-                                                check_inputs_exist=not loosely and not remote_fs, check_outputs_exist=False,
-                                                create_dirs=not loosely and not remote_fs)
+        params1 = validate_parameters(
+            params,
+            self.inputs,
+            defaults=self.defaults,
+            subst=subst,
+            fqname=self.fqname,
+            check_unknowns=False,
+            check_required=not loosely,
+            check_inputs_exist=not loosely and not remote_fs,
+            check_outputs_exist=False,
+            create_dirs=not loosely and not remote_fs,
+        )
         # check outputs
-        params1.update(**validate_parameters(params, self.outputs, defaults=self.defaults, subst=subst, fqname=self.fqname,
-                                                check_unknowns=False, check_required=False,
-                                                check_inputs_exist=not loosely and not remote_fs, check_outputs_exist=False,
-                                                create_dirs=not loosely and not remote_fs))
+        params1.update(
+            **validate_parameters(
+                params,
+                self.outputs,
+                defaults=self.defaults,
+                subst=subst,
+                fqname=self.fqname,
+                check_unknowns=False,
+                check_required=False,
+                check_inputs_exist=not loosely and not remote_fs,
+                check_outputs_exist=False,
+                create_dirs=not loosely and not remote_fs,
+            )
+        )
         return params1
 
-    def validate_outputs(self, params: Dict[str, Any], subst: Optional[SubstitutionNS]=None, loosely=False, remote_fs=False):
+    def validate_outputs(
+        self, params: Dict[str, Any], subst: Optional[SubstitutionNS] = None, loosely=False, remote_fs=False
+    ):
         """Validates outputs. Parameter substitution is done.
         If loosely is True, then doesn't check for required parameters, and doesn't check for files to exist etc.
         If remote_fs is True, doesn't check files and directories.
         """
-        assert(self.finalized)
+        assert self.finalized
         # update implicits that weren't marked as unresolved
         for name in self._implicit_params:
             impl = self.inputs_outputs[name].implicit
             if type(impl) is not Unresolved:
                 params[name] = self.inputs_outputs[name].implicit
-        params.update(**validate_parameters(params, self.outputs, defaults=self.defaults, subst=subst, fqname=self.fqname,
-                                                check_unknowns=False, check_required=not loosely,
-                                                check_inputs_exist=not loosely and not remote_fs,
-                                                check_outputs_exist=not loosely and not remote_fs,
-                                                ))
+        params.update(
+            **validate_parameters(
+                params,
+                self.outputs,
+                defaults=self.defaults,
+                subst=subst,
+                fqname=self.fqname,
+                check_unknowns=False,
+                check_required=not loosely,
+                check_inputs_exist=not loosely and not remote_fs,
+                check_outputs_exist=not loosely and not remote_fs,
+            )
+        )
         return params
 
     def rich_help(self, tree, max_category=ParameterCategory.Optional):
@@ -549,7 +625,9 @@ class Cargo(object):
                     subtree = tree.add(f"[dim]{cat.name} {title}: omitting {len(schemas)}[/dim]")
                     continue
                 subtree = tree.add(f"{cat.name} {title}:")
-                table = Table.grid("", "", "", padding=(0,2)) # , show_header=False, show_lines=False, box=rich.box.SIMPLE)
+                table = Table.grid(
+                    "", "", "", padding=(0, 2)
+                )  # , show_header=False, show_lines=False, box=rich.box.SIMPLE)
                 subtree.add(table)
                 for name, schema in schemas:
                     attrs = []
@@ -563,9 +641,9 @@ class Cargo(object):
                     info = []
                     schema.info and info.append(rich.markup.escape(schema.info))
                     attrs and info.append(f"[dim]\\[{rich.markup.escape(', '.join(attrs))}][/dim]")
-                    table.add_row(f"[bold]{name}[/bold]",
-                                f"[dim]{rich.markup.escape(str(schema.dtype))}[/dim]",
-                                " ".join(info))
+                    table.add_row(
+                        f"[bold]{name}[/bold]", f"[dim]{rich.markup.escape(str(schema.dtype))}[/dim]", " ".join(info)
+                    )
 
     def assign_value(self, key: str, value: Any, override: bool = False):
         """assigns a parameter value to the cargo.

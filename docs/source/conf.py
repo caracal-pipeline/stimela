@@ -7,12 +7,13 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 
-import stimela
 from datetime import date
 
-author = 'Oleg Smirnov, Sphesihle Makhathini and RATT'
-project = 'stimela'
-copyright = f'{date.today().year}, {author}'
+import stimela
+
+author = "Oleg Smirnov, Sphesihle Makhathini and RATT"
+project = "stimela"
+copyright = f"{date.today().year}, {author}"
 
 release = stimela.__version__
 version = stimela.__version__
@@ -22,19 +23,18 @@ version = stimela.__version__
 
 extensions = []
 
-templates_path = ['_templates']
+templates_path = ["_templates"]
 exclude_patterns = []
 
-language = 'en'
+language = "en"
 
-highlight_language = 'yaml'
+highlight_language = "yaml"
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
-html_theme = 'furo'
-html_static_path = ['_static']
-
+html_theme = "furo"
+html_static_path = ["_static"]
 
 
 needs_sphinx = "5.0"

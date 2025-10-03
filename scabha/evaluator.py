@@ -1,62 +1,60 @@
-
-import glob
-import os.path
-import fnmatch
-import pyparsing
-pyparsing.ParserElement.enable_packrat()
-from pyparsing import *
-from pyparsing import common
-from functools import reduce
-import operator
+# ruff: noqa: E741 - ignore ambiguous variable name.
 import dataclasses
-
-from .substitutions import SubstitutionError, SubstitutionContext
-from .basetypes import Unresolved, UNSET
-from .exceptions import *
-
+import fnmatch
+import glob
+import operator
+import os.path
 import typing
-from typing import Dict, List, Any
+from collections import OrderedDict
+from functools import reduce
+from typing import Any, Dict, List
+
+import pyparsing as pp
 from omegaconf import DictConfig, ListConfig
+
+from .basetypes import UNSET, Unresolved
+from .exceptions import FormulaError, ParserError, UnsetError
+from .substitutions import SubstitutionContext, SubstitutionError
+
+pp.ParserElement.enable_packrat()
 
 _parser = None
 
-# see https://stackoverflow.com/questions/43244861/pyparsing-infixnotation-optimization for a cleaner parser with functions
+# see https://stackoverflow.com/questions/43244861/pyparsing-infixnotation-optimization
+# for a cleaner parser with functions
+
 
 def _not_operator(value):
     return value is UNSET or isinstance(value, Unresolved) or not value
 
-_UNARY_OPERATORS = {
-    '+':    lambda x: +x,
-    '-':    lambda x: -x,
-    '~':    lambda x: ~x,
-    'not':  _not_operator
-}
+
+_UNARY_OPERATORS = {"+": lambda x: +x, "-": lambda x: -x, "~": lambda x: ~x, "not": _not_operator}
 
 _BINARY_OPERATORS = {
-    '**':   lambda x,y: x ** y,
-    '*':   lambda x,y: x * y,
-    '/':   lambda x,y: x / y,
-    '//':   lambda x,y: x // y,
-    '+':   lambda x,y: x + y,
-    '-':   lambda x,y: x - y,
-    '<<':   lambda x,y: x << y,
-    '>>':   lambda x,y: x >> y,
-    '&':   lambda x,y: x & y,
-    '^':   lambda x,y: x ^ y,
-    '|':   lambda x,y: x | y,
-    '==':   lambda x,y: x == y,
-    '!=':   lambda x,y: x != y,
-    '<=':   lambda x,y: x <= y,
-    '<':   lambda x,y: x < y,
-    '>=':   lambda x,y: x >= y,
-    '>':   lambda x,y: x > y,
+    "**": lambda x, y: x**y,
+    "*": lambda x, y: x * y,
+    "/": lambda x, y: x / y,
+    "//": lambda x, y: x // y,
+    "+": lambda x, y: x + y,
+    "-": lambda x, y: x - y,
+    "<<": lambda x, y: x << y,
+    ">>": lambda x, y: x >> y,
+    "&": lambda x, y: x & y,
+    "^": lambda x, y: x ^ y,
+    "|": lambda x, y: x | y,
+    "==": lambda x, y: x == y,
+    "!=": lambda x, y: x != y,
+    "<=": lambda x, y: x <= y,
+    "<": lambda x, y: x < y,
+    ">=": lambda x, y: x >= y,
+    ">": lambda x, y: x > y,
     # 'is':   lambda x,y: x is y,
     # 'is not':   lambda x,y: x is not y,
-    'in':   lambda x,y: x in y,
-    'not in':   lambda x,y: x not in y,
-    'and':   lambda x,y: x and y,
-    'or':   lambda x,y: x or y,
-}        
+    "in": lambda x, y: x in y,
+    "not in": lambda x, y: x not in y,
+    "and": lambda x, y: x and y,
+    "or": lambda x, y: x or y,
+}
 
 
 class ResultsHandler(object):
@@ -77,8 +75,8 @@ class UnaryHandler(ResultsHandler):
         assert op in _UNARY_OPERATORS
         self._op = _UNARY_OPERATORS[op]
         # not allows UNSET values
-        self.allow_unset = (op == 'not')
-    
+        self.allow_unset = op == "not"
+
     def evaluate(self, evaluator):
         arg = evaluator._evaluate_result(self.arg, allow_unset=self.allow_unset)
         if isinstance(arg, Unresolved):
@@ -95,10 +93,12 @@ class BinaryHandler(ResultsHandler):
         assert op in _BINARY_OPERATORS
         self._op = _BINARY_OPERATORS[op]
         self.allow_unset = False
-    
+
     def evaluate(self, evaluator):
-        arg1, arg2 = evaluator._evaluate_result(self.arg1, allow_unset=self.allow_unset), \
-                     evaluator._evaluate_result(self.arg2, allow_unset=self.allow_unset)
+        arg1, arg2 = (
+            evaluator._evaluate_result(self.arg1, allow_unset=self.allow_unset),
+            evaluator._evaluate_result(self.arg2, allow_unset=self.allow_unset),
+        )
         if isinstance(arg1, Unresolved):
             return arg1
         if isinstance(arg2, Unresolved):
@@ -116,9 +116,10 @@ class BinaryHandler(ResultsHandler):
         ret = BinaryHandler(*t[:initlen])
         i = initlen
         while i < len(t):
-            ret = BinaryHandler(ret, *t[i:i+incr])
+            ret = BinaryHandler(ret, *t[i : i + incr])
             i += incr
         return ret
+
 
 class GetItemHandler(ResultsHandler):
     def __init__(self, base):
@@ -137,6 +138,7 @@ class GetItemHandler(ResultsHandler):
         if isinstance(index, Unresolved):
             return index
         return base[index]
+
 
 class FunctionHandler(ResultsHandler):
     def __init__(self, func, *args):
@@ -174,28 +176,30 @@ class FunctionHandler(ResultsHandler):
     def LIST(self, evaluator, args):
         def make_list(*x):
             return list(x)
+
         return self.evaluate_generic_callable(evaluator, "LIST", make_list, args)
 
     def LEN(self, evaluator, args):
         def make_len(x):
             return len(x)
-        return self.evaluate_generic_callable(evaluator, "LEN", make_len,
-                                              args, min_args=1, max_args=1)
+
+        return self.evaluate_generic_callable(evaluator, "LEN", make_len, args, min_args=1, max_args=1)
 
     def RANGE(self, evaluator, args):
         def make_range(*x):
             return list(range(*x))
+
         return self.evaluate_generic_callable(evaluator, "RANGE", make_range, args, min_args=1, max_args=3)
-    
+
     def VALID(self, evaluator, args):
         if len(args) != 1:
             raise FormulaError(f"{'.'.join(evaluator.location)}: VALID() expects one argument, got {len(args)}")
         try:
             result = evaluator._evaluate_result(args[0], allow_unset=True)
-        except (TypeError, ValueError) as exc:
+        except (TypeError, ValueError, IndexError):
             return False
         if isinstance(result, Unresolved):
-            return False        
+            return False
         return result
 
     def TRY(self, evaluator, args):
@@ -210,32 +214,35 @@ class FunctionHandler(ResultsHandler):
 
     def MAX(self, evaluator, args):
         return self.evaluate_generic_callable(evaluator, "MAX", max, args, min_args=1)
-    
+
     def GETITEM(self, evaluator, args):
         def get_item(x, y):
             return x[y]
+
         return self.evaluate_generic_callable(evaluator, "GETITEM", get_item, args, min_args=2, max_args=2)
 
     def IS_STR(self, evaluator, args):
         def is_str(x):
             return type(x) is str
+
         return self.evaluate_generic_callable(evaluator, "IS_STR", is_str, args, min_args=1, max_args=1)
-    
+
     def IS_NUM(self, evaluator, args):
         def is_num(x):
-            return isinstance(x, (bool, int, float, complex)) 
+            return isinstance(x, (bool, int, float, complex))
+
         return self.evaluate_generic_callable(evaluator, "IS_NUM", is_num, args, min_args=1, max_args=1)
-    
+
     def CASES(self, evaluator, args):
         # set default case
-        if len(args)%2:
+        if len(args) % 2:
             default_case = args[-1]
             args = args[:-1]
-        else: 
+        else:
             default_case = None
         # return first True case
         for i in range(0, len(args), 2):
-            conditional, result = args[i:i+2]
+            conditional, result = args[i : i + 2]
             cond = evaluator._evaluate_result(conditional, allow_unset=False)
             if cond:
                 return evaluator._evaluate_result(result, allow_unset=True)
@@ -256,15 +263,15 @@ class FunctionHandler(ResultsHandler):
                 raise SubstitutionError(f"{'.'.join(evaluator.location)}: '{cond.name}' is not defined")
             result = if_unset
         else:
-            result = if_true if cond else if_false    
-            
+            result = if_true if cond else if_false
+
         return evaluator._evaluate_result(result)
 
     def IFSET(self, evaluator, args):
         if len(args) < 1 or len(args) > 3:
             raise FormulaError(f"{'.'.join(evaluator.location)}: IFSET() expects 1 to 3 arguments, got {len(args)}")
-        
-        lookup, if_set, if_unset = list(args) + [None]*(3 - len(args))
+
+        lookup, if_set, if_unset = list(args) + [None] * (3 - len(args))
 
         value = evaluator._evaluate_result(lookup, allow_unset=True)
         if isinstance(value, Unresolved):
@@ -272,10 +279,10 @@ class FunctionHandler(ResultsHandler):
                 return UNSET
             else:
                 return evaluator._evaluate_result(if_unset)
-        elif is_missing(if_set) or if_set == 'SELF':
+        elif is_missing(if_set) or if_set == "SELF":
             return value
         else:
-            return evaluator._evaluate_result(if_set)            
+            return evaluator._evaluate_result(if_set)
 
     def GLOB(self, evaluator, args):
         if len(args) != 1:
@@ -300,7 +307,7 @@ class FunctionHandler(ResultsHandler):
         if isinstance(path, Unresolved):
             return path
         if not isinstance(path, str):
-            raise FormulaError(f"DIRNAME() expects a string, got a {str(type(path))}") 
+            raise FormulaError(f"DIRNAME() expects a string, got a {str(type(path))}")
         return os.path.dirname(path)
 
     def BASENAME(self, evaluator, args):
@@ -310,7 +317,7 @@ class FunctionHandler(ResultsHandler):
         if isinstance(path, Unresolved):
             return path
         if not isinstance(path, str):
-            raise FormulaError(f"BASENAME() expects a string, got a {str(type(path))}") 
+            raise FormulaError(f"BASENAME() expects a string, got a {str(type(path))}")
         return os.path.basename(path)
 
     def EXTENSION(self, evaluator, args):
@@ -320,7 +327,7 @@ class FunctionHandler(ResultsHandler):
         if isinstance(path, Unresolved):
             return path
         if not isinstance(path, str):
-            raise FormulaError(f"EXTENSION() expects a string, got a {str(type(path))}") 
+            raise FormulaError(f"EXTENSION() expects a string, got a {str(type(path))}")
         return os.path.splitext(path)[1]
 
     def STRIPEXT(self, evaluator, args):
@@ -330,17 +337,17 @@ class FunctionHandler(ResultsHandler):
         if isinstance(path, Unresolved):
             return path
         if not isinstance(path, str):
-            raise FormulaError(f"STRIPEXT() expects a string, got a {str(type(path))}") 
+            raise FormulaError(f"STRIPEXT() expects a string, got a {str(type(path))}")
         return os.path.splitext(path)[0]
 
     def NOSUBST(self, evaluator, args):
         if len(args) != 1:
             raise FormulaError(f"{'.'.join(evaluator.location)}: NOSUBST() expects 1 argument, got {len(args)}")
         return evaluator._evaluate_result(args[0], subst=False)
-    
+
     def SORT(self, evaluator, args):
         return self._sort_impl(evaluator, args, "SORT")
-    
+
     def RSORT(self, evaluator, args):
         return self._sort_impl(evaluator, args, "RSORT", reverse=True)
 
@@ -351,69 +358,78 @@ class FunctionHandler(ResultsHandler):
         if isinstance(sortlist, Unresolved):
             return sortlist
         if not isinstance(sortlist, (list, tuple)):
-            raise FormulaError(f"{funcname}() expects a list, got a {str(type(sortlist))}") 
+            raise FormulaError(f"{funcname}() expects a list, got a {str(type(sortlist))}")
         return sorted(sortlist, reverse=reverse)
-    
+
 
 def construct_parser():
-    lparen = Literal("(").suppress()
-    rparen = Literal(")").suppress()
-    lbrack = Literal("[").suppress()
-    rbrack = Literal("]").suppress()
-    comma = Literal(",").suppress()
-    period = Literal(".").suppress()
-    string = (QuotedString('"') | QuotedString("'"))("constant")
-    UNSET = Keyword("UNSET")("unset")
-    SELF = Keyword("SELF")("self_value")
-    EMPTY = Keyword("EMPTY")("empty")
-    bool_false = (Keyword("False") | Keyword("false"))("bool_false").set_parse_action(lambda:[False])
-    bool_true = (Keyword("True") | Keyword("true"))("bool_true").set_parse_action(lambda:[True])
+    lparen = pp.Literal("(").suppress()
+    rparen = pp.Literal(")").suppress()
+    lbrack = pp.Literal("[").suppress()
+    rbrack = pp.Literal("]").suppress()
+    comma = pp.Literal(",").suppress()  # noqa: F841 - unusued
+    period = pp.Literal(".").suppress()
+    string = (pp.QuotedString('"') | pp.QuotedString("'"))("constant")
+    UNSET = pp.Keyword("UNSET")("unset")
+    SELF = pp.Keyword("SELF")("self_value")
+    EMPTY = pp.Keyword("EMPTY")("empty")
+    bool_false = (pp.Keyword("False") | pp.Keyword("false"))("bool_false").set_parse_action(lambda: [False])
+    bool_true = (pp.Keyword("True") | pp.Keyword("true"))("bool_true").set_parse_action(lambda: [True])
 
     boolean = (bool_true | bool_false)("constant")
-    number = common.number("constant")
+    number = pp.common.number("constant")
 
-    fieldname = Word(alphas + "_", alphanums + "_-@*?")
-    nested_field = Group(fieldname + OneOrMore(period + fieldname))("namespace_lookup")
-    anyseq = CharsNotIn(",)")("constant")
+    fieldname = pp.Word(pp.alphas + "_", pp.alphanums + "_-@*?")
+    nested_field = pp.Group(fieldname + pp.OneOrMore(period + fieldname))("namespace_lookup")
+    anyseq = pp.CharsNotIn(",)")("constant")
 
     # allow expression to be used recursively
-    expr = Forward()
-    
+    expr = pp.Forward()
+
     # functions -- get all all-uppercase members from FunctionHandler
     anyseq_funcnames = {"GLOB", "EXISTS", "ERROR"}
-    all_funcnames = set(func for func in dir(FunctionHandler) 
-                        if callable(getattr(FunctionHandler, func)) and func.upper() == func)
+    all_funcnames = set(
+        func for func in dir(FunctionHandler) if callable(getattr(FunctionHandler, func)) and func.upper() == func
+    )
     all_funcnames -= anyseq_funcnames
 
-    functions = reduce(operator.or_, map(Keyword, all_funcnames))
+    functions = reduce(operator.or_, map(pp.Keyword, all_funcnames))
     # these functions take one argument, which could also be a sequence
-    anyseq_functions = reduce(operator.or_, map(Keyword, anyseq_funcnames))
+    anyseq_functions = reduce(operator.or_, map(pp.Keyword, anyseq_funcnames))
 
-    atomic_value = (boolean | UNSET | EMPTY | nested_field | string | number)
+    atomic_value = boolean | UNSET | EMPTY | nested_field | string | number
 
-    function_call_anyseq = Group(anyseq_functions + lparen + (expr | anyseq) + rparen).setParseAction(FunctionHandler.pa)
-    function_call = Group(functions + lparen + 
-                    Opt(delimited_list(expr|SELF)) + 
-                    rparen).setParseAction(FunctionHandler.pa)
+    function_call_anyseq = pp.Group(anyseq_functions + lparen + (expr | anyseq) + rparen).setParseAction(
+        FunctionHandler.pa
+    )
+    function_call = pp.Group(functions + lparen + pp.Opt(pp.delimited_list(expr | SELF)) + rparen).setParseAction(
+        FunctionHandler.pa
+    )
 
     operators = [
-        ((lbrack + expr + rbrack), 1, opAssoc.LEFT, GetItemHandler.pa),
-        (Literal("**"), 2, opAssoc.LEFT, BinaryHandler.pa), 
-        (Literal("-")|Literal("+")|Literal("~"), 1, opAssoc.RIGHT, UnaryHandler.pa), 
-        (Literal("*")|Literal("//")|Literal("/")|Literal("%"), 2, opAssoc.LEFT, BinaryHandler.pa),
-        (Literal("+")|Literal("-"), 2, opAssoc.LEFT, BinaryHandler.pa),
-        (Literal("<<")|Literal(">>"), 2, opAssoc.LEFT, BinaryHandler.pa),
-        (Literal("&"), 2, opAssoc.LEFT, BinaryHandler.pa),
-        (Literal("^"), 2, opAssoc.LEFT, BinaryHandler.pa),
-        (Literal("|"), 2, opAssoc.LEFT, BinaryHandler.pa),
-        (reduce(operator.or_, map(Literal, ("==", "!=", ">=", "<=", ">", "<"))), 2, opAssoc.LEFT, BinaryHandler.pa),
-        (CaselessKeyword("in")|CaselessKeyword("not in"), 2, opAssoc.LEFT, BinaryHandler.pa),
-        (CaselessKeyword("not"), 1, opAssoc.RIGHT, UnaryHandler.pa),
-        (CaselessKeyword("and")|CaselessKeyword("or"), 2, opAssoc.LEFT, BinaryHandler.pa),
+        ((lbrack + expr + rbrack), 1, pp.opAssoc.LEFT, GetItemHandler.pa),
+        (pp.Literal("**"), 2, pp.opAssoc.LEFT, BinaryHandler.pa),
+        (pp.Literal("-") | pp.Literal("+") | pp.Literal("~"), 1, pp.opAssoc.RIGHT, UnaryHandler.pa),
+        (pp.Literal("*") | pp.Literal("//") | pp.Literal("/") | pp.Literal("%"), 2, pp.opAssoc.LEFT, BinaryHandler.pa),
+        (pp.Literal("+") | pp.Literal("-"), 2, pp.opAssoc.LEFT, BinaryHandler.pa),
+        (pp.Literal("<<") | pp.Literal(">>"), 2, pp.opAssoc.LEFT, BinaryHandler.pa),
+        (pp.Literal("&"), 2, pp.opAssoc.LEFT, BinaryHandler.pa),
+        (pp.Literal("^"), 2, pp.opAssoc.LEFT, BinaryHandler.pa),
+        (pp.Literal("|"), 2, pp.opAssoc.LEFT, BinaryHandler.pa),
+        (
+            reduce(operator.or_, map(pp.Literal, ("==", "!=", ">=", "<=", ">", "<"))),
+            2,
+            pp.opAssoc.LEFT,
+            BinaryHandler.pa,
+        ),
+        (pp.CaselessKeyword("in") | pp.CaselessKeyword("not in"), 2, pp.opAssoc.LEFT, BinaryHandler.pa),
+        (pp.CaselessKeyword("not"), 1, pp.opAssoc.RIGHT, UnaryHandler.pa),
+        (pp.CaselessKeyword("and") | pp.CaselessKeyword("or"), 2, pp.opAssoc.LEFT, BinaryHandler.pa),
     ]
 
-    infix = infix_notation(atomic_value | function_call | function_call_anyseq | nested_field,
-                            operators)("subexpression")
+    infix = pp.infix_notation(atomic_value | function_call | function_call_anyseq | nested_field, operators)(
+        "subexpression"
+    )
 
     expr <<= infix
 
@@ -425,13 +441,14 @@ if _parser is None:
 
 _parse_cache = {}
 
+
 def parse_string(text: str, location: List[str] = []):
     """parses a formula, returns ParseResults object. Implements cache.
 
     Args:
         text (str): formula to parse
         location (List[str], optional): Hierarchical location, used for erro messages
-        
+
     Raises:
         ParserError: on any parse error
 
@@ -451,18 +468,23 @@ def parse_string(text: str, location: List[str] = []):
 
     return parse_results
 
+
 def is_missing(result):
     return result is None
+
 
 class SELF(object):
     pass
 
 
 class Evaluator(object):
-    def __init__(self,  ns: Dict[str, Any], 
-                        subst_context: typing.Optional[SubstitutionContext] = None, 
-                        allow_unresolved: bool = False,
-                        location: List[str] = []):
+    def __init__(
+        self,
+        ns: Dict[str, Any],
+        subst_context: typing.Optional[SubstitutionContext] = None,
+        allow_unresolved: bool = False,
+        location: List[str] = [],
+    ):
         self.ns = ns
         self.subst_context = subst_context
         self.location = location
@@ -497,9 +519,9 @@ class Evaluator(object):
 
     def subexpression(self, value, subst=True):
         return self._evaluate_result(value, allow_unset=True, subst=subst)
-    
+
     def namespace_lookup(self, *args, subst=True):
-        if len(args) == 1 and type(args[0]) is ParseResults:
+        if len(args) == 1 and type(args[0]) is pp.ParseResults:
             args = args[0]
             assert args._name == "namespace_lookup"
         value = self.ns
@@ -507,7 +529,7 @@ class Evaluator(object):
         while fields:
             fld = fields.pop(0)
             # check for wildcards
-            if fld not in value and ('*' in fld or '?' in fld):
+            if fld not in value and ("*" in fld or "?" in fld):
                 names = sorted(fnmatch.filter(value.keys(), fld))
                 if names:
                     fld = names[-1]
@@ -516,7 +538,7 @@ class Evaluator(object):
                 if fields:
                     raise SubstitutionError(f"{'.'.join(self.location)}: '{fld}' undefined (in '{'.'.join(args)}')")
                 else:
-                    return UNSET('.'.join(args))
+                    return UNSET(".".join(args))
             # this can still throw an error if a nested interpolation is invoked
             try:
                 value = value.get(fld, subst=subst)
@@ -531,15 +553,17 @@ class Evaluator(object):
             value = parse_result.evaluate(self)
 
         # if result is already a constant, resolve it
-        elif type(parse_result) is not ParseResults:
+        elif type(parse_result) is not pp.ParseResults:
             return self._resolve(parse_result, subst=subst)
-        
+
         # lookup processing method based on name
         else:
             method = parse_result.getName()
             assert method is not None
             if not hasattr(self, method):
-                raise ParserError(f"{'.'.join(self.location)}: don't know how to deal with an element of type '{method}'")
+                raise ParserError(
+                    f"{'.'.join(self.location)}: don't know how to deal with an element of type '{method}'"
+                )
 
             try:
                 value = getattr(self, method)(*parse_result, subst=subst)
@@ -569,7 +593,7 @@ class Evaluator(object):
         Returns:
             Any: result of evaluation
         """
-        
+
         if type(value) is not str:
             return value
 
@@ -598,11 +622,14 @@ class Evaluator(object):
         finally:
             self.location = self.location[:loclen]
 
-    def evaluate_object(self, obj: Any,
-                        sublocation: List[str] = [],
-                        raise_substitution_errors: bool = True, 
-                        recursion_level: int = 1,
-                        verbose: bool = False) -> Any:
+    def evaluate_object(
+        self,
+        obj: Any,
+        sublocation: List[str] = [],
+        raise_substitution_errors: bool = True,
+        recursion_level: int = 1,
+        verbose: bool = False,
+    ) -> Any:
         """evaluates object, which can be a nested container, in which case string elements
         are evaluated recursively. Evaluations are done in place.
 
@@ -637,17 +664,21 @@ class Evaluator(object):
                 if raise_substitution_errors or not self.allow_unresolved:
                     raise SubstitutionError(f"{'.'.join(sublocation)}: substitution error", [err])
                 return Unresolved(errors=[err])
-            
+
         # helper function
         def update(value, sloc):
             if isinstance(value, Unresolved):
                 return value, False
             subloc = sublocation + [sloc]
-            if verbose: 
+            if verbose:
                 print(f"{subloc}: {value} ...")
-            new_value = self.evaluate_object(value, raise_substitution_errors=raise_substitution_errors,
-                                                recursion_level=recursion_level, verbose=verbose,
-                                                sublocation=subloc)
+            new_value = self.evaluate_object(
+                value,
+                raise_substitution_errors=raise_substitution_errors,
+                recursion_level=recursion_level,
+                verbose=verbose,
+                sublocation=subloc,
+            )
             if verbose:
                 print(f"{subloc}: {value} -> {new_value}")
             # UNSET return means delete or revert to default
@@ -699,16 +730,18 @@ class Evaluator(object):
 
         return obj_out
 
-
-    def evaluate_dict(self, params: Dict[str, Any], 
-                    corresponding_ns: typing.Optional[Dict[str, Any]] = None, 
-                    defaults: Dict[str, Any] = {}, 
-                    sublocation = [],
-                    raise_substitution_errors: bool = True, 
-                    collapse_substitution_errors: bool = False,  # true for subcontainers
-                    subcontainer_type: typing.Optional[str] = None,
-                    recursive: bool = True,
-                    verbose: bool = False) -> Dict[str, Any]:
+    def evaluate_dict(
+        self,
+        params: Dict[str, Any],
+        corresponding_ns: typing.Optional[Dict[str, Any]] = None,
+        defaults: Dict[str, Any] = {},
+        sublocation=[],
+        raise_substitution_errors: bool = True,
+        collapse_substitution_errors: bool = False,  # true for subcontainers
+        subcontainer_type: typing.Optional[str] = None,
+        recursive: bool = True,
+        verbose: bool = False,
+    ) -> Dict[str, Any]:
         """evaluates dict of parameters, which can contain nested containers which can be evaluated recursively.
         Returns new dict.
 
@@ -738,11 +771,11 @@ class Evaluator(object):
         for name, value in list(params.items()):
             if isinstance(value, Unresolved):
                 continue
-            # 
+            #
             retry = True
             while retry:
                 retry = False
-                if verbose: # or type(value) is UNSET:
+                if verbose:  # or type(value) is UNSET:
                     print(f"{name}: {value} ...")
                 if type(value) is str:
                     try:
@@ -765,7 +798,7 @@ class Evaluator(object):
                             if corresponding_ns:
                                 corresponding_ns[name] = defaults[name]
                             retry = True
-                        else: 
+                        else:
                             if name in params_out:
                                 del params_out[name]
                             if corresponding_ns and name in corresponding_ns:
@@ -783,9 +816,10 @@ class Evaluator(object):
                         defaults,
                         sublocation=sublocation + [name],
                         raise_substitution_errors=raise_substitution_errors,
-                        collapse_substitution_errors=True, subcontainer_type="Dict",
+                        collapse_substitution_errors=True,
+                        subcontainer_type="Dict",
                         recursive=True,
-                        verbose=verbose
+                        verbose=verbose,
                     )
                     params_out[name] = value
                     if corresponding_ns:
@@ -793,15 +827,16 @@ class Evaluator(object):
                 elif isinstance(value, (list, ListConfig)) and recursive:
                     # convert list to dict, and evaluate
                     proxy_dict = self.evaluate_dict(
-                                {f"[{i}]": v for i, v in enumerate(value)},
-                                corresponding_ns,
-                                defaults,
-                                sublocation=sublocation + [name],
-                                raise_substitution_errors=raise_substitution_errors,
-                                collapse_substitution_errors=True, subcontainer_type="List",
-                                recursive=True,
-                                verbose=verbose
-                            )
+                        {f"[{i}]": v for i, v in enumerate(value)},
+                        corresponding_ns,
+                        defaults,
+                        sublocation=sublocation + [name],
+                        raise_substitution_errors=raise_substitution_errors,
+                        collapse_substitution_errors=True,
+                        subcontainer_type="List",
+                        recursive=True,
+                        verbose=verbose,
+                    )
                     if isinstance(proxy_dict, Unresolved):
                         value = proxy_dict
                     else:
@@ -819,7 +854,6 @@ class Evaluator(object):
                 return Unresolved(f"unresolved {subcontainer_type} elements", errors)
 
         return params_out
-
 
 
 if __name__ == "__main__":
