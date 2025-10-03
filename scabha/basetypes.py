@@ -1,11 +1,6 @@
 from __future__ import annotations
 
 import os.path
-from .exceptions import UnsetError
-from itertools import zip_longest
-from typeguard import (
-    check_type, TypeCheckError, TypeCheckerCallable, TypeCheckMemo, checker_lookup_functions
-)
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from inspect import isclass
@@ -14,7 +9,13 @@ from pathlib import Path
 from typing import Any, List, Union, get_args, get_origin
 
 import uritools
-from typeguard import TypeCheckerCallable, TypeCheckError, TypeCheckMemo, check_type, checker_lookup_functions
+from typeguard import (
+    TypeCheckerCallable,
+    TypeCheckError,
+    TypeCheckMemo,
+    check_type,
+    checker_lookup_functions,
+)
 
 from .exceptions import UnsetError
 
