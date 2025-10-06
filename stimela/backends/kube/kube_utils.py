@@ -1,8 +1,7 @@
 import logging
 import re
-from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from kubernetes.client.rest import ApiException
 from omegaconf import OmegaConf
@@ -11,6 +10,7 @@ from rich.markup import escape
 from urllib3.exceptions import HTTPError
 
 from stimela.exceptions import StimelaCabRuntimeError
+from stimela.monitoring.kube import KubeReport
 
 from . import KubeBackendOptions, get_kube_api
 
@@ -38,25 +38,6 @@ k8s_memory_units_in_bytes = {
     "P": 10**15,
     "E": 10**18,
 }
-
-
-@dataclass
-class KubeReport:
-    status: Optional[str] = None
-    running_pods: Optional[int] = None
-    pending_pods: Optional[int] = None
-    terminating_pods: Optional[int] = None
-    successful_pods: Optional[int] = None
-    failed_pods: Optional[int] = None
-    stateless_pods: Optional[int] = None
-    total_pods: Optional[int] = None
-    total_cores: Optional[float] = None
-    total_memory: Optional[float] = None
-    connection_status: str = "connected"
-
-    @property
-    def profiling_results(self):
-        return {"k8s_cores": self.total_cores, "k8s_mem": self.total_memory}
 
 
 def resolve_unit(quantity: str, units: Dict = k8s_memory_units_in_bytes):
@@ -207,7 +188,13 @@ class StatusReporter(object):
                             self.kube.debug.event_format.format(event=event), extra=dict(color=color) if color else {}
                         )
 
-    def update(self):
+    def update(self, *args):
+        """Produce a report object containing resource monitoring.
+
+        NOTE(JSKenyon): I have introduced *args in the function signature to ensure compatibility
+        with the new code in stimela.monitoring. This code should eventually be adapted to live
+        in the monitoring module and be runnable outside of a particular step.
+        """
         from . import session_user
 
         metrics = []

@@ -36,7 +36,7 @@ def timer_element(
     if right_spinner:
         columns.append(SpinnerColumn())
 
-    return Progress(*columns, refresh_per_second=2, transient=True)
+    return Progress(*columns, auto_refresh=False, transient=True)
 
 
 def status_element(has_description: bool = True, width: Optional[int] = None):
@@ -58,4 +58,4 @@ def status_element(has_description: bool = True, width: Optional[int] = None):
 
     columns.append(TextColumn("[bold]{task.fields[value]}[/bold]", table_column=Column(no_wrap=True)))
 
-    return Progress(*columns, refresh_per_second=2, transient=True)
+    return Progress(*columns, auto_refresh=False, transient=True)
