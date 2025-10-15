@@ -8,7 +8,7 @@ import pytest
 import stimela_tests
 from scabha.basetypes import File
 from scabha.schema_utils import paramfile_loader
-from stimela.backends import StimelaBackendSchema, runner, singularity, native
+from stimela.backends import StimelaBackendSchema, runner, singularity
 from stimela.exceptions import BackendError
 from stimela.kitchen.cab import Cab
 
