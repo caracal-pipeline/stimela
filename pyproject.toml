@@ -37,7 +37,7 @@ docs = [
     "Sphinx>=5.3.0,<6",
     "sphinx-copybutton>=0.5.0,<0.6",
     "furo>=2022.9.15,<2023",
-    "docutils"
+    "docutils>=0.19,<1.0"
 ]
 dev = [
     "pre-commit>=4.3.0",
