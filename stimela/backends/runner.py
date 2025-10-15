@@ -41,15 +41,17 @@ class BackendRunner(object):
 
 
 def validate_backend_settings(
-    backend_opts: Dict[str, Any], cab: Cab, log: logging.Logger,
+    backend_opts: Dict[str, Any],
+    cab: Cab,
+    log: logging.Logger,
 ) -> BackendRunner:
     """Checks that backend settings refer to a valid backend
-    
+
     Args:
         backend_opts (Dict): Options to set for the backend runner
         cab (object): Cab instance associated with backend
-        log (object): Logger object 
-    
+        log (object): Logger object
+
     Returns BackendRunner object: tuple of options, main, wrapper, where 'main' the the main backend,
     and 'wrapper' is an optional wrapper backend such as slurm.
     """
@@ -58,11 +60,11 @@ def validate_backend_settings(
 
     backend_name = backend = None
     selected = backend_opts.select or ["singularity", "native"]
-    
+
     # select containerization engine, if any
     for name in selected:
         # container tech cannot be used if cab.image has not been set
-        if name in ["singularity"]: 
+        if name in ["singularity"]:
             if isinstance(cab, Cab) and cab.image is None:
                 continue
         # check that backend has not been disabled
@@ -73,8 +75,10 @@ def validate_backend_settings(
                 backend_name = name
                 break
     else:
-        raise BackendError(f"selected backends ({', '.join(selected)}) not available, " 
-                        f"or the cab '{cab.name}' does not specify a container image")
+        raise BackendError(
+            f"selected backends ({', '.join(selected)}) not available, "
+            f"or the cab '{cab.name}' does not specify a container image"
+        )
 
     is_remote = is_remote_fs = backend.is_remote()
 
