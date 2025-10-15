@@ -64,7 +64,7 @@ def validate_backend_settings(
     # select containerization engine, if any
     for name in selected:
         # container tech cannot be used if cab.image has not been set
-        if name in ["singularity"]:
+        if name in ["singularity", "kube"]:
             if isinstance(cab, Cab) and cab.image is None:
                 continue
         # check that backend has not been disabled
