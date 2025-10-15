@@ -463,16 +463,16 @@ def run(
                     statrep.connected = connected = True
                     container_state = resp.status.container_statuses[0].state
 
-                    waiting = container_state.waiting
-                    running = container_state.running
-                    terminated = container_state.terminated
-
-                    # Do not repeatedly log messages if there is no change in state.
+                    # Only update log/do further checks when container state changes.
                     if container_state == last_container_state:
                         time.sleep(0.1)
                         continue
                     else:
                         last_container_state = container_state
+
+                    waiting = container_state.waiting
+                    running = container_state.running
+                    terminated = container_state.terminated
 
                     if waiting:
                         log.info("container state is 'waiting'")
