@@ -8,13 +8,12 @@ import pytest
 import stimela_tests
 from scabha.basetypes import File
 from scabha.schema_utils import paramfile_loader
-from stimela.backends import StimelaBackendSchema, runner
+from stimela.backends import StimelaBackendSchema, runner, singularity, native
 from stimela.exceptions import BackendError
 from stimela.kitchen.cab import Cab
 
 testdir = os.path.abspath(os.path.dirname(stimela_tests.__file__))
 recipe_file = File(f"{testdir}/test_recipe.yml")
-
 
 @dataclass
 class SchemaSpec:
@@ -26,6 +25,16 @@ class SchemaSpec:
 cabs = paramfile_loader(recipe_file, schema_spec=SchemaSpec)[recipe_file.BASENAME].cabs
 backend_opts = StimelaBackendSchema
 
+
+def fake_singularity_backend(name, opts={}):
+    if name == "singularity":
+        return singularity
+    else:
+        this_runner = __import__("stimela.backends", fromlist=["runner"])
+        return this_runner.get_backend(name, opts)
+
+if not singularity.is_available():
+    runner.get_backend = fake_singularity_backend    
 
 def test_default_select():
     print(
