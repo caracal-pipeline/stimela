@@ -455,7 +455,7 @@ def run(
     if enable_slurm:
         log.info("enabling the slurm backend wrapper")
         stimela.CONFIG.opts.backend.slurm.enable = True
-
+        
     def log_available_runnables():
         """Helper function to list available recipes or cabs"""
         if available_recipes:

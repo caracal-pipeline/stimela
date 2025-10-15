@@ -39,7 +39,8 @@ class BackendRunner(object):
             return self.backend.build(cab, backend=self.opts, log=log, rebuild=rebuild, wrapper=self.wrapper)
 
 
-def validate_backend_settings(backend_opts: Dict[str, Any], log: logging.Logger) -> BackendRunner:
+def validate_backend_settings(backend_opts: Dict[str, Any], log: logging.Logger,
+                            cab: "stimela.kitchen.cab.Cab"=None) -> BackendRunner:
     """Checks that backend settings refer to a valid backend
 
     Returs tuple of options, main, wrapper, where 'main' the the main backend, and 'wrapper' is an optional wrapper
@@ -52,13 +53,16 @@ def validate_backend_settings(backend_opts: Dict[str, Any], log: logging.Logger)
     selected = backend_opts.select or ["singularity", "native"]
     # select containerization engine, if any
     for name in selected:
+        # container tech cannot be used if cab.image has not been set
+        if name in ["singularity"] and not getattr(cab, "image", None):
+            continue
         # check that backend has not been disabled
         opts = getattr(backend_opts, name, None)
         if not opts or opts.enable:
             backend = get_backend(name, opts)
             if backend is not None:
                 backend_name = name
-                break
+                break 
     else:
         raise BackendError(f"selected backends ({', '.join(selected)}) not available")
 
