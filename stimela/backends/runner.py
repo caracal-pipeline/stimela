@@ -7,6 +7,7 @@ from omegaconf import OmegaConf
 import stimela
 from stimela.backends import StimelaBackendOptions
 from stimela.exceptions import BackendError
+from stimela.kitchen.cab import Cab
 
 from . import get_backend
 
@@ -40,23 +41,30 @@ class BackendRunner(object):
 
 
 def validate_backend_settings(
-    backend_opts: Dict[str, Any], log: logging.Logger, cab: "stimela.kitchen.cab.Cab" = None
+    backend_opts: Dict[str, Any], cab: Cab, log: logging.Logger,
 ) -> BackendRunner:
     """Checks that backend settings refer to a valid backend
-
-    Returs tuple of options, main, wrapper, where 'main' the the main backend, and 'wrapper' is an optional wrapper
-    backend such as slurm.
+    
+    Args:
+        backend_opts (Dict): Options to set for the backend runner
+        cab (object): Cab instance associated with backend
+        log (object): Logger object 
+    
+    Returns BackendRunner object: tuple of options, main, wrapper, where 'main' the the main backend,
+    and 'wrapper' is an optional wrapper backend such as slurm.
     """
     if not isinstance(backend_opts, StimelaBackendOptions):
         backend_opts = OmegaConf.to_object(backend_opts)
 
     backend_name = backend = None
     selected = backend_opts.select or ["singularity", "native"]
+    
     # select containerization engine, if any
     for name in selected:
         # container tech cannot be used if cab.image has not been set
-        if name in ["singularity"] and not getattr(cab, "image", None):
-            continue
+        if name in ["singularity"]: 
+            if isinstance(cab, Cab) and cab.image is None:
+                continue
         # check that backend has not been disabled
         opts = getattr(backend_opts, name, None)
         if not opts or opts.enable:
@@ -65,7 +73,8 @@ def validate_backend_settings(
                 backend_name = name
                 break
     else:
-        raise BackendError(f"selected backends ({', '.join(selected)}) not available")
+        raise BackendError(f"selected backends ({', '.join(selected)}) not available, " 
+                        f"or the cab '{cab.name}' does not specify a container image")
 
     is_remote = is_remote_fs = backend.is_remote()
 
