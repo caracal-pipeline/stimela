@@ -15,6 +15,7 @@ from stimela.kitchen.cab import Cab
 testdir = os.path.abspath(os.path.dirname(stimela_tests.__file__))
 recipe_file = File(f"{testdir}/test_recipe.yml")
 
+
 @dataclass
 class SchemaSpec:
     cabs: Dict[str, Cab]
@@ -33,8 +34,10 @@ def fake_singularity_backend(name, opts={}):
         this_runner = __import__("stimela.backends", fromlist=["runner"])
         return this_runner.get_backend(name, opts)
 
+
 if not singularity.is_available():
-    runner.get_backend = fake_singularity_backend    
+    runner.get_backend = fake_singularity_backend
+
 
 def test_default_select():
     print(
