@@ -39,8 +39,9 @@ class BackendRunner(object):
             return self.backend.build(cab, backend=self.opts, log=log, rebuild=rebuild, wrapper=self.wrapper)
 
 
-def validate_backend_settings(backend_opts: Dict[str, Any], log: logging.Logger,
-                            cab: "stimela.kitchen.cab.Cab"=None) -> BackendRunner:
+def validate_backend_settings(
+    backend_opts: Dict[str, Any], log: logging.Logger, cab: "stimela.kitchen.cab.Cab" = None
+) -> BackendRunner:
     """Checks that backend settings refer to a valid backend
 
     Returs tuple of options, main, wrapper, where 'main' the the main backend, and 'wrapper' is an optional wrapper
@@ -62,7 +63,7 @@ def validate_backend_settings(backend_opts: Dict[str, Any], log: logging.Logger,
             backend = get_backend(name, opts)
             if backend is not None:
                 backend_name = name
-                break 
+                break
     else:
         raise BackendError(f"selected backends ({', '.join(selected)}) not available")
 

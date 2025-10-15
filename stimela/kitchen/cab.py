@@ -207,7 +207,6 @@ class Cab(Cargo):
         except Exception as exc:
             raise CabValidationError("error constructing cab command", exc)
 
-
         self.log.debug(f"command is {command}")
 
         return shlex.split(command) + args + self.build_argument_list(params)

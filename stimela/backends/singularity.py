@@ -497,4 +497,3 @@ def run(
             log.info(f"{command_name} returns exit code {retcode} after {elapsed()}")
 
         return cabstat
-
