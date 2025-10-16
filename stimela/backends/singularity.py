@@ -23,6 +23,10 @@ from . import native
 ReadWrite = Enum("BindMode", "ro rw", module=__name__)
 
 
+# can only execute cabs that specify a container image
+requires_container_image = True
+
+
 @dataclass
 class SingularityBackendOptions(object):
     @dataclass

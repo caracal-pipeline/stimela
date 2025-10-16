@@ -58,27 +58,31 @@ def validate_backend_settings(
     if not isinstance(backend_opts, StimelaBackendOptions):
         backend_opts = OmegaConf.to_object(backend_opts)
 
-    backend_name = backend = None
     selected = backend_opts.select or ["singularity", "native"]
 
     # select containerization engine, if any
     for name in selected:
-        # container tech cannot be used if cab.image has not been set
-        if name in ["singularity", "kube"]:
-            if isinstance(cab, Cab) and cab.image is None:
-                continue
-        # check that backend has not been disabled
+        backend_name = backend = None
         opts = getattr(backend_opts, name, None)
+        # check that backend has not been disabled
         if not opts or opts.enable:
             backend = get_backend(name, opts)
             if backend is not None:
                 backend_name = name
+                if getattr(backend, "requires_container_image", False):
+                    if isinstance(cab, Cab) and not cab.image:
+                        continue
                 break
     else:
-        raise BackendError(
-            f"selected backends ({', '.join(selected)}) not available, "
-            f"or the cab '{cab.name}' does not specify a container image"
-        )
+        selected_string = ", ".join(selected)
+        # backend is available but cab.image is not set when cab is a Cab.
+        if backend_name:
+            raise BackendError(
+                f"Selected backdend(s) '{selected_string}' require a container image but"
+                f" The cab '{cab.name}' does not specify one."
+            )
+        else:
+            raise BackendError(f"selected backends ({', '.join(selected)}) not available.")
 
     is_remote = is_remote_fs = backend.is_remote()
 

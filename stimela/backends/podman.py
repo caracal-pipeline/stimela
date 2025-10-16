@@ -10,6 +10,10 @@ import stimela
 from stimela import utils
 
 
+# can only execute cabs that specify a container image
+requires_container_image = True
+
+
 def is_available(opts=None):
     return False
 
