@@ -7,6 +7,7 @@ from omegaconf import OmegaConf
 import stimela
 from stimela.backends import StimelaBackendOptions
 from stimela.exceptions import BackendError
+from stimela.kitchen.cab import Cab
 
 from . import get_backend
 
@@ -39,28 +40,49 @@ class BackendRunner(object):
             return self.backend.build(cab, backend=self.opts, log=log, rebuild=rebuild, wrapper=self.wrapper)
 
 
-def validate_backend_settings(backend_opts: Dict[str, Any], log: logging.Logger) -> BackendRunner:
+def validate_backend_settings(
+    backend_opts: Dict[str, Any],
+    log: logging.Logger,
+    cab: Optional[Cab] = None,
+) -> BackendRunner:
     """Checks that backend settings refer to a valid backend
 
-    Returs tuple of options, main, wrapper, where 'main' the the main backend, and 'wrapper' is an optional wrapper
-    backend such as slurm.
+    Args:
+        backend_opts (Dict): Options to set for the backend runner
+        cab (object): Cab instance associated with backend
+        log (object): Logger object
+
+    Returns BackendRunner object: tuple of options, main, wrapper, where 'main' the the main backend,
+    and 'wrapper' is an optional wrapper backend such as slurm.
     """
     if not isinstance(backend_opts, StimelaBackendOptions):
         backend_opts = OmegaConf.to_object(backend_opts)
 
-    backend_name = backend = None
     selected = backend_opts.select or ["singularity", "native"]
+
     # select containerization engine, if any
     for name in selected:
-        # check that backend has not been disabled
+        backend_name = backend = None
         opts = getattr(backend_opts, name, None)
+        # check that backend has not been disabled
         if not opts or opts.enable:
             backend = get_backend(name, opts)
             if backend is not None:
                 backend_name = name
+                if getattr(backend, "requires_container_image", False):
+                    if isinstance(cab, Cab) and not cab.image:
+                        continue
                 break
     else:
-        raise BackendError(f"selected backends ({', '.join(selected)}) not available")
+        selected_string = ", ".join(selected)
+        # backend is available but cab.image is not set when cab is a Cab.
+        if backend_name:
+            raise BackendError(
+                f"Selected backdend(s) '{selected_string}' require a container image but"
+                f" The cab '{cab.name}' does not specify one."
+            )
+        else:
+            raise BackendError(f"selected backends ({', '.join(selected)}) not available.")
 
     is_remote = is_remote_fs = backend.is_remote()
 
