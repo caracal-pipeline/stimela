@@ -65,7 +65,7 @@ def test_default_select():
     )
 
     simms_cab = Cab(**cabs.simms)
-    backend_runner = runner.validate_backend_settings(backend_opts, simms_cab, logging.Logger)
+    backend_runner = runner.validate_backend_settings(backend_opts, logging.Logger, simms_cab)
 
     assert isinstance(backend_runner, runner.BackendRunner)
     assert backend_runner.backend_name == "native"
@@ -76,7 +76,7 @@ def test_native_priority_backend():
 
     simms_cab = Cab(**cabs.simms)
     backend_opts.select = ["native", "singularity"]
-    backend_runner = runner.validate_backend_settings(backend_opts, simms_cab, logging.Logger)
+    backend_runner = runner.validate_backend_settings(backend_opts, logging.Logger, simms_cab)
 
     assert backend_runner.backend_name == "native"
 
@@ -91,7 +91,7 @@ def test_container_backend_no_image():
     simms_cab = Cab(**cabs.simms)
     backend_opts.select = ["singularity"]
     with pytest.raises(BackendError) as exception:
-        runner.validate_backend_settings(backend_opts, simms_cab, logging.Logger)
+        runner.validate_backend_settings(backend_opts, logging.Logger, simms_cab)
 
     assert "require a container image" in str(exception.value)
 
@@ -106,7 +106,7 @@ def test_no_container_backend_yes_image():
     simms_cab = Cab(**cabs.simms)
     backend_opts.select = ["singularity"]
     with pytest.raises(BackendError) as exception:
-        runner.validate_backend_settings(backend_opts, simms_cab, logging.Logger)
+        runner.validate_backend_settings(backend_opts, logging.Logger, simms_cab)
 
     assert "not available" in str(exception.value)
 
@@ -121,7 +121,7 @@ def test_container_backend_yes_image():
     simms_cab = Cab(**cabs.simms)
     backend_opts.select = ["singularity"]
     simms_cab.image = "foo-bar"
-    backend_runner = runner.validate_backend_settings(backend_opts, simms_cab, logging.Logger)
+    backend_runner = runner.validate_backend_settings(backend_opts, logging.Logger, simms_cab)
 
     assert backend_runner.backend is runner.get_backend("singularity")
 
@@ -131,6 +131,6 @@ def test_native_backend_no_image():
 
     simms_cab = Cab(**cabs.simms)
     backend_opts.select = ["native"]
-    backend_runner = runner.validate_backend_settings(backend_opts, simms_cab, logging.Logger)
+    backend_runner = runner.validate_backend_settings(backend_opts, logging.Logger, simms_cab)
 
     assert backend_runner.backend is runner.get_backend("native")

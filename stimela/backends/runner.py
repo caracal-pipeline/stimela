@@ -42,8 +42,8 @@ class BackendRunner(object):
 
 def validate_backend_settings(
     backend_opts: Dict[str, Any],
-    cab: Cab,
     log: logging.Logger,
+    cab: Optional[Cab] = None,
 ) -> BackendRunner:
     """Checks that backend settings refer to a valid backend
 

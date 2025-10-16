@@ -297,7 +297,7 @@ class Step:
             backend_opts = OmegaConf.to_object(
                 OmegaConf.merge(StimelaBackendSchema, backend or {}, self.cargo.backend or {}, self.backend or {})
             )
-            runner.validate_backend_settings(backend_opts, self.cargo if isinstance(self.cargo, Cab) else None, log=log)
+            runner.validate_backend_settings(backend_opts, log, cab=self.cargo if isinstance(self.cargo, Cab) else None)
 
     def prevalidate(self, subst: Optional[SubstitutionNS] = None, root=False, backend=None):
         self.finalize(backend=backend)
@@ -384,7 +384,9 @@ class Step:
                     log_rich_payload(self.log, "effective backend settings are", opts_yaml, syntax="yaml")
                 backend_opts = OmegaConf.to_object(OmegaConf.merge(stimela.CONFIG.opts.backend, backend_opts))
                 backend_runner = runner.validate_backend_settings(
-                    backend_opts, self.cargo if isinstance(self.cargo, Cab) else None, log=log
+                    backend_opts,
+                    log,
+                    cab=self.cargo if isinstance(self.cargo, Cab) else None,
                 )
             except Exception as exc:
                 newexc = BackendError("error validating backend settings", exc)
@@ -437,7 +439,9 @@ class Step:
             backend_opts = OmegaConf.merge(StimelaBackendSchema, backend_opts)
             backend_opts = OmegaConf.to_object(backend_opts)
             backend_runner = runner.validate_backend_settings(
-                backend_opts, self.cargo if isinstance(self.cargo, Cab) else None, log=self.log
+                backend_opts,
+                self.log,
+                cab=self.cargo if isinstance(self.cargo, Cab) else None,
             )
         except Exception as exc:
             newexc = BackendError("error validating backend settings", exc)
