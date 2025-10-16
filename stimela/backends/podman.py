@@ -9,7 +9,6 @@ from io import StringIO
 import stimela
 from stimela import utils
 
-
 # can only execute cabs that specify a container image
 requires_container_image = True
 
