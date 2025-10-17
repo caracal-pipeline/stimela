@@ -1,6 +1,6 @@
 [project]
 name = "stimela"
-version = "2.1.4rc3"
+version = "2.1.4rc4"
 description = "Framework for system agnostic pipelines for (not just) radio interferometry"
 authors = [
     { name = "Oleg Smirnov and RATT", email = "osmirnov@gmail.com" },
