@@ -1,8 +1,8 @@
+import copy
 import logging
 import os.path
 from dataclasses import dataclass
 from typing import Any, Dict
-import copy
 
 import pytest
 
@@ -135,29 +135,29 @@ def test_native_backend_no_image():
     backend_runner = runner.validate_backend_settings(backend_opts, logging.Logger, simms_cab)
 
     assert backend_runner.backend is runner.get_backend("native")
-    
-    
+
+
 def test_singularity_priority_no_native_no_singularity():
     print("===== expecting errors since both backends are not available =====")
-    
+
     simms_cab = Cab(**cabs.simms)
     backend_opts2 = copy.deepcopy(backend_opts)
-    backend_opts2.select = ["singularity","native"]
+    backend_opts2.select = ["singularity", "native"]
     backend_opts2.native.enable = False
-    
+
     with pytest.raises(BackendError) as exception:
         runner.validate_backend_settings(backend_opts2, logging.Logger, simms_cab)
 
     assert "not available" in str(exception.value)
 
-    
+
 def test_singularity_priority_no_native():
     print("===== expecting no errors since singularity is available =====")
 
     # import runner for this function context
     runner = __import__("stimela.backends", fromlist=["runner"]).runner
     runner.get_backend = fake_singularity_on
-    
+
     backend_opts2 = copy.deepcopy(backend_opts)
     backend_opts2.native.enable = False
     simms_cab = Cab(**cabs.simms)
@@ -166,8 +166,8 @@ def test_singularity_priority_no_native():
     backend_runner = runner.validate_backend_settings(backend_opts2, logging.Logger, simms_cab)
 
     assert backend_runner.backend is runner.get_backend("singularity")
-    
-    
+
+
 def test_singularity_priority_no_native_no_image():
     print("===== expecting errors since container image is not set and native is disabled =====")
 
@@ -179,7 +179,7 @@ def test_singularity_priority_no_native_no_image():
     backend_opts2 = copy.deepcopy(backend_opts)
     backend_opts2.select = ["singularity", "native"]
     backend_opts2.native.enable = False
-    
+
     with pytest.raises(BackendError) as exception:
         runner.validate_backend_settings(backend_opts2, logging.Logger, simms_cab)
 
