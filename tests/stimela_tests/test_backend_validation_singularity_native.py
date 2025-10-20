@@ -94,11 +94,11 @@ def test_container_backend_no_image():
     with pytest.raises(BackendError) as exception:
         runner.validate_backend_settings(backend_opts, logging.Logger, simms_cab)
 
-    assert "require a container image" in str(exception.value)
+    assert "container image not specified by cab" in str(exception.value)
 
 
 def test_no_container_backend_yes_image():
-    print("===== expecting errors when using a container backend and cab.image is not set =====")
+    print("===== expecting errors when container backend is not available =====")
 
     # import runner for this function context
     runner = __import__("stimela.backends", fromlist=["runner"]).runner
@@ -109,7 +109,8 @@ def test_no_container_backend_yes_image():
     with pytest.raises(BackendError) as exception:
         runner.validate_backend_settings(backend_opts, logging.Logger, simms_cab)
 
-    assert "not available" in str(exception.value)
+    assert "unable to select a backend" in str(exception.value)
+    assert "singularity" in str(exception.value)
 
 
 def test_container_backend_yes_image():
@@ -148,7 +149,9 @@ def test_singularity_priority_no_native_no_singularity():
     with pytest.raises(BackendError) as exception:
         runner.validate_backend_settings(backend_opts2, logging.Logger, simms_cab)
 
-    assert "not available" in str(exception.value)
+    assert "unable to select a backend" in str(exception.value)
+    assert "singularity" in str(exception.value)
+    assert "native: disabled" in str(exception.value)
 
 
 def test_singularity_priority_no_native():
@@ -183,4 +186,5 @@ def test_singularity_priority_no_native_no_image():
     with pytest.raises(BackendError) as exception:
         runner.validate_backend_settings(backend_opts2, logging.Logger, simms_cab)
 
-    assert "not available" in str(exception.value)
+    assert "container image not specified by cab" in str(exception.value)
+    assert "native: disabled" in str(exception.value)
