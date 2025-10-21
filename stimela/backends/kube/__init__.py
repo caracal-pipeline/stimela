@@ -42,6 +42,9 @@ InjectedFileFormatters = dict(yaml=yaml.dump, json=json.dumps, txt=str)
 
 InjectedFileFormats = Enum("InjectedFileFormats", " ".join(InjectedFileFormatters.keys()), module=__name__)
 
+# can only execute cabs that specify a container image
+requires_container_image = True
+
 
 @dataclass
 class KubePodSpec(object):
