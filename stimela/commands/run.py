@@ -355,7 +355,7 @@ def run(
     parameter_file: List[str] = [],
 ):
     log = logger()
-    if not (ctx.parent.params["boring"] or ctx.parent.params["no_progress"]):
+    if not (ctx.parent.params["boring"] or ctx.parent.params["disable_display"]):
         display.enable()
     params = OrderedDict()
     errcode = 0

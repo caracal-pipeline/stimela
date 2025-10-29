@@ -73,9 +73,11 @@ class RunExecGroup(click.Group):
     is_flag=True,
     help="Reset the configuration cache. First thing to try in case of strange configuration errors.",
 )
-@click.option("--simple", "-S", is_flag=True, help="Use simplified (single-line) displays.")
-@click.option("--no-progress", "-np", is_flag=True, help="Disable the progress display.")
-@click.option("--boring", "-B", is_flag=True, help="Disables progress bar and any other fancy console outputs.")
+@click.option("--simplify-display", "-sd", is_flag=True, help="Use the simplified (single-line) Rich progress display.")
+@click.option("--disable-display", "-dd", is_flag=True, help="Disable the Rich progress display entirely.")
+@click.option(
+    "--boring", "-B", is_flag=True, help="Disables the Rich progress display and any other fancy console outputs."
+)
 @click.option("--verbose", "-v", is_flag=True, help="Be extra verbose in output.")
 @click.version_option(str(stimela.__version__))
 def cli(
@@ -86,16 +88,16 @@ def cli(
     verbose=False,
     no_sys_config=False,
     clear_cache=False,
-    no_progress=False,
     boring=False,
-    simple=False,
+    simplify_display=False,
+    disable_display=False,
 ):
     global log
     log = stimela.logger(loglevel=logging.DEBUG if verbose else logging.INFO, boring=boring)
     log.info("starting")  # remove this eventually, but it's handy for timing things right now
 
     # Force simple displays when provided.
-    if simple:
+    if simplify_display:
         display.set_variant_override("simple")
 
     stimela.VERBOSE = verbose
