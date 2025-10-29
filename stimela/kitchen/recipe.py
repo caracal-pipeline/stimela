@@ -1354,12 +1354,13 @@ class Recipe(Cargo):
                 # level overrides are ignored.
                 backend_opts = OmegaConf.merge(stimela.CONFIG.opts.backend, backend)
                 backend_opts = OmegaConf.to_object(backend_opts)
-                # TODO(JSKenyon): For now, we default to a minimal display for the kube backend
-                # when scattering. This is consistent with the behaviour prior to the addition of
-                # multiple displays. At present, the status reporter for the kube backend is not
-                # configured at this point so we cannot track all the pods running in the scattered
-                # loop.
+                # TODO(JSKenyon): For now, we default to a minimal display (e.g. the slurm display)
+                # for the kube backend when scattering. This is consistent with the behaviour prior
+                # to the addition of multiple displays. At present, the status reporter for the kube
+                # backend is not configured at this point so we cannot track all the pods running
+                # in the scattered loop.
                 display_style = backend_opts.current_wrapper or backend_opts.current_backend
+                # As noted above, use simpler slurm display when scattering with kube backend.
                 display_style = "slurm" if display_style == "kube" else display_style
 
                 # If the display is disabled at this point, it implies that we
