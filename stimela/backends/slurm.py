@@ -88,7 +88,7 @@ class SlurmOptions(object):
         self, args: List[str], fqname: Optional[str] = None, log: Optional[logging.Logger] = None
     ) -> List[str]:
         if self.build_local:
-            return args
+            return args, args
         return self._wrap(
             self.srun_opts_build if self.srun_opts_build is not None else self.srun_opts,
             args,

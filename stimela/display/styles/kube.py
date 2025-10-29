@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from rich.console import Group
 from rich.panel import Panel
@@ -9,11 +9,13 @@ from rich.progress import Progress
 from rich.table import Column, Table
 from rich.text import Text
 
+from stimela.monitoring.kube import KubeReport
+
 from .base import DisplayStyle
 from .elements import status_element, timer_element
 
 if TYPE_CHECKING:
-    from stimela.task_stats import SystemStatsDatum, TaskInformation, TaskStatsDatum
+    from stimela.task_stats import TaskInformation
 
 
 class KubeDisplay(DisplayStyle):
@@ -130,23 +132,16 @@ class KubeDisplay(DisplayStyle):
 
     def update(
         self,
-        sys_stats: SystemStatsDatum,
-        task_stats: TaskStatsDatum,
         task_info: TaskInformation,
-        extra_info: Optional[object] = None,
+        report: KubeReport,
     ):
         """Updates the progress elements using the provided values.
 
         Args:
-            sys_stats:
-                An object containing the current system status.
-            task_stats:
-                An object containing the current task stats.
             task_info:
                 An object containing information about the current task.
-            extra_info:
-                A Report object containing additional information. Typically
-                used for information originating from a backend.
+            report:
+                A Report object containing resource monitoring.
         """
 
         if task_info is not None:
@@ -158,36 +153,32 @@ class KubeDisplay(DisplayStyle):
             # why the command has square brackets in the first place.
             self.task_command.update(self.task_command_id, value=f"{(task_info.command or '--').strip('([])')}")
 
-        if extra_info:
-            self.kube_connection_status.update(self.kube_connection_status_id, value=f"{extra_info.connection_status}")
+        # Require a KubeReport to update all fields.
+        if not isinstance(report, KubeReport):
+            return
 
-            cpu_percent = extra_info.total_cores * 100
+        self.kube_connection_status.update(self.kube_connection_status_id, value=f"{report.connection_status}")
 
-            self.kube_core_usage.update(self.kube_core_usage_id, value=f"[green]{cpu_percent:2.1f}[/green]%")
+        cpu_percent = report.total_cores * 100
 
-            max_cpu_percent = max(cpu_percent, self.task_maxima["kube_peak_core_usage"])
-            self.task_maxima["kube_peak_core_usage"] = max_cpu_percent
-            self.kube_peak_core_usage.update(
-                self.kube_peak_core_usage_id, value=f"[green]{max_cpu_percent:2.1f}[/green]%"
-            )
+        self.kube_core_usage.update(self.kube_core_usage_id, value=f"[green]{cpu_percent:2.1f}[/green]%")
 
-            self.kube_ram_usage.update(self.kube_ram_usage_id, value=f"[green]{extra_info.total_memory}[/green]GB")
+        max_cpu_percent = max(cpu_percent, self.task_maxima["kube_peak_core_usage"])
+        self.task_maxima["kube_peak_core_usage"] = max_cpu_percent
+        self.kube_peak_core_usage.update(self.kube_peak_core_usage_id, value=f"[green]{max_cpu_percent:2.1f}[/green]%")
 
-            max_ram = max(extra_info.total_memory, self.task_maxima["kube_peak_ram_usage"])
-            self.task_maxima["kube_peak_ram_usage"] = max_ram
-            self.kube_peak_ram_usage.update(self.kube_peak_ram_usage_id, value=f"[green]{max_ram}[/green]GB")
+        self.kube_ram_usage.update(self.kube_ram_usage_id, value=f"[green]{report.total_memory}[/green]GB")
 
-            self.pending_pods.update(self.pending_pods_id, value=f"[yellow]{extra_info.pending_pods}[/yellow]")
+        max_ram = max(report.total_memory, self.task_maxima["kube_peak_ram_usage"])
+        self.task_maxima["kube_peak_ram_usage"] = max_ram
+        self.kube_peak_ram_usage.update(self.kube_peak_ram_usage_id, value=f"[green]{max_ram}[/green]GB")
 
-            self.running_pods.update(self.running_pods_id, value=f"[green]{extra_info.running_pods}[/green]")
-
-            self.terminating_pods.update(self.terminating_pods_id, value=f"[blue]{extra_info.terminating_pods}[/blue]")
-
-            self.successful_pods.update(self.successful_pods_id, value=f"[green]{extra_info.successful_pods}[/green]")
-
-            self.failed_pods.update(self.failed_pods_id, value=f"[red]{extra_info.failed_pods}[/red]")
-
-            self.stateless_pods.update(self.stateless_pods_id, value=f"[red]{extra_info.stateless_pods}[/red]")
+        self.pending_pods.update(self.pending_pods_id, value=f"[yellow]{report.pending_pods}[/yellow]")
+        self.running_pods.update(self.running_pods_id, value=f"[green]{report.running_pods}[/green]")
+        self.terminating_pods.update(self.terminating_pods_id, value=f"[blue]{report.terminating_pods}[/blue]")
+        self.successful_pods.update(self.successful_pods_id, value=f"[green]{report.successful_pods}[/green]")
+        self.failed_pods.update(self.failed_pods_id, value=f"[red]{report.failed_pods}[/red]")
+        self.stateless_pods.update(self.stateless_pods_id, value=f"[red]{report.stateless_pods}[/red]")
 
 
 class SimpleKubeDisplay(DisplayStyle):
@@ -265,23 +256,16 @@ class SimpleKubeDisplay(DisplayStyle):
 
     def update(
         self,
-        sys_stats: SystemStatsDatum,
-        task_stats: TaskStatsDatum,
         task_info: TaskInformation,
-        extra_info: Optional[object] = None,
+        report: KubeReport,
     ):
         """Updates the progress elements using the provided values.
 
         Args:
-            sys_stats:
-                An object containing the current system status.
-            task_stats:
-                An object containing the current task stats.
             task_info:
                 An object containing information about the current task.
-            extra_info:
-                A Report object containing additional information. Typically
-                used for information originating from a backend.
+            report:
+                A Report object containing resource monitoring.
         """
 
         if task_info is not None:
@@ -291,19 +275,15 @@ class SimpleKubeDisplay(DisplayStyle):
             # why the command has square brackets in the first place.
             self.task_command.update(self.task_command_id, value=f"{(task_info.command or '--').strip('([])')}")
 
-        if extra_info:
-            self.kube_connection_status.update(self.kube_connection_status_id, value=f"{extra_info.connection_status}")
+        # Require a KubeReport to update all fields.
+        if not isinstance(report, KubeReport):
+            return
 
-            cpu_percent = extra_info.total_cores * 100
-
-            self.kube_core_usage.update(self.kube_core_usage_id, value=f"[green]{cpu_percent:2.1f}[/green]%")
-
-            self.kube_ram_usage.update(self.kube_ram_usage_id, value=f"[green]{extra_info.total_memory}[/green]GB")
-
-            self.pending_pods.update(self.pending_pods_id, value=f"[yellow]{extra_info.pending_pods}[/yellow]")
-
-            self.running_pods.update(self.running_pods_id, value=f"[cyan]{extra_info.running_pods}[/cyan]")
-
-            self.successful_pods.update(self.successful_pods_id, value=f"[green]{extra_info.successful_pods}[/green]")
-
-            self.failed_pods.update(self.failed_pods_id, value=f"[red]{extra_info.failed_pods}[/red]")
+        self.kube_connection_status.update(self.kube_connection_status_id, value=f"{report.connection_status}")
+        cpu_percent = report.total_cores * 100
+        self.kube_core_usage.update(self.kube_core_usage_id, value=f"[green]{cpu_percent:2.1f}[/green]%")
+        self.kube_ram_usage.update(self.kube_ram_usage_id, value=f"[green]{report.total_memory}[/green]GB")
+        self.pending_pods.update(self.pending_pods_id, value=f"[yellow]{report.pending_pods}[/yellow]")
+        self.running_pods.update(self.running_pods_id, value=f"[cyan]{report.running_pods}[/cyan]")
+        self.successful_pods.update(self.successful_pods_id, value=f"[green]{report.successful_pods}[/green]")
+        self.failed_pods.update(self.failed_pods_id, value=f"[red]{report.failed_pods}[/red]")

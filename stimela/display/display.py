@@ -14,7 +14,7 @@ from stimela.display.styles import KubeDisplay, LocalDisplay, SimpleKubeDisplay,
 from stimela.stimelogging import rich_console
 
 if TYPE_CHECKING:
-    from stimela.task_stats import SystemStatsDatum, TaskInformation, TaskStatsDatum
+    from stimela.task_stats import TaskInformation
 
 
 class Display:
@@ -45,14 +45,16 @@ class Display:
         SpinnerColumn(),
         TextColumn("[yellow][bold]{task.description}[/bold][/yellow]", table_column=Column(no_wrap=True)),
         TimeElapsedColumn(),
-        refresh_per_second=2,
+        auto_refresh=False,
         transient=True,
     )
     run_elapsed_id = run_elapsed.add_task("", start=True)
 
     style_map = {
-        ("local", "simple"): SimpleLocalDisplay,
-        ("local", "fancy"): LocalDisplay,
+        ("native", "simple"): SimpleLocalDisplay,
+        ("native", "fancy"): LocalDisplay,
+        ("singularity", "simple"): SimpleLocalDisplay,
+        ("singularity", "fancy"): LocalDisplay,
         ("kube", "simple"): SimpleKubeDisplay,
         ("kube", "fancy"): KubeDisplay,
         ("slurm", "simple"): SimpleSlurmDisplay,
@@ -73,7 +75,7 @@ class Display:
         msg = Text("DISPLAY HAS NOT BEEN CONFIGURED", justify="center")
         msg.stylize("bold red")
 
-        self.live_display = Live(msg, refresh_per_second=5, console=self.console, transient=True)
+        self.live_display = Live(msg, refresh_per_second=2, console=self.console, transient=True)
 
         # Configure a simple, local display as the default.
         self.set_display_style(variant="simple")
@@ -109,7 +111,7 @@ class Display:
     def is_enabled(self):
         return self.live_display.is_started
 
-    def set_display_style(self, style: str = "local", variant: str = "fancy"):
+    def set_display_style(self, style: str = "native", variant: str = "fancy"):
         """Reconfigures the display style based on the provided string.
 
         Args:
@@ -141,25 +143,18 @@ class Display:
 
     def update(
         self,
-        sys_stats: SystemStatsDatum,
-        task_stats: TaskStatsDatum,
         task_info: TaskInformation,
-        extra_info: Optional[object] = None,
+        report: object,
     ):
         """Calls the update method on current_display.
 
         Args:
-            sys_stats:
-                An object containing the current system status.
-            task_stats:
-                An object containing the current task stats.
             task_info:
                 An object containing information about the current task.
-            extra_info:
-                A Report object containing additional information. Typically
-                used for information originating from a backend.
+            report:
+                A Report object containing resource monitoring.
         """
-        return self.current_display.update(sys_stats, task_stats, task_info, extra_info)
+        return self.current_display.update(task_info, report)
 
 
 display = Display(rich_console)

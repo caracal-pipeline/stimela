@@ -1,15 +1,17 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from datetime import timedelta
+from typing import TYPE_CHECKING
 
-from rich.progress import Progress
-from rich.table import Table
+from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn
+from rich.text import Text
+
+from stimela.monitoring.slurm import SlurmReport
 
 from .base import DisplayStyle
-from .elements import status_element
 
 if TYPE_CHECKING:
-    from stimela.task_stats import SystemStatsDatum, TaskInformation, TaskStatsDatum
+    from stimela.task_stats import TaskInformation
 
 
 class SimpleSlurmDisplay(DisplayStyle):
@@ -50,45 +52,49 @@ class SimpleSlurmDisplay(DisplayStyle):
 
         super().__init__(run_timer)
 
-        self.run_elapsed.update(self.run_elapsed_id, description="R")
-        self.task_elapsed.update(self.task_elapsed_id, description="S")
+        # NOTE(JSKenyon): This display has diverged from the others as it has
+        # been optimised for minimum CPU usage.
+        self.task_elapsed = Progress(
+            SpinnerColumn(),
+            "[yellow][bold]R[/bold][/yellow]",
+            "[yellow]{task.fields[elapsed]}[/yellow]",
+            SpinnerColumn(),
+            "[yellow][bold]S[/bold][/yellow]",
+            TimeElapsedColumn(),
+            "[bold]{task.fields[name]}[/bold]",
+            "[dim]{task.fields[status]}[/dim]",
+            "{task.fields[command]}",
+            auto_refresh=False,
+            transient=True,
+        )
+        self.task_elapsed_id = self.task_elapsed.add_task(
+            "stimela", name="--", status="--", command="--", elapsed="00:00:00", start=True
+        )
 
-        for k, v in self.tracked_values.items():
-            status = status_element(has_description=v is not None)
-            status_id = status.add_task(v, value="--")
-            setattr(self, k, status)
-            setattr(self, f"{k}_id", status_id)
-
-        table = Table.grid(expand=False, padding=(0, 1))
-        table.add_row(self.run_elapsed, self.task_elapsed, self.task_name, self.task_status, self.task_command)
-
-        self.render_target = table
+        self.render_target = self.task_elapsed
 
     def update(
         self,
-        sys_stats: SystemStatsDatum,
-        task_stats: TaskStatsDatum,
         task_info: TaskInformation,
-        extra_info: Optional[object] = None,
+        report: SlurmReport,
     ):
         """Updates the progress elements using the provided values.
 
         Args:
-            sys_stats:
-                An object containing the current system status.
-            task_stats:
-                An object containing the current task stats.
             task_info:
                 An object containing information about the current task.
-            extra_info:
-                A Report object containing additional information. Typically
-                used for information originating from a backend.
+            report:
+                A Report object containing resource monitoring.
         """
-        if task_info is not None:
-            self.task_name.update(self.task_name_id, value=f"[bold]{task_info.description}[/bold]")
+        updates = {}
 
-            self.task_status.update(self.task_status_id, value=f"[dim]{task_info.status or 'running'}[/dim]")
-            # Sometimes the command contains square brackets which rich
-            # interprets as formatting. Remove them. # TODO: Figure out
-            # why the command has square brackets in the first place.
-            self.task_command.update(self.task_command_id, value=f"{(task_info.command or '--').strip('([])')}")
+        run_elapsed_task = self.run_elapsed.tasks[self.run_elapsed_id]
+        elapsed = timedelta(seconds=int(run_elapsed_task.elapsed))
+        updates["elapsed"] = Text(str(elapsed), style="progress.elapsed")
+
+        if task_info is not None:
+            updates["name"] = task_info.description
+            updates["status"] = task_info.status or "running"
+            updates["command"] = (task_info.command or "--").strip("([])")
+
+        self.task_elapsed.update(self.task_elapsed_id, **updates)

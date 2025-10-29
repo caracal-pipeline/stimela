@@ -30,7 +30,6 @@ from stimela.display.display import display
 from stimela.exceptions import RecipeValidationError, StepSelectionError, StepValidationError, StimelaRuntimeError
 from stimela.kitchen.recipe import Recipe, RecipeSchema, Step
 from stimela.kitchen.run_state import graph_to_constraints
-from stimela.stimelogging import is_logging_boring
 
 
 def resolve_recipe_files(filename: str, log: logging.Logger, use_manifest: bool = True):
@@ -328,7 +327,9 @@ def load_recipe_files(filenames: List[str]):
 @click.argument(
     "parameters", nargs=-1, metavar="filename.yml ... [recipe or cab name] [PARAM=VALUE] ...", required=True
 )
+@click.pass_context
 def run(
+    ctx,
     parameters: List[str] = [],
     dump_config: bool = False,
     dry_run: bool = False,
@@ -354,7 +355,7 @@ def run(
     parameter_file: List[str] = [],
 ):
     log = logger()
-    if not is_logging_boring():
+    if not (ctx.parent.params["boring"] or ctx.parent.params["disable_display"]):
         display.enable()
     params = OrderedDict()
     errcode = 0

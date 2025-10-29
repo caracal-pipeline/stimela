@@ -1156,6 +1156,7 @@ class Recipe(Cargo):
                 subst.info.taskname = taskname
                 # task_stats.declare_subtask_attributes(count)
                 # task_attrs = (count,)
+                # NOTE(JSKenyon): This uses the default dummy_reporter i.e. won't update stats.
                 context = task_stats.declare_subtask(f"({count})")
             else:
                 from contextlib import nullcontext
@@ -1345,33 +1346,22 @@ class Recipe(Cargo):
                 else:
                     num_workers = min(self._for_loop_scatter, nloop)
 
-                # NOTE(JSKenyon): We don't actually have the runner at this
-                # point so dynamically changing the display based on the
-                # backend is problematic. The loop being run may also use
-                # different backends for each step. However, in most cases a
-                # scattered loop will be either remote (kube, slurm) or local,
-                # and not a mixture of the two. This chooses the display based
-                # on the backend config at the recipe level - step level
-                # overrides are ignored.
+                # NOTE(JSKenyon): We don't actually have the runner at this point so dynamically
+                # changing the display based on the backend is problematic. The loop being run may
+                # also use different backends for each step. However, in most cases a scattered
+                # loop will be either remote (kube, slurm) or local, and not a mixture of the two.
+                # This chooses the display based on the backend config at the recipe level - step
+                # level overrides are ignored.
                 backend_opts = OmegaConf.merge(stimela.CONFIG.opts.backend, backend)
-                requested_backends = backend_opts.select
-                if isinstance(requested_backends, (list, ListConfig)):
-                    selected_backend = next(b for b in requested_backends if backend_opts[b].enable)
-                else:
-                    selected_backend = requested_backends
-
-                # TODO(JSKenyon): For now, we default to a minimal display for
-                # the kube backend when scattering. This is consistent with
-                # the behaviour prior to the addition of multiple displays.
-                # At present, the status reporter for the kube backend is not
-                # configured at this point so we cannot track all the pods
-                # running in the scattered loop.
-                if selected_backend == "kube":
-                    display_style = "slurm"
-                elif backend_opts.slurm.enable:
-                    display_style = "slurm"
-                else:
-                    display_style = "local"
+                backend_opts = OmegaConf.to_object(backend_opts)
+                # TODO(JSKenyon): For now, we default to a minimal display (e.g. the slurm display)
+                # for the kube backend when scattering. This is consistent with the behaviour prior
+                # to the addition of multiple displays. At present, the status reporter for the kube
+                # backend is not configured at this point so we cannot track all the pods running
+                # in the scattered loop.
+                display_style = backend_opts.current_wrapper or backend_opts.current_backend
+                # As noted above, use simpler slurm display when scattering with kube backend.
+                display_style = "slurm" if display_style == "kube" else display_style
 
                 # If the display is disabled at this point, it implies that we
                 # should leave it that way (may be in a child process).
