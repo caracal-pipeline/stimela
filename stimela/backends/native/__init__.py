@@ -9,6 +9,9 @@ from .run_native import build_command_line as build_command_line
 from .run_native import run as run
 from .run_native import update_rlimits as update_rlimits
 
+# can only execute cabs that specify a container image
+requires_container_image = False
+
 
 def is_available(opts=None):
     return True

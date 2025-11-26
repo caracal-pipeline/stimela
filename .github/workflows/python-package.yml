@@ -38,3 +38,4 @@ jobs:
       run: uv run stimela --help
     - name: Test with pytest
       run: uv run pytest tests
+

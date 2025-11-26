@@ -290,6 +290,8 @@ class Recipe(Cargo):
             raise AssignmentError(f"{whose.fqname}: error evaluating assignments", exc)
         # dispatch and reassign, since substitutions may have been performed
         for key, value in assign.items():
+            if ignore_subst_errors and isinstance(value, Unresolved):
+                continue
             self.assign_value(key, value, subst=subst, whose=whose)
 
     def assign_value(
@@ -343,11 +345,8 @@ class Recipe(Cargo):
         #     assign_nested(self.backend, subkey, value)
         elif nesting == "log":
             whose = whose or self
-            if type(value) is Unresolved:
-                self.log.debug(f"ignoring unresolved log options assignment {key}={value}")
-            else:
-                self.log.debug(f"log options assignment: {key}={value}")
-                whose.update_log_options(**{subkey: value})
+            self.log.debug(f"log options assignment: {key}={value}")
+            whose.update_log_options(**{subkey: value})
             if whose is self and subst is not None and "recipe" in subst:
                 subst.recipe.log[subkey] = value
         # in override mode, assign to assign dict for future processing
@@ -358,6 +357,8 @@ class Recipe(Cargo):
 
     def update_log_options(self, **options):
         for setting, value in options.items():
+            if isinstance(value, Unresolved):
+                raise AssignmentError(f"unresolved {self.fqname}.log.{setting} setting", [value])
             try:
                 self.logopts[setting] = value
             except Exception as exc:

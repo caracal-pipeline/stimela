@@ -317,6 +317,6 @@ def load_config(
     # check for missing requirements
     missing = configuratt.check_requirements(conf, [], strict=True)
     for loc, name, _ in missing:
-        log.warn(f"optional config section '{loc}' omitted due to unmet requirement '{name}'")
+        log.warning(f"optional config section '{loc}' omitted due to unmet requirement '{name}'")
 
     return conf

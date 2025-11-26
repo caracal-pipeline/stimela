@@ -5,10 +5,13 @@ from typing import Any, Dict, Optional
 from omegaconf import OmegaConf
 
 import stimela
-from stimela.backends import StimelaBackendOptions
+from stimela.backends import (
+    StimelaBackendOptions,
+    get_backend,
+    get_backend_status,
+)
 from stimela.exceptions import BackendError
-
-from . import get_backend
+from stimela.kitchen.cab import Cab
 
 
 @dataclass
@@ -39,28 +42,47 @@ class BackendRunner(object):
             return self.backend.build(cab, backend=self.opts, log=log, rebuild=rebuild, wrapper=self.wrapper)
 
 
-def validate_backend_settings(backend_opts: Dict[str, Any], log: logging.Logger) -> BackendRunner:
+def validate_backend_settings(
+    backend_opts: Dict[str, Any],
+    log: logging.Logger,
+    cab: Optional[Cab] = None,
+) -> BackendRunner:
     """Checks that backend settings refer to a valid backend
 
-    Returs tuple of options, main, wrapper, where 'main' the the main backend, and 'wrapper' is an optional wrapper
-    backend such as slurm.
+    Args:
+        backend_opts (Dict): Options to set for the backend runner
+        cab (object): Cab instance associated with backend
+        log (object): Logger object
+
+    Returns BackendRunner object: tuple of options, main, wrapper, where 'main' the the main backend,
+    and 'wrapper' is an optional wrapper backend such as slurm.
     """
     if not isinstance(backend_opts, StimelaBackendOptions):
         backend_opts = OmegaConf.to_object(backend_opts)
 
-    backend_name = backend = None
     selected = backend_opts.select or ["singularity", "native"]
-    # select containerization engine, if any
+    # select backend engine
+
+    excuses = {}
     for name in selected:
         # check that backend has not been disabled
         opts = getattr(backend_opts, name, None)
-        if not opts or opts.enable:
-            backend = get_backend(name, opts)
-            if backend is not None:
-                backend_name = name
-                break
+        if opts and not opts.enable:
+            excuses[name] = "disabled"
+            continue
+        backend = get_backend(name, opts)
+        if backend is None:
+            excuses[name] = get_backend_status(name)  # will tell what's wrong
+            continue
+        if getattr(backend, "requires_container_image", False) and isinstance(cab, Cab) and not cab.image:
+            excuses[name] = "container image not specified by cab"
+            continue
+        # this one wins
+        backend_name = name
+        break
     else:
-        raise BackendError(f"selected backends ({', '.join(selected)}) not available")
+        reason = "; ".join([f"{name}: {excuse}" for name, excuse in excuses.items()])
+        raise BackendError(f"unable to select a backend ({reason})")
 
     is_remote = is_remote_fs = backend.is_remote()
 

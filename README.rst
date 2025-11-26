@@ -22,10 +22,10 @@ Stimela can be installed using ``pip``. Simply run ``pip install stimela``.
 Installation - Developer
 ------------------------
 
-``uv`` - ``uv`` managed environment
+`uv <https://docs.astral.sh/uv/>`_ - ``uv`` managed environment
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-After cloning the repo, install with ``uv sync --group dev``. Then run ``uv run pre-commit install`` to set up the pre-commit hooks. By default, you should end up with a correctly configured environment in ``.venv``. ``ruff`` can be invoked manually with ``uv run ruff check`` and ``uv run ruff format``. Note that this install will not be in editable mode but that can be accomplished by running ``uv pip install -e . --group dev``.
+After cloning the repo, install with ``uv sync --group dev``. Then run ``uv run pre-commit install`` to set up the pre-commit hooks. By default, you should end up with a correctly configured environment in ``.venv``. `ruff <https://docs.astral.sh/ruff/>`_ (linter and code formater) can be invoked manually with ``uv run ruff check`` and ``uv run ruff format``.
 
 ``uv`` - ``uv pip`` managed environment
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
