@@ -11,6 +11,7 @@ import traceback
 from typing import Any, Dict, Optional
 
 import yaml
+from kubernetes.client.models.v1_container_state import V1ContainerState
 from kubernetes.client.rest import ApiException
 from omegaconf import OmegaConf
 from requests import ConnectionError
@@ -426,6 +427,7 @@ def run(
             connected = True
             # last_log_timestamp = None
             seen_logs = set()
+            last_container_state = V1ContainerState()  # Default.
             while retcode is None and pod.check_status():
                 try:
                     for entry in kube_api.read_namespaced_pod_log(
@@ -459,10 +461,19 @@ def run(
                     # check for return code
                     resp = kube_api.read_namespaced_pod_status(name=podname, namespace=namespace)
                     statrep.connected = connected = True
-                    contstat = resp.status.container_statuses[0].state
-                    waiting = contstat.waiting
-                    running = contstat.running
-                    terminated = contstat.terminated
+                    container_state = resp.status.container_statuses[0].state
+
+                    # Only update log/do further checks when container state changes.
+                    if container_state == last_container_state:
+                        time.sleep(0.1)
+                        continue
+                    else:
+                        last_container_state = container_state
+
+                    waiting = container_state.waiting
+                    running = container_state.running
+                    terminated = container_state.terminated
+
                     if waiting:
                         log.info("container state is 'waiting'")
                         dprint(2, "waiting", waiting)
