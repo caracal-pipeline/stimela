@@ -5,9 +5,8 @@ import threading
 import time
 from dataclasses import dataclass, fields
 from datetime import datetime
-from typing import Callable, List, Optional, OrderedDict
+from typing import Callable, List, Optional, OrderedDict, Union
 
-import psutil
 from omegaconf import OmegaConf
 from rich.table import Table
 from rich.text import Text
@@ -15,6 +14,7 @@ from rich.text import Text
 from scabha.basetypes import EmptyListDefault
 from stimela import stimelogging
 from stimela.display.display import display, rich_console
+from stimela.monitoring import REPORTERS
 
 # this is "" for the main process, ".0", ".1", for subprocesses, ".0.0" for nested subprocesses
 _subprocess_identifier = ""
@@ -27,9 +27,6 @@ def get_subprocess_id():
 def add_subprocess_id(num: int):
     global _subprocess_identifier
     _subprocess_identifier += f".{num}"
-
-
-_prev_disk_io = None, None
 
 
 @dataclass
@@ -56,15 +53,20 @@ class TaskInformation(object):
 
 # stack of task information -- most recent subtask is at the end
 _task_stack = []
-child_processes = {}
 
 
 @contextlib.contextmanager
-def declare_subtask(subtask_name, status_reporter=None):
+def declare_subtask(subtask_name: str, status_reporter: Union[str, Callable] = "dummy"):
     task_names = []
     if _task_stack:
         task_names = _task_stack[-1].names + (_task_stack[-1].task_attrs or [])
     task_names.append(subtask_name)
+    if isinstance(status_reporter, str):
+        status_reporter = REPORTERS[status_reporter]
+    elif isinstance(status_reporter, Callable):
+        status_reporter = status_reporter
+    else:
+        raise TypeError(f"Expected string or callable; got {type(status_reporter)}.")
     _task_stack.append(TaskInformation(task_names, status_reporter=status_reporter))
     update_process_status()
     try:
@@ -110,34 +112,7 @@ def declare_subcommand(command):
 
 
 @dataclass
-class SystemStatsDatum:
-    n_cpu: int = 0
-    cpu: float = 0
-    mem_used: int = 0
-    mem_total: int = 0
-
-    def __post_init__(self):
-        self.n_cpu = psutil.cpu_count()
-        self.cpu = psutil.cpu_percent()
-        self.mem_used = round(psutil.virtual_memory().used / (2**30))
-        self.mem_total = round(psutil.virtual_memory().total / (2**30))
-
-
-@dataclass
 class TaskStatsDatum(object):
-    cpu: float = 0
-    mem_used: float = 0
-    load_1m: float = 0
-    load_5m: float = 0
-    load_15m: float = 0
-    read_count: int = 0
-    read_gb: float = 0
-    read_gbps: float = 0
-    read_ms: float = 0
-    write_count: int = 0
-    write_gb: float = 0
-    write_gbps: float = 0
-    write_ms: float = 0
     num_samples: int = 0
 
     def __post_init__(self):
@@ -217,22 +192,6 @@ def update_stats(now: datetime, sample: TaskStatsDatum):
         _taskstats[key][0] = (now - start).total_seconds()
 
 
-def update_children():
-    """Update the module level dictionary mapping child pid to process.
-
-    This is necessary as calling Process.children will return different
-    Process objects each time. These then fail to report CPU stats unless
-    we make them block which has a large impact on performance.
-    """
-    current_children = psutil.Process().children(recursive=True)
-    current_pids = {proc.pid for proc in current_children}
-    child_processes.update({c.pid: c for c in current_children if c.pid not in child_processes})
-    dropped_pids = {c for c in child_processes.keys() if c not in current_pids}
-
-    for pid in dropped_pids:
-        del child_processes[pid]
-
-
 def update_process_status():
     # current subtask info
     task_info = _task_stack[-1] if _task_stack else None
@@ -240,68 +199,20 @@ def update_process_status():
     # elapsed time since start
     now = datetime.now()
 
-    # form up sample datum
+    # Call reporter which should return stats which can be added to the task_stats object.
+    if task_info is None:
+        report = REPORTERS["dummy"](now, task_info)
+    elif task_info and task_info.status_reporter:
+        report = task_info.status_reporter(now, task_info)
+    else:
+        raise ValueError("No reporter avaialable.")
+
     task_stats = TaskStatsDatum(num_samples=1)
-    sys_stats = SystemStatsDatum()
-
-    # Track the child processes (and retain their Process objects).
-    update_children()
-
-    if child_processes and task_info:
-        processes = list(child_processes.values())
-    else:
-        processes = []  # Don't bother with cpu and mem for stimela itself.
-
-    # CPU and memory
-    for p in processes:
-        try:
-            task_stats.cpu += p.cpu_percent()
-            task_stats.mem_used += p.memory_info().rss
-        except psutil.NoSuchProcess:
-            pass  # Process ended before we could gather its stats.
-
-    task_stats.mem_used = round(task_stats.mem_used / (2**30))
-
-    # load
-    load = [la / sys_stats.n_cpu * 100 for la in psutil.getloadavg()]
-    task_stats.load_1m, task_stats.load_5m, task_stats.load_15m = load
-
-    # get disk I/O stats
-    disk_io = psutil.disk_io_counters()
-    global _prev_disk_io
-    prev_io, prev_time = _prev_disk_io
-    if prev_io is not None:
-        delta = (now - prev_time).total_seconds()
-        io = {}
-        io_fields = ("read_bytes", "read_count", "read_time", "write_bytes", "write_count", "write_time")
-        for key in io_fields:
-            io[key] = getattr(disk_io, key) - getattr(prev_io, key)
-        task_stats.read_count = io["read_count"]
-        task_stats.write_count = io["write_count"]
-        task_stats.read_gb = io["read_bytes"] / 2**30
-        task_stats.write_gb = io["write_bytes"] / 2**30
-        task_stats.read_gbps = task_stats.read_gb / delta
-        task_stats.write_gbps = task_stats.write_gb / delta
-        task_stats.read_ms = io["read_time"]
-        task_stats.write_ms = io["write_time"]
-    else:
-        io = None
-    _prev_disk_io = disk_io, now
-
-    # Call extra status reporter which should return stats which can be added
-    # to the task_stats object as well as a list of strings which can be used
-    # in the display. TODO(JSKenyon): All backends should produce a Report
-    # object which can be used here. At present, this only applies to the
-    # kube backend.
-    if task_info and task_info.status_reporter:
-        report = task_info.status_reporter()
-        task_stats.insert_extra_stats(**report.profiling_results)
-    else:
-        report = None
+    task_stats.insert_extra_stats(**report.profiling_results)
 
     # Update the display using the stats and info objects.
     if display.is_enabled:
-        display.update(sys_stats, task_stats, task_info, extra_info=report)
+        display.update(task_info, report)
 
     # update stats
     update_stats(now, task_stats)
@@ -382,8 +293,10 @@ def render_profiling_summary(stats: TaskStatsDatum, max_depth, unroll_loops=Fals
             table_avg.add_column(label, justify="right")
             table_peak.add_column(label, justify="right")
 
-    table_avg.add_column("R GB", justify="right")
-    table_avg.add_column("W GB", justify="right")
+    if "read_gb" in available_stats:
+        table_avg.add_column("R GB", justify="right")
+    if "write_gb" in available_stats:
+        table_avg.add_column("W GB", justify="right")
 
     for name_tuple, (elapsed, sum, peak) in stats.items():
         if name_tuple and len(name_tuple) <= max_depth and elapsed > 0:
@@ -398,10 +311,14 @@ def render_profiling_summary(stats: TaskStatsDatum, max_depth, unroll_loops=Fals
             peak_row = avg_row.copy()
             for f, label in _printed_stats.items():
                 if f in available_stats:
-                    avg_row.append(f"{getattr(avg, f):.2f}" if hasattr(avg, f) else "")
-                    peak_row.append(f"{getattr(peak, f):.2f}" if hasattr(peak, f) else "")
+                    avg_row.append(f"{getattr(avg, f):.2f}" if hasattr(avg, f) else "--")
+                    peak_row.append(f"{getattr(peak, f):.2f}" if hasattr(peak, f) else "--")
 
-            avg_row += [f"{sum.read_gb:.2f}", f"{sum.write_gb:.2f}"]
+            if "read_gb" in available_stats:
+                avg_row.append(f"{getattr(sum, 'read_gb'):.2f}" if hasattr(sum, "read_gb") else "--")
+            if "write_gb" in available_stats:
+                avg_row.append(f"{getattr(sum, 'write_gb'):.2f}" if hasattr(sum, "write_gb") else "--")
+
             table_avg.add_row(*avg_row)
             table_peak.add_row(*peak_row)
 
@@ -444,9 +361,9 @@ def save_profiling_stats(log, print_depth=2, unroll_loops=False):
         if name:
             name = ".".join(name)
             avg = sum.averaged()
-            davg = {f: getattr(avg, f) for f in _taskstats_sample_names}
-            dpeak = {f: getattr(peak, f) for f in _taskstats_sample_names}
-            dsum = {f: getattr(sum, f) for f in _sum_stats}
+            davg = {f: getattr(avg, f, "--") for f in _taskstats_sample_names}
+            dpeak = {f: getattr(peak, f, "--") for f in _taskstats_sample_names}
+            dsum = {f: getattr(sum, f, "--") for f in _sum_stats}
 
             stats_dict[name] = dict(elapsed=elapsed, avg=davg, peak=dpeak, total=dsum)
 
