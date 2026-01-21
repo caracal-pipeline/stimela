@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, List, Union, get_args, get_origin
 
 import uritools
+from pydantic_core import core_schema
 from typeguard import (
     TypeCheckerCallable,
     TypeCheckError,
@@ -17,7 +18,7 @@ from typeguard import (
     checker_lookup_functions,
 )
 
-from .exceptions import UnsetError
+from scabha.exceptions import UnsetError
 
 
 def EmptyDictDefault():
@@ -77,6 +78,9 @@ class SkippedOutput(Unresolved):
 
 
 class URI(str):
+    def __new__(cls, value: str):
+        return super().__new__(cls, value)
+
     def __init__(self, value):
         uri_components = uritools.urisplit(value)
         self.scheme = uri_components.scheme or "file"  # Protocol.
@@ -115,6 +119,15 @@ class URI(str):
 
     def __repr__(self):
         return self.full_uri
+
+    @classmethod
+    def __get_pydantic_core_schema__(cls, source, handler):
+        """Pydantic v2 schema handler"""
+        return core_schema.no_info_after_validator_function(
+            cls,
+            core_schema.str_schema(),
+            serialization=core_schema.plain_serializer_function_ser_schema(lambda v: str(v)),
+        )
 
 
 class File(URI):
