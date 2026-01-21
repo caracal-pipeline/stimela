@@ -12,9 +12,9 @@ from typing import Any, Dict, List
 import pyparsing as pp
 from omegaconf import DictConfig, ListConfig
 
-from .basetypes import UNSET, Unresolved
-from .exceptions import FormulaError, ParserError, UnsetError
-from .substitutions import SubstitutionContext, SubstitutionError
+from scabha.basetypes import UNSET, Unresolved
+from scabha.exceptions import FormulaError, ParserError, UnsetError
+from scabha.substitutions import SubstitutionContext, SubstitutionError
 
 pp.ParserElement.enable_packrat()
 
@@ -399,10 +399,10 @@ def construct_parser():
 
     atomic_value = boolean | UNSET | EMPTY | nested_field | string | number
 
-    function_call_anyseq = pp.Group(anyseq_functions + lparen + (expr | anyseq) + rparen).setParseAction(
+    function_call_anyseq = pp.Group(anyseq_functions + lparen + (expr | anyseq) + rparen).set_parse_action(
         FunctionHandler.pa
     )
-    function_call = pp.Group(functions + lparen + pp.Opt(pp.delimited_list(expr | SELF)) + rparen).setParseAction(
+    function_call = pp.Group(functions + lparen + pp.Opt(pp.DelimitedList(expr | SELF)) + rparen).set_parse_action(
         FunctionHandler.pa
     )
 

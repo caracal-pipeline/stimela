@@ -17,24 +17,24 @@ def test_parser():
         "a.b[c.d]",
     ]:
         print(f"\n\n\n=====================\nExpression: {string}\n")
-        a = expr.parseString(string, parse_all=True)
+        a = expr.parse_string(string, parse_all=True)
         print(f"\n\n\n{a.getName()}")
         print(a.dump())
 
-    # a = expr.parseString("IFSET(a.b)+IFSET(a.b)", parse_all=True)
+    # a = expr.parse_string("IFSET(a.b)+IFSET(a.b)", parse_all=True)
     # print(a.dump())
 
-    # a = expr.parseString("a.x==b.x", parse_all=True)
+    # a = expr.parse_string("a.x==b.x", parse_all=True)
     # print(a.dump())
 
-    # a = expr.parseString("(a.x==0)==IF(a.x==0,1,2,3)", parse_all=True)
+    # a = expr.parse_string("(a.x==0)==IF(a.x==0,1,2,3)", parse_all=True)
     # print(a.dump())
 
-    # a = expr.parseString("IFSET(a.b, (a.x==0)==(a.x==0),(a.x!=b.x))", parse_all=True)
+    # a = expr.parse_string("IFSET(a.b, (a.x==0)==(a.x==0),(a.x!=b.x))", parse_all=True)
     # print(a.dump())
 
     # print("===")
-    # a = expr.parseString("a.b OR a.b", parse_all=True)
+    # a = expr.parse_string("a.b OR a.b", parse_all=True)
     # print(a.dump())
 
     # a = expr.parse_string("IF((previous.x+1)*previous.x == 2, previous.x == 0, previous.y == 0)", parse_all=True)
