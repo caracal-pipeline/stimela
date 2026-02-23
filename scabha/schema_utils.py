@@ -311,19 +311,15 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]], default_policies: D
                             kwargs["default"] = None
                     elif policies.repeat == "[]":  # else assume [X,Y] or X,Y syntax
                         dtype = str
-                        validator = (
-                            lambda ctx, param, value, etype=dtype, schema=schema, _type=elem_type: _validate_list(
-                                value, element_type=_type, schema=schema, brackets=False
-                            )
+                        validator = lambda ctx, param, value, etype=dtype, schema=schema, _type=elem_type: (
+                            _validate_list(value, element_type=_type, schema=schema, brackets=False)
                         )
                         metavar = schema.metavar or f"{elem_type.__name__},{elem_type.__name__},..."
                     elif policies.repeat is not None:  # assume XrepY syntax
                         dtype = str
                         sep = policies.repeat
-                        validator = (
-                            lambda ctx, param, value, etype=dtype, schema=schema, _type=elem_type: _validate_list(
-                                value, element_type=_type, schema=schema, sep=sep, brackets=False
-                            )
+                        validator = lambda ctx, param, value, etype=dtype, schema=schema, _type=elem_type: (
+                            _validate_list(value, element_type=_type, schema=schema, sep=sep, brackets=False)
                         )
                         metavar = schema.metavar or f"{elem_type.__name__}{sep}{elem_type.__name__}{sep}..."
                     else:
@@ -339,16 +335,14 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]], default_policies: D
                     elif policies.repeat == "[]":  # else assume [X,Y] or X,Y syntax
                         dtype = str
                         metavar = schema.metavar or ",".join((t.__name__ for t in elem_types))
-                        validator = (
-                            lambda ctx, param, value, etype=dtype, schema=schema, _type=elem_types: _validate_tuple(
-                                value, element_types=_type, schema=schema, brackets=False
-                            )
+                        validator = lambda ctx, param, value, etype=dtype, schema=schema, _type=elem_types: (
+                            _validate_tuple(value, element_types=_type, schema=schema, brackets=False)
                         )
                     elif policies.repeat is not None:  # assume XrepY syntax
                         dtype = str
                         metavar = schema.metavar or policies.repeat.join((t.__name__ for t in elem_types))
-                        validator = (
-                            lambda ctx, param, value, etype=dtype, schema=schema, _type=elem_types: _validate_tuple(
+                        validator = lambda ctx, param, value, etype=dtype, schema=schema, _type=elem_types: (
+                            _validate_tuple(
                                 value, element_types=_type, schema=schema, sep=policies.repeat, brackets=False
                             )
                         )
