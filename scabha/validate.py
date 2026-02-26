@@ -6,29 +6,117 @@ import os.path
 import pathlib
 import re
 from collections import OrderedDict
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, get_args, get_origin
 
 import pydantic
 import pydantic.dataclasses
 import yaml
 from omegaconf import DictConfig, ListConfig, OmegaConf
 
-from scabha.basetypes import Unresolved
-
-from .basetypes import MS, UNSET, URI, Directory, File
-from .evaluator import Evaluator
-from .exceptions import Error, ParameterValidationError, SubstitutionErrorList
-from .substitutions import SubstitutionNS, substitutions_from
+from scabha.basetypes import MS, UNSET, URI, Directory, File, Unresolved
+from scabha.evaluator import Evaluator
+from scabha.exceptions import Error, ParameterValidationError, SubstitutionErrorList
+from scabha.substitutions import SubstitutionNS, substitutions_from
 
 
 def join_quote(values):
     return "'" + "', '".join(values) + "'" if values else ""
 
 
+def is_simple_dtype(dtype: Any) -> bool:
+    """True for plain Python types (str, int, float, bool, custom classes)."""
+
+    return get_origin(dtype) is None and isinstance(dtype, type)
+
+
+def is_any_dtype(dtype: Any) -> bool:
+    """Return True when dtype represents typing.Any.
+
+    Args:
+        dtype: Schema dtype or annotation to evaluate.
+
+    Returns:
+        True if dtype is typing.Any, otherwise False.
+    """
+
+    return dtype is Any
+
+
+def coerce_scalar(value: Any, dtype: Any, label: str) -> Any:
+    """Cast a scalar value to the requested dtype when possible.
+
+    Args:
+        value: Raw value extracted from the schema inputs.
+        dtype: Target type used for coercion.
+        label: Parameter label included in error messages.
+
+    Returns:
+        The coerced value if casting succeeds or the original value when dtype is typing.Any.
+
+    Raises:
+        TypeError: Raised when casting fails for strict dtypes.
+    """
+
+    # Do not coerce if correct type or Any
+    if is_any_dtype(dtype) or isinstance(value, dtype):
+        return value
+
+    try:
+        return dtype(value)
+    except Exception as error:
+        typename = getattr(dtype, "__name__", str(dtype))
+        raise TypeError(f"{label}: failed to coerce value {value!r} to {typename}") from error
+
+
+def maybe_coerce_value(value: Any, dtype: Any, label: str) -> tuple[Any, bool]:
+    """Attempt to coerce primitive and container values prior to validation."""
+
+    origin = get_origin(dtype)
+    if origin is None:
+        if is_any_dtype(dtype):
+            return value, False
+        if isinstance(dtype, type):
+            coerced = coerce_scalar(value, dtype, label)
+            return coerced, coerced is not value
+        return value, False
+
+    # Handle typing.List[foo] and typing.Tuple[foo]
+    if origin in (list, List, tuple, Tuple):
+        elem_dtype = get_args(dtype)[0] if get_args(dtype) else Any
+        if isinstance(value, (list, tuple)):
+            changed = False
+            coerced_list = []
+            for idx, elem in enumerate(value):
+                coerced_elem, elem_changed = maybe_coerce_value(elem, elem_dtype, f"{label}[{idx}]")
+                coerced_list.append(coerced_elem)
+                changed = changed or elem_changed
+            target = list if origin in (list, List) else tuple
+            coerced_value = target(coerced_list)
+            return coerced_value, changed
+        return value, False
+
+    # Handle typing.Dict[key, val]
+    if origin in (dict, Dict):
+        key_dtype, val_dtype = get_args(dtype) or (Any, Any)
+        if isinstance(value, dict):
+            changed = False
+            coerced_dict = {}
+            for k, v in value.items():
+                new_k, key_changed = maybe_coerce_value(k, key_dtype, f"{label}.key")
+                new_v, val_changed = maybe_coerce_value(v, val_dtype, f"{label}.{new_k}")
+                coerced_dict[new_k] = new_v
+                changed = changed or key_changed or val_changed
+            return coerced_dict, changed
+        return value, False
+
+    # Fallback: no coercion for unions, literals, etc.
+    return value, False
+
+
 def evaluate_and_substitute_object(obj: Any, subst: SubstitutionNS, recursion_level: int = 1, location: List[str] = []):
     with substitutions_from(subst, raise_errors=True) as context:
-        evaltor = Evaluator(subst, context, location=location, allow_unresolved=False)
-        return evaltor.evaluate_object(obj, raise_substitution_errors=True, recursion_level=recursion_level)
+        evalutor = Evaluator(subst, context, location=location, allow_unresolved=False)
+        return evalutor.evaluate_object(obj, raise_substitution_errors=True, recursion_level=recursion_level)
 
 
 def evaluate_and_substitute(
@@ -186,8 +274,16 @@ def validate_parameters(
             fields.append((fldname, schema._dtype))
 
             # OmegaConf dicts/lists need to be converted to standard containers for pydantic to take them
+            normalized_value = value
             if isinstance(value, (ListConfig, DictConfig)):
-                inputs[name] = OmegaConf.to_container(value)
+                normalized_value = OmegaConf.to_container(value)
+                inputs[name] = normalized_value
+
+            # NOTE (Brian): This part could be dangerous as it gives JavaScript like functionality
+            # to CLI parameter parsing. Trusts the user has correct alias types set.
+            coerced_value, changed = maybe_coerce_value(normalized_value, schema._dtype, mkname(name))
+            if changed:
+                inputs[name] = coerced_value
 
     dcls = dataclasses.make_dataclass("Parameters", fields)
 
@@ -213,7 +309,7 @@ def validate_parameters(
 
         if schema.is_file_type or schema.is_file_list_type:
             # match to existing file(s)
-            if type(value) is str:
+            if isinstance(value, str):
                 # try to interpret string as a formatted list (a list substituted in would come out like that)
                 try:
                     files = yaml.safe_load(value)

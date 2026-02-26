@@ -56,6 +56,7 @@ def test_test_aliasing():
 
     print("===== expecting no errors now =====")
     retcode, output = run("stimela -v doc test_aliasing.yml")
+    assert retcode == 0
 
     print("===== expecting no errors now =====")
     retcode, output = run("stimela -v -b native exec test_aliasing.yml a=1 s3.a=1 s4.a=1 e=e f=f")

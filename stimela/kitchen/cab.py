@@ -3,6 +3,7 @@ import os.path
 import re
 import shlex
 from collections import OrderedDict
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
@@ -18,8 +19,7 @@ from scabha.exceptions import SchemaError
 from scabha.substitutions import substitutions_from
 from stimela.backends import StimelaBackendSchema, flavours
 from stimela.exceptions import CabValidationError, StimelaBaseImageError, StimelaCabRuntimeError
-
-from . import wranglers
+from stimela.kitchen import wranglers
 
 ParameterPassingMechanism = Enum("ParameterPassingMechanism", "args yaml", module=__name__)
 
@@ -281,7 +281,7 @@ class Cab(Cargo):
             if schema.dtype == "bool" and not value and get_policy(schema, "explicit_false") is None:
                 return None
 
-            is_list = hasattr(value, "__iter__") and type(value) is not str
+            is_list = isinstance(value, Iterable) and not isinstance(value, str)
             format_policy = get_policy(schema, "format")
             format_list_policy = get_policy(schema, "format_list")
             format_scalar_policy = get_policy(schema, "format_list_scalar")
