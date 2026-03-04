@@ -8,6 +8,7 @@ from collections import OrderedDict
 from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
+from unicodedata import name
 
 from omegaconf import DictConfig, OmegaConf
 from omegaconf.errors import OmegaConfBaseException
@@ -19,6 +20,7 @@ from scabha.basetypes import UNSET, Placeholder, SkippedOutput
 from scabha.exceptions import SubstitutionError, SubstitutionErrorList
 from scabha.substitutions import SubstitutionNS
 from scabha.validate import Unresolved, evaluate_and_substitute_object, join_quote
+from scabha.cargo import GrumbleEntry, GrumbleSeverity
 from stimela import log_exception, stimelogging, task_stats
 from stimela.backends import StimelaBackendSchema, runner
 from stimela.config import EmptyDictDefault, EmptyListDefault
@@ -86,6 +88,9 @@ class Step:
 
     # optional backend settings
     backend: Optional[Dict[str, Any]] = None
+
+    pre_grumble: Dict[str, Any]  = EmptyDictDefault()  # optional dict of messages to issue before running
+    post_grumble: Dict[str, Any] = EmptyDictDefault()  # optional dict of messages to issue after running
 
     def __post_init__(self):
         self.fqname = self.fqname or self.name
@@ -397,6 +402,36 @@ class Step:
             with task_stats.declare_subtask(self.name, wrapper_or_backend):
                 return backend_runner.build(self.cargo, log=log, rebuild=rebuild)
 
+    def issue_grumbles(self, which: str, subst: SubstitutionNS) -> bool:
+        # check for grumbles -- convert to DictConfig first if needed
+        def to_dictconfig(d: Any) -> DictConfig:
+            if isinstance(d, DictConfig):
+                return d
+            return OmegaConf.create({k: OmegaConf.structured(v) for k, v in d.items()})
+        grumbles = OmegaConf.merge(to_dictconfig(getattr(self.cargo, which)), to_dictconfig(getattr(self, which)))
+        grumbles = evaluate_and_substitute_object(
+            grumbles, subst, recursion_level=-1, location=[self.fqname, which])
+        abort = False
+        # loop over resulting list
+        for label, entry in grumbles.items():
+            entry = GrumbleEntry(**entry)  
+            if entry.condition is None or entry.condition:
+                severity = entry.severity
+                if isinstance(severity, str):
+                    severity = GrumbleSeverity[severity]
+                is_warning = int(severity) >= GrumbleSeverity.warning.value
+                if severity.value == GrumbleSeverity.abort.value:
+                    severity = GrumbleSeverity.critical
+                    abort = True
+                if not hasattr(self.log, severity.name):
+                    raise StimelaCabRuntimeError(f"invalid severity '{severity}' in '{self.fqname}.{which}.{label}'")
+                stimelogging.log_and_remember(self.log, entry.message, label=label, 
+                                              severity=severity.name, 
+                                              suppress_repeat=entry.no_repeat, 
+                                              at_end=entry.at_end if entry.at_end is not None else is_warning, 
+                                              only_at_end=entry.only_at_end)
+        return abort
+    
     def run(
         self,
         backend: Optional[Dict] = None,
@@ -653,6 +688,9 @@ class Step:
                     skip = True
 
             if not skip:
+                if self.issue_grumbles("pre_grumble", subst):
+                    raise StepValidationError("aborting due to above", log=self.log)
+
                 # check for outputs that need removal
                 if not backend_runner.is_remote_fs:
                     for name, schema in self.outputs.items():
@@ -719,6 +757,9 @@ class Step:
                 if subst is not None:
                     subst.current._merge_(params)
                 self.log_summary(logging.DEBUG, "validated outputs", ignore_missing=True, outputs=True)
+
+            if self.issue_grumbles("post_grumble", subst):
+                raise StepValidationError("aborting due to above", log=self.log)
 
             # bomb out if an output was invalid
             invalid = [

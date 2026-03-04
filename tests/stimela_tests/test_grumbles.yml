@@ -1,0 +1,53 @@
+cabs:
+  foo:
+    command: echo 
+    inputs:
+      x: int = 1
+      y: int = 2
+    pre_grumble:
+      pre1:
+        message: "This is a pre-grumble about {current.x} {current.y} in general"
+        severity: info
+    post_grumble:
+      post1:
+        condition: =current.x == current.y
+        message: "This is a post-grumble about {current.x} == {current.y}"
+        severity: warning
+      post2: 
+        condition: =current.x == 42
+        message: "x is 42, I'm out of here!"
+        severity: abort
+  bar:
+    command: echo 
+    inputs:
+      x: int = 1
+      y: int = 2
+        
+recipe:
+  name: "demo recipe"
+  info: 'top level recipe definition'
+  steps:
+    step1:
+      cab: foo
+      params:
+        x: 1
+        y: 2
+      post_grumble:
+        # this one won't fire, as it inherits the cab's condition (same 'post1' label)
+        post1:
+          message: "This is a step-specific post-grumble about {current.x} == {current.y}"
+        post3:
+          message: "This is a step-specific post-grumble about life in general"
+    step2:
+      cab: foo
+      params:
+        x: 2
+        y: 2
+      post_grumble:
+        post1:
+          message: "This is a step-specific post-grumble about {current.x} == {current.y}"
+    step3:
+      cab: foo
+      params:
+        x: 3
+        y: 3

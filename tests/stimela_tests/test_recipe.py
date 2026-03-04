@@ -42,11 +42,12 @@ def verify_output(output, *regexes):
     output = re.sub(r"\s+", " ", output)
     # Match the regex strings with any number of characters between them.
     regex = "(.*)".join(regexes)
-    if not re.search(regex, output):
+    count = len(re.findall(regex, output))
+    if not count:
         print("Error, expected regex pattern did not appear in the output:")
         print(f"  {regex}")
-        return False
-    return True
+        return 0
+    return count
 
 
 def test_test_aliasing():

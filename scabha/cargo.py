@@ -8,7 +8,7 @@ import typing
 import warnings
 from collections import OrderedDict
 from dataclasses import dataclass
-from enum import IntEnum
+from enum import IntEnum, Enum
 from typing import Any, Dict, List, Optional
 
 import rich.box
@@ -305,6 +305,42 @@ ParameterSchema = OmegaConf.structured(Parameter)
 
 ParameterFields = set(f.name for f in dataclasses.fields(Parameter))
 
+GrumbleSeverity = IntEnum(
+    "GrumbleSeverity", dict(debug=0, info=1, warn=2, warning=2, error=3, critical=4, abort=5), module=__name__
+)
+
+
+@dataclass
+class GrumbleEntry(object):
+    """This class encapsulates information about a single grumble entry, 
+    which is used to generate messages from cabs, recipes and steps."""
+
+    message: str                    # message string, subject to formula evaluations etc.
+    condition: Optional[str] = None # condition under which message is issued
+                                    # subject to substitution and formula evaluation. 
+                                    # If condition is None, message is always issued.
+                                    # If condition evaluates to False, message is not issued.
+    severity: GrumbleSeverity = "info"
+
+    no_repeat: Optional[bool] = None    # suppress repeat of identical messages, default False
+    at_end: Optional[bool] = None       # repeat at end of run, default True for >= warning
+    only_at_end: Optional[bool] = None  # only issue at end of run, default is False
+    
+    label: str = ""                 # label, formed up from parent objects
+
+    @staticmethod 
+    def validate_grumble_list(name: str, grumble_list: DictConfig):
+        for label, entry in grumble_list.items():
+            fqname = f"{name}.{label}"
+            entry['label'] = fqname
+            try:
+                OmegaConf.merge(GrumbleEntrySchema, entry)
+            except Exception as exc0:
+                raise DefinitionError(f"{fqname} is not a valid grumble entry", exc0) from None
+
+
+GrumbleEntrySchema = OmegaConf.structured(GrumbleEntry)
+
 
 @dataclass
 class Cargo(object):
@@ -325,6 +361,9 @@ class Cargo(object):
     backend: Optional[str] = None  # backend, if not default
 
     dynamic_schema: Optional[str] = None  # function to call to augment inputs/outputs dynamically
+
+    pre_grumble: Dict[str, Any]  = EmptyDictDefault()  # optional dict of messages to issue before running
+    post_grumble: Dict[str, Any] = EmptyDictDefault()  # optional dict of messages to issue after running
 
     @staticmethod
     def flatten_schemas(io_dest, io, label, prefix=""):
@@ -422,6 +461,11 @@ class Cargo(object):
                 raise DefinitionError(f"{modulename}.{funcname} is not a valid callable")
             # make backup copy of original inputs/outputs
             self._original_inputs_outputs = self.inputs.copy(), self.outputs.copy()
+        # check that grumbles are valid
+        for label in ["pre_grumble", "post_grumble"]:
+            GrumbleEntry.validate_grumble_list(label, 
+                                               getattr(self, label))
+
 
     @property
     def inputs_outputs(self):
