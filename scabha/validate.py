@@ -6,6 +6,8 @@ import os.path
 import pathlib
 import re
 from collections import OrderedDict
+from collections.abc import Callable
+from types import NoneType
 from typing import Any, Dict, List, Optional, Tuple, get_args, get_origin
 
 import pydantic
@@ -17,6 +19,19 @@ from scabha.basetypes import MS, UNSET, URI, Directory, File, Unresolved
 from scabha.evaluator import Evaluator
 from scabha.exceptions import Error, ParameterValidationError, SubstitutionErrorList
 from scabha.substitutions import SubstitutionNS, substitutions_from
+
+COERCERS: dict[tuple[type, type], Callable[[Any], Any]] = {}
+BOOL_TRUTHY = {"true", "1", "1.0"}
+BOOL_FALSY = {"false", "0", "0.0"}
+NONE_STRINGS = {"null", "none"}
+
+
+def register_coercer(from_type: type, to_type: type) -> Callable[[Any], Any]:
+    def decorator(func: Callable[[Any], Any]) -> Callable[[Any], Any]:
+        COERCERS[(from_type, to_type)] = func
+        return func
+
+    return decorator
 
 
 def join_quote(values):
@@ -42,6 +57,41 @@ def is_any_dtype(dtype: Any) -> bool:
     return dtype is Any
 
 
+@register_coercer(str, bool)
+def str_to_bool(value: str) -> bool:
+    value = value.lower()
+    if value in BOOL_TRUTHY:
+        return True
+    if value in BOOL_FALSY:
+        return False
+    raise ValueError(f"Cannot interpret {value!r} as boolean")
+
+
+@register_coercer(str, int)
+def str_to_int(value: str) -> int:
+    cleaned = value.strip()
+    if "." in cleaned:
+        f = float(cleaned)
+        if f == int(f):
+            return int(f)
+        raise ValueError(f"Cannot losslessly convert {value!r} to int")
+    return int(cleaned)
+
+
+@register_coercer(str, NoneType)
+def str_to_none(value: str) -> None:
+    if value.lower() in NONE_STRINGS:
+        return None
+    raise ValueError(f"Cannot interpret {value!r} as None")
+
+
+@register_coercer(float, int)
+def float_to_int(value: float) -> int:
+    if value != int(value):
+        raise ValueError(f"Cannot losslessly convert {value!r} to int")
+    return int(value)
+
+
 def coerce_scalar(value: Any, dtype: Any, label: str) -> Any:
     """Cast a scalar value to the requested dtype when possible.
 
@@ -61,6 +111,16 @@ def coerce_scalar(value: Any, dtype: Any, label: str) -> Any:
     if is_any_dtype(dtype) or isinstance(value, dtype):
         return value
 
+    # Look for register coercer
+    coercer = COERCERS.get((type(value), dtype))
+    if coercer:
+        try:
+            return coercer(value)
+        except Exception as error:
+            typename = getattr(dtype, "__name__", str(dtype))
+            raise TypeError(f"{label}: failed to coerce value {value!r} to {typename}") from error
+
+    # Try direct coercion through constructor
     try:
         return dtype(value)
     except Exception as error:
@@ -93,7 +153,6 @@ def maybe_coerce_value(value: Any, dtype: Any, label: str) -> tuple[Any, bool]:
             target = list if origin in (list, List) else tuple
             coerced_value = target(coerced_list)
             return coerced_value, changed
-        return value, False
 
     # Handle typing.Dict[key, val]
     if origin in (dict, Dict):
