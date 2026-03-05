@@ -432,7 +432,7 @@ class Step:
                 stimelogging.log_and_remember(
                     self.log,
                     entry.message,
-                    label=label,
+                    label=entry.label or label,
                     severity=severity.name,
                     suppress_repeat=entry.no_repeat,
                     at_end=entry.at_end if entry.at_end is not None else is_warning,

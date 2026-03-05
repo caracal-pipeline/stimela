@@ -518,7 +518,7 @@ def log_and_remember(
 
 
 def has_accumulated_messages() -> bool:
-    return len(_accumulate_messages) > 0
+    return any(at_end for _, _, at_end in _accumulate_messages.values())
 
 
 def flush_accumulated_messages() -> None:
