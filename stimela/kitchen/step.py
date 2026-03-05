@@ -8,7 +8,6 @@ from collections import OrderedDict
 from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
-from unicodedata import name
 
 from omegaconf import DictConfig, OmegaConf
 from omegaconf.errors import OmegaConfBaseException
@@ -17,10 +16,10 @@ from rich.markup import escape
 import scabha.exceptions
 import stimela
 from scabha.basetypes import UNSET, Placeholder, SkippedOutput
+from scabha.cargo import NotifyEntry, NotifySeverity
 from scabha.exceptions import SubstitutionError, SubstitutionErrorList
 from scabha.substitutions import SubstitutionNS
 from scabha.validate import Unresolved, evaluate_and_substitute_object, join_quote
-from scabha.cargo import GrumbleEntry, GrumbleSeverity
 from stimela import log_exception, stimelogging, task_stats
 from stimela.backends import StimelaBackendSchema, runner
 from stimela.config import EmptyDictDefault, EmptyListDefault
@@ -89,8 +88,8 @@ class Step:
     # optional backend settings
     backend: Optional[Dict[str, Any]] = None
 
-    pre_grumble: Dict[str, Any]  = EmptyDictDefault()  # optional dict of messages to issue before running
-    post_grumble: Dict[str, Any] = EmptyDictDefault()  # optional dict of messages to issue after running
+    pre_notify: Dict[str, Any] = EmptyDictDefault()  # optional dict of messages to issue before running
+    post_notify: Dict[str, Any] = EmptyDictDefault()  # optional dict of messages to issue after running
 
     def __post_init__(self):
         self.fqname = self.fqname or self.name
@@ -125,6 +124,9 @@ class Step:
         else:
             # otherwise, self._skip stays at None, and will be re-evaluated at runtime
             self._skip = None
+        # check that notifications are valid
+        for label in ["pre_notify", "post_notify"]:
+            NotifyEntry.validate_notify_list(label, getattr(self, label))
 
     def summary(self, params=None, recursive=True, ignore_missing=False, inputs=True, outputs=True):
         summary_params = OrderedDict()
@@ -402,36 +404,42 @@ class Step:
             with task_stats.declare_subtask(self.name, wrapper_or_backend):
                 return backend_runner.build(self.cargo, log=log, rebuild=rebuild)
 
-    def issue_grumbles(self, which: str, subst: SubstitutionNS) -> bool:
-        # check for grumbles -- convert to DictConfig first if needed
+    def issue_notifications(self, which: str, subst) -> bool:
+        # check for notifications -- convert to DictConfig first if needed
         def to_dictconfig(d: Any) -> DictConfig:
             if isinstance(d, DictConfig):
                 return d
             return OmegaConf.create({k: OmegaConf.structured(v) for k, v in d.items()})
-        grumbles = OmegaConf.merge(to_dictconfig(getattr(self.cargo, which)), to_dictconfig(getattr(self, which)))
-        grumbles = evaluate_and_substitute_object(
-            grumbles, subst, recursion_level=-1, location=[self.fqname, which])
+
+        notifications = OmegaConf.merge(to_dictconfig(getattr(self.cargo, which)), to_dictconfig(getattr(self, which)))
+        notifications = evaluate_and_substitute_object(
+            notifications, subst, recursion_level=-1, location=[self.fqname, which]
+        )
         abort = False
         # loop over resulting list
-        for label, entry in grumbles.items():
-            entry = GrumbleEntry(**entry)  
+        for label, entry in notifications.items():
+            entry = NotifyEntry(**entry)
             if entry.condition is None or entry.condition:
                 severity = entry.severity
                 if isinstance(severity, str):
-                    severity = GrumbleSeverity[severity]
-                is_warning = int(severity) >= GrumbleSeverity.warning.value
-                if severity.value == GrumbleSeverity.abort.value:
-                    severity = GrumbleSeverity.critical
+                    severity = NotifySeverity[severity]
+                is_warning = int(severity) >= NotifySeverity.warning.value
+                if severity.value == NotifySeverity.abort.value:
+                    severity = NotifySeverity.critical
                     abort = True
                 if not hasattr(self.log, severity.name):
                     raise StimelaCabRuntimeError(f"invalid severity '{severity}' in '{self.fqname}.{which}.{label}'")
-                stimelogging.log_and_remember(self.log, entry.message, label=label, 
-                                              severity=severity.name, 
-                                              suppress_repeat=entry.no_repeat, 
-                                              at_end=entry.at_end if entry.at_end is not None else is_warning, 
-                                              only_at_end=entry.only_at_end)
+                stimelogging.log_and_remember(
+                    self.log,
+                    entry.message,
+                    label=label,
+                    severity=severity.name,
+                    suppress_repeat=entry.no_repeat,
+                    at_end=entry.at_end if entry.at_end is not None else is_warning,
+                    only_at_end=entry.only_at_end,
+                )
         return abort
-    
+
     def run(
         self,
         backend: Optional[Dict] = None,
@@ -688,7 +696,7 @@ class Step:
                     skip = True
 
             if not skip:
-                if self.issue_grumbles("pre_grumble", subst):
+                if self.issue_notifications("pre_notify", subst):
                     raise StepValidationError("aborting due to above", log=self.log)
 
                 # check for outputs that need removal
@@ -758,7 +766,7 @@ class Step:
                     subst.current._merge_(params)
                 self.log_summary(logging.DEBUG, "validated outputs", ignore_missing=True, outputs=True)
 
-            if self.issue_grumbles("post_grumble", subst):
+            if self.issue_notifications("post_notify", subst):
                 raise StepValidationError("aborting due to above", log=self.log)
 
             # bomb out if an output was invalid

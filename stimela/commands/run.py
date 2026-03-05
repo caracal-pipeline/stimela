@@ -670,8 +670,8 @@ def run(
                 unroll_loops=stimela.CONFIG.opts.profile.unroll_loops,
             )
             if stimelogging.has_accumulated_messages():
-                    stimelogging.declare_chapter("accumulated warnings and errors")
-                    stimelogging.flush_accumulated_messages()
+                stimelogging.declare_chapter("accumulated warnings and errors")
+                stimelogging.flush_accumulated_messages()
 
             if not isinstance(exc, ScabhaBaseException) or not exc.logged:
                 log_exception(

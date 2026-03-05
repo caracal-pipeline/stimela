@@ -26,7 +26,7 @@ def run(command):
 
 
 def verify_output(output, *regexes):
-    """Returns True if the regexes appear in sequence in the output.
+    """Returns the number of times the regexes appear in sequence in the output.
 
     Given an output string, returns True if the regexes appear in order in
     the output string, with any number of characters between the regex strings.

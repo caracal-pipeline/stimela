@@ -4,14 +4,14 @@ cabs:
     inputs:
       x: int = 1
       y: int = 2
-    pre_grumble:
+    pre_notify:
       pre1:
-        message: "This is a pre-grumble about {current.x} {current.y} in general"
+        message: "This is a pre-notification about {current.x} {current.y} in general"
         severity: info
-    post_grumble:
+    post_notify:
       post1:
         condition: =current.x == current.y
-        message: "This is a post-grumble about {current.x} == {current.y}"
+        message: "This is a post-notification about {current.x} == {current.y}"
         severity: warning
       post2: 
         condition: =current.x == 42
@@ -32,20 +32,20 @@ recipe:
       params:
         x: 1
         y: 2
-      post_grumble:
+      post_notify:
         # this one won't fire, as it inherits the cab's condition (same 'post1' label)
         post1:
-          message: "This is a step-specific post-grumble about {current.x} == {current.y}"
+          message: "This is a step-specific post-notification about {current.x} == {current.y}"
         post3:
-          message: "This is a step-specific post-grumble about life in general"
+          message: "This is a step-specific post-notification about life in general"
     step2:
       cab: foo
       params:
         x: 2
         y: 2
-      post_grumble:
+      post_notify:
         post1:
-          message: "This is a step-specific post-grumble about {current.x} == {current.y}"
+          message: "This is a step-specific post-notification about {current.x} == {current.y}"
     step3:
       cab: foo
       params:
