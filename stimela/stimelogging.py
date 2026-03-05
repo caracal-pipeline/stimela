@@ -491,7 +491,9 @@ def log_rich_payload(
         extra=dict(logfile_message=f"{message}: \n{str(payload)}", console_payload=console_payload),
     )
 
+
 _accumulate_messages = {}
+
 
 def log_and_remember(
     log: logging.Logger,
@@ -514,11 +516,13 @@ def log_and_remember(
     # otherwise, log message now
     method(message)
 
+
 def has_accumulated_messages() -> bool:
     return len(_accumulate_messages) > 0
+
 
 def flush_accumulated_messages() -> None:
     for method, message, at_end in _accumulate_messages.values():
         if at_end:
-            method(message)    
+            method(message)
     _accumulate_messages.clear()
