@@ -183,9 +183,9 @@ class FunctionHandler(ResultsHandler):
     _LOG_LEVELS = {"debug", "info", "warning", "error", "critical"}
 
     def LOG(self, evaluator, args):
-        """LOG(message [, options]) — log a message.
+        """LOG(message [, options, options]) — log a message.
 
-        Options is a comma-separated string of:
+        Options can be comma-separated strings of:
           - level: debug, info (default), warning, error, critical
           - no-repeat: suppress identical messages
           - summary: repeat at end of run (default for warning and above)
@@ -251,27 +251,17 @@ class FunctionHandler(ResultsHandler):
             log_method(str(msg))
         return msg
 
-    @staticmethod
-    def _append_level_option(args, level):
-        """Appends a level to the options argument (second arg), creating it if needed."""
-        args = list(args)
-        if len(args) < 2:
-            args.append(level)
-        else:
-            args[1] = f"{args[1]},{level}"
-        return args
-
     def LOG_INFO(self, evaluator, args):
-        return self.LOG(evaluator, self._append_level_option(args, "info"))
+        return self.LOG(evaluator, list(args) + ["info"])
 
     def LOG_WARNING(self, evaluator, args):
-        return self.LOG(evaluator, self._append_level_option(args, "warning"))
+        return self.LOG(evaluator, list(args) + ["warning"])
 
     def LOG_ERROR(self, evaluator, args):
-        return self.LOG(evaluator, self._append_level_option(args, "error"))
+        return self.LOG(evaluator, list(args) + ["error"])
 
     def LOG_CRITICAL(self, evaluator, args):
-        return self.LOG(evaluator, self._append_level_option(args, "critical"))
+        return self.LOG(evaluator, list(args) + ["critical"])
 
     def LIST(self, evaluator, args):
         def make_list(*x):

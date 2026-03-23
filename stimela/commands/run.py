@@ -671,7 +671,7 @@ def run(
             )
             if stimelogging.has_accumulated_messages():
                 stimelogging.declare_chapter("accumulated warnings and errors")
-                stimelogging.flush_accumulated_messages()
+            stimelogging.flush_accumulated_messages()
 
             if not isinstance(exc, ScabhaBaseException) or not exc.logged:
                 log_exception(
@@ -706,7 +706,7 @@ def run(
 
     if stimelogging.has_accumulated_messages():
         stimelogging.declare_chapter("accumulated warnings and errors")
-        stimelogging.flush_accumulated_messages()
+    stimelogging.flush_accumulated_messages()
 
     last_log_dir = stimelogging.get_logfile_dir(outer_step.log) or "."
     outer_step.log.info(f"last log directory was {stimelogging.apply_style(last_log_dir, 'bold green')}")
