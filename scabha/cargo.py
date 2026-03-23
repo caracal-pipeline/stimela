@@ -305,42 +305,6 @@ ParameterSchema = OmegaConf.structured(Parameter)
 
 ParameterFields = set(f.name for f in dataclasses.fields(Parameter))
 
-NotifySeverity = IntEnum(
-    "NotifySeverity", dict(debug=0, info=1, warning=2, error=3, critical=4, abort=5), module=__name__
-)
-
-
-@dataclass
-class NotifyEntry(object):
-    """This class encapsulates information about a single notification entry,
-    which is used to generate messages from cabs, recipes and steps."""
-
-    message: str  # message string, subject to formula evaluations etc.
-    condition: Optional[str] = None  # condition under which message is issued
-    # subject to substitution and formula evaluation.
-    # If condition is None, message is always issued.
-    # If condition evaluates to False, message is not issued.
-    severity: NotifySeverity = "info"
-
-    no_repeat: Optional[bool] = None  # suppress repeat of identical messages, default False
-    at_end: Optional[bool] = None  # repeat at end of run, default True for >= warning
-    only_at_end: Optional[bool] = None  # only issue at end of run, default is False
-
-    label: str = ""  # label, formed up from parent objects
-
-    @staticmethod
-    def validate_notify_list(name: str, notify_list: DictConfig):
-        for label, entry in notify_list.items():
-            fqname = f"{name}.{label}"
-            entry["label"] = fqname
-            try:
-                OmegaConf.merge(NotifyEntrySchema, entry)
-            except Exception as exc0:
-                raise DefinitionError(f"{fqname} is not a valid notify entry", exc0) from None
-
-
-NotifyEntrySchema = OmegaConf.structured(NotifyEntry)
-
 
 @dataclass
 class Cargo(object):
@@ -362,8 +326,8 @@ class Cargo(object):
 
     dynamic_schema: Optional[str] = None  # function to call to augment inputs/outputs dynamically
 
-    pre_notify: Dict[str, Any] = EmptyDictDefault()  # optional dict of messages to issue before running
-    post_notify: Dict[str, Any] = EmptyDictDefault()  # optional dict of messages to issue after running
+    preamble: Dict[str, Any] = EmptyDictDefault()  # Dict[str, List[str]] of expressions evaluated before running
+    epilogue: Dict[str, Any] = EmptyDictDefault()  # Dict[str, List[str]] of expressions evaluated after running
 
     @staticmethod
     def flatten_schemas(io_dest, io, label, prefix=""):
@@ -461,9 +425,12 @@ class Cargo(object):
                 raise DefinitionError(f"{modulename}.{funcname} is not a valid callable")
             # make backup copy of original inputs/outputs
             self._original_inputs_outputs = self.inputs.copy(), self.outputs.copy()
-        # check that notifications are valid
-        for label in ["pre_notify", "post_notify"]:
-            NotifyEntry.validate_notify_list(label, getattr(self, label))
+        # check that preamble/epilogue entries are valid (each must be a list of expressions)
+        for section_name in ["preamble", "epilogue"]:
+            section = getattr(self, section_name)
+            for key, value in section.items():
+                if not isinstance(value, (list, ListConfig)):
+                    raise DefinitionError(f"{section_name}.{key} must be a list of expressions")
 
     @property
     def inputs_outputs(self):
@@ -571,6 +538,7 @@ class Cargo(object):
             check_outputs_exist=False,
             create_dirs=False,
             ignore_subst_errors=True,
+            log=self.log,
         )
 
         return params
@@ -598,6 +566,7 @@ class Cargo(object):
             check_inputs_exist=not loosely and not remote_fs,
             check_outputs_exist=False,
             create_dirs=not loosely and not remote_fs,
+            log=self.log,
         )
         # check outputs
         params1.update(
@@ -612,6 +581,7 @@ class Cargo(object):
                 check_inputs_exist=not loosely and not remote_fs,
                 check_outputs_exist=False,
                 create_dirs=not loosely and not remote_fs,
+                log=self.log,
             )
         )
         return params1
@@ -640,6 +610,7 @@ class Cargo(object):
                 check_required=not loosely,
                 check_inputs_exist=not loosely and not remote_fs,
                 check_outputs_exist=not loosely and not remote_fs,
+                log=self.log,
             )
         )
         return params

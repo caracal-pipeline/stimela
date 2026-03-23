@@ -16,8 +16,7 @@ from rich.markup import escape
 import scabha.exceptions
 import stimela
 from scabha.basetypes import UNSET, Placeholder, SkippedOutput
-from scabha.cargo import NotifyEntry, NotifySeverity
-from scabha.exceptions import SubstitutionError, SubstitutionErrorList
+from scabha.exceptions import AbortError, SubstitutionError, SubstitutionErrorList
 from scabha.substitutions import SubstitutionNS
 from scabha.validate import Unresolved, evaluate_and_substitute_object, join_quote
 from stimela import log_exception, stimelogging, task_stats
@@ -88,8 +87,8 @@ class Step:
     # optional backend settings
     backend: Optional[Dict[str, Any]] = None
 
-    pre_notify: Dict[str, Any] = EmptyDictDefault()  # optional dict of messages to issue before running
-    post_notify: Dict[str, Any] = EmptyDictDefault()  # optional dict of messages to issue after running
+    preamble: Dict[str, Any] = EmptyDictDefault()  # Dict[str, List[str]] of expressions evaluated before running
+    epilogue: Dict[str, Any] = EmptyDictDefault()  # Dict[str, List[str]] of expressions evaluated after running
 
     def __post_init__(self):
         self.fqname = self.fqname or self.name
@@ -124,9 +123,14 @@ class Step:
         else:
             # otherwise, self._skip stays at None, and will be re-evaluated at runtime
             self._skip = None
-        # check that notifications are valid
-        for label in ["pre_notify", "post_notify"]:
-            NotifyEntry.validate_notify_list(label, getattr(self, label))
+        # check that preamble/epilogue entries are valid (each must be a list of expressions)
+        from omegaconf import ListConfig
+
+        for section_name in ["preamble", "epilogue"]:
+            section = getattr(self, section_name)
+            for key, value in section.items():
+                if not isinstance(value, (list, ListConfig)):
+                    raise StepValidationError(f"step '{self.name}': {section_name}.{key} must be a list of expressions")
 
     def summary(self, params=None, recursive=True, ignore_missing=False, inputs=True, outputs=True):
         summary_params = OrderedDict()
@@ -404,41 +408,38 @@ class Step:
             with task_stats.declare_subtask(self.name, wrapper_or_backend):
                 return backend_runner.build(self.cargo, log=log, rebuild=rebuild)
 
-    def issue_notifications(self, which: str, subst) -> bool:
-        # check for notifications -- convert to DictConfig first if needed
-        def to_dictconfig(d: Any) -> DictConfig:
-            if isinstance(d, DictConfig):
-                return d
-            return OmegaConf.create({k: OmegaConf.structured(v) for k, v in d.items()})
+    def evaluate_section(self, which: str, subst) -> bool:
+        """Evaluates preamble or epilogue expressions.
 
-        notifications = OmegaConf.merge(to_dictconfig(getattr(self.cargo, which)), to_dictconfig(getattr(self, which)))
-        notifications = evaluate_and_substitute_object(
-            notifications, subst, recursion_level=-1, location=[self.fqname, which]
-        )
-        abort = False
-        # loop over resulting list
-        for label, entry in notifications.items():
-            entry = NotifyEntry(**entry)
-            if entry.condition is None or entry.condition:
-                severity = entry.severity
-                if isinstance(severity, str):
-                    severity = NotifySeverity[severity]
-                is_warning = int(severity) >= NotifySeverity.warning.value
-                if severity.value == NotifySeverity.abort.value:
-                    severity = NotifySeverity.critical
-                    abort = True
-                if not hasattr(self.log, severity.name):
-                    raise StimelaCabRuntimeError(f"invalid severity '{severity}' in '{self.fqname}.{which}.{label}'")
-                stimelogging.log_and_remember(
-                    self.log,
-                    entry.message,
-                    label=entry.label or label,
-                    severity=severity.name,
-                    suppress_repeat=entry.no_repeat,
-                    at_end=entry.at_end if entry.at_end is not None else is_warning,
-                    only_at_end=entry.only_at_end,
-                )
-        return abort
+        Merges cargo and step sections by label (step overrides cargo).
+        Each entry is a list of expressions evaluated with short-circuit AND semantics.
+        Returns True if step should abort.
+        """
+        cargo_section = getattr(self.cargo, which, {})
+        step_section = getattr(self, which, {})
+        # merge: step labels override cargo labels
+        merged = dict(cargo_section)
+        merged.update(step_section)
+
+        for label, expressions in merged.items():
+            for expr_str in expressions:
+                try:
+                    result = evaluate_and_substitute_object(
+                        expr_str,
+                        subst,
+                        recursion_level=-1,
+                        location=[self.fqname, which, label],
+                        log=self.log,
+                        log_and_remember=stimelogging.log_and_remember,
+                    )
+                    # False or unset result skips remaining expressions in this label
+                    if result is UNSET or isinstance(result, Unresolved) or not result:
+                        self.log.critical(f"{which}: {label}: '{expr_str}' evaluates to {result}")
+                        return True
+                except AbortError as exc:
+                    self.log.critical(str(exc))
+                    return True
+        return False
 
     def run(
         self,
@@ -476,7 +477,7 @@ class Step:
         try:
             backend_opts = OmegaConf.merge(self.config.opts.backend, backend)
             backend_opts = evaluate_and_substitute_object(
-                backend_opts, subst, recursion_level=-1, location=[self.fqname, "backend"]
+                backend_opts, subst, recursion_level=-1, location=[self.fqname, "backend"], log=self.log
             )
             if not is_outer_step and backend_opts.verbose:
                 opts_yaml = OmegaConf.to_yaml(backend_opts)
@@ -510,7 +511,7 @@ class Step:
             # evaluate the skip attribute (it can be a formula and/or a {}-substititon)
             skip = self._skip
             if self._skip is None and subst is not None:
-                skip = evaluate_and_substitute_object(self.skip, subst, location=[self.fqname, "skip"])
+                skip = evaluate_and_substitute_object(self.skip, subst, location=[self.fqname, "skip"], log=self.log)
                 if skip is UNSET:  # skip: =IFSET(recipe.foo) will return UNSET
                     skip = False
                 self.log.debug(f"dynamic skip attribute evaluation returns {skip}")
@@ -696,7 +697,7 @@ class Step:
                     skip = True
 
             if not skip:
-                if self.issue_notifications("pre_notify", subst):
+                if self.evaluate_section("preamble", subst):
                     raise StepValidationError("aborting due to above", log=self.log)
 
                 # check for outputs that need removal
@@ -766,7 +767,7 @@ class Step:
                     subst.current._merge_(params)
                 self.log_summary(logging.DEBUG, "validated outputs", ignore_missing=True, outputs=True)
 
-            if self.issue_notifications("post_notify", subst):
+            if self.evaluate_section("epilogue", subst):
                 raise StepValidationError("aborting due to above", log=self.log)
 
             # bomb out if an output was invalid

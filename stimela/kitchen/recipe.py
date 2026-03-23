@@ -218,7 +218,7 @@ class Recipe(Cargo):
             # perform substitutions
             try:
                 flattened = evaluate_and_substitute(
-                    flattened, subst, subst.recipe, location=[whose.fqname], ignore_subst_errors=True
+                    flattened, subst, subst.recipe, location=[whose.fqname], ignore_subst_errors=True, log=self.log
                 )
             except Exception as exc:
                 raise AssignmentError(f"{whose.fqname}: error evaluating assignments", exc)
@@ -284,7 +284,12 @@ class Recipe(Cargo):
         # do final round of substitutions
         try:
             assign = evaluate_and_substitute(
-                assign, subst, subst.recipe, location=[whose.fqname], ignore_subst_errors=ignore_subst_errors
+                assign,
+                subst,
+                subst.recipe,
+                location=[whose.fqname],
+                ignore_subst_errors=ignore_subst_errors,
+                log=self.log,
             )
         except Exception as exc:
             raise AssignmentError(f"{whose.fqname}: error evaluating assignments", exc)
@@ -1300,7 +1305,7 @@ class Recipe(Cargo):
             try:
                 backend_opts = OmegaConf.merge(stimela.CONFIG.opts.backend, backend)
                 backend_opts = evaluate_and_substitute_object(
-                    backend_opts, subst, recursion_level=-1, location=[self.fqname, "backend"]
+                    backend_opts, subst, recursion_level=-1, location=[self.fqname, "backend"], log=self.log
                 )
                 if getattr(backend_opts, "verbose", 0):
                     opts_yaml = OmegaConf.to_yaml(backend_opts)

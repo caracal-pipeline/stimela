@@ -6,15 +6,24 @@ def test_notifications():
     retcode, output = run("stimela -b native run test_notify.yml")
     assert retcode == 0
     print(output)
-    assert verify_output(output, r"INFO: This is a pre-notification about \d+ \d+ in general") == 3
-    assert verify_output(output, r"INFO: This is a step-specific post-notification about life in general") == 1
-    assert verify_output(output, r"WARNING: This is a step-specific post-notification about 2 == 2 ") == 2
-    assert verify_output(output, r"WARNING: This is a post-notification about 3 == 3") == 2
+    # INFO-level messages appear once (no summary by default), WARNING+ appear twice (execution + summary)
+    assert verify_output(output, r"INFO: This is a preamble about \d+ \d+ in general") == 5
+    assert verify_output(output, r"INFO: This is a step-specific epilogue about life in general") == 1
+    assert verify_output(output, r"WARNING: This is a step-specific epilogue about 2 == 2") == 2
+    assert verify_output(output, r"WARNING: This is an epilogue about 3 == 3") == 2
 
-    retcode, output = run("stimela -b native run test_notify.yml step3.x=42")
+    retcode, output = run("stimela -b native run test_notify.yml step4.x=42")
     assert retcode == 1
     print(output)
-    assert verify_output(output, r"INFO: This is a pre-notification about \d+ \d+ in general") == 3
-    assert verify_output(output, r"INFO: This is a step-specific post-notification about life in general") == 1
-    assert verify_output(output, r"WARNING: This is a step-specific post-notification about 2 == 2 ") == 2
-    assert verify_output(output, r"CRITICAL: x is 42, I'm out of here!") == 2
+    assert verify_output(output, r"INFO: This is a preamble about \d+ \d+ in general") == 5
+    assert verify_output(output, r"INFO: This is a step-specific epilogue about life in general") == 1
+    assert verify_output(output, r"WARNING: This is a step-specific epilogue about 2 == 2") == 2
+    assert verify_output(output, r"CRITICAL: ABORT: x is 42, I'm out of here!") == 1
+
+    retcode, output = run("stimela -b native run test_notify.yml step4.x=43")
+    assert retcode == 1
+    print(output)
+    assert verify_output(output, r"INFO: This is a preamble about \d+ \d+ in general") == 5
+    assert verify_output(output, r"INFO: This is a step-specific epilogue about life in general") == 1
+    assert verify_output(output, r"WARNING: This is a step-specific epilogue about 2 == 2") == 2
+    assert verify_output(output, r"CRITICAL: epilogue: assert:") == 1

@@ -1,28 +1,26 @@
 cabs:
   foo:
-    command: echo 
+    command: echo
     inputs:
       x: int = 1
       y: int = 2
-    pre_notify:
+    preamble:
       pre1:
-        message: "This is a pre-notification about {current.x} {current.y} in general"
-        severity: info
-    post_notify:
+        - =LOG("This is a preamble about {current.x} {current.y} in general")
+    epilogue:
       post1:
-        condition: =current.x == current.y
-        message: "This is a post-notification about {current.x} == {current.y}"
-        severity: warning
-      post2: 
-        condition: =current.x == 42
-        message: "x is 42, I'm out of here!"
-        severity: abort
+        - =IF(current.x == current.y, 
+            LOG_WARNING("This is an epilogue about {current.x} == {current.y}", "no-repeat"))
+      post2:
+        - =IF(current.x == 42, ABORT("x is 42, I'm out of here!"))
+      assert:
+        - =current.x != 43
   bar:
-    command: echo 
+    command: echo
     inputs:
       x: int = 1
       y: int = 2
-        
+
 recipe:
   name: "demo recipe"
   info: 'top level recipe definition'
@@ -32,21 +30,32 @@ recipe:
       params:
         x: 1
         y: 2
-      post_notify:
-        # this one won't fire, as it inherits the cab's condition (same 'post1' label)
+      epilogue:
+        # this one won't fire, as step overrides cab's 'post1' and x != y here
         post1:
-          message: "This is a step-specific post-notification about {current.x} == {current.y}"
+          - =IF(current.x == current.y, 
+            LOG_WARNING("This is a step-specific epilogue about {current.x} == {current.y}"))
         post3:
-          message: "This is a step-specific post-notification about life in general"
+          - =LOG("This is a step-specific epilogue about life in general")
     step2:
       cab: foo
       params:
         x: 2
         y: 2
-      post_notify:
-        post1:
-          message: "This is a step-specific post-notification about {current.x} == {current.y}"
+    step2a:
+      cab: foo
+      params:
+        x: 2
+        y: 2
     step3:
+      cab: foo
+      params:
+        x: 2
+        y: 2
+      epilogue:
+        post1:
+          - =IF(current.x == current.y, LOG("This is a step-specific epilogue about {current.x} == {current.y}", "warning"))
+    step4:
       cab: foo
       params:
         x: 3
