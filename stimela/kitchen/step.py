@@ -9,7 +9,7 @@ from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, ListConfig, OmegaConf
 from omegaconf.errors import OmegaConfBaseException
 from rich.markup import escape
 
@@ -124,8 +124,6 @@ class Step:
             # otherwise, self._skip stays at None, and will be re-evaluated at runtime
             self._skip = None
         # check that preamble/epilogue entries are valid (each must be a list of expressions)
-        from omegaconf import ListConfig
-
         for section_name in ["preamble", "epilogue"]:
             section = getattr(self, section_name)
             for key, value in section.items():
