@@ -2,6 +2,7 @@
 import dataclasses
 import fnmatch
 import glob
+import logging
 import operator
 import os.path
 import typing
@@ -13,7 +14,7 @@ import pyparsing as pp
 from omegaconf import DictConfig, ListConfig
 
 from .basetypes import UNSET, Unresolved
-from .exceptions import FormulaError, ParserError, UnsetError
+from .exceptions import AbortError, FormulaError, ParserError, UnsetError
 from .substitutions import SubstitutionContext, SubstitutionError
 
 pp.ParserElement.enable_packrat()
@@ -173,6 +174,95 @@ class FunctionHandler(ResultsHandler):
         cond = evaluator._evaluate_result(args[0], allow_unset=True)
         raise FormulaError(f"ERROR: {cond}")
 
+    def ABORT(self, evaluator, args):
+        if len(args) != 1:
+            raise FormulaError(f"{'.'.join(evaluator.location)}: ABORT() expects one argument, got {len(args)}")
+        msg = evaluator._evaluate_result(args[0], allow_unset=True)
+        raise AbortError(f"ABORT: {msg}")
+
+    _LOG_LEVELS = {"debug", "info", "warning", "error", "critical"}
+
+    def LOG(self, evaluator, args):
+        """LOG(message [, options, options]) — log a message.
+
+        Options can be comma-separated strings of:
+          - level: debug, info (default), warning, error, critical
+          - no-repeat: suppress identical messages
+          - summary: repeat at end of run (default for warning and above)
+          - no-summary: don't repeat at end of run (default for info and below)
+          - only-summary: only issue at end of run
+        """
+        if len(args) < 1:
+            raise FormulaError(f"{'.'.join(evaluator.location)}: LOG() expects 1 or 2 arguments, got {len(args)}")
+        msg = evaluator._evaluate_result(args[0])
+        if isinstance(msg, Unresolved):
+            return msg
+
+        # parse options
+        level = "info"
+        suppress_repeat = False
+        at_end = None  # will be set based on level if not explicitly specified
+        only_at_end = False
+
+        if len(args) > 1:
+            opts = set()
+            # strip at comma and concatenate all arguments
+            for arg in args[1:]:
+                opts_str = evaluator._evaluate_result(arg)
+                if isinstance(opts_str, Unresolved):
+                    return opts_str
+                opts |= {o.strip() for o in str(opts_str).split(",")}
+            # now process options
+            level_opts = opts & self._LOG_LEVELS
+            if len(level_opts) > 1:
+                raise FormulaError(f"{'.'.join(evaluator.location)}: LOG(): multiple levels specified: {level_opts}")
+            if level_opts:
+                level = level_opts.pop()
+            unknown = opts - self._LOG_LEVELS - {"no-repeat", "summary", "no-summary", "only-summary"}
+            if unknown:
+                raise FormulaError(f"{'.'.join(evaluator.location)}: LOG(): unknown option(s): {unknown}")
+            suppress_repeat = "no-repeat" in opts
+            if "summary" in opts:
+                at_end = True
+            if "no-summary" in opts:
+                at_end = False
+            if "only-summary" in opts:
+                only_at_end = True
+
+        # default at_end: True for warning and above, False for info and below
+        if at_end is None:
+            at_end = level in ("warning", "error", "critical")
+
+        log_method = getattr(evaluator.log, level, None)
+        if log_method is None:
+            raise FormulaError(f"{'.'.join(evaluator.location)}: LOG(): invalid log level '{level}'")
+
+        if evaluator.log_and_remember is not None:
+            evaluator.log_and_remember(
+                evaluator.log,
+                str(msg),
+                label=str(msg),
+                severity=level,
+                suppress_repeat=suppress_repeat,
+                at_end=at_end,
+                only_at_end=only_at_end,
+            )
+        else:
+            log_method(str(msg))
+        return msg
+
+    def LOG_INFO(self, evaluator, args):
+        return self.LOG(evaluator, list(args) + ["info"])
+
+    def LOG_WARNING(self, evaluator, args):
+        return self.LOG(evaluator, list(args) + ["warning"])
+
+    def LOG_ERROR(self, evaluator, args):
+        return self.LOG(evaluator, list(args) + ["error"])
+
+    def LOG_CRITICAL(self, evaluator, args):
+        return self.LOG(evaluator, list(args) + ["critical"])
+
     def LIST(self, evaluator, args):
         def make_list(*x):
             return list(x)
@@ -252,9 +342,10 @@ class FunctionHandler(ResultsHandler):
         return evaluator._evaluate_result(default_case, allow_unset=True)
 
     def IF(self, evaluator, args):
-        if len(args) < 3 or len(args) > 4:
-            raise FormulaError(f"{'.'.join(evaluator.location)}: IF() expects 3 or 4 arguments, got {len(args)}")
-        conditional, if_true, if_false = args[:3]
+        if len(args) < 2 or len(args) > 4:
+            raise FormulaError(f"{'.'.join(evaluator.location)}: IF() expects 2 to 4 arguments, got {len(args)}")
+        conditional, if_true = args[0], args[1]
+        if_false = args[2] if len(args) > 2 else True
         if_unset = args[3] if len(args) == 4 else UNSET("")
 
         cond = evaluator._evaluate_result(conditional, allow_unset=if_unset is not None)
@@ -387,7 +478,7 @@ def construct_parser():
     expr = pp.Forward()
 
     # functions -- get all all-uppercase members from FunctionHandler
-    anyseq_funcnames = {"GLOB", "EXISTS", "ERROR"}
+    anyseq_funcnames = {"GLOB", "EXISTS", "ERROR", "ABORT"}
     all_funcnames = set(
         func for func in dir(FunctionHandler) if callable(getattr(FunctionHandler, func)) and func.upper() == func
     )
@@ -484,11 +575,15 @@ class Evaluator(object):
         subst_context: typing.Optional[SubstitutionContext] = None,
         allow_unresolved: bool = False,
         location: List[str] = [],
+        log: typing.Optional[logging.Logger] = None,
+        log_and_remember: typing.Optional[typing.Callable] = None,
     ):
         self.ns = ns
         self.subst_context = subst_context
         self.location = location
         self.allow_unresolved = allow_unresolved
+        self.log = log or logging.getLogger("scabha.evaluator")
+        self.log_and_remember = log_and_remember
 
     def _resolve(self, value, in_formula=True, subst=True):
         if type(value) is str:
@@ -612,6 +707,8 @@ class Evaluator(object):
 
                     try:
                         return self._evaluate_result(parse_results, allow_unset=True)
+                    except AbortError:
+                        raise
                     except Exception as exc:
                         raise FormulaError(f"{'.'.join(self.location)}: evaluation of '{value}' failed", exc, tb=True)
             else:
@@ -780,6 +877,8 @@ class Evaluator(object):
                 if type(value) is str:
                     try:
                         new_value = self.evaluate(value, sublocation=sublocation + [name])
+                    except AbortError:
+                        raise
                     except (AttributeError, SubstitutionError, ParserError, FormulaError) as err:
                         if raise_substitution_errors:
                             raise

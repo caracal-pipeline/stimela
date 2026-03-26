@@ -1,6 +1,7 @@
 # ruff: noqa: E731 - ignore assignment of lambda expressions. TODO(JSKenyon): Fix this.
 import dataclasses
 import keyword
+import logging
 import os
 import os.path
 import pathlib
@@ -25,9 +26,18 @@ def join_quote(values):
     return "'" + "', '".join(values) + "'" if values else ""
 
 
-def evaluate_and_substitute_object(obj: Any, subst: SubstitutionNS, recursion_level: int = 1, location: List[str] = []):
+def evaluate_and_substitute_object(
+    obj: Any,
+    subst: SubstitutionNS,
+    recursion_level: int = 1,
+    location: List[str] = [],
+    log: Optional[logging.Logger] = None,
+    log_and_remember: Optional[callable] = None,
+):
     with substitutions_from(subst, raise_errors=True) as context:
-        evaltor = Evaluator(subst, context, location=location, allow_unresolved=False)
+        evaltor = Evaluator(
+            subst, context, location=location, allow_unresolved=False, log=log, log_and_remember=log_and_remember
+        )
         return evaltor.evaluate_object(obj, raise_substitution_errors=True, recursion_level=recursion_level)
 
 
@@ -38,9 +48,10 @@ def evaluate_and_substitute(
     defaults: Dict[str, Any] = {},
     ignore_subst_errors: bool = False,
     location: List[str] = [],
+    log: Optional[logging.Logger] = None,
 ):
     with substitutions_from(subst, raise_errors=True) as context:
-        evaltor = Evaluator(subst, context, location=location, allow_unresolved=True)
+        evaltor = Evaluator(subst, context, location=location, allow_unresolved=True, log=log)
         inputs = evaltor.evaluate_dict(
             inputs, corresponding_ns=corresponding_ns, defaults=defaults, raise_substitution_errors=False
         )
@@ -68,6 +79,7 @@ def validate_parameters(
     check_outputs_exist=True,
     create_dirs=False,
     ignore_subst_errors=False,
+    log: Optional[logging.Logger] = None,
 ) -> Dict[str, Any]:
     """Validates a dict of parameter values against a given schema
 
@@ -141,6 +153,7 @@ def validate_parameters(
             defaults=all_defaults,
             ignore_subst_errors=ignore_subst_errors,
             location=[fqname],
+            log=log,
         )
 
     # split inputs into unresolved substitutions, and proper inputs

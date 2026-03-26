@@ -136,7 +136,7 @@ class StimelaLogFormatter(logging.Formatter):
             if record.levelno <= logging.DEBUG:
                 font, color = self.DEBUG_STYLE
             elif record.levelno >= logging.CRITICAL:
-                font, color = self.SEVERE_STYLE
+                font, color = self.CRITICAL_STYLE
             elif record.levelno >= logging.ERROR:
                 font, color = self.ERROR_STYLE
             elif record.levelno >= logging.WARNING:
@@ -490,3 +490,39 @@ def log_rich_payload(
         f"{message}:",
         extra=dict(logfile_message=f"{message}: \n{str(payload)}", console_payload=console_payload),
     )
+
+
+_accumulate_messages = {}
+
+
+def log_and_remember(
+    log: logging.Logger,
+    message: str,
+    label: Any,
+    severity: str,
+    suppress_repeat: bool = False,
+    at_end: bool = True,
+    only_at_end: bool = False,
+):
+    message_key = (id(log), label)
+    method = getattr(log, severity)
+    # skip message if already issued before
+    if suppress_repeat and message_key in _accumulate_messages:
+        return
+    _accumulate_messages[message_key] = (method, message, at_end)
+    # skip message if "at_end"
+    if only_at_end:
+        return
+    # otherwise, log message now
+    method(message)
+
+
+def has_accumulated_messages() -> bool:
+    return any(at_end for _, _, at_end in _accumulate_messages.values())
+
+
+def flush_accumulated_messages() -> None:
+    for method, message, at_end in _accumulate_messages.values():
+        if at_end:
+            method(message)
+    _accumulate_messages.clear()

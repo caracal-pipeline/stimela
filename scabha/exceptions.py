@@ -128,6 +128,12 @@ class FormulaError(ScabhaBaseException):
     pass
 
 
+class AbortError(FormulaError):
+    """Raised by ABORT() formula function to signal step abort."""
+
+    pass
+
+
 class CyclicSubstitutionError(SubstitutionError):
     def __init__(self, location: List[str], other_location: List[str]):
         self.location = ".".join(location)

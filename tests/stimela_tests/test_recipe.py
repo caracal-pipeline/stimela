@@ -26,9 +26,7 @@ def run(command):
 
 
 def verify_output(output, *regexes):
-    """Returns True if the regexes appear in sequence in the output.
-
-    Given an output string, returns True if the regexes appear in order in
+    """Given an output string, returns the number of times the regexes appear in order in
     the output string, with any number of characters between the regex strings.
 
     Args:
@@ -41,12 +39,13 @@ def verify_output(output, *regexes):
     # on terminal width when performing these tests.
     output = re.sub(r"\s+", " ", output)
     # Match the regex strings with any number of characters between them.
-    regex = "(.*)".join(regexes)
-    if not re.search(regex, output):
+    regex = "(.*?)".join(regexes)
+    count = len(re.findall(regex, output))
+    if not count:
         print("Error, expected regex pattern did not appear in the output:")
         print(f"  {regex}")
-        return False
-    return True
+        return 0
+    return count
 
 
 def test_test_aliasing():

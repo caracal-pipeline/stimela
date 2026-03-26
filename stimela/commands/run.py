@@ -669,6 +669,10 @@ def run(
                 print_depth=profile if profile is not None else stimela.CONFIG.opts.profile.print_depth,
                 unroll_loops=stimela.CONFIG.opts.profile.unroll_loops,
             )
+            if stimelogging.has_accumulated_messages():
+                stimelogging.declare_chapter("accumulated warnings and errors")
+            stimelogging.flush_accumulated_messages()
+
             if not isinstance(exc, ScabhaBaseException) or not exc.logged:
                 log_exception(
                     StimelaRuntimeError(
@@ -699,6 +703,10 @@ def run(
             print_depth=profile if profile is not None else stimela.CONFIG.opts.profile.print_depth,
             unroll_loops=stimela.CONFIG.opts.profile.unroll_loops,
         )
+
+    if stimelogging.has_accumulated_messages():
+        stimelogging.declare_chapter("accumulated warnings and errors")
+    stimelogging.flush_accumulated_messages()
 
     last_log_dir = stimelogging.get_logfile_dir(outer_step.log) or "."
     outer_step.log.info(f"last log directory was {stimelogging.apply_style(last_log_dir, 'bold green')}")

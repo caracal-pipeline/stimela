@@ -326,6 +326,9 @@ class Cargo(object):
 
     dynamic_schema: Optional[str] = None  # function to call to augment inputs/outputs dynamically
 
+    preamble: Dict[str, Any] = EmptyDictDefault()  # Dict[str, List[str]] of expressions evaluated before running
+    epilogue: Dict[str, Any] = EmptyDictDefault()  # Dict[str, List[str]] of expressions evaluated after running
+
     @staticmethod
     def flatten_schemas(io_dest, io, label, prefix=""):
         for name, value in io.items():
@@ -422,6 +425,12 @@ class Cargo(object):
                 raise DefinitionError(f"{modulename}.{funcname} is not a valid callable")
             # make backup copy of original inputs/outputs
             self._original_inputs_outputs = self.inputs.copy(), self.outputs.copy()
+        # check that preamble/epilogue entries are valid (each must be a list of expressions)
+        for section_name in ["preamble", "epilogue"]:
+            section = getattr(self, section_name)
+            for key, value in section.items():
+                if not isinstance(value, (list, ListConfig)):
+                    raise DefinitionError(f"{section_name}.{key} must be a list of expressions")
 
     @property
     def inputs_outputs(self):
@@ -529,6 +538,7 @@ class Cargo(object):
             check_outputs_exist=False,
             create_dirs=False,
             ignore_subst_errors=True,
+            log=self.log,
         )
 
         return params
@@ -556,6 +566,7 @@ class Cargo(object):
             check_inputs_exist=not loosely and not remote_fs,
             check_outputs_exist=False,
             create_dirs=not loosely and not remote_fs,
+            log=self.log,
         )
         # check outputs
         params1.update(
@@ -570,6 +581,7 @@ class Cargo(object):
                 check_inputs_exist=not loosely and not remote_fs,
                 check_outputs_exist=False,
                 create_dirs=not loosely and not remote_fs,
+                log=self.log,
             )
         )
         return params1
@@ -598,6 +610,7 @@ class Cargo(object):
                 check_required=not loosely,
                 check_inputs_exist=not loosely and not remote_fs,
                 check_outputs_exist=not loosely and not remote_fs,
+                log=self.log,
             )
         )
         return params
