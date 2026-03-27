@@ -321,7 +321,7 @@ class Step:
         params = self.validated_params = self.cargo.prevalidate(params, subst, root=root)
         # add missing outputs
         for name, schema in self.cargo.outputs.items():
-            if name not in params and schema.required and not schema.is_named_output:
+            if name not in params and schema.required:
                 params[name] = UNSET(name)
         self.log.debug(
             f"{self.cargo.name}: {len(self.missing_params)} missing, "

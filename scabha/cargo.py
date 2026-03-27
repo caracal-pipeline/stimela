@@ -152,8 +152,8 @@ class Parameter(object):
     tags: List[str] = EmptyListDefault()
 
     # If True, parameter is required. None/False, not required.
-    # For aliases, False at recipe level can be added to override the target setting,
-    # while the default of None won't override.
+    # For outputs, required=False means missing output will not be treated as an error.
+    # For aliases, False at recipe level will override the target setting, while the default of None won't.
     required: Optional[bool] = None
 
     # restrict value choices, i.e. making for an option-type parameter

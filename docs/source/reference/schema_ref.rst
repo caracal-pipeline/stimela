@@ -17,7 +17,7 @@ Basic schema attributes
 
 The ``dtype`` attribute of the schema determines the data type of the parameter. This generally follows the Python `typing <https://docs.python.org/3/library/typing.html>`_ module syntax. Basic types such as ``str``, ``int``, ``float``, ``bool``, as well as compound types such as ``List``, ``Tuple``, ``Dict``, ``Union`` and ``Optional`` are recognized. In addition, Stimela defines the ``File``, ``Directory``, ``MS`` and ``URI`` types. The latter two refer to Measurement Sets and uniform record identifiers (for Dask-ms based tools that support both traditional MSs and, e.g., S3-backed storage.)
 
-The default dtype is a ``str``.
+The default dtype is a ``str``. 
 
 Some more terminology is in order. The term *cargo* refers to the underlying tool for which the interface is being defined. The cargo can be a sub-recipe, or a cab wrapping an underlying piece of software:
 
@@ -34,7 +34,9 @@ Some more terminology is in order. The term *cargo* refers to the underlying too
 
 The ``default`` attribute can be used to provide a default value for an input (or a named output.) If a default is not supplied, the parameter is treated as optional, unless marked with a ``required: true`` attribute.
 
-Note that Stimela also recognizes an alternative way to specify default values via a separate ``defaults`` section::
+For outputs, ``required`` has a slightly different meaning. Stimela will normally check that the cab has produced the expected file-type outputs, and flag up an error if it hasn't. However, ``required: false`` may be used to mark optional outputs, which do not necessarily need to exist at the end of the run.
+
+Note that Stimela also recognized an alternative way to specify default values via a separate ``defaults`` section::
 
     inputs:
         foo:
@@ -44,6 +46,8 @@ Note that Stimela also recognizes an alternative way to specify default values v
             default: 0
     defaults:
         foo: "foodef"
+    
+
 
 
 Shorthand schemas
