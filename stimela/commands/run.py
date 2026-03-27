@@ -503,7 +503,7 @@ def run(
             log_available_runnables()
             sys.exit(2)
     # else something was specified
-    elif recipe_or_cab in available_recipes:
+    elif recipe_or_cab in stimela.CONFIG.lib.recipes:
         recipe_name = recipe_or_cab
         log.info(f"selected recipe is '{recipe_name}'")
     elif recipe_or_cab in stimela.CONFIG.cabs:
