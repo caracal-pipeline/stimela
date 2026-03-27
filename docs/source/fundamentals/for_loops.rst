@@ -18,7 +18,7 @@ This can be specified in one of two ways::
                 params:
                     bar: =recipe.foo
 
-This tells Stimela to run the recipe three times, setting the variable ``foo`` to "a", "b" and "c" respectively. :ref:`subst`can then be employed inside the step definitions to alter the workflow based on the value of ``foo``.
+This tells Stimela to run the recipe three times, setting the varizable ``foo`` to "a", "b" and "c" respectively. :ref:`subst` can then be employed inside the step definitions to alter the workflow based on the value of ``foo``.
 
 In the second form, the list of values to be iterated over is an input to the recipe::
 

@@ -84,13 +84,24 @@ Next, we have the body of the recipe proper::
 This starts with a section name. Because the section name is not one of the standard ones (i.e. `cabs`, `opts`), stimela will treat
 it as a recipe definition. Note that it is also possible to define recipes directly in the library, like this::
 
-  ratt-parrot:
-    name: ratt-parrot
-    info: "imaging of RRAT PARROT follow-up observations"
+  lib:
+    recipes:
+      ratt-parrot:
+        name: ratt-parrot
+        info: "imaging of RRAT PARROT follow-up observations"
 
 ...and, in fact, any recipe section defined at the top level will be implicitly inserted into ``lib.recipes``. Defining things at top level is simply a :ref:`shortcut <config_loading_recipes>` that saves on indentation.
 
 Then, we have an optional ``name`` attribute (if missing, the section name will be used as the recipe name), and an ``info`` string describing the recipe.
+
+Default recipes
+***************
+
+If a document defines multiple recipes, one of them can be marked as the default by setting the ``DEFAULT`` key at the top level of the document to the name of that recipe. This is useful for documents that contain, e.g., multiple subrecipes, but where one of them needs to be designated as the "main" recipe to be run when no specific one is selected from the command line. For example, in ``parrot-cabs.yml``, we can have::
+
+  DEFAULT: ratt-parrot
+
+Note that the ``DEFAULT`` key can also be set to the name of a cab, in which case the default runnable becomes that cab. Note also that ``stimela doc`` will use the default name as the default item to be documented.
 
 
 Recipe variables

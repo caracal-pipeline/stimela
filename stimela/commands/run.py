@@ -14,7 +14,7 @@ from typing import List, Optional, Tuple
 import click
 import yaml
 from benedict import benedict
-from omegaconf.omegaconf import OmegaConf, OmegaConfBaseException
+from omegaconf.omegaconf import DictConfig, OmegaConf, OmegaConfBaseException
 
 import stimela
 import stimela.backends
@@ -110,7 +110,9 @@ def resolve_recipe_files(filename: str, log: logging.Logger, use_manifest: bool 
 
 
 def load_recipe_files(filenames: List[str]):
-    """Loads a set of config or recipe files. Returns list of recipes loaded."""
+    """Loads a set of config or recipe files.
+    Returns tuple of names, default_name, where 'names' is the list of recipes loaded,
+    and default_name can be None"""
 
     full_conf = OmegaConf.create()
     full_deps = configuratt.ConfigDependencies()
@@ -160,11 +162,20 @@ def load_recipe_files(filenames: List[str]):
     # config secions are merged into the config namespace, while recipes go under
     # lib.recipes
     recipe_names = []
+    default_name = None
     update_conf = OmegaConf.create()
     for name, value in full_conf.items():
         if name in stimela.CONFIG:
             update_conf[name] = value
+        elif name == "DEFAULT":
+            if type(value) is not str:
+                logger().error(f"DEFAULT entry must be of type 'str', got '{type(value).__name__}'")
+                sys.exit(2)
+            default_name = value
         else:
+            if type(value) is not DictConfig:
+                logger().error(f"'{name}': subsection expected, got '{type(value).__name__}'")
+                sys.exit(2)
             try:
                 stimela.CONFIG.lib.recipes[name] = OmegaConf.merge(RecipeSchema, value)
             except Exception as exc:
@@ -178,7 +189,7 @@ def load_recipe_files(filenames: List[str]):
         log_exception(f"error applying configuration from {' ,'.join(filenames)}", exc)
         sys.exit(2)
 
-    return recipe_names
+    return recipe_names, default_name
 
 
 @click.command(
@@ -426,9 +437,9 @@ def run(
 
     # load config and recipes from all given files
     if files_to_load:
-        available_recipes = load_recipe_files(files_to_load)
+        available_recipes, default_name = load_recipe_files(files_to_load)
     else:
-        available_recipes = []
+        available_recipes, default_name = [], None
 
     # load config settigs from --config arguments
     try:
@@ -463,6 +474,10 @@ def run(
             log.info(f"available recipes: {' '.join(available_recipes)}")
         if stimela.CONFIG.cabs:
             log.info(f"available cabs: {' '.join(stimela.CONFIG.cabs.keys())}")
+
+    if recipe_or_cab is None and default_name is not None and not last_recipe:
+        log.info(f"using '{default_name}' as the default runnable")
+        recipe_or_cab = default_name
 
     # figure out what we're running, recipe or cab
     recipe_name = cab_name = None
