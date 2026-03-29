@@ -27,13 +27,14 @@ Here's an example of a notional cab schema::
                     qux:
                         dtype: File
                         info: "this is the bar.qux parameter. It's not required"
+                        must_exist: false
             outputs:
                 numbers:
                     dtype: List[int]
                     info: "this is an output called 'result'. It is a list of integers"
                 output-file:
                     dtype: File
-                    required: false 
+                    must_exist: true 
 
 Here's what we can learn from the above:
 
@@ -49,7 +50,7 @@ Here's what we can learn from the above:
 
 * Inputs can have a default value, and can be marked as required. An input with no default and no ``required: true`` property is considered optional (conversely, a required input with a default is a tautology.)
  
-* Outputs can be marked as *not* required. This is relevant for file-type outputs. Normally, Stimela will check that output files exist after the task has completed, and will report an error otherwise. However, for ``required: false`` outputs, Stimela will omit this check.
+* Normally, Stimela will check that input files exist before a task is run, and throw an error if they don't. Setting ``must_exist: false`` disables this check. Conversely, output files aren't checked after the task is complete, unless ``must_exist: true`` is specified for them.
 
 
 Shorthand schemas
@@ -106,7 +107,7 @@ A few other properties are primarily relevant to file-type IOs:
 
 * the ``mkdir`` property tells Stimela to create a directory, if the directory component of a mixed output does not exist. 
 
-* setting the ``must_exist`` property to False tells Stimela that an input file does not need to exist. Normally, missing input files raise an error during validation.
+* the ``must_exist`` property tells Stimela to (not) check for file existence. By default, input files **must** exist at the start of the run, while output files **don't** have to exist at the end of the run. This logic may be flipped by setting ``must_exist: false`` in the former case, and ``must_exist: true`` in the latter case.
 
 * setting the ``remove_if_exists`` property on an output tells Stimela to remove the output file before running the task, should it exist.
 
