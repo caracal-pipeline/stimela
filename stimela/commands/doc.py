@@ -92,7 +92,7 @@ def doc(what: List[str] = [], do_list=False, implicit=False, obscure=False, all=
 
     # load config and recipes from all given files
     if files_to_load:
-        top_level_recipes = load_recipe_files(files_to_load)
+        top_level_recipes, default_name = load_recipe_files(files_to_load)
 
     if not files_to_load:
         log.error("No YAML documents were specified")
@@ -109,6 +109,11 @@ def doc(what: List[str] = [], do_list=False, implicit=False, obscure=False, all=
 
     recipes_to_document = []
     cabs_to_document = []
+
+    # use default name if supplied
+    if not names_to_document and default_name is not None:
+        log.info(f"using '{default_name}' as the default item to be documented")
+        names_to_document = [default_name]
 
     for item in names_to_document:
         recipe_names = fnmatch.filter(stimela.CONFIG.lib.recipes.keys(), item)
