@@ -61,6 +61,8 @@ class ForLoopClause(object):
     # Default is "i/N", where i is the current index plus 1, and N is the total number of loops.
     # A format string can be supplied instead.
     display_status: Optional[str] = None
+    # Expressions to be evaluated at each iteration and accumulated into list-type outputs
+    output_elements: Dict[str, Any] = EmptyDictDefault()
 
 
 def IterantPlaceholder(name: str):
@@ -1000,6 +1002,14 @@ class Recipe(Cargo):
                 self.log.debug(f"recipe is a for-loop with '{self.for_loop.var}' iterating over {len(values)} values")
                 self.log.debug(f"loop values: {values}")
             self._for_loop_values = values
+            # validate output_elements names against declared outputs
+            if self.for_loop.output_elements:
+                for elem_name in self.for_loop.output_elements:
+                    if elem_name not in self.outputs:
+                        raise ParameterValidationError(
+                            f"recipe '{self.name}': for_loop.output_elements.{elem_name} "
+                            f"does not correspond to a declared output"
+                        )
         # else fake a single-value list
         else:
             self._for_loop_values = [None]
@@ -1124,6 +1134,7 @@ class Recipe(Cargo):
         subst.info.subprocess = task_stats.get_subprocess_id()
         taskname = subst.info.taskname
         outputs = {}
+        output_elements = {}
         exception = tb = None
         task_attrs, task_kwattrs = (), {}
         try:
@@ -1227,6 +1238,19 @@ class Recipe(Cargo):
                                 if alias.param in step_params:
                                     outputs[name] = step_params[alias.param]
 
+                # evaluate output_elements expressions for this iteration
+                output_elements = {}
+                if self.for_loop and self.for_loop.output_elements:
+                    for elem_name, expr in self.for_loop.output_elements.items():
+                        value = evaluate_and_substitute_object(
+                            expr,
+                            subst,
+                            recursion_level=-1,
+                            location=[self.fqname, "for_loop", "output_elements", elem_name],
+                            log=self.log,
+                        )
+                        output_elements[elem_name] = value
+
         except Exception as exc:
             # raise exception up if asked to
             if raise_exc:
@@ -1240,7 +1264,17 @@ class Recipe(Cargo):
             else:
                 subprocess_logs = None
 
-        return task_attrs, task_kwattrs, task_stats.collect_stats(), outputs, exception, tb, subprocess_logs
+        return (
+            task_attrs,
+            task_kwattrs,
+            task_stats.collect_stats(),
+            outputs,
+            exception,
+            tb,
+            subprocess_logs,
+            count,
+            output_elements,
+        )
 
     def build(self, backend={}, rebuild=False, build_skips=False, log: Optional[logging.Logger] = None):
         # set up backend
@@ -1346,6 +1380,11 @@ class Recipe(Cargo):
                 )
 
                 nloop = len(loop_worker_args)
+                accumulated_elements = (
+                    {name: [None] * nloop for name in self.for_loop.output_elements}
+                    if self.for_loop and self.for_loop.output_elements
+                    else {}
+                )
                 if self._for_loop_scatter < 0:
                     num_workers = nloop
                 else:
@@ -1399,7 +1438,7 @@ class Recipe(Cargo):
                     errors = []
                     nfail = ncomplete = 0
                     for f in as_completed(futures):
-                        attrs, kwattrs, stats, outputs, exc, tb, subprocess_logs = f.result()
+                        attrs, kwattrs, stats, outputs, exc, tb, subprocess_logs, iter_count, iter_elements = f.result()
                         # Print the logs associated with the completed future.
                         # These are already timestamped by the child process.
                         rich_console.print(subprocess_logs, soft_wrap=True)
@@ -1412,6 +1451,8 @@ class Recipe(Cargo):
                             nfail += 1
                         else:
                             ncomplete += 1
+                            for name, value in iter_elements.items():
+                                accumulated_elements[name][iter_count] = value
                         if ncomplete:
                             status = f"[green]{ncomplete}[/green]/{nloop} complete"
                         else:
@@ -1428,11 +1469,20 @@ class Recipe(Cargo):
                         raise StimelaRuntimeError(f"{nfail}/{nloop} jobs have failed", errors)
             # else just iterate directly
             else:
+                accumulated_elements = (
+                    {name: [] for name in self.for_loop.output_elements}
+                    if self.for_loop and self.for_loop.output_elements
+                    else {}
+                )
                 for args in loop_worker_args:
-                    _, _, _, outputs, _, _, _ = self._iterate_loop_worker(*args, raise_exc=True)
+                    _, _, _, outputs, _, _, _, _count, iter_elements = self._iterate_loop_worker(*args, raise_exc=True)
+                    for name, value in iter_elements.items():
+                        accumulated_elements[name].append(value)
 
             # either way, outputs contains output aliases from the last iteration
             params.update(**outputs)
+            if accumulated_elements:
+                params.update(**accumulated_elements)
 
             # current namespace becomes recipe again
             subst.current = subst.recipe
