@@ -90,9 +90,9 @@ Occasionally, you'll want your for-loop recipe to return an output that consists
         inputs:
             image-list: List[File]
         outputs:
-            results:
+            images:
                 dtype: List[File]
-                info: "list of output files produced by each iteration"
+                info: "list of output images produced by each iteration"
             scores:
                 dtype: List[float]
                 info: "list of metrics from each iteration, rescaled by 2"
@@ -100,7 +100,7 @@ Occasionally, you'll want your for-loop recipe to return an output that consists
             var: image
             over: image-list
             output_elements:
-                results: =steps.process.output_file
+                images: =steps.process.output-img
                 scores: =steps.evaluate.metric * 2
         steps:
             process:

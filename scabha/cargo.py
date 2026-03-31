@@ -555,9 +555,12 @@ class Cargo(object):
         self._resolve_implicit_parameters(params, subst)
 
         # check inputs
+        true_inputs = self.inputs.copy()
+        true_inputs.update({name: schema for name, schema in self.outputs.items() if schema.is_named_output})
+
         params1 = validate_parameters(
             params,
-            self.inputs,
+            true_inputs,
             defaults=self.defaults,
             subst=subst,
             fqname=self.fqname,
@@ -569,23 +572,24 @@ class Cargo(object):
             log=self.log,
         )
         # check outputs
-        named_outputs = {name: schema for name, schema in self.outputs.items() if schema.is_named_output}
-        if named_outputs:
-            params1.update(
-                **validate_parameters(
-                    params,
-                    named_outputs,
-                    defaults=self.defaults,
-                    subst=subst,
-                    fqname=self.fqname,
-                    check_unknowns=False,
-                    check_required=False,
-                    check_inputs_exist=not loosely and not remote_fs,
-                    check_outputs_exist=False,
-                    create_dirs=not loosely and not remote_fs,
-                    log=self.log,
-                )
-            )
+        true_outputs = {name: schema for name, schema in self.outputs.items() if not schema.is_named_output}
+        params2 = validate_parameters(
+            params,
+            true_outputs,
+            defaults=self.defaults,
+            subst=subst,
+            fqname=self.fqname,
+            ignore_subst_errors=True,
+            check_unknowns=False,
+            check_required=False,
+            check_inputs_exist=not loosely and not remote_fs,
+            check_outputs_exist=False,
+            create_dirs=not loosely and not remote_fs,
+            log=self.log,
+        )
+        # update with outputs that weren't substitution errors, because
+        # we don't want (ignored) substitution errors to be baked in
+        params1.update({name: value for name, value in params2.items() if type(value) is not Unresolved})
         return params1
 
     def validate_outputs(

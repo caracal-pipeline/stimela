@@ -38,7 +38,7 @@ recipe:
       info: "list of x*y values from each iteration"
     message:
       dtype: str
-      default: "sums: {current.sums}, products: {current.products}"
+      implicit: "sums: {current.sums}, products: {current.products}"
 
   assign:
     y: =recipe.x * 2

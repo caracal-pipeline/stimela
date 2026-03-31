@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from io import StringIO
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union, get_origin
 
 import networkx as nx
 import rich.table
@@ -1010,6 +1010,11 @@ class Recipe(Cargo):
                             f"recipe '{self.name}': for_loop.output_elements.{elem_name} "
                             f"does not correspond to a declared output"
                         )
+                    elif get_origin(self.outputs[elem_name]._dtype) is not list:
+                        raise ParameterValidationError(
+                            f"recipe '{self.name}': for_loop.output_elements.{elem_name} "
+                            f"has dtype '{self.outputs[elem_name].dtype}', expected a List type"
+                        )
         # else fake a single-value list
         else:
             self._for_loop_values = [None]
@@ -1038,37 +1043,7 @@ class Recipe(Cargo):
 
         self.validate_for_loop(params, strict=True)
 
-        # # in case of a for-loop, assign first iterant
-        # if self.for_loop is not None:
-        #     if self.for_loop.var in self.inputs:
-        #         params[self.for_loop.var] = IterantPlaceholder(self.for_loop.var)
-        #     else:
-        #         self.assign[self.for_loop.var] = IterantPlaceholder(self.for_loop.var)
-
         return params
-
-    ## NB: OMS: is this really used or needed anywhere?
-    # def _link_steps(self):
-    #     """
-    #     Adds  next_step and previous_step attributes to the recipe.
-    #     """
-    #     steps = list(self.steps.values())
-    #     N = len(steps)
-    #     # Nothing to link if only one step
-    #     if N == 1:
-    #         return
-
-    #     for i in range(N):
-    #         step = steps[i]
-    #         if i == 0:
-    #             step.next_step = steps[1]
-    #             step.previous_step = None
-    #         elif i > 0 and i < N-2:
-    #             step.next_step = steps[i+1]
-    #             step.previous_step = steps[i-1]
-    #         elif i == N-1:
-    #             step.next_step = None
-    #             step.previous_step = steps[i-2]
 
     def summary(self, params: Dict[str, Any], recursive=True, ignore_missing=False):
         """Returns list of lines with a summary of the recipe state"""
