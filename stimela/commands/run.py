@@ -517,17 +517,20 @@ def run(
             log_available_runnables()
         sys.exit(2)
 
+    runnable_name = cab_name or recipe_name
+    subst = SubstitutionNS()
+    info = SubstitutionNS(
+        fqname=runnable_name, label=runnable_name, label_parts=[runnable_name], suffix="", taskname=runnable_name
+    )
+    subst._add_("info", info, nosubst=True)
+    subst._add_("config", stimela.CONFIG, nosubst=True)
+    subst._add_("current", SubstitutionNS(**params))
+
     # are we running a standalone cab?
     if cab_name is not None:
         # create step config by merging in settings (var=value pairs from the command line)
         outer_step = Step(cab=cab_name, params=params)
         outer_step.name = cab_name
-        # provide basic substitutions for running the step below
-        subst = SubstitutionNS()
-        info = SubstitutionNS(fqname=cab_name, label=cab_name, label_parts=[], suffix="", taskname=cab_name)
-        subst._add_("info", info, nosubst=True)
-        subst._add_("config", stimela.CONFIG, nosubst=True)
-        subst._add_("current", SubstitutionNS(**params))
         # create step logger manually, since we won't be doing the normal recipe-level log management
         step_logger = stimela.logger().getChild(cab_name)
         step_logger.propagate = True
@@ -556,6 +559,8 @@ def run(
 
     # else run a recipe
     else:
+        subst._add_("recipe", subst.current)
+
         # create recipe object from the config
         kwargs = dict(**stimela.CONFIG.lib.recipes[recipe_name])
         kwargs.setdefault("name", recipe_name)
@@ -587,6 +592,8 @@ def run(
                 log_exception(exc)
                 sys.exit(1)
 
+        # create subst namespace for outer step
+
         # split out parameters
         params = {key: value for key, value in params.items() if key in recipe.inputs_outputs}
 
@@ -594,7 +601,7 @@ def run(
         log.info("pre-validating the recipe")
         outer_step = Step(recipe=recipe, name=f"{recipe_name}", info=recipe_name, params=params)
         try:
-            params = outer_step.prevalidate(root=True)
+            params = outer_step.prevalidate(root=True, subst=subst)
         except Exception as exc:
             log_exception(RecipeValidationError(f"pre-validation of recipe '{recipe_name}' failed", exc))
             for line in traceback.format_exc().split("\n"):
@@ -627,9 +634,6 @@ def run(
         filename = os.path.join(logdir, "stimela.recipe.deps")
         stimela.config.CONFIG_DEPS.save(filename)
         log.info(f"saved recipe dependencies to {filename}")
-
-        # no substitutions provided, recipe initializes its own
-        subst = None
 
     # in debug mode, pretty-print the recipe
     if log.isEnabledFor(logging.DEBUG):

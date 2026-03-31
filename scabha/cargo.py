@@ -569,21 +569,23 @@ class Cargo(object):
             log=self.log,
         )
         # check outputs
-        params1.update(
-            **validate_parameters(
-                params,
-                self.outputs,
-                defaults=self.defaults,
-                subst=subst,
-                fqname=self.fqname,
-                check_unknowns=False,
-                check_required=False,
-                check_inputs_exist=not loosely and not remote_fs,
-                check_outputs_exist=False,
-                create_dirs=not loosely and not remote_fs,
-                log=self.log,
+        named_outputs = {name: schema for name, schema in self.outputs.items() if schema.is_named_output}
+        if named_outputs:
+            params1.update(
+                **validate_parameters(
+                    params,
+                    named_outputs,
+                    defaults=self.defaults,
+                    subst=subst,
+                    fqname=self.fqname,
+                    check_unknowns=False,
+                    check_required=False,
+                    check_inputs_exist=not loosely and not remote_fs,
+                    check_outputs_exist=False,
+                    create_dirs=not loosely and not remote_fs,
+                    log=self.log,
+                )
             )
-        )
         return params1
 
     def validate_outputs(
