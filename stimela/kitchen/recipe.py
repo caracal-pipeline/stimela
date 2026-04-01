@@ -790,7 +790,8 @@ class Recipe(Cargo):
 
     def _update_subst_namespace(self, subst: SubstitutionNS):
         """Updates subst namespace at start of prevalidate or run"""
-        info = SubstitutionNS(fqname=self.fqname, taskname=self.fqname, label="", label_parts=[], suffix="")
+        taskname = subst.get("self", {}).get("taskname") or self.fqname
+        info = SubstitutionNS(fqname=self.fqname, taskname=taskname, label="", label_parts=[], suffix="")
         # nosubst=True means these sub-namespaces are not subject to {}-substitutions
         subst._add_("info", info, nosubst=True)
         subst._add_("self", info, nosubst=True)
