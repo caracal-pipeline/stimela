@@ -568,7 +568,10 @@ class Step:
             if validated and not skip:
                 self.log_summary(logging.INFO, "validated inputs", color="GREEN", ignore_missing=True, inputs=True)
                 if subst is not None:
-                    subst.current = params
+                    subst._add_("current", params)
+                    # add root if it hasn't been added yet
+                    if "root" not in subst:
+                        subst._add_("root", subst.current)
 
             ## check for (a) invalid params (b) unresolved inputs
             # (c) unresolved outputs of File/MS/Directory type

@@ -1299,12 +1299,8 @@ class Recipe(Cargo):
         subst.recipe._add_("steps", subst.steps, nosubst=True)
 
         if subst_outer is not None:
-            if "root" in subst_outer:
-                subst._add_("root", subst_outer.root, nosubst=True)
             if "recipe" in subst_outer:
                 subst._add_("parent", subst_outer.recipe, nosubst=True)
-        else:
-            subst.root = subst.recipe
 
         subst_copy = subst.copy()
         self.update_assignments(subst, params=params, ignore_subst_errors=True)
