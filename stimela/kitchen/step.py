@@ -308,7 +308,7 @@ class Step:
             )
             runner.validate_backend_settings(backend_opts, log, cab=self.cargo if isinstance(self.cargo, Cab) else None)
 
-    def prevalidate(self, subst: Optional[SubstitutionNS] = None, root=False, backend=None):
+    def prevalidate(self, subst: SubstitutionNS, root=False, backend=None):
         self.finalize(backend=backend)
         # apply dynamic schemas
         params = self.params
@@ -503,7 +503,7 @@ class Step:
             parent_log_info, parent_log_warning = parent_log.info, parent_log.warning
 
         if self.validated_params is None:
-            self.prevalidate(self.params)
+            self.prevalidate(subst)
 
         with context:
             # evaluate the skip attribute (it can be a formula and/or a {}-substititon)

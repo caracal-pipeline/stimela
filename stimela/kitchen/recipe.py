@@ -958,7 +958,7 @@ class Recipe(Cargo):
             # get scatter value
             if "for_loop.scatter" in params:
                 scatter = params["for_loop.scatter"]
-            elif "for_loop.over" in self.assign:
+            elif "for_loop.scatter" in self.assign:
                 scatter = self.assign["for_loop.scatter"]
             else:
                 scatter = self.for_loop.scatter
@@ -1325,6 +1325,8 @@ class Recipe(Cargo):
         for count, iter_var in enumerate(self._for_loop_values):
             loop_worker_args.append((params, subst, backend, count, iter_var))
 
+        final_iter_outputs = {}
+
         # if scatter is enabled, use a process pool
         if self._for_loop_scatter:
             self.log.info(
@@ -1393,6 +1395,9 @@ class Recipe(Cargo):
                 nfail = ncomplete = 0
                 for f in as_completed(futures):
                     attrs, kwattrs, stats, outputs, exc, tb, subprocess_logs, iter_count, iter_elements = f.result()
+                    # save outputs from final iteration
+                    if iter_count == nloop - 1:
+                        final_iter_outputs = outputs
                     # Print the logs associated with the completed future.
                     # These are already timestamped by the child process.
                     rich_console.print(subprocess_logs, soft_wrap=True)
@@ -1429,12 +1434,14 @@ class Recipe(Cargo):
                 else {}
             )
             for args in loop_worker_args:
-                _, _, _, outputs, _, _, _, _count, iter_elements = self._iterate_loop_worker(*args, raise_exc=True)
+                _, _, _, final_iter_outputs, _, _, _, _count, iter_elements = self._iterate_loop_worker(
+                    *args, raise_exc=True
+                )
                 for name, value in iter_elements.items():
                     accumulated_elements[name].append(value)
 
         # either way, outputs contains output aliases from the last iteration
-        params.update(**outputs)
+        params.update(**final_iter_outputs)
         if accumulated_elements:
             params.update(**accumulated_elements)
 

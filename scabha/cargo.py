@@ -513,9 +513,7 @@ class Cargo(object):
                 if current:
                     current[name] = schema.implicit
 
-    def prevalidate(
-        self, params: Optional[Dict[str, Any]], subst: Optional[SubstitutionNS] = None, backend=None, root=False
-    ):
+    def prevalidate(self, params: Optional[Dict[str, Any]], subst: SubstitutionNS, backend=None, root=False):
         """Does pre-validation.
         No parameter substitution is done, but will check for missing params and such.
         A dynamic schema, if defined, is applied at this point."""
@@ -543,9 +541,7 @@ class Cargo(object):
 
         return params
 
-    def validate_inputs(
-        self, params: Dict[str, Any], subst: Optional[SubstitutionNS] = None, loosely=False, remote_fs=False
-    ):
+    def validate_inputs(self, params: Dict[str, Any], subst: SubstitutionNS, loosely=False, remote_fs=False):
         """Validates inputs.
         If loosely is True, then doesn't check for required parameters, and doesn't check for files to exist etc.
         This is used when skipping a step.
@@ -592,9 +588,7 @@ class Cargo(object):
         params1.update({name: value for name, value in params2.items() if type(value) is not Unresolved})
         return params1
 
-    def validate_outputs(
-        self, params: Dict[str, Any], subst: Optional[SubstitutionNS] = None, loosely=False, remote_fs=False
-    ):
+    def validate_outputs(self, params: Dict[str, Any], subst: SubstitutionNS, loosely=False, remote_fs=False):
         """Validates outputs. Parameter substitution is done.
         If loosely is True, then doesn't check for required parameters, and doesn't check for files to exist etc.
         If remote_fs is True, doesn't check files and directories.
