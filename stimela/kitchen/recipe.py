@@ -1182,11 +1182,8 @@ class Recipe(Cargo):
                         if step.info:
                             self.log.info(f"  ({step.info})", extra=dict(color="GREEN", boldface=True))
                     try:
-                        ## make a copy of the subst dict since recipe might modify
-                        # step_params = step.run(subst=subst.copy(), batch=batch)
-                        step_params = step.run(
-                            backend=backend_settings, subst=subst.copy(), parent_log=self.log
-                        )  # make a copy of the subst dict since recipe might modify
+                        # make a copy of the subst dict since subrecipes may modify
+                        step_params = step.run(backend=backend_settings, subst=subst.copy(), parent_log=self.log)
                     except ScabhaBaseException as exc:
                         newexc = StimelaStepExecutionError(f"step '{step.fqname}' has failed, aborting the recipe", exc)
                         if not exc.logged:
@@ -1260,14 +1257,12 @@ class Recipe(Cargo):
         for step in self.steps.values():
             step.build(backend, rebuild=rebuild, build_skips=build_skips, log=log)
 
-    def _run(
-        self, params: Dict[str, Any], subst: Optional[Dict[str, Any]] = None, backend: Dict = {}
-    ) -> Dict[str, Any]:
+    def _run(self, params: Dict[str, Any], subst: SubstitutionNS, backend: Dict = {}) -> Dict[str, Any]:
         """Internal method for running a recipe. Meant to be called from the containing step.
 
         Args:
             params (Dict[str, Any]): input parameters
-            subst (Dict[str, Any], optional): Substitution namespace. Defaults to None.
+            subst (SubstitutionNS): Substitution namespace.
             backend (Dict, optional): Extra backend settings from parent. Defaults to {}.
 
         Returns:
@@ -1277,32 +1272,23 @@ class Recipe(Cargo):
         backend = OmegaConf.merge(backend, self.backend or {})
 
         # set up substitution namespace
-        subst_outer = subst
-        if subst is None:
-            subst = SubstitutionNS()
-            taskname = self.name
-        else:
-            taskname = subst.info.taskname
+        taskname = subst.info.taskname
 
         info = SubstitutionNS(fqname=self.fqname, label="", label_parts=[], suffix="", taskname=taskname)
         # nosubst=True means these sub-namespaces are not subject to {}-substitutions
         info1 = info.copy()
         subst._add_("info", info1, nosubst=True)
         subst._add_("self", info1, nosubst=True)
-        subst._add_("config", self.config, nosubst=True)
+
         subst._add_("steps", {}, nosubst=True)
         subst._add_("previous", {}, nosubst=True)
-        subst._add_("current", {}, nosubst=True)
+        if "recipe" in subst:
+            subst._add_("parent", subst.recipe, nosubst=True)
+        subst._add_("recipe", subst.current.copy())
 
-        subst.recipe = SubstitutionNS(**params)
         subst.recipe.log = self.logopts
         subst.recipe._add_("steps", subst.steps, nosubst=True)
 
-        if subst_outer is not None:
-            if "recipe" in subst_outer:
-                subst._add_("parent", subst_outer.recipe, nosubst=True)
-
-        subst_copy = subst.copy()
         self.update_assignments(subst, params=params, ignore_subst_errors=True)
 
         # init backends if not already done
@@ -1322,148 +1308,141 @@ class Recipe(Cargo):
 
             stimela.backends.init_backends(backend_opts, stimela.logger())
 
-        try:
-            self.log.info(f"running recipe '{self.name}'")
+        self.log.info(f"running recipe '{self.name}'")
 
-            # our inputs have been validated, so propagate aliases to steps. Check for missing stuff just in case
-            for name, schema in self.inputs.items():
-                if name in params:
-                    value = params[name]
-                    if isinstance(value, Unresolved) and not isinstance(value, Placeholder):
-                        raise RecipeValidationError(f"recipe '{self.name}' has unresolved input '{name}'", log=self.log)
-                    self._update_aliases(name, value)
-                elif schema.required and (self.for_loop is None or name != self.for_loop.var):
-                    raise RecipeValidationError(
-                        f"recipe '{self.name}' is missing required input '{name}'", log=self.log
-                    )
+        # our inputs have been validated, so propagate aliases to steps. Check for missing stuff just in case
+        for name, schema in self.inputs.items():
+            if name in params:
+                value = params[name]
+                if isinstance(value, Unresolved) and not isinstance(value, Placeholder):
+                    raise RecipeValidationError(f"recipe '{self.name}' has unresolved input '{name}'", log=self.log)
+                self._update_aliases(name, value)
+            elif schema.required and (self.for_loop is None or name != self.for_loop.var):
+                raise RecipeValidationError(f"recipe '{self.name}' is missing required input '{name}'", log=self.log)
 
-            # form list of arguments for each invocation of the loop worker
-            loop_worker_args = []
-            for count, iter_var in enumerate(self._for_loop_values):
-                loop_worker_args.append((params, subst, backend, count, iter_var))
+        # form list of arguments for each invocation of the loop worker
+        loop_worker_args = []
+        for count, iter_var in enumerate(self._for_loop_values):
+            loop_worker_args.append((params, subst, backend, count, iter_var))
 
-            # if scatter is enabled, use a process pool
-            if self._for_loop_scatter:
-                self.log.info(
-                    f"[yellow]Scattering recipe {self.fqname} - terminal logs "
-                    f"will appear on the completion of a scattered step. Log "
-                    f"files will be updated in real time.[/yellow]"
-                )
+        # if scatter is enabled, use a process pool
+        if self._for_loop_scatter:
+            self.log.info(
+                f"[yellow]Scattering recipe {self.fqname} - terminal logs "
+                f"will appear on the completion of a scattered step. Log "
+                f"files will be updated in real time.[/yellow]"
+            )
 
-                nloop = len(loop_worker_args)
-                accumulated_elements = (
-                    {name: [None] * nloop for name in self.for_loop.output_elements}
-                    if self.for_loop and self.for_loop.output_elements
-                    else {}
-                )
-                if self._for_loop_scatter < 0:
-                    num_workers = nloop
-                else:
-                    num_workers = min(self._for_loop_scatter, nloop)
-
-                # NOTE(JSKenyon): We don't actually have the runner at this point so dynamically
-                # changing the display based on the backend is problematic. The loop being run may
-                # also use different backends for each step. However, in most cases a scattered
-                # loop will be either remote (kube, slurm) or local, and not a mixture of the two.
-                # This chooses the display based on the backend config at the recipe level - step
-                # level overrides are ignored.
-                backend_opts = OmegaConf.merge(stimela.CONFIG.opts.backend, backend)
-                backend_opts = OmegaConf.to_object(backend_opts)
-                # TODO(JSKenyon): For now, we default to a minimal display (e.g. the slurm display)
-                # for the kube backend when scattering. This is consistent with the behaviour prior
-                # to the addition of multiple displays. At present, the status reporter for the kube
-                # backend is not configured at this point so we cannot track all the pods running
-                # in the scattered loop.
-                display_style = backend_opts.current_wrapper or backend_opts.current_backend
-                # As noted above, use simpler slurm display when scattering with kube backend.
-                display_style = "slurm" if display_style == "kube" else display_style
-
-                # If the display is disabled at this point, it implies that we
-                # should leave it that way (may be in a child process).
-                pause_display = display.is_enabled
-                # Disable display during pool creation so that it isn't
-                # enabled in the resulting processes.
-                if pause_display:
-                    display.disable(reset_cursor=True)
-                with ProcessPoolExecutor(num_workers) as pool:
-                    # submit each iterant to pool
-                    futures = []
-                    for args in loop_worker_args:
-                        future = pool.submit(self._iterate_loop_worker, *args, subprocess=True, raise_exc=False)
-                        futures.append(future)
-
-                    # Re-enable display after pool creation.
-                    if pause_display:
-                        display.set_display_style(display_style)
-                        display.enable()
-                    # Set status on scatter subtask once display is re-enabled.
-                    task_stats.declare_subtask_status(f"0/{nloop} complete, {num_workers} workers")
-
-                    # Start a thread to monitor resource usage.
-                    monitor = task_stats.MonitorThread()
-                    monitor.start()
-
-                    # update task stats, since they're recorded independently
-                    # within each step, as well as get any exceptions from the
-                    # nested steps/recipes.
-                    errors = []
-                    nfail = ncomplete = 0
-                    for f in as_completed(futures):
-                        attrs, kwattrs, stats, outputs, exc, tb, subprocess_logs, iter_count, iter_elements = f.result()
-                        # Print the logs associated with the completed future.
-                        # These are already timestamped by the child process.
-                        rich_console.print(subprocess_logs, soft_wrap=True)
-                        task_stats.declare_subtask_attributes(*attrs, **kwattrs)
-                        task_stats.add_missing_stats(stats)
-                        if exc is not None:
-                            errors.append(exc)
-                            if not isinstance(exc, ScabhaBaseException):
-                                errors.append(tb)
-                            nfail += 1
-                        else:
-                            ncomplete += 1
-                            for name, value in iter_elements.items():
-                                accumulated_elements[name][iter_count] = value
-                        if ncomplete:
-                            status = f"[green]{ncomplete}[/green]/{nloop} complete"
-                        else:
-                            status = f"0/{nloop} complete"
-                        if nfail:
-                            status = f"{status}, [red]{nfail}[/red] failed"
-                        status = f"{status}, {num_workers} workers"
-                        task_stats.declare_subtask_status(status)
-
-                    monitor.stop()  # Stop monitoring resource usage.
-
-                    if errors:
-                        pool.shutdown()
-                        raise StimelaRuntimeError(f"{nfail}/{nloop} jobs have failed", errors)
-            # else just iterate directly
+            nloop = len(loop_worker_args)
+            accumulated_elements = (
+                {name: [None] * nloop for name in self.for_loop.output_elements}
+                if self.for_loop and self.for_loop.output_elements
+                else {}
+            )
+            if self._for_loop_scatter < 0:
+                num_workers = nloop
             else:
-                accumulated_elements = (
-                    {name: [] for name in self.for_loop.output_elements}
-                    if self.for_loop and self.for_loop.output_elements
-                    else {}
-                )
+                num_workers = min(self._for_loop_scatter, nloop)
+
+            # NOTE(JSKenyon): We don't actually have the runner at this point so dynamically
+            # changing the display based on the backend is problematic. The loop being run may
+            # also use different backends for each step. However, in most cases a scattered
+            # loop will be either remote (kube, slurm) or local, and not a mixture of the two.
+            # This chooses the display based on the backend config at the recipe level - step
+            # level overrides are ignored.
+            backend_opts = OmegaConf.merge(stimela.CONFIG.opts.backend, backend)
+            backend_opts = OmegaConf.to_object(backend_opts)
+            # TODO(JSKenyon): For now, we default to a minimal display (e.g. the slurm display)
+            # for the kube backend when scattering. This is consistent with the behaviour prior
+            # to the addition of multiple displays. At present, the status reporter for the kube
+            # backend is not configured at this point so we cannot track all the pods running
+            # in the scattered loop.
+            display_style = backend_opts.current_wrapper or backend_opts.current_backend
+            # As noted above, use simpler slurm display when scattering with kube backend.
+            display_style = "slurm" if display_style == "kube" else display_style
+
+            # If the display is disabled at this point, it implies that we
+            # should leave it that way (may be in a child process).
+            pause_display = display.is_enabled
+            # Disable display during pool creation so that it isn't
+            # enabled in the resulting processes.
+            if pause_display:
+                display.disable(reset_cursor=True)
+            with ProcessPoolExecutor(num_workers) as pool:
+                # submit each iterant to pool
+                futures = []
                 for args in loop_worker_args:
-                    _, _, _, outputs, _, _, _, _count, iter_elements = self._iterate_loop_worker(*args, raise_exc=True)
-                    for name, value in iter_elements.items():
-                        accumulated_elements[name].append(value)
+                    future = pool.submit(self._iterate_loop_worker, *args, subprocess=True, raise_exc=False)
+                    futures.append(future)
 
-            # either way, outputs contains output aliases from the last iteration
-            params.update(**outputs)
-            if accumulated_elements:
-                params.update(**accumulated_elements)
+                # Re-enable display after pool creation.
+                if pause_display:
+                    display.set_display_style(display_style)
+                    display.enable()
+                # Set status on scatter subtask once display is re-enabled.
+                task_stats.declare_subtask_status(f"0/{nloop} complete, {num_workers} workers")
 
-            # current namespace becomes recipe again
-            subst.current = subst.recipe
+                # Start a thread to monitor resource usage.
+                monitor = task_stats.MonitorThread()
+                monitor.start()
 
-            self.log.info(f"recipe '{self.name}' executed successfully")
-            return OrderedDict((name, value) for name, value in params.items() if name in self.outputs)
-        finally:
-            steps = subst.steps
-            subst.update(subst_copy)
-            subst.current.steps = steps
+                # update task stats, since they're recorded independently
+                # within each step, as well as get any exceptions from the
+                # nested steps/recipes.
+                errors = []
+                nfail = ncomplete = 0
+                for f in as_completed(futures):
+                    attrs, kwattrs, stats, outputs, exc, tb, subprocess_logs, iter_count, iter_elements = f.result()
+                    # Print the logs associated with the completed future.
+                    # These are already timestamped by the child process.
+                    rich_console.print(subprocess_logs, soft_wrap=True)
+                    task_stats.declare_subtask_attributes(*attrs, **kwattrs)
+                    task_stats.add_missing_stats(stats)
+                    if exc is not None:
+                        errors.append(exc)
+                        if not isinstance(exc, ScabhaBaseException):
+                            errors.append(tb)
+                        nfail += 1
+                    else:
+                        ncomplete += 1
+                        for name, value in iter_elements.items():
+                            accumulated_elements[name][iter_count] = value
+                    if ncomplete:
+                        status = f"[green]{ncomplete}[/green]/{nloop} complete"
+                    else:
+                        status = f"0/{nloop} complete"
+                    if nfail:
+                        status = f"{status}, [red]{nfail}[/red] failed"
+                    status = f"{status}, {num_workers} workers"
+                    task_stats.declare_subtask_status(status)
+
+                monitor.stop()  # Stop monitoring resource usage.
+
+                if errors:
+                    pool.shutdown()
+                    raise StimelaRuntimeError(f"{nfail}/{nloop} jobs have failed", errors)
+        # else just iterate directly
+        else:
+            accumulated_elements = (
+                {name: [] for name in self.for_loop.output_elements}
+                if self.for_loop and self.for_loop.output_elements
+                else {}
+            )
+            for args in loop_worker_args:
+                _, _, _, outputs, _, _, _, _count, iter_elements = self._iterate_loop_worker(*args, raise_exc=True)
+                for name, value in iter_elements.items():
+                    accumulated_elements[name].append(value)
+
+        # either way, outputs contains output aliases from the last iteration
+        params.update(**outputs)
+        if accumulated_elements:
+            params.update(**accumulated_elements)
+
+        # current namespace becomes recipe again
+        subst.current = subst.recipe
+
+        self.log.info(f"recipe '{self.name}' executed successfully")
+        return OrderedDict((name, value) for name, value in params.items() if name in self.outputs)
 
     def to_dag(self, graph: Optional[nx.DiGraph] = None, parent: Optional[str] = None) -> nx.DiGraph:
         """Converts a stimela recipe into a simple directed acyclic graph.

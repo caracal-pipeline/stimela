@@ -441,8 +441,8 @@ class Step:
 
     def run(
         self,
+        subst: SubstitutionNS,
         backend: Optional[Dict] = None,
-        subst: Optional[Dict[str, Any]] = None,
         is_outer_step: bool = False,
         parent_log: Optional[logging.Logger] = None,
     ) -> Dict[str, Any]:
@@ -450,7 +450,7 @@ class Step:
 
         Args:
             backend (Dict, optional): Backend settings inherited from parent.
-            subst (Dict[str, Any], optional): Substitution namespace. Defaults to None.
+            subst (SubstitutionNS): Substitution namespace.
             parent_log (logging.Logger, optional): parent logger for parent-related messages. Defaults to using the
                 step logger if not supplied.
 
