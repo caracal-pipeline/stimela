@@ -788,7 +788,23 @@ class Recipe(Cargo):
                 substep.params[subname] = value
         return own_params, unset_params
 
-    def prevalidate(self, params: Dict[str, Any], subst: Optional[SubstitutionNS] = None, backend=None, root=False):
+    def _update_subst_namespace(self, subst: SubstitutionNS):
+        """Updates subst namespace at start of prevalidate or run"""
+        info = SubstitutionNS(fqname=self.fqname, taskname=self.fqname, label="", label_parts=[], suffix="")
+        # nosubst=True means these sub-namespaces are not subject to {}-substitutions
+        subst._add_("info", info, nosubst=True)
+        subst._add_("self", info, nosubst=True)
+
+        subst._add_("steps", {}, nosubst=True)
+        subst._add_("previous", {}, nosubst=True)
+        if "recipe" in subst:
+            subst._add_("parent", subst.recipe, nosubst=True)
+        subst._add_("recipe", subst.current)
+
+        subst.recipe.log = self.logopts
+        subst.recipe._add_("steps", subst.steps, nosubst=True)
+
+    def prevalidate(self, params: Dict[str, Any], subst: SubstitutionNS, backend=None, root=False):
         self.finalize(backend=backend)
         self.log.debug("prevalidating recipe")
         errors = []
@@ -798,33 +814,7 @@ class Recipe(Cargo):
         # split parameters into our own, and per-step, and UNSET directives
         params, unset_params = self._preprocess_parameters(params)
 
-        subst_outer = subst  # outer dictionary is used to prevalidate our parameters
-
-        subst = SubstitutionNS()
-        info = SubstitutionNS(fqname=self.fqname, taskname=self.fqname, label="", label_parts=[], suffix="")
-        # mutable=False means these sub-namespaces are not subject to {}-substitutions
-        subst._add_("info", info, nosubst=True)
-        subst._add_("self", info, nosubst=True)
-        subst._add_("config", self.config, nosubst=True)
-        subst._add_("steps", {}, nosubst=True)
-        subst._add_("previous", {}, nosubst=True)
-        subst.recipe = SubstitutionNS(**params)
-        subst.recipe.log = self.logopts
-        if root:
-            subst.root = subst.recipe
-
-        if subst_outer is not None:
-            if "root" in subst_outer:
-                subst._add_("root", subst_outer.root, nosubst=True)
-            if "recipe" in subst_outer:
-                subst._add_("parent", subst_outer.recipe, nosubst=True)
-        else:
-            subst_outer = SubstitutionNS()
-            info1 = info.copy()
-            subst_outer._add_("info", info1, nosubst=True)
-            subst_outer._add_("self", info1, nosubst=True)
-            subst_outer._add_("config", self.config, nosubst=True)
-            subst_outer.current = subst.recipe
+        self._update_subst_namespace(subst)
 
         # update assignments
         self.update_assignments(subst, params=params, ignore_subst_errors=True, ignore_abo_errors=True)
@@ -841,7 +831,7 @@ class Recipe(Cargo):
         # we call this twice, potentially, so define as a function
         def prevalidate_self(params):
             try:
-                params1 = Cargo.prevalidate(self, params, subst=subst_outer, backend=backend)
+                params1 = Cargo.prevalidate(self, params, subst=subst, backend=backend)
                 # mark params that have become unset
                 unset_params.update(set(params) - set(params1))
                 params = params1
@@ -884,8 +874,8 @@ class Recipe(Cargo):
                 )
 
                 try:
-                    step_params = step.prevalidate(subst)
-                    subst.current._merge_(step_params)
+                    step_params = step.prevalidate(subst.copy())
+                    subst._add_("current", step_params)
                 except ScabhaBaseException as exc:
                     errors.append(RecipeValidationError(f"step '{label}' failed prevalidation", exc))
                 except Exception as exc:
@@ -1019,20 +1009,8 @@ class Recipe(Cargo):
         else:
             self._for_loop_values = [None]
 
-    def validate_inputs(
-        self, params: Dict[str, Any], subst: Optional[SubstitutionNS] = None, loosely=False, remote_fs=False
-    ):
+    def validate_inputs(self, params: Dict[str, Any], subst: SubstitutionNS, loosely=False, remote_fs=False):
         params, _ = self._preprocess_parameters(params)
-
-        if subst is None:
-            subst = SubstitutionNS()
-            info = SubstitutionNS(fqname=self.fqname)
-            subst._add_("info", info, nosubst=True)
-            subst._add_("self", info, nosubst=True)
-            subst._add_("config", self.config, nosubst=True)
-
-            subst.recipe = SubstitutionNS(**params)
-            subst.current = subst.recipe
 
         if "current" in subst:
             subst.current._add_("steps", self._prevalidated_steps, nosubst=True)
@@ -1272,22 +1250,7 @@ class Recipe(Cargo):
         backend = OmegaConf.merge(backend, self.backend or {})
 
         # set up substitution namespace
-        taskname = subst.info.taskname
-
-        info = SubstitutionNS(fqname=self.fqname, label="", label_parts=[], suffix="", taskname=taskname)
-        # nosubst=True means these sub-namespaces are not subject to {}-substitutions
-        info1 = info.copy()
-        subst._add_("info", info1, nosubst=True)
-        subst._add_("self", info1, nosubst=True)
-
-        subst._add_("steps", {}, nosubst=True)
-        subst._add_("previous", {}, nosubst=True)
-        if "recipe" in subst:
-            subst._add_("parent", subst.recipe, nosubst=True)
-        subst._add_("recipe", subst.current.copy())
-
-        subst.recipe.log = self.logopts
-        subst.recipe._add_("steps", subst.steps, nosubst=True)
+        self._update_subst_namespace(subst)
 
         self.update_assignments(subst, params=params, ignore_subst_errors=True)
 

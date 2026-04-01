@@ -560,8 +560,6 @@ def run(
 
     # else run a recipe
     else:
-        subst._add_("recipe", subst.current)
-
         # create recipe object from the config
         kwargs = dict(**stimela.CONFIG.lib.recipes[recipe_name])
         kwargs.setdefault("name", recipe_name)
