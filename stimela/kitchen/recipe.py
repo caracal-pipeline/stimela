@@ -886,8 +886,8 @@ class Recipe(Cargo):
 
                 # revert to recipe-level assignments
                 self.update_assignments(subst, params=params, ignore_subst_errors=True, ignore_abo_errors=True)
-                subst.previous = subst.current
-                subst.steps[label] = subst.previous
+                subst._add_("previous", subst.current, nosubst=True)
+                subst.steps._add_(label, subst.previous)
             # restore current from recipe
             subst.current = subst.recipe
 
@@ -1175,8 +1175,8 @@ class Recipe(Cargo):
 
                     # put step parameters into previous and steps[label] again, as they may have changed based on
                     # outputs)
-                    subst.previous = step_params
-                    subst.steps[label] = subst.previous
+                    subst._add_("previous", step_params, nosubst=True)
+                    subst.steps._add_(label, subst.previous, nosubst=True)
                     # revert to recipe level assignments
 
                     # now check for output aliases that need to be propagated down from steps
