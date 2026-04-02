@@ -793,8 +793,8 @@ class Recipe(Cargo):
         taskname = subst.get("self", {}).get("taskname") or self.fqname
         info = SubstitutionNS(fqname=self.fqname, taskname=taskname, label="", label_parts=[], suffix="")
         # nosubst=True means these sub-namespaces are not subject to {}-substitutions
-        subst._add_("info", info)
-        subst._add_("self", info)
+        subst._add_("info", info, nosubst=True)
+        subst.self = subst.info
 
         subst._add_("steps", {}, nosubst=True)
         subst._add_("previous", {}, nosubst=True)
