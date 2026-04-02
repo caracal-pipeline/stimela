@@ -846,6 +846,8 @@ class Recipe(Cargo):
 
             # merge again, since values may have changed
             subst.recipe._merge_(params)
+            if root:
+                subst.root = subst.recipe
             return params
 
         params = prevalidate_self(params)

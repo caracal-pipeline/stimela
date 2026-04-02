@@ -316,7 +316,7 @@ class Step:
             # prevalidate in order to resolve substitutions in existing parameters
             params = self.cargo.prevalidate(params, subst, root=root)
             self.cargo.apply_dynamic_schemas(params, subst)
-            # will prevvalidate again below based on these updated schemas
+            # will prevalidate again below based on these updated schemas
         # validate cab or recipe
         params = self.validated_params = self.cargo.prevalidate(params, subst, root=root)
         # add missing outputs
