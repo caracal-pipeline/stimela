@@ -1289,9 +1289,10 @@ class Recipe(Cargo):
         # form list of arguments for each invocation of the loop worker
         loop_worker_args = []
         for count, iter_var in enumerate(self._for_loop_values):
-            # pass in a copy of subst and subst.info, since they mutate in the iteration
+            # pass in a copy of subst and subst.info+self, since they mutate in the iteration
             subst_copy = subst.copy()
             subst_copy.info = subst.info.copy()
+            subst_copy.self = subst_copy.info
             loop_worker_args.append((params, subst_copy, backend, count, iter_var))
 
         final_iter_outputs = {}
