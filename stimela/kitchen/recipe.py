@@ -1296,16 +1296,19 @@ class Recipe(Cargo):
             loop_worker_args.append((params, subst_copy, backend, count, iter_var))
 
         final_iter_outputs = {}
+        nloop = len(loop_worker_args)
 
+        # skip the trivial case
+        if not nloop:
+            self.log.info("this recipe is an empty for-loop: time for masterful inactivity")
         # if scatter is enabled, use a process pool
-        if self._for_loop_scatter:
+        elif self._for_loop_scatter:
             self.log.info(
                 f"[yellow]Scattering recipe {self.fqname} - terminal logs "
                 f"will appear on the completion of a scattered step. Log "
                 f"files will be updated in real time.[/yellow]"
             )
 
-            nloop = len(loop_worker_args)
             accumulated_elements = (
                 {name: [None] * nloop for name in self.for_loop.output_elements}
                 if self.for_loop and self.for_loop.output_elements
