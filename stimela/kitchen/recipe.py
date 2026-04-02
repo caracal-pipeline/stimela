@@ -886,6 +886,8 @@ class Recipe(Cargo):
                 self.update_assignments(subst, params=params, ignore_subst_errors=True, ignore_abo_errors=True)
                 subst.previous = subst.current
                 subst.steps[label] = subst.previous
+            # restore current from recipe
+            subst.current = subst.recipe
 
         prevalidate_steps()
 
@@ -1285,11 +1287,11 @@ class Recipe(Cargo):
                 raise RecipeValidationError(f"recipe '{self.name}' is missing required input '{name}'", log=self.log)
 
         # form list of arguments for each invocation of the loop worker
-        # pass in a copy of subst and subst.info, since they mutate
-        subst_copy = subst.copy()
-        subst_copy.info = subst.info.copy()
         loop_worker_args = []
         for count, iter_var in enumerate(self._for_loop_values):
+            # pass in a copy of subst and subst.info, since they mutate in the iteration
+            subst_copy = subst.copy()
+            subst_copy.info = subst.info.copy()
             loop_worker_args.append((params, subst_copy, backend, count, iter_var))
 
         final_iter_outputs = {}
