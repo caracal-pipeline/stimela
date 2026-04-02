@@ -522,8 +522,8 @@ def run(
     info = SubstitutionNS(
         fqname=runnable_name, label=runnable_name, label_parts=[runnable_name], suffix="", taskname=runnable_name
     )
-    subst._add_("info", info, nosubst=True)
-    subst._add_("self", info, nosubst=True)
+    subst._add_("info", info)
+    subst._add_("self", info)
     subst._add_("config", stimela.CONFIG, nosubst=True)
     subst._add_("current", SubstitutionNS(**params))
 
