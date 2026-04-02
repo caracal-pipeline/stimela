@@ -1285,9 +1285,12 @@ class Recipe(Cargo):
                 raise RecipeValidationError(f"recipe '{self.name}' is missing required input '{name}'", log=self.log)
 
         # form list of arguments for each invocation of the loop worker
+        # pass in a copy of subst and subst.info, since they mutate
+        subst_copy = subst.copy()
+        subst_copy.info = subst.info.copy()
         loop_worker_args = []
         for count, iter_var in enumerate(self._for_loop_values):
-            loop_worker_args.append((params, subst, backend, count, iter_var))
+            loop_worker_args.append((params, subst_copy, backend, count, iter_var))
 
         final_iter_outputs = {}
 
