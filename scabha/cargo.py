@@ -513,9 +513,7 @@ class Cargo(object):
                 if current:
                     current[name] = schema.implicit
 
-    def prevalidate(
-        self, params: Optional[Dict[str, Any]], subst: Optional[SubstitutionNS] = None, backend=None, root=False
-    ):
+    def prevalidate(self, params: Optional[Dict[str, Any]], subst: SubstitutionNS, backend=None, root=False):
         """Does pre-validation.
         No parameter substitution is done, but will check for missing params and such.
         A dynamic schema, if defined, is applied at this point."""
@@ -543,9 +541,7 @@ class Cargo(object):
 
         return params
 
-    def validate_inputs(
-        self, params: Dict[str, Any], subst: Optional[SubstitutionNS] = None, loosely=False, remote_fs=False
-    ):
+    def validate_inputs(self, params: Dict[str, Any], subst: SubstitutionNS, loosely=False, remote_fs=False):
         """Validates inputs.
         If loosely is True, then doesn't check for required parameters, and doesn't check for files to exist etc.
         This is used when skipping a step.
@@ -555,9 +551,12 @@ class Cargo(object):
         self._resolve_implicit_parameters(params, subst)
 
         # check inputs
+        true_inputs = self.inputs.copy()
+        true_inputs.update({name: schema for name, schema in self.outputs.items() if schema.is_named_output})
+
         params1 = validate_parameters(
             params,
-            self.inputs,
+            true_inputs,
             defaults=self.defaults,
             subst=subst,
             fqname=self.fqname,
@@ -569,26 +568,27 @@ class Cargo(object):
             log=self.log,
         )
         # check outputs
-        params1.update(
-            **validate_parameters(
-                params,
-                self.outputs,
-                defaults=self.defaults,
-                subst=subst,
-                fqname=self.fqname,
-                check_unknowns=False,
-                check_required=False,
-                check_inputs_exist=not loosely and not remote_fs,
-                check_outputs_exist=False,
-                create_dirs=not loosely and not remote_fs,
-                log=self.log,
-            )
+        true_outputs = {name: schema for name, schema in self.outputs.items() if not schema.is_named_output}
+        params2 = validate_parameters(
+            params,
+            true_outputs,
+            defaults=self.defaults,
+            subst=subst,
+            fqname=self.fqname,
+            ignore_subst_errors=True,
+            check_unknowns=False,
+            check_required=False,
+            check_inputs_exist=not loosely and not remote_fs,
+            check_outputs_exist=False,
+            create_dirs=not loosely and not remote_fs,
+            log=self.log,
         )
+        # update with outputs that weren't substitution errors, because
+        # we don't want (ignored) substitution errors to be baked in
+        params1.update({name: value for name, value in params2.items() if type(value) is not Unresolved})
         return params1
 
-    def validate_outputs(
-        self, params: Dict[str, Any], subst: Optional[SubstitutionNS] = None, loosely=False, remote_fs=False
-    ):
+    def validate_outputs(self, params: Dict[str, Any], subst: SubstitutionNS, loosely=False, remote_fs=False):
         """Validates outputs. Parameter substitution is done.
         If loosely is True, then doesn't check for required parameters, and doesn't check for files to exist etc.
         If remote_fs is True, doesn't check files and directories.

@@ -308,7 +308,7 @@ class Step:
             )
             runner.validate_backend_settings(backend_opts, log, cab=self.cargo if isinstance(self.cargo, Cab) else None)
 
-    def prevalidate(self, subst: Optional[SubstitutionNS] = None, root=False, backend=None):
+    def prevalidate(self, subst: SubstitutionNS, root=False, backend=None):
         self.finalize(backend=backend)
         # apply dynamic schemas
         params = self.params
@@ -316,7 +316,7 @@ class Step:
             # prevalidate in order to resolve substitutions in existing parameters
             params = self.cargo.prevalidate(params, subst, root=root)
             self.cargo.apply_dynamic_schemas(params, subst)
-            # will prevvalidate again below based on these updated schemas
+            # will prevalidate again below based on these updated schemas
         # validate cab or recipe
         params = self.validated_params = self.cargo.prevalidate(params, subst, root=root)
         # add missing outputs
@@ -441,8 +441,8 @@ class Step:
 
     def run(
         self,
+        subst: SubstitutionNS,
         backend: Optional[Dict] = None,
-        subst: Optional[Dict[str, Any]] = None,
         is_outer_step: bool = False,
         parent_log: Optional[logging.Logger] = None,
     ) -> Dict[str, Any]:
@@ -450,7 +450,7 @@ class Step:
 
         Args:
             backend (Dict, optional): Backend settings inherited from parent.
-            subst (Dict[str, Any], optional): Substitution namespace. Defaults to None.
+            subst (SubstitutionNS): Substitution namespace.
             parent_log (logging.Logger, optional): parent logger for parent-related messages. Defaults to using the
                 step logger if not supplied.
 
@@ -503,7 +503,7 @@ class Step:
             parent_log_info, parent_log_warning = parent_log.info, parent_log.warning
 
         if self.validated_params is None:
-            self.prevalidate(self.params)
+            self.prevalidate(subst)
 
         with context:
             # evaluate the skip attribute (it can be a formula and/or a {}-substititon)
@@ -568,7 +568,10 @@ class Step:
             if validated and not skip:
                 self.log_summary(logging.INFO, "validated inputs", color="GREEN", ignore_missing=True, inputs=True)
                 if subst is not None:
-                    subst.current = params
+                    subst._add_("current", params)
+                    # add root if it hasn't been added yet
+                    if "root" not in subst:
+                        subst._add_("root", subst.current)
 
             ## check for (a) invalid params (b) unresolved inputs
             # (c) unresolved outputs of File/MS/Directory type

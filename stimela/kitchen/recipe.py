@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from io import StringIO
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union, get_origin
 
 import networkx as nx
 import rich.table
@@ -61,6 +61,8 @@ class ForLoopClause(object):
     # Default is "i/N", where i is the current index plus 1, and N is the total number of loops.
     # A format string can be supplied instead.
     display_status: Optional[str] = None
+    # Expressions to be evaluated at each iteration and accumulated into list-type outputs
+    output_elements: Dict[str, Any] = EmptyDictDefault()
 
 
 def IterantPlaceholder(name: str):
@@ -786,7 +788,24 @@ class Recipe(Cargo):
                 substep.params[subname] = value
         return own_params, unset_params
 
-    def prevalidate(self, params: Dict[str, Any], subst: Optional[SubstitutionNS] = None, backend=None, root=False):
+    def _update_subst_namespace(self, subst: SubstitutionNS):
+        """Updates subst namespace at start of prevalidate or run"""
+        taskname = subst.get("self", {}).get("taskname") or self.fqname
+        info = SubstitutionNS(fqname=self.fqname, taskname=taskname, label="", label_parts=[], suffix="")
+        # nosubst=True means these sub-namespaces are not subject to {}-substitutions
+        subst._add_("info", info, nosubst=True)
+        subst.self = subst.info
+
+        subst._add_("steps", {}, nosubst=True)
+        subst._add_("previous", {}, nosubst=True)
+        if "recipe" in subst:
+            subst._add_("parent", subst.recipe)
+        subst._add_("recipe", subst.current)
+
+        subst.recipe.log = self.logopts
+        subst.recipe._add_("steps", subst.steps, nosubst=True)
+
+    def prevalidate(self, params: Dict[str, Any], subst: SubstitutionNS, backend=None, root=False):
         self.finalize(backend=backend)
         self.log.debug("prevalidating recipe")
         errors = []
@@ -796,33 +815,7 @@ class Recipe(Cargo):
         # split parameters into our own, and per-step, and UNSET directives
         params, unset_params = self._preprocess_parameters(params)
 
-        subst_outer = subst  # outer dictionary is used to prevalidate our parameters
-
-        subst = SubstitutionNS()
-        info = SubstitutionNS(fqname=self.fqname, taskname=self.fqname, label="", label_parts=[], suffix="")
-        # mutable=False means these sub-namespaces are not subject to {}-substitutions
-        subst._add_("info", info, nosubst=True)
-        subst._add_("self", info, nosubst=True)
-        subst._add_("config", self.config, nosubst=True)
-        subst._add_("steps", {}, nosubst=True)
-        subst._add_("previous", {}, nosubst=True)
-        subst.recipe = SubstitutionNS(**params)
-        subst.recipe.log = self.logopts
-        if root:
-            subst.root = subst.recipe
-
-        if subst_outer is not None:
-            if "root" in subst_outer:
-                subst._add_("root", subst_outer.root, nosubst=True)
-            if "recipe" in subst_outer:
-                subst._add_("parent", subst_outer.recipe, nosubst=True)
-        else:
-            subst_outer = SubstitutionNS()
-            info1 = info.copy()
-            subst_outer._add_("info", info1, nosubst=True)
-            subst_outer._add_("self", info1, nosubst=True)
-            subst_outer._add_("config", self.config, nosubst=True)
-            subst_outer.current = subst.recipe
+        self._update_subst_namespace(subst)
 
         # update assignments
         self.update_assignments(subst, params=params, ignore_subst_errors=True, ignore_abo_errors=True)
@@ -839,7 +832,7 @@ class Recipe(Cargo):
         # we call this twice, potentially, so define as a function
         def prevalidate_self(params):
             try:
-                params1 = Cargo.prevalidate(self, params, subst=subst_outer, backend=backend)
+                params1 = Cargo.prevalidate(self, params, subst=subst, backend=backend)
                 # mark params that have become unset
                 unset_params.update(set(params) - set(params1))
                 params = params1
@@ -853,6 +846,8 @@ class Recipe(Cargo):
 
             # merge again, since values may have changed
             subst.recipe._merge_(params)
+            if root:
+                subst.root = subst.recipe
             return params
 
         params = prevalidate_self(params)
@@ -882,8 +877,8 @@ class Recipe(Cargo):
                 )
 
                 try:
-                    step_params = step.prevalidate(subst)
-                    subst.current._merge_(step_params)
+                    step_params = step.prevalidate(subst.copy())
+                    subst._add_("current", step_params)
                 except ScabhaBaseException as exc:
                     errors.append(RecipeValidationError(f"step '{label}' failed prevalidation", exc))
                 except Exception as exc:
@@ -891,8 +886,10 @@ class Recipe(Cargo):
 
                 # revert to recipe-level assignments
                 self.update_assignments(subst, params=params, ignore_subst_errors=True, ignore_abo_errors=True)
-                subst.previous = subst.current
-                subst.steps[label] = subst.previous
+                subst._add_("previous", subst.current, nosubst=True)
+                subst.steps._add_(label, subst.previous)
+            # restore current from recipe
+            subst.current = subst.recipe
 
         prevalidate_steps()
 
@@ -956,7 +953,7 @@ class Recipe(Cargo):
             # get scatter value
             if "for_loop.scatter" in params:
                 scatter = params["for_loop.scatter"]
-            elif "for_loop.over" in self.assign:
+            elif "for_loop.scatter" in self.assign:
                 scatter = self.assign["for_loop.scatter"]
             else:
                 scatter = self.for_loop.scatter
@@ -1000,24 +997,25 @@ class Recipe(Cargo):
                 self.log.debug(f"recipe is a for-loop with '{self.for_loop.var}' iterating over {len(values)} values")
                 self.log.debug(f"loop values: {values}")
             self._for_loop_values = values
+            # validate output_elements names against declared outputs
+            if self.for_loop.output_elements:
+                for elem_name in self.for_loop.output_elements:
+                    if elem_name not in self.outputs:
+                        raise ParameterValidationError(
+                            f"recipe '{self.name}': for_loop.output_elements.{elem_name} "
+                            f"does not correspond to a declared output"
+                        )
+                    elif get_origin(self.outputs[elem_name]._dtype) is not list:
+                        raise ParameterValidationError(
+                            f"recipe '{self.name}': for_loop.output_elements.{elem_name} "
+                            f"has dtype '{self.outputs[elem_name].dtype}', expected a List type"
+                        )
         # else fake a single-value list
         else:
             self._for_loop_values = [None]
 
-    def validate_inputs(
-        self, params: Dict[str, Any], subst: Optional[SubstitutionNS] = None, loosely=False, remote_fs=False
-    ):
+    def validate_inputs(self, params: Dict[str, Any], subst: SubstitutionNS, loosely=False, remote_fs=False):
         params, _ = self._preprocess_parameters(params)
-
-        if subst is None:
-            subst = SubstitutionNS()
-            info = SubstitutionNS(fqname=self.fqname)
-            subst._add_("info", info, nosubst=True)
-            subst._add_("self", info, nosubst=True)
-            subst._add_("config", self.config, nosubst=True)
-
-            subst.recipe = SubstitutionNS(**params)
-            subst.current = subst.recipe
 
         if "current" in subst:
             subst.current._add_("steps", self._prevalidated_steps, nosubst=True)
@@ -1028,37 +1026,7 @@ class Recipe(Cargo):
 
         self.validate_for_loop(params, strict=True)
 
-        # # in case of a for-loop, assign first iterant
-        # if self.for_loop is not None:
-        #     if self.for_loop.var in self.inputs:
-        #         params[self.for_loop.var] = IterantPlaceholder(self.for_loop.var)
-        #     else:
-        #         self.assign[self.for_loop.var] = IterantPlaceholder(self.for_loop.var)
-
         return params
-
-    ## NB: OMS: is this really used or needed anywhere?
-    # def _link_steps(self):
-    #     """
-    #     Adds  next_step and previous_step attributes to the recipe.
-    #     """
-    #     steps = list(self.steps.values())
-    #     N = len(steps)
-    #     # Nothing to link if only one step
-    #     if N == 1:
-    #         return
-
-    #     for i in range(N):
-    #         step = steps[i]
-    #         if i == 0:
-    #             step.next_step = steps[1]
-    #             step.previous_step = None
-    #         elif i > 0 and i < N-2:
-    #             step.next_step = steps[i+1]
-    #             step.previous_step = steps[i-1]
-    #         elif i == N-1:
-    #             step.next_step = None
-    #             step.previous_step = steps[i-2]
 
     def summary(self, params: Dict[str, Any], recursive=True, ignore_missing=False):
         """Returns list of lines with a summary of the recipe state"""
@@ -1124,6 +1092,7 @@ class Recipe(Cargo):
         subst.info.subprocess = task_stats.get_subprocess_id()
         taskname = subst.info.taskname
         outputs = {}
+        output_elements = {}
         exception = tb = None
         task_attrs, task_kwattrs = (), {}
         try:
@@ -1196,11 +1165,8 @@ class Recipe(Cargo):
                         if step.info:
                             self.log.info(f"  ({step.info})", extra=dict(color="GREEN", boldface=True))
                     try:
-                        ## make a copy of the subst dict since recipe might modify
-                        # step_params = step.run(subst=subst.copy(), batch=batch)
-                        step_params = step.run(
-                            backend=backend_settings, subst=subst.copy(), parent_log=self.log
-                        )  # make a copy of the subst dict since recipe might modify
+                        # make a copy of the subst dict since subrecipes may modify
+                        step_params = step.run(backend=backend_settings, subst=subst.copy(), parent_log=self.log)
                     except ScabhaBaseException as exc:
                         newexc = StimelaStepExecutionError(f"step '{step.fqname}' has failed, aborting the recipe", exc)
                         if not exc.logged:
@@ -1209,8 +1175,8 @@ class Recipe(Cargo):
 
                     # put step parameters into previous and steps[label] again, as they may have changed based on
                     # outputs)
-                    subst.previous = step_params
-                    subst.steps[label] = subst.previous
+                    subst._add_("previous", step_params, nosubst=True)
+                    subst.steps._add_(label, subst.previous, nosubst=True)
                     # revert to recipe level assignments
 
                     # now check for output aliases that need to be propagated down from steps
@@ -1227,6 +1193,19 @@ class Recipe(Cargo):
                                 if alias.param in step_params:
                                     outputs[name] = step_params[alias.param]
 
+                # evaluate output_elements expressions for this iteration
+                output_elements = {}
+                if self.for_loop and self.for_loop.output_elements:
+                    for elem_name, expr in self.for_loop.output_elements.items():
+                        value = evaluate_and_substitute_object(
+                            expr,
+                            subst,
+                            recursion_level=-1,
+                            location=[self.fqname, "for_loop", "output_elements", elem_name],
+                            log=self.log,
+                        )
+                        output_elements[elem_name] = value
+
         except Exception as exc:
             # raise exception up if asked to
             if raise_exc:
@@ -1240,7 +1219,17 @@ class Recipe(Cargo):
             else:
                 subprocess_logs = None
 
-        return task_attrs, task_kwattrs, task_stats.collect_stats(), outputs, exception, tb, subprocess_logs
+        return (
+            task_attrs,
+            task_kwattrs,
+            task_stats.collect_stats(),
+            outputs,
+            exception,
+            tb,
+            subprocess_logs,
+            count,
+            output_elements,
+        )
 
     def build(self, backend={}, rebuild=False, build_skips=False, log: Optional[logging.Logger] = None):
         # set up backend
@@ -1251,14 +1240,12 @@ class Recipe(Cargo):
         for step in self.steps.values():
             step.build(backend, rebuild=rebuild, build_skips=build_skips, log=log)
 
-    def _run(
-        self, params: Dict[str, Any], subst: Optional[Dict[str, Any]] = None, backend: Dict = {}
-    ) -> Dict[str, Any]:
+    def _run(self, params: Dict[str, Any], subst: SubstitutionNS, backend: Dict = {}) -> Dict[str, Any]:
         """Internal method for running a recipe. Meant to be called from the containing step.
 
         Args:
             params (Dict[str, Any]): input parameters
-            subst (Dict[str, Any], optional): Substitution namespace. Defaults to None.
+            subst (SubstitutionNS): Substitution namespace.
             backend (Dict, optional): Extra backend settings from parent. Defaults to {}.
 
         Returns:
@@ -1268,36 +1255,8 @@ class Recipe(Cargo):
         backend = OmegaConf.merge(backend, self.backend or {})
 
         # set up substitution namespace
-        subst_outer = subst
-        if subst is None:
-            subst = SubstitutionNS()
-            taskname = self.name
-        else:
-            taskname = subst.info.taskname
+        self._update_subst_namespace(subst)
 
-        info = SubstitutionNS(fqname=self.fqname, label="", label_parts=[], suffix="", taskname=taskname)
-        # nosubst=True means these sub-namespaces are not subject to {}-substitutions
-        info1 = info.copy()
-        subst._add_("info", info1, nosubst=True)
-        subst._add_("self", info1, nosubst=True)
-        subst._add_("config", self.config, nosubst=True)
-        subst._add_("steps", {}, nosubst=True)
-        subst._add_("previous", {}, nosubst=True)
-        subst._add_("current", {}, nosubst=True)
-
-        subst.recipe = SubstitutionNS(**params)
-        subst.recipe.log = self.logopts
-        subst.recipe._add_("steps", subst.steps, nosubst=True)
-
-        if subst_outer is not None:
-            if "root" in subst_outer:
-                subst._add_("root", subst_outer.root, nosubst=True)
-            if "recipe" in subst_outer:
-                subst._add_("parent", subst_outer.recipe, nosubst=True)
-        else:
-            subst.root = subst.recipe
-
-        subst_copy = subst.copy()
         self.update_assignments(subst, params=params, ignore_subst_errors=True)
 
         # init backends if not already done
@@ -1317,132 +1276,155 @@ class Recipe(Cargo):
 
             stimela.backends.init_backends(backend_opts, stimela.logger())
 
-        try:
-            self.log.info(f"running recipe '{self.name}'")
+        self.log.info(f"running recipe '{self.name}'")
 
-            # our inputs have been validated, so propagate aliases to steps. Check for missing stuff just in case
-            for name, schema in self.inputs.items():
-                if name in params:
-                    value = params[name]
-                    if isinstance(value, Unresolved) and not isinstance(value, Placeholder):
-                        raise RecipeValidationError(f"recipe '{self.name}' has unresolved input '{name}'", log=self.log)
-                    self._update_aliases(name, value)
-                elif schema.required and (self.for_loop is None or name != self.for_loop.var):
-                    raise RecipeValidationError(
-                        f"recipe '{self.name}' is missing required input '{name}'", log=self.log
-                    )
+        # our inputs have been validated, so propagate aliases to steps. Check for missing stuff just in case
+        for name, schema in self.inputs.items():
+            if name in params:
+                value = params[name]
+                if isinstance(value, Unresolved) and not isinstance(value, Placeholder):
+                    raise RecipeValidationError(f"recipe '{self.name}' has unresolved input '{name}'", log=self.log)
+                self._update_aliases(name, value)
+            elif schema.required and (self.for_loop is None or name != self.for_loop.var):
+                raise RecipeValidationError(f"recipe '{self.name}' is missing required input '{name}'", log=self.log)
 
-            # form list of arguments for each invocation of the loop worker
-            loop_worker_args = []
-            for count, iter_var in enumerate(self._for_loop_values):
-                loop_worker_args.append((params, subst, backend, count, iter_var))
+        # form list of arguments for each invocation of the loop worker
+        loop_worker_args = []
+        for count, iter_var in enumerate(self._for_loop_values):
+            # pass in a copy of subst and subst.info+self, since they mutate in the iteration
+            subst_copy = subst.copy()
+            subst_copy.info = subst.info.copy()
+            subst_copy.self = subst_copy.info
+            loop_worker_args.append((params, subst_copy, backend, count, iter_var))
 
-            # if scatter is enabled, use a process pool
-            if self._for_loop_scatter:
-                self.log.info(
-                    f"[yellow]Scattering recipe {self.fqname} - terminal logs "
-                    f"will appear on the completion of a scattered step. Log "
-                    f"files will be updated in real time.[/yellow]"
-                )
+        final_iter_outputs = {}
+        nloop = len(loop_worker_args)
 
-                nloop = len(loop_worker_args)
-                if self._for_loop_scatter < 0:
-                    num_workers = nloop
-                else:
-                    num_workers = min(self._for_loop_scatter, nloop)
+        # skip the trivial case
+        if not nloop:
+            self.log.info("this recipe is an empty for-loop: time for masterful inactivity")
+        # if scatter is enabled, use a process pool
+        elif self._for_loop_scatter:
+            self.log.info(
+                f"[yellow]Scattering recipe {self.fqname} - terminal logs "
+                f"will appear on the completion of a scattered step. Log "
+                f"files will be updated in real time.[/yellow]"
+            )
 
-                # NOTE(JSKenyon): We don't actually have the runner at this point so dynamically
-                # changing the display based on the backend is problematic. The loop being run may
-                # also use different backends for each step. However, in most cases a scattered
-                # loop will be either remote (kube, slurm) or local, and not a mixture of the two.
-                # This chooses the display based on the backend config at the recipe level - step
-                # level overrides are ignored.
-                backend_opts = OmegaConf.merge(stimela.CONFIG.opts.backend, backend)
-                backend_opts = OmegaConf.to_object(backend_opts)
-                # TODO(JSKenyon): For now, we default to a minimal display (e.g. the slurm display)
-                # for the kube backend when scattering. This is consistent with the behaviour prior
-                # to the addition of multiple displays. At present, the status reporter for the kube
-                # backend is not configured at this point so we cannot track all the pods running
-                # in the scattered loop.
-                display_style = backend_opts.current_wrapper or backend_opts.current_backend
-                # As noted above, use simpler slurm display when scattering with kube backend.
-                display_style = "slurm" if display_style == "kube" else display_style
-
-                # If the display is disabled at this point, it implies that we
-                # should leave it that way (may be in a child process).
-                pause_display = display.is_enabled
-                # Disable display during pool creation so that it isn't
-                # enabled in the resulting processes.
-                if pause_display:
-                    display.disable(reset_cursor=True)
-                with ProcessPoolExecutor(num_workers) as pool:
-                    # submit each iterant to pool
-                    futures = []
-                    for args in loop_worker_args:
-                        future = pool.submit(self._iterate_loop_worker, *args, subprocess=True, raise_exc=False)
-                        futures.append(future)
-
-                    # Re-enable display after pool creation.
-                    if pause_display:
-                        display.set_display_style(display_style)
-                        display.enable()
-                    # Set status on scatter subtask once display is re-enabled.
-                    task_stats.declare_subtask_status(f"0/{nloop} complete, {num_workers} workers")
-
-                    # Start a thread to monitor resource usage.
-                    monitor = task_stats.MonitorThread()
-                    monitor.start()
-
-                    # update task stats, since they're recorded independently
-                    # within each step, as well as get any exceptions from the
-                    # nested steps/recipes.
-                    errors = []
-                    nfail = ncomplete = 0
-                    for f in as_completed(futures):
-                        attrs, kwattrs, stats, outputs, exc, tb, subprocess_logs = f.result()
-                        # Print the logs associated with the completed future.
-                        # These are already timestamped by the child process.
-                        rich_console.print(subprocess_logs, soft_wrap=True)
-                        task_stats.declare_subtask_attributes(*attrs, **kwattrs)
-                        task_stats.add_missing_stats(stats)
-                        if exc is not None:
-                            errors.append(exc)
-                            if not isinstance(exc, ScabhaBaseException):
-                                errors.append(tb)
-                            nfail += 1
-                        else:
-                            ncomplete += 1
-                        if ncomplete:
-                            status = f"[green]{ncomplete}[/green]/{nloop} complete"
-                        else:
-                            status = f"0/{nloop} complete"
-                        if nfail:
-                            status = f"{status}, [red]{nfail}[/red] failed"
-                        status = f"{status}, {num_workers} workers"
-                        task_stats.declare_subtask_status(status)
-
-                    monitor.stop()  # Stop monitoring resource usage.
-
-                    if errors:
-                        pool.shutdown()
-                        raise StimelaRuntimeError(f"{nfail}/{nloop} jobs have failed", errors)
-            # else just iterate directly
+            accumulated_elements = (
+                {name: [None] * nloop for name in self.for_loop.output_elements}
+                if self.for_loop and self.for_loop.output_elements
+                else {}
+            )
+            if self._for_loop_scatter < 0:
+                num_workers = nloop
             else:
+                num_workers = min(self._for_loop_scatter, nloop)
+
+            # NOTE(JSKenyon): We don't actually have the runner at this point so dynamically
+            # changing the display based on the backend is problematic. The loop being run may
+            # also use different backends for each step. However, in most cases a scattered
+            # loop will be either remote (kube, slurm) or local, and not a mixture of the two.
+            # This chooses the display based on the backend config at the recipe level - step
+            # level overrides are ignored.
+            backend_opts = OmegaConf.merge(stimela.CONFIG.opts.backend, backend)
+            backend_opts = OmegaConf.to_object(backend_opts)
+            # TODO(JSKenyon): For now, we default to a minimal display (e.g. the slurm display)
+            # for the kube backend when scattering. This is consistent with the behaviour prior
+            # to the addition of multiple displays. At present, the status reporter for the kube
+            # backend is not configured at this point so we cannot track all the pods running
+            # in the scattered loop.
+            display_style = backend_opts.current_wrapper or backend_opts.current_backend
+            # As noted above, use simpler slurm display when scattering with kube backend.
+            display_style = "slurm" if display_style == "kube" else display_style
+
+            # If the display is disabled at this point, it implies that we
+            # should leave it that way (may be in a child process).
+            pause_display = display.is_enabled
+            # Disable display during pool creation so that it isn't
+            # enabled in the resulting processes.
+            if pause_display:
+                display.disable(reset_cursor=True)
+            with ProcessPoolExecutor(num_workers) as pool:
+                # submit each iterant to pool
+                futures = []
                 for args in loop_worker_args:
-                    _, _, _, outputs, _, _, _ = self._iterate_loop_worker(*args, raise_exc=True)
+                    future = pool.submit(self._iterate_loop_worker, *args, subprocess=True, raise_exc=False)
+                    futures.append(future)
 
-            # either way, outputs contains output aliases from the last iteration
-            params.update(**outputs)
+                # Re-enable display after pool creation.
+                if pause_display:
+                    display.set_display_style(display_style)
+                    display.enable()
+                # Set status on scatter subtask once display is re-enabled.
+                task_stats.declare_subtask_status(f"0/{nloop} complete, {num_workers} workers")
 
-            # current namespace becomes recipe again
-            subst.current = subst.recipe
+                # Start a thread to monitor resource usage.
+                monitor = task_stats.MonitorThread()
+                monitor.start()
 
-            self.log.info(f"recipe '{self.name}' executed successfully")
-            return OrderedDict((name, value) for name, value in params.items() if name in self.outputs)
-        finally:
-            steps = subst.steps
-            subst.update(subst_copy)
-            subst.current.steps = steps
+                # update task stats, since they're recorded independently
+                # within each step, as well as get any exceptions from the
+                # nested steps/recipes.
+                errors = []
+                nfail = ncomplete = 0
+                for f in as_completed(futures):
+                    attrs, kwattrs, stats, outputs, exc, tb, subprocess_logs, iter_count, iter_elements = f.result()
+                    # save outputs from final iteration
+                    if iter_count == nloop - 1:
+                        final_iter_outputs = outputs
+                    # Print the logs associated with the completed future.
+                    # These are already timestamped by the child process.
+                    rich_console.print(subprocess_logs, soft_wrap=True)
+                    task_stats.declare_subtask_attributes(*attrs, **kwattrs)
+                    task_stats.add_missing_stats(stats)
+                    if exc is not None:
+                        errors.append(exc)
+                        if not isinstance(exc, ScabhaBaseException):
+                            errors.append(tb)
+                        nfail += 1
+                    else:
+                        ncomplete += 1
+                        for name, value in iter_elements.items():
+                            accumulated_elements[name][iter_count] = value
+                    if ncomplete:
+                        status = f"[green]{ncomplete}[/green]/{nloop} complete"
+                    else:
+                        status = f"0/{nloop} complete"
+                    if nfail:
+                        status = f"{status}, [red]{nfail}[/red] failed"
+                    status = f"{status}, {num_workers} workers"
+                    task_stats.declare_subtask_status(status)
+
+                monitor.stop()  # Stop monitoring resource usage.
+
+                if errors:
+                    pool.shutdown()
+                    raise StimelaRuntimeError(f"{nfail}/{nloop} jobs have failed", errors)
+        # else just iterate directly
+        else:
+            accumulated_elements = (
+                {name: [] for name in self.for_loop.output_elements}
+                if self.for_loop and self.for_loop.output_elements
+                else {}
+            )
+            for args in loop_worker_args:
+                _, _, _, final_iter_outputs, _, _, _, _count, iter_elements = self._iterate_loop_worker(
+                    *args, raise_exc=True
+                )
+                for name, value in iter_elements.items():
+                    accumulated_elements[name].append(value)
+
+        # either way, outputs contains output aliases from the last iteration
+        params.update(**final_iter_outputs)
+        if accumulated_elements:
+            params.update(**accumulated_elements)
+
+        # current namespace becomes recipe again
+        subst.current = subst.recipe
+
+        self.log.info(f"recipe '{self.name}' executed successfully")
+        return OrderedDict((name, value) for name, value in params.items() if name in self.outputs)
 
     def to_dag(self, graph: Optional[nx.DiGraph] = None, parent: Optional[str] = None) -> nx.DiGraph:
         """Converts a stimela recipe into a simple directed acyclic graph.
