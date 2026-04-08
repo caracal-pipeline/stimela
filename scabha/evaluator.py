@@ -865,6 +865,14 @@ class Evaluator(object):
         if collapse_substitution_errors:
             assert subcontainer_type is not None
         params_out = params
+
+        def is_formula_or_subst(value: str) -> bool:
+            return (
+                value.startswith("=")
+                and not value.startswith("==")
+                or (value.startswith("{") and value.endswith("}") and not value.startswith("{{"))
+            )
+
         for name, value in list(params.items()):
             if isinstance(value, Unresolved):
                 continue
@@ -883,30 +891,24 @@ class Evaluator(object):
                         if raise_substitution_errors:
                             raise
                         new_value = Unresolved(errors=[err])
-                    # if a formula evaluated to a formula string (e.g. because the namespace
-                    # contains the raw formula), treat as unresolved
-                    if (
-                        not raise_substitution_errors
-                        and type(new_value) is str
-                        and value.startswith("=")
-                        and not value.startswith("==")
-                        and new_value.startswith("=")
-                        and not new_value.startswith("==")
-                    ):
-                        new_value = Unresolved(
-                            errors=[
-                                FormulaError(
-                                    f"{'.'.join(self.location + sublocation + [name])}: "
-                                    f"formula '{value}' could not be fully resolved"
-                                )
-                            ]
-                        )
                     if verbose:
                         print(f"{name}: {value} -> {new_value}")
+                    # check for circularity
+                    if is_formula_or_subst(value) and new_value == value:
+                        err = SubstitutionError(
+                            f"{'.'.join(self.location + sublocation + [name])}: "
+                            f"self-referencing formula or substitution"
+                        )
+                        if raise_substitution_errors:
+                            raise err
+                        else:
+                            new_value = Unresolved(errors=[err])
                     # UNSET return means delete or revert to default
                     if new_value is UNSET:
                         if subcontainer_type:
-                            raise SubstitutionError(f"{'.'.join(self.location + sublocation)}: UNSET not allowed here")
+                            raise SubstitutionError(
+                                f"{'.'.join(self.location + sublocation + [name])}: UNSET not allowed here"
+                            )
                         if params_out is params:
                             params_out = params.copy()
                         # if value is in defaults and is different, try to evaluate that instead
