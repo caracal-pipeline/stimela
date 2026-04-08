@@ -5,6 +5,17 @@ cabs:
       msg:
         dtype: str
 
+circular:
+  inputs:
+    circular:
+      default: 0
+
+  steps:
+    s1:
+      cab: echo
+      params: 
+        msg: =current.msg
+
 outer:
   inputs:
     ncpu:
@@ -27,3 +38,5 @@ inner:
       cab: echo
       params:
         msg: =recipe.ncpu
+
+

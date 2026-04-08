@@ -122,13 +122,31 @@ def test_test_loop_recipe():
     assert retcode == 0
 
 
-def test_issue527_formula_passing_to_subrecipe():
-    """Test that formula params like =recipe.ncpu are correctly passed to sub-recipes."""
-    print("===== expecting no errors now =====")
+def test_issue527_1():
+    """Test that circular references are ignored in prevalidation"""
+    print("===== expecting no errors =====")
     retcode, output = run("stimela -v -b native run test_issue527.yml outer")
     assert retcode == 0
     print(output)
     assert verify_output(output, "recipe 'outer' executed successfully")
+
+
+def test_issue527_2():
+    """Test that circular references are caught in validation"""
+    print("===== expecting an error =====")
+    retcode, output = run("stimela -v -b native run test_issue527.yml circular")
+    assert retcode == 1
+    print(output)
+    assert verify_output(output, "self-referencing formula or substitution")
+
+
+def test_issue527_3():
+    """Test that circular references are caught in validation"""
+    print("===== expecting an error =====")
+    retcode, output = run("stimela -v -b native run test_issue527.yml circular circular==recipe.circular")
+    assert retcode == 1
+    print(output)
+    assert verify_output(output, "invalid inputs")
 
 
 def test_scatter():
