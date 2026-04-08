@@ -896,7 +896,7 @@ class Evaluator(object):
                         new_value = Unresolved(
                             errors=[
                                 FormulaError(
-                                    f"{'.'.join(self.location + sublocation)}: "
+                                    f"{'.'.join(self.location + sublocation + [name])}: "
                                     f"formula '{value}' could not be fully resolved"
                                 )
                             ]
