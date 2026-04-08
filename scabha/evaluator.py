@@ -883,6 +883,17 @@ class Evaluator(object):
                         if raise_substitution_errors:
                             raise
                         new_value = Unresolved(errors=[str(err)])
+                    # if a formula evaluated to a formula string (e.g. because the namespace
+                    # contains the raw formula), treat as unresolved
+                    if (
+                        not raise_substitution_errors
+                        and type(new_value) is str
+                        and value.startswith("=")
+                        and not value.startswith("==")
+                        and new_value.startswith("=")
+                        and not new_value.startswith("==")
+                    ):
+                        new_value = Unresolved(errors=[f"formula '{value}' could not be fully resolved"])
                     if verbose:
                         print(f"{name}: {value} -> {new_value}")
                     # UNSET return means delete or revert to default
