@@ -466,7 +466,9 @@ class Cargo(object):
             # delete implicit parameters, since they may have come from older version of schema
             params = self._delete_implicit_parameters(params, subst)
             # get rid of unsets
-            params = {key: value for key, value in params.items() if value is not UNSET and not isinstance(value, Unresolved) }
+            params = {
+                key: value for key, value in params.items() if value is not UNSET and not isinstance(value, Unresolved)
+            }
             try:
                 self.inputs, self.outputs = self._dyn_schema(params, *self._original_inputs_outputs)
             except Exception:
