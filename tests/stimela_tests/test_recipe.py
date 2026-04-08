@@ -122,6 +122,15 @@ def test_test_loop_recipe():
     assert retcode == 0
 
 
+def test_issue527_formula_passing_to_subrecipe():
+    """Test that formula params like =recipe.ncpu are correctly passed to sub-recipes."""
+    print("===== expecting no errors now =====")
+    retcode, output = run("stimela -v -b native run test_issue527.yml outer")
+    assert retcode == 0
+    print(output)
+    assert verify_output(output, "recipe 'outer' executed successfully")
+
+
 def test_scatter():
     print("===== expecting no errors now =====")
     retcode = os.system("stimela -v -b native exec test_scatter.yml basic_loop")
