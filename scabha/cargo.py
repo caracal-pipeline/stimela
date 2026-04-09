@@ -465,8 +465,10 @@ class Cargo(object):
         if self._dyn_schema:
             # delete implicit parameters, since they may have come from older version of schema
             params = self._delete_implicit_parameters(params, subst)
-            # get rid of unsets
-            params = {key: value for key, value in params.items() if value is not UNSET and type(value) is not UNSET}
+            # get rid of unset and unresolved parameters
+            params = {
+                key: value for key, value in params.items() if value is not UNSET and not isinstance(value, Unresolved)
+            }
             try:
                 self.inputs, self.outputs = self._dyn_schema(params, *self._original_inputs_outputs)
             except Exception:
@@ -479,7 +481,7 @@ class Cargo(object):
                         try:
                             schema = OmegaConf.unsafe_merge(ParameterSchema.copy(), schema)
                         except Exception as exc:
-                            raise SchemaError("error in dynamic schema for parameter 'name'", exc)
+                            raise SchemaError(f"error in dynamic schema for parameter '{name}'", exc)
                         io[name] = Parameter(**schema)
             # new outputs may have been added
             for schema in self.outputs.values():

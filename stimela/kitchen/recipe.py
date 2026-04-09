@@ -815,6 +815,9 @@ class Recipe(Cargo):
         # split parameters into our own, and per-step, and UNSET directives
         params, unset_params = self._preprocess_parameters(params)
 
+        # our own parameters are prevalidated against the outer substitution context;
+        # step parameters are prevalidated against our own subst
+        subst_outer = subst.copy()
         self._update_subst_namespace(subst)
 
         # update assignments
@@ -832,7 +835,7 @@ class Recipe(Cargo):
         # we call this twice, potentially, so define as a function
         def prevalidate_self(params):
             try:
-                params1 = Cargo.prevalidate(self, params, subst=subst, backend=backend)
+                params1 = Cargo.prevalidate(self, params, subst=subst_outer, backend=backend)
                 # mark params that have become unset
                 unset_params.update(set(params) - set(params1))
                 params = params1
