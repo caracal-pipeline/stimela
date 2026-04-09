@@ -867,9 +867,9 @@ class Evaluator(object):
         params_out = params
 
         def is_formula_or_subst(value: str) -> bool:
-            return ((value.startswith("=") and not value.startswith("=="))
-                or  (value.startswith("{") and value.endswith("}") and not value.startswith("{{")))
-            
+            return (value.startswith("=") and not value.startswith("==")) or (
+                value.startswith("{") and value.endswith("}") and not value.startswith("{{")
+            )
 
         for name, value in list(params.items()):
             if isinstance(value, Unresolved):
