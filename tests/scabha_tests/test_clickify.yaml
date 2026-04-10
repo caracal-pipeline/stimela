@@ -16,9 +16,12 @@ inputs:
       repeat: list
   j: 
     dtype: float
-  k: 
+  k:
     dtype: float
     default: 2
+  nosubst-val:
+    dtype: str
+    default: '=NOSUBST("hello")'
   tup: 
     dtype: Optional[Tuple[int, str]] 
   files1: 

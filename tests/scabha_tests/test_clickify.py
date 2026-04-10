@@ -18,13 +18,14 @@ def func(
     j: Optional[float] = 1,
     remainder: Optional[List[str]] = None,
     k: float = 2,
+    nosubst_val: Optional[str] = None,
     tup: Optional[Tuple[int, str]] = None,
     files1: Optional[List[str]] = None,
     files2: Optional[List[str]] = None,
     files3: Optional[List[str]] = None,
     output: str = None,
 ):
-    print(f"name:{name} i:{i} j:{j} k:{k} tup:{tup}")
+    print(f"name:{name} i:{i} j:{j} k:{k} nosubst_val:{nosubst_val} tup:{tup}")
     print(f"remainder: {remainder}")
     print(f"files1: {files1}")
     print(f"files2: {files2}")

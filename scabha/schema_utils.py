@@ -11,9 +11,10 @@ from omegaconf import MISSING, OmegaConf
 from scabha import configuratt
 from scabha.exceptions import SchemaError
 
-from .basetypes import EmptyDictDefault, File, is_file_type
+from .basetypes import EmptyDictDefault, File, Unresolved, is_file_type
 from .cargo import _UNSET_DEFAULT, UNSET, Cargo, Parameter, ParameterPolicies
 from .evaluator import Evaluator
+from .substitutions import SubstitutionNS
 
 
 def schema_to_dataclass(io: Dict[str, Parameter], class_name: str, bases=(), post_init: Optional[Callable] = None):
@@ -241,7 +242,7 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]], default_policies: D
 
     # construct evaluator with an empty substitution namespace, since default values may be expressions
     # that need evaluating (such as =NOSUBST); there's no substitutions available in defaults
-    evaluator = Evaluator({})
+    evaluator = Evaluator(SubstitutionNS())
 
     decorator_chain = None
     inputs = Cargo.flatten_schemas(OrderedDict(), getattr(schemas, "inputs", {}), "inputs")
@@ -282,8 +283,13 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]], default_policies: D
             is_unset = schema.default in (UNSET, _UNSET_DEFAULT)
             kwargs = dict()
             if not is_unset and not schema.suppress_cli_default and nargs != -1:
-                defval = evaluator.evaluate(schema.default)
-                kwargs["default"] = defval
+                defval = evaluator.evaluate(schema.default, sublocation=[name])
+                # unset is skipped quietly, unresolved is reported
+                if type(defval) is not UNSET:
+                    if isinstance(defval, Unresolved):
+                        print(f"default value '{schema.default} for '{name}' is unresolved, skipping the default")
+                    else:
+                        kwargs["default"] = defval
 
             # sort out option type. Atomic type?
             if dtype in _atomic_types:
