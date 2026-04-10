@@ -11,7 +11,7 @@ import pytest
 from scabha.schema_utils import clickify_parameters
 
 
-# Change into directory where test_recipy.py lives
+# Change into directory where the test lives
 # As suggested by https://stackoverflow.com/questions/62044541/change-pytest-working-directory-to-test-case-directory
 @pytest.fixture(autouse=True)
 def change_test_dir(request, monkeypatch):
