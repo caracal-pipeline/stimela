@@ -285,11 +285,16 @@ def clickify_parameters(schemas: Union[str, Dict[str, Any]], default_policies: D
             if not is_unset and not schema.suppress_cli_default and nargs != -1:
                 defval = evaluator.evaluate(schema.default, sublocation=[name])
                 # unset is skipped quietly, unresolved is reported
-                if type(defval) is not UNSET:
-                    if isinstance(defval, Unresolved):
-                        print(f"default value '{schema.default} for '{name}' is unresolved, skipping the default")
-                    else:
-                        kwargs["default"] = defval
+                if defval is UNSET:
+                    pass  # UNSET means no default
+                elif isinstance(defval, Unresolved):
+                    click.echo(
+                        f"clickify_parameters: '{name}': default value "
+                        f"'{schema.default}' doesn't resolve, skipping the default",
+                        err=True,
+                    )
+                else:
+                    kwargs["default"] = defval
 
             # sort out option type. Atomic type?
             if dtype in _atomic_types:

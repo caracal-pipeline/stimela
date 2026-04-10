@@ -21,7 +21,13 @@ inputs:
     default: 2
   nosubst-val:
     dtype: str
-    default: '=NOSUBST("hello")'
+    default: =NOSUBST("hello")
+  unset-val:
+    dtype: str
+    default: =UNSET
+  unresolved-val:
+    dtype: str
+    default: =deliberately.unresolved
   tup: 
     dtype: Optional[Tuple[int, str]] 
   files1: 
