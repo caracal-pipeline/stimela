@@ -243,6 +243,8 @@ def validate_parameters(
 
             # check for existence of all files in list, if needed
             if must_exist:
+                if not files and not schema.is_file_list_type:
+                    raise ParameterValidationError(f"'{mkname(name)}': file doesn't exist")
                 not_exists = [uri.path for uri in files if not uri.remote and not os.path.exists(uri.path)]
                 if not_exists:
                     raise ParameterValidationError(f"'{mkname(name)}': {','.join(not_exists)} doesn't exist")
