@@ -14,7 +14,7 @@ from typing import List, Optional, Tuple
 import click
 import yaml
 from benedict import benedict
-from omegaconf.omegaconf import OmegaConf, OmegaConfBaseException
+from omegaconf.omegaconf import DictConfig, OmegaConf, OmegaConfBaseException
 
 import stimela
 import stimela.backends
@@ -110,7 +110,9 @@ def resolve_recipe_files(filename: str, log: logging.Logger, use_manifest: bool 
 
 
 def load_recipe_files(filenames: List[str]):
-    """Loads a set of config or recipe files. Returns list of recipes loaded."""
+    """Loads a set of config or recipe files.
+    Returns tuple of names, default_name, where 'names' is the list of recipes loaded,
+    and default_name can be None"""
 
     full_conf = OmegaConf.create()
     full_deps = configuratt.ConfigDependencies()
@@ -160,11 +162,20 @@ def load_recipe_files(filenames: List[str]):
     # config secions are merged into the config namespace, while recipes go under
     # lib.recipes
     recipe_names = []
+    default_name = None
     update_conf = OmegaConf.create()
     for name, value in full_conf.items():
         if name in stimela.CONFIG:
             update_conf[name] = value
+        elif name == "DEFAULT":
+            if type(value) is not str:
+                logger().error(f"DEFAULT entry must be of type 'str', got '{type(value).__name__}'")
+                sys.exit(2)
+            default_name = value
         else:
+            if type(value) is not DictConfig:
+                logger().error(f"'{name}': subsection expected, got '{type(value).__name__}'")
+                sys.exit(2)
             try:
                 stimela.CONFIG.lib.recipes[name] = OmegaConf.merge(RecipeSchema, value)
             except Exception as exc:
@@ -178,7 +189,7 @@ def load_recipe_files(filenames: List[str]):
         log_exception(f"error applying configuration from {' ,'.join(filenames)}", exc)
         sys.exit(2)
 
-    return recipe_names
+    return recipe_names, default_name
 
 
 @click.command(
@@ -426,9 +437,9 @@ def run(
 
     # load config and recipes from all given files
     if files_to_load:
-        available_recipes = load_recipe_files(files_to_load)
+        available_recipes, default_name = load_recipe_files(files_to_load)
     else:
-        available_recipes = []
+        available_recipes, default_name = [], None
 
     # load config settigs from --config arguments
     try:
@@ -464,6 +475,10 @@ def run(
         if stimela.CONFIG.cabs:
             log.info(f"available cabs: {' '.join(stimela.CONFIG.cabs.keys())}")
 
+    if recipe_or_cab is None and default_name is not None and not last_recipe:
+        log.info(f"using '{default_name}' as the default runnable")
+        recipe_or_cab = default_name
+
     # figure out what we're running, recipe or cab
     recipe_name = cab_name = None
     # do we need to make an implicit choice?
@@ -488,7 +503,7 @@ def run(
             log_available_runnables()
             sys.exit(2)
     # else something was specified
-    elif recipe_or_cab in available_recipes:
+    elif recipe_or_cab in stimela.CONFIG.lib.recipes:
         recipe_name = recipe_or_cab
         log.info(f"selected recipe is '{recipe_name}'")
     elif recipe_or_cab in stimela.CONFIG.cabs:
@@ -502,17 +517,21 @@ def run(
             log_available_runnables()
         sys.exit(2)
 
+    runnable_name = cab_name or recipe_name
+    subst = SubstitutionNS()
+    info = SubstitutionNS(
+        fqname=runnable_name, label=runnable_name, label_parts=[runnable_name], suffix="", taskname=runnable_name
+    )
+    subst._add_("info", info)
+    subst._add_("self", info)
+    subst._add_("config", stimela.CONFIG, nosubst=True)
+    subst._add_("current", SubstitutionNS(**params))
+
     # are we running a standalone cab?
     if cab_name is not None:
         # create step config by merging in settings (var=value pairs from the command line)
         outer_step = Step(cab=cab_name, params=params)
         outer_step.name = cab_name
-        # provide basic substitutions for running the step below
-        subst = SubstitutionNS()
-        info = SubstitutionNS(fqname=cab_name, label=cab_name, label_parts=[], suffix="", taskname=cab_name)
-        subst._add_("info", info, nosubst=True)
-        subst._add_("config", stimela.CONFIG, nosubst=True)
-        subst._add_("current", SubstitutionNS(**params))
         # create step logger manually, since we won't be doing the normal recipe-level log management
         step_logger = stimela.logger().getChild(cab_name)
         step_logger.propagate = True
@@ -572,6 +591,8 @@ def run(
                 log_exception(exc)
                 sys.exit(1)
 
+        # create subst namespace for outer step
+
         # split out parameters
         params = {key: value for key, value in params.items() if key in recipe.inputs_outputs}
 
@@ -579,7 +600,7 @@ def run(
         log.info("pre-validating the recipe")
         outer_step = Step(recipe=recipe, name=f"{recipe_name}", info=recipe_name, params=params)
         try:
-            params = outer_step.prevalidate(root=True)
+            params = outer_step.prevalidate(root=True, subst=subst)
         except Exception as exc:
             log_exception(RecipeValidationError(f"pre-validation of recipe '{recipe_name}' failed", exc))
             for line in traceback.format_exc().split("\n"):
@@ -612,9 +633,6 @@ def run(
         filename = os.path.join(logdir, "stimela.recipe.deps")
         stimela.config.CONFIG_DEPS.save(filename)
         log.info(f"saved recipe dependencies to {filename}")
-
-        # no substitutions provided, recipe initializes its own
-        subst = None
 
     # in debug mode, pretty-print the recipe
     if log.isEnabledFor(logging.DEBUG):
@@ -669,6 +687,10 @@ def run(
                 print_depth=profile if profile is not None else stimela.CONFIG.opts.profile.print_depth,
                 unroll_loops=stimela.CONFIG.opts.profile.unroll_loops,
             )
+            if stimelogging.has_accumulated_messages():
+                stimelogging.declare_chapter("accumulated warnings and errors")
+            stimelogging.flush_accumulated_messages()
+
             if not isinstance(exc, ScabhaBaseException) or not exc.logged:
                 log_exception(
                     StimelaRuntimeError(
@@ -699,6 +721,10 @@ def run(
             print_depth=profile if profile is not None else stimela.CONFIG.opts.profile.print_depth,
             unroll_loops=stimela.CONFIG.opts.profile.unroll_loops,
         )
+
+    if stimelogging.has_accumulated_messages():
+        stimelogging.declare_chapter("accumulated warnings and errors")
+    stimelogging.flush_accumulated_messages()
 
     last_log_dir = stimelogging.get_logfile_dir(outer_step.log) or "."
     outer_step.log.info(f"last log directory was {stimelogging.apply_style(last_log_dir, 'bold green')}")

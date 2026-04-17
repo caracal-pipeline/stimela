@@ -16,9 +16,18 @@ inputs:
       repeat: list
   j: 
     dtype: float
-  k: 
+  k:
     dtype: float
     default: 2
+  nosubst-val:
+    dtype: str
+    default: =NOSUBST("hello")
+  unset-val:
+    dtype: str
+    default: =UNSET
+  unresolved-val:
+    dtype: str
+    default: =deliberately.unresolved
   tup: 
     dtype: Optional[Tuple[int, str]] 
   files1: 

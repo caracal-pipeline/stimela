@@ -1,0 +1,62 @@
+cabs:
+  foo:
+    command: echo
+    inputs:
+      x: int = 1
+      y: int = 2
+    preamble:
+      pre1:
+        - =LOG("This is a preamble about {current.x} {current.y} in general")
+    epilogue:
+      post1:
+        - =IF(current.x == current.y, 
+            LOG_WARNING("This is an epilogue about {current.x} == {current.y}", "no-repeat"))
+      post2:
+        - =IF(current.x == 42, ABORT("x is 42, I'm out of here!"))
+      assert:
+        - =current.x != 43
+  bar:
+    command: echo
+    inputs:
+      x: int = 1
+      y: int = 2
+
+recipe:
+  name: "demo recipe"
+  info: 'top level recipe definition'
+  steps:
+    step1:
+      cab: foo
+      params:
+        x: 1
+        y: 2
+      epilogue:
+        # this one won't fire, as step overrides cab's 'post1' and x != y here
+        post1:
+          - =IF(current.x == current.y, 
+            LOG_WARNING("This is a step-specific epilogue about {current.x} == {current.y}"))
+        post3:
+          - =LOG("This is a step-specific epilogue about life in general")
+    step2:
+      cab: foo
+      params:
+        x: 2
+        y: 2
+    step2a:
+      cab: foo
+      params:
+        x: 2
+        y: 2
+    step3:
+      cab: foo
+      params:
+        x: 2
+        y: 2
+      epilogue:
+        post1:
+          - =IF(current.x == current.y, LOG("This is a step-specific epilogue about {current.x} == {current.y}", "warning"))
+    step4:
+      cab: foo
+      params:
+        x: 3
+        y: 3

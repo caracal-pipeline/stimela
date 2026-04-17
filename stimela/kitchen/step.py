@@ -9,14 +9,14 @@ from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, ListConfig, OmegaConf
 from omegaconf.errors import OmegaConfBaseException
 from rich.markup import escape
 
 import scabha.exceptions
 import stimela
 from scabha.basetypes import UNSET, Placeholder, SkippedOutput
-from scabha.exceptions import SubstitutionError, SubstitutionErrorList
+from scabha.exceptions import AbortError, SubstitutionError, SubstitutionErrorList
 from scabha.substitutions import SubstitutionNS
 from scabha.validate import Unresolved, evaluate_and_substitute_object, join_quote
 from stimela import log_exception, stimelogging, task_stats
@@ -86,6 +86,9 @@ class Step:
     # optional backend settings
     backend: Optional[Dict[str, Any]] = None
 
+    preamble: Dict[str, Any] = EmptyDictDefault()  # Dict[str, List[str]] of expressions evaluated before running
+    epilogue: Dict[str, Any] = EmptyDictDefault()  # Dict[str, List[str]] of expressions evaluated after running
+
     def __post_init__(self):
         self.fqname = self.fqname or self.name
         if not bool(self.cab) and not bool(self.recipe):
@@ -119,6 +122,12 @@ class Step:
         else:
             # otherwise, self._skip stays at None, and will be re-evaluated at runtime
             self._skip = None
+        # check that preamble/epilogue entries are valid (each must be a list of expressions)
+        for section_name in ["preamble", "epilogue"]:
+            section = getattr(self, section_name)
+            for key, value in section.items():
+                if not isinstance(value, (list, ListConfig)):
+                    raise StepValidationError(f"step '{self.name}': {section_name}.{key} must be a list of expressions")
 
     def summary(self, params=None, recursive=True, ignore_missing=False, inputs=True, outputs=True):
         summary_params = OrderedDict()
@@ -298,7 +307,7 @@ class Step:
             )
             runner.validate_backend_settings(backend_opts, log, cab=self.cargo if isinstance(self.cargo, Cab) else None)
 
-    def prevalidate(self, subst: Optional[SubstitutionNS] = None, root=False, backend=None):
+    def prevalidate(self, subst: SubstitutionNS, root=False, backend=None):
         self.finalize(backend=backend)
         # apply dynamic schemas
         params = self.params
@@ -306,12 +315,12 @@ class Step:
             # prevalidate in order to resolve substitutions in existing parameters
             params = self.cargo.prevalidate(params, subst, root=root)
             self.cargo.apply_dynamic_schemas(params, subst)
-            # will prevvalidate again below based on these updated schemas
+            # will prevalidate again below based on these updated schemas
         # validate cab or recipe
         params = self.validated_params = self.cargo.prevalidate(params, subst, root=root)
         # add missing outputs
         for name, schema in self.cargo.outputs.items():
-            if name not in params and schema.required:
+            if name not in params and schema.required and not schema.is_named_output:
                 params[name] = UNSET(name)
         self.log.debug(
             f"{self.cargo.name}: {len(self.missing_params)} missing, "
@@ -396,10 +405,43 @@ class Step:
             with task_stats.declare_subtask(self.name, wrapper_or_backend):
                 return backend_runner.build(self.cargo, log=log, rebuild=rebuild)
 
+    def evaluate_section(self, which: str, subst) -> bool:
+        """Evaluates preamble or epilogue expressions.
+
+        Merges cargo and step sections by label (step overrides cargo).
+        Each entry is a list of expressions evaluated with short-circuit AND semantics.
+        Returns True if step should abort.
+        """
+        cargo_section = getattr(self.cargo, which, {})
+        step_section = getattr(self, which, {})
+        # merge: step labels override cargo labels
+        merged = dict(cargo_section)
+        merged.update(step_section)
+
+        for label, expressions in merged.items():
+            for expr_str in expressions:
+                try:
+                    result = evaluate_and_substitute_object(
+                        expr_str,
+                        subst,
+                        recursion_level=-1,
+                        location=[self.fqname, which, label],
+                        log=self.log,
+                        log_and_remember=stimelogging.log_and_remember,
+                    )
+                    # False or unset result skips remaining expressions in this label
+                    if result is UNSET or isinstance(result, Unresolved) or not result:
+                        self.log.critical(f"{which}: {label}: '{expr_str}' evaluates to {result}")
+                        return True
+                except AbortError as exc:
+                    self.log.critical(str(exc))
+                    return True
+        return False
+
     def run(
         self,
+        subst: SubstitutionNS,
         backend: Optional[Dict] = None,
-        subst: Optional[Dict[str, Any]] = None,
         is_outer_step: bool = False,
         parent_log: Optional[logging.Logger] = None,
     ) -> Dict[str, Any]:
@@ -407,7 +449,7 @@ class Step:
 
         Args:
             backend (Dict, optional): Backend settings inherited from parent.
-            subst (Dict[str, Any], optional): Substitution namespace. Defaults to None.
+            subst (SubstitutionNS): Substitution namespace.
             parent_log (logging.Logger, optional): parent logger for parent-related messages. Defaults to using the
                 step logger if not supplied.
 
@@ -432,7 +474,7 @@ class Step:
         try:
             backend_opts = OmegaConf.merge(self.config.opts.backend, backend)
             backend_opts = evaluate_and_substitute_object(
-                backend_opts, subst, recursion_level=-1, location=[self.fqname, "backend"]
+                backend_opts, subst, recursion_level=-1, location=[self.fqname, "backend"], log=self.log
             )
             if not is_outer_step and backend_opts.verbose:
                 opts_yaml = OmegaConf.to_yaml(backend_opts)
@@ -460,13 +502,13 @@ class Step:
             parent_log_info, parent_log_warning = parent_log.info, parent_log.warning
 
         if self.validated_params is None:
-            self.prevalidate(self.params)
+            self.prevalidate(subst)
 
         with context:
             # evaluate the skip attribute (it can be a formula and/or a {}-substititon)
             skip = self._skip
             if self._skip is None and subst is not None:
-                skip = evaluate_and_substitute_object(self.skip, subst, location=[self.fqname, "skip"])
+                skip = evaluate_and_substitute_object(self.skip, subst, location=[self.fqname, "skip"], log=self.log)
                 if skip is UNSET:  # skip: =IFSET(recipe.foo) will return UNSET
                     skip = False
                 self.log.debug(f"dynamic skip attribute evaluation returns {skip}")
@@ -525,7 +567,10 @@ class Step:
             if validated and not skip:
                 self.log_summary(logging.INFO, "validated inputs", color="GREEN", ignore_missing=True, inputs=True)
                 if subst is not None:
-                    subst.current = params
+                    subst._add_("current", params)
+                    # add root if it hasn't been added yet
+                    if "root" not in subst:
+                        subst._add_("root", subst.current)
 
             ## check for (a) invalid params (b) unresolved inputs
             # (c) unresolved outputs of File/MS/Directory type
@@ -652,6 +697,9 @@ class Step:
                     skip = True
 
             if not skip:
+                if self.evaluate_section("preamble", subst):
+                    raise StepValidationError("aborting due to above", log=self.log)
+
                 # check for outputs that need removal
                 if not backend_runner.is_remote_fs:
                     for name, schema in self.outputs.items():
@@ -718,6 +766,9 @@ class Step:
                 if subst is not None:
                     subst.current._merge_(params)
                 self.log_summary(logging.DEBUG, "validated outputs", ignore_missing=True, outputs=True)
+
+            if self.evaluate_section("epilogue", subst):
+                raise StepValidationError("aborting due to above", log=self.log)
 
             # bomb out if an output was invalid
             invalid = [

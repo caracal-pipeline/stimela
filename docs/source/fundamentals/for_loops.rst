@@ -18,7 +18,7 @@ This can be specified in one of two ways::
                 params:
                     bar: =recipe.foo
 
-This tells Stimela to run the recipe three times, setting the variable ``foo`` to "a", "b" and "c" respectively. :ref:`subst`can then be employed inside the step definitions to alter the workflow based on the value of ``foo``.
+This tells Stimela to run the recipe three times, setting the variable ``foo`` to "a", "b" and "c" respectively. :ref:`subst` can then be employed inside the step definitions to alter the workflow based on the value of ``foo``.
 
 In the second form, the list of values to be iterated over is an input to the recipe::
 
@@ -81,4 +81,35 @@ You can also tell Stimela to scatter a loop over a number of worker processes, a
 
 This will run up to 16 iterations of the loop concurrently. Use ``scatter: -1`` to run all iterations concurrently. Single-node users beware, this is an easy way to overload a node! However, with the Kubernetes backend or the Slurm backend wrapper, this can very effectively leverage a cluster.
 
+Accumulating loop outputs
+-------------------------
 
+Occasionally, you'll want your for-loop recipe to return an output that consists of a list of values from each iteration. To do this, you need to (a) formally declare the output in the recipe schema with a ``dtype`` of ``List[T]``, where ``T`` is the correct element type, and (b) specify how the element values are computed. The latter is done by adding an ``output_elements`` clause to the loop definition. This specifies how the elements are evaluated, using :ref:`subst`. The results are accumulated into a list and assigned to the corresponding recipe output::
+
+    my-recipe:
+        inputs:
+            image-list: List[File]
+        outputs:
+            images:
+                dtype: List[File]
+                info: "list of output images produced by each iteration"
+            scores:
+                dtype: List[float]
+                info: "list of metrics from each iteration, rescaled by 2"
+        for_loop:
+            var: image
+            over: image-list
+            output_elements:
+                images: =steps.process.output-img
+                scores: =steps.evaluate.metric * 2
+        steps:
+            process:
+                cab: process-image
+                params:
+                    img: =recipe.image
+            evaluate:
+                cab: evaluate-metric
+                params:
+                    img: =steps.process.output-img
+
+This also works with scattered loops -- results are collected in the original iteration order regardless of which worker completes first.

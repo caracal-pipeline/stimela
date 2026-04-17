@@ -40,7 +40,7 @@ recipe:
 
   inputs:
     foo:
-      default: "{current.nested.bar}"
+      default: "{recipe.nested.bar}"
 
   assign:
     nested:

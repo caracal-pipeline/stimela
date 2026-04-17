@@ -1,0 +1,42 @@
+cabs:
+  echo:
+    command: echo
+    inputs:
+      msg:
+        dtype: str
+
+circular:
+  inputs:
+    circular:
+      default: 0
+
+  steps:
+    s1:
+      cab: echo
+      params: 
+        msg: =current.msg
+
+outer:
+  inputs:
+    ncpu:
+      dtype: int
+      default: 1
+
+  steps:
+    inner-1:
+      recipe: inner
+      params:
+        ncpu: =recipe.ncpu
+
+inner:
+  inputs:
+    ncpu:
+      dtype: int
+
+  steps:
+    echo-1:
+      cab: echo
+      params:
+        msg: =recipe.ncpu
+
+

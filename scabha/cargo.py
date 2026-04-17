@@ -152,8 +152,8 @@ class Parameter(object):
     tags: List[str] = EmptyListDefault()
 
     # If True, parameter is required. None/False, not required.
-    # For outputs, required=False means missing output will not be treated as an error.
-    # For aliases, False at recipe level will override the target setting, while the default of None won't.
+    # For aliases, False at recipe level can be added to override the target setting,
+    # while the default of None won't override.
     required: Optional[bool] = None
 
     # restrict value choices, i.e. making for an option-type parameter
@@ -326,6 +326,9 @@ class Cargo(object):
 
     dynamic_schema: Optional[str] = None  # function to call to augment inputs/outputs dynamically
 
+    preamble: Dict[str, Any] = EmptyDictDefault()  # Dict[str, List[str]] of expressions evaluated before running
+    epilogue: Dict[str, Any] = EmptyDictDefault()  # Dict[str, List[str]] of expressions evaluated after running
+
     @staticmethod
     def flatten_schemas(io_dest, io, label, prefix=""):
         for name, value in io.items():
@@ -422,6 +425,12 @@ class Cargo(object):
                 raise DefinitionError(f"{modulename}.{funcname} is not a valid callable")
             # make backup copy of original inputs/outputs
             self._original_inputs_outputs = self.inputs.copy(), self.outputs.copy()
+        # check that preamble/epilogue entries are valid (each must be a list of expressions)
+        for section_name in ["preamble", "epilogue"]:
+            section = getattr(self, section_name)
+            for key, value in section.items():
+                if not isinstance(value, (list, ListConfig)):
+                    raise DefinitionError(f"{section_name}.{key} must be a list of expressions")
 
     @property
     def inputs_outputs(self):
@@ -456,8 +465,10 @@ class Cargo(object):
         if self._dyn_schema:
             # delete implicit parameters, since they may have come from older version of schema
             params = self._delete_implicit_parameters(params, subst)
-            # get rid of unsets
-            params = {key: value for key, value in params.items() if value is not UNSET and type(value) is not UNSET}
+            # get rid of unset and unresolved parameters
+            params = {
+                key: value for key, value in params.items() if value is not UNSET and not isinstance(value, Unresolved)
+            }
             try:
                 self.inputs, self.outputs = self._dyn_schema(params, *self._original_inputs_outputs)
             except Exception:
@@ -470,7 +481,7 @@ class Cargo(object):
                         try:
                             schema = OmegaConf.unsafe_merge(ParameterSchema.copy(), schema)
                         except Exception as exc:
-                            raise SchemaError("error in dynamic schema for parameter 'name'", exc)
+                            raise SchemaError(f"error in dynamic schema for parameter '{name}'", exc)
                         io[name] = Parameter(**schema)
             # new outputs may have been added
             for schema in self.outputs.values():
@@ -504,9 +515,7 @@ class Cargo(object):
                 if current:
                     current[name] = schema.implicit
 
-    def prevalidate(
-        self, params: Optional[Dict[str, Any]], subst: Optional[SubstitutionNS] = None, backend=None, root=False
-    ):
+    def prevalidate(self, params: Optional[Dict[str, Any]], subst: SubstitutionNS, backend=None, root=False):
         """Does pre-validation.
         No parameter substitution is done, but will check for missing params and such.
         A dynamic schema, if defined, is applied at this point."""
@@ -529,13 +538,12 @@ class Cargo(object):
             check_outputs_exist=False,
             create_dirs=False,
             ignore_subst_errors=True,
+            log=self.log,
         )
 
         return params
 
-    def validate_inputs(
-        self, params: Dict[str, Any], subst: Optional[SubstitutionNS] = None, loosely=False, remote_fs=False
-    ):
+    def validate_inputs(self, params: Dict[str, Any], subst: SubstitutionNS, loosely=False, remote_fs=False):
         """Validates inputs.
         If loosely is True, then doesn't check for required parameters, and doesn't check for files to exist etc.
         This is used when skipping a step.
@@ -545,9 +553,12 @@ class Cargo(object):
         self._resolve_implicit_parameters(params, subst)
 
         # check inputs
+        true_inputs = self.inputs.copy()
+        true_inputs.update({name: schema for name, schema in self.outputs.items() if schema.is_named_output})
+
         params1 = validate_parameters(
             params,
-            self.inputs,
+            true_inputs,
             defaults=self.defaults,
             subst=subst,
             fqname=self.fqname,
@@ -556,27 +567,30 @@ class Cargo(object):
             check_inputs_exist=not loosely and not remote_fs,
             check_outputs_exist=False,
             create_dirs=not loosely and not remote_fs,
+            log=self.log,
         )
         # check outputs
-        params1.update(
-            **validate_parameters(
-                params,
-                self.outputs,
-                defaults=self.defaults,
-                subst=subst,
-                fqname=self.fqname,
-                check_unknowns=False,
-                check_required=False,
-                check_inputs_exist=not loosely and not remote_fs,
-                check_outputs_exist=False,
-                create_dirs=not loosely and not remote_fs,
-            )
+        true_outputs = {name: schema for name, schema in self.outputs.items() if not schema.is_named_output}
+        params2 = validate_parameters(
+            params,
+            true_outputs,
+            defaults=self.defaults,
+            subst=subst,
+            fqname=self.fqname,
+            ignore_subst_errors=True,
+            check_unknowns=False,
+            check_required=False,
+            check_inputs_exist=not loosely and not remote_fs,
+            check_outputs_exist=False,
+            create_dirs=not loosely and not remote_fs,
+            log=self.log,
         )
+        # update with outputs that weren't substitution errors, because
+        # we don't want (ignored) substitution errors to be baked in
+        params1.update({name: value for name, value in params2.items() if type(value) is not Unresolved})
         return params1
 
-    def validate_outputs(
-        self, params: Dict[str, Any], subst: Optional[SubstitutionNS] = None, loosely=False, remote_fs=False
-    ):
+    def validate_outputs(self, params: Dict[str, Any], subst: SubstitutionNS, loosely=False, remote_fs=False):
         """Validates outputs. Parameter substitution is done.
         If loosely is True, then doesn't check for required parameters, and doesn't check for files to exist etc.
         If remote_fs is True, doesn't check files and directories.
@@ -598,6 +612,7 @@ class Cargo(object):
                 check_required=not loosely,
                 check_inputs_exist=not loosely and not remote_fs,
                 check_outputs_exist=not loosely and not remote_fs,
+                log=self.log,
             )
         )
         return params

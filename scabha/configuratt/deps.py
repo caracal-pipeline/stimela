@@ -176,9 +176,8 @@ class ConfigDependencies(object):
                         return True
                 except ImportError:
                     pass
-            elif not dep.missing_parent:
-                if os.path.exists(filename):
-                    return True
+            elif os.path.exists(filename):
+                return True
         return False
 
     # def add_provision_record(self, loc, filename):

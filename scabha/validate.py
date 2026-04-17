@@ -1,6 +1,7 @@
 # ruff: noqa: E731 - ignore assignment of lambda expressions. TODO(JSKenyon): Fix this.
 import dataclasses
 import keyword
+import logging
 import os
 import os.path
 import pathlib
@@ -220,10 +221,19 @@ def maybe_coerce_value(value: Any, dtype: Any, label: str) -> tuple[Any, bool]:
     return value, False
 
 
-def evaluate_and_substitute_object(obj: Any, subst: SubstitutionNS, recursion_level: int = 1, location: List[str] = []):
+def evaluate_and_substitute_object(
+    obj: Any,
+    subst: SubstitutionNS,
+    recursion_level: int = 1,
+    location: List[str] = [],
+    log: Optional[logging.Logger] = None,
+    log_and_remember: Optional[Callable] = None,
+):
     with substitutions_from(subst, raise_errors=True) as context:
-        evaluator = Evaluator(subst, context, location=location, allow_unresolved=False)
-        return evaluator.evaluate_object(obj, raise_substitution_errors=True, recursion_level=recursion_level)
+        evaltor = Evaluator(
+            subst, context, location=location, allow_unresolved=False, log=log, log_and_remember=log_and_remember
+        )
+        return evaltor.evaluate_object(obj, raise_substitution_errors=True, recursion_level=recursion_level)
 
 
 def evaluate_and_substitute(
@@ -233,9 +243,10 @@ def evaluate_and_substitute(
     defaults: Dict[str, Any] = {},
     ignore_subst_errors: bool = False,
     location: List[str] = [],
+    log: Optional[logging.Logger] = None,
 ):
     with substitutions_from(subst, raise_errors=True) as context:
-        evaluator = Evaluator(subst, context, location=location, allow_unresolved=True)
+        evaluator = Evaluator(subst, context, location=location, allow_unresolved=True, log=log)
         inputs = evaluator.evaluate_dict(
             inputs, corresponding_ns=corresponding_ns, defaults=defaults, raise_substitution_errors=False
         )
@@ -263,6 +274,7 @@ def validate_parameters(
     check_outputs_exist=True,
     create_dirs=False,
     ignore_subst_errors=False,
+    log: Optional[logging.Logger] = None,
 ) -> Dict[str, Any]:
     """Validates a dict of parameter values against a given schema
 
@@ -336,6 +348,7 @@ def validate_parameters(
             defaults=all_defaults,
             ignore_subst_errors=ignore_subst_errors,
             location=[fqname],
+            log=log,
         )
 
     # split inputs into unresolved substitutions, and proper inputs
@@ -433,8 +446,8 @@ def validate_parameters(
 
             # check for existence of all files in list, if needed
             if must_exist:
-                if not files:
-                    raise ParameterValidationError(f"'{mkname(name)}': file(s) don't exist")
+                if not files and not schema.is_file_list_type:
+                    raise ParameterValidationError(f"'{mkname(name)}': file doesn't exist")
                 not_exists = [uri.path for uri in files if not uri.remote and not os.path.exists(uri.path)]
                 if not_exists:
                     raise ParameterValidationError(f"'{mkname(name)}': {','.join(not_exists)} doesn't exist")

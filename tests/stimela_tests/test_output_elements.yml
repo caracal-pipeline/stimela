@@ -1,0 +1,63 @@
+cabs:
+  echo:
+    command: echo
+    inputs:
+      x:
+        dtype: int
+        required: true
+        policies:
+          positional: true
+      y:
+        dtype: int
+        required: true
+        policies:
+          positional: true
+
+opts:
+  log:
+    dir: test-logs/logs-{config.run.datetime}
+    nest: 3
+    symlink: logs
+
+recipe:
+  name: "loop with output_elements"
+  info: "test recipe that loops and accumulates output_elements"
+
+  inputs:
+    values:
+      dtype: List[int]
+      required: true
+      default: [1, 2, 3]
+
+  outputs:
+    sums:
+      dtype: List[int]
+      info: "list of x+y values from each iteration"
+    products:
+      dtype: List[int]
+      info: "list of x*y values from each iteration"
+    message:
+      dtype: str
+      implicit: "sums: {current.sums}, products: {current.products}"
+
+  assign:
+    y: =recipe.x * 2
+
+  for_loop:
+    var: x
+    over: values
+    output_elements:
+      sums: =steps.compute.x + recipe.y
+      products: =steps.compute.x * recipe.y
+
+  steps:
+    compute:
+      cab: echo
+      params:
+        x: =recipe.x
+        y: =recipe.y
+
+  epilogue:
+    log-outputs:
+      - =LOG("results to follow")
+      - =LOG(current.message)

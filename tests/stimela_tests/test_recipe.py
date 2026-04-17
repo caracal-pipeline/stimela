@@ -26,9 +26,7 @@ def run(command):
 
 
 def verify_output(output, *regexes):
-    """Returns True if the regexes appear in sequence in the output.
-
-    Given an output string, returns True if the regexes appear in order in
+    """Given an output string, returns the number of times the regexes appear in order in
     the output string, with any number of characters between the regex strings.
 
     Args:
@@ -41,12 +39,13 @@ def verify_output(output, *regexes):
     # on terminal width when performing these tests.
     output = re.sub(r"\s+", " ", output)
     # Match the regex strings with any number of characters between them.
-    regex = "(.*)".join(regexes)
-    if not re.search(regex, output):
+    regex = "(.*?)".join(regexes)
+    count = len(re.findall(regex, output))
+    if not count:
         print("Error, expected regex pattern did not appear in the output:")
         print(f"  {regex}")
-        return False
-    return True
+        return 0
+    return count
 
 
 def test_test_aliasing():
@@ -122,6 +121,33 @@ def test_test_loop_recipe():
     print("===== expecting no errors now =====")
     retcode = os.system("stimela -v -b native exec test_loop_recipe.yml loop_recipe")
     assert retcode == 0
+
+
+def test_issue527_1():
+    """Test that circular references are ignored in prevalidation"""
+    print("===== expecting no errors =====")
+    retcode, output = run("stimela -v -b native run test_issue527.yml outer")
+    assert retcode == 0
+    print(output)
+    assert verify_output(output, "recipe 'outer' executed successfully")
+
+
+def test_issue527_2():
+    """Test that circular references are caught in validation"""
+    print("===== expecting an error =====")
+    retcode, output = run("stimela -v -b native run test_issue527.yml circular")
+    assert retcode == 1
+    print(output)
+    assert verify_output(output, "self-referencing formula or substitution")
+
+
+def test_issue527_3():
+    """Test that circular references are caught in validation"""
+    print("===== expecting an error =====")
+    retcode, output = run("stimela -v -b native run test_issue527.yml circular circular==recipe.circular")
+    assert retcode == 1
+    print(output)
+    assert verify_output(output, "invalid inputs")
 
 
 def test_scatter():
