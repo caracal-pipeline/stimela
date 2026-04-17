@@ -128,10 +128,45 @@ def coerce_scalar(value: Any, dtype: Any, label: str) -> Any:
         raise TypeError(f"{label}: failed to coerce value {value!r} to {typename}") from error
 
 
+def coerce_homogeneous_sequence(
+    value: Any,
+    elem_dtype: Any,
+    label: str,
+    target_type: type,
+) -> tuple[Any, bool]:
+    """Coerce each element of a sequence to the same dtype."""
+    changed = False
+    coerced = []
+    for idx, elem in enumerate(value):
+        new_elem, elem_changed = maybe_coerce_value(elem, elem_dtype, f"{label}[{idx}]")
+        coerced.append(new_elem)
+        changed = changed or elem_changed
+    return target_type(coerced), changed
+
+
+def coerce_heterogeneous_tuple(
+    value: Any,
+    elem_dtypes: tuple[type, ...],
+    label: str,
+) -> tuple[Any, bool]:
+    """Coerce each element of a fixed-length tuple to its positional dtype."""
+    if len(value) != len(elem_dtypes):
+        raise TypeError(f"{label}: expected {len(elem_dtypes)} elements, got {len(value)}")
+    changed = False
+    coerced = []
+    for idx, (elem, edtype) in enumerate(zip(value, elem_dtypes)):
+        new_elem, elem_changed = maybe_coerce_value(elem, edtype, f"{label}[{idx}]")
+        coerced.append(new_elem)
+        changed = changed or elem_changed
+    return tuple(coerced), changed
+
+
 def maybe_coerce_value(value: Any, dtype: Any, label: str) -> tuple[Any, bool]:
     """Attempt to coerce primitive and container values prior to validation."""
 
     origin = get_origin(dtype)
+    args = get_args(dtype)
+
     if origin is None:
         if is_any_dtype(dtype):
             return value, False
@@ -140,19 +175,32 @@ def maybe_coerce_value(value: Any, dtype: Any, label: str) -> tuple[Any, bool]:
             return coerced, coerced is not value
         return value, False
 
-    # Handle typing.List[foo] and typing.Tuple[foo]
-    if origin in (list, List, tuple, Tuple):
-        elem_dtype = get_args(dtype)[0] if get_args(dtype) else Any
-        if isinstance(value, (list, tuple)):
-            changed = False
-            coerced_list = []
-            for idx, elem in enumerate(value):
-                coerced_elem, elem_changed = maybe_coerce_value(elem, elem_dtype, f"{label}[{idx}]")
-                coerced_list.append(coerced_elem)
-                changed = changed or elem_changed
-            target = list if origin in (list, List) else tuple
-            coerced_value = target(coerced_list)
-            return coerced_value, changed
+    # Handle typing.List[foo]
+    # NOTE(Brian): This is expecting homogeneous lists. Not sure if this is
+    # expected behaviour to have them homogeneous.
+    if origin in (list, List):
+        if not isinstance(value, (list, tuple)):
+            return value, False
+        elem_dtype = args[0] if args else Any
+        return coerce_homogeneous_sequence(value, elem_dtype, label, list)
+
+    # Handle typing.Tuple[foo, bar, ...] and typing.Tuple[foo, bar, baz]
+    # NOTE(Brian): This is expecting heterogeneous or homogeneous tuples.
+    # Not sure if this is expected behaviour to have them this way.
+    if origin in (tuple, Tuple):
+        if not isinstance(value, (list, tuple)):
+            return value, False
+
+        if not args or args == ((),):
+            # Bare Tuple with no type info
+            return tuple(value), False
+
+        if len(args) == 2 and args[1] is Ellipsis:
+            # Tuple[int, ...] - variable-length homogeneous
+            return coerce_homogeneous_sequence(value, args[0], label, tuple)
+
+        # Tuple[int, str, bool] - fixed-length heterogeneous
+        return coerce_heterogeneous_tuple(value, args, label)
 
     # Handle typing.Dict[key, val]
     if origin in (dict, Dict):
@@ -174,8 +222,8 @@ def maybe_coerce_value(value: Any, dtype: Any, label: str) -> tuple[Any, bool]:
 
 def evaluate_and_substitute_object(obj: Any, subst: SubstitutionNS, recursion_level: int = 1, location: List[str] = []):
     with substitutions_from(subst, raise_errors=True) as context:
-        evalutor = Evaluator(subst, context, location=location, allow_unresolved=False)
-        return evalutor.evaluate_object(obj, raise_substitution_errors=True, recursion_level=recursion_level)
+        evaluator = Evaluator(subst, context, location=location, allow_unresolved=False)
+        return evaluator.evaluate_object(obj, raise_substitution_errors=True, recursion_level=recursion_level)
 
 
 def evaluate_and_substitute(
@@ -187,8 +235,8 @@ def evaluate_and_substitute(
     location: List[str] = [],
 ):
     with substitutions_from(subst, raise_errors=True) as context:
-        evaltor = Evaluator(subst, context, location=location, allow_unresolved=True)
-        inputs = evaltor.evaluate_dict(
+        evaluator = Evaluator(subst, context, location=location, allow_unresolved=True)
+        inputs = evaluator.evaluate_dict(
             inputs, corresponding_ns=corresponding_ns, defaults=defaults, raise_substitution_errors=False
         )
         # collect errors
