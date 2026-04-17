@@ -8,7 +8,6 @@ import pathlib
 import re
 from collections import OrderedDict
 from collections.abc import Callable
-from types import NoneType
 from typing import Any, Dict, List, Optional, Tuple, get_args, get_origin
 
 import pydantic
@@ -20,6 +19,9 @@ from scabha.basetypes import MS, UNSET, URI, Directory, File, Unresolved
 from scabha.evaluator import Evaluator
 from scabha.exceptions import Error, ParameterValidationError, SubstitutionErrorList
 from scabha.substitutions import SubstitutionNS, substitutions_from
+
+# types.NoneType was added in Python 3.10; fall back to type(None) for 3.9 compatibility
+NoneType = type(None)
 
 COERCERS: dict[tuple[type, type], Callable[[Any], Any]] = {}
 BOOL_TRUTHY = {"true", "1", "1.0"}
@@ -230,10 +232,10 @@ def evaluate_and_substitute_object(
     log_and_remember: Optional[Callable] = None,
 ):
     with substitutions_from(subst, raise_errors=True) as context:
-        evaltor = Evaluator(
+        evaluator = Evaluator(
             subst, context, location=location, allow_unresolved=False, log=log, log_and_remember=log_and_remember
         )
-        return evaltor.evaluate_object(obj, raise_substitution_errors=True, recursion_level=recursion_level)
+        return evaluator.evaluate_object(obj, raise_substitution_errors=True, recursion_level=recursion_level)
 
 
 def evaluate_and_substitute(
