@@ -8,9 +8,10 @@ flip a specific assertion and be recorded in plan/migrate_pydantic.md.
 
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+import pydantic
 import pytest
 
-from scabha.basetypes import UNSET, Directory, File, Unresolved
+from scabha.basetypes import UNSET, URI, Directory, File, Unresolved
 from scabha.cargo import Parameter
 from scabha.exceptions import ParameterValidationError, ScabhaBaseException
 from scabha.validate import validate_parameters
@@ -300,5 +301,47 @@ def test_typing_imports_stable():
         assert p._dtype is not None, f"dtype {dtype!r} failed to resolve"
 
 
+# --- pydantic v2 URI core-schema hook ---------------------------------------
+
+
+class TestPydanticCoreSchema:
+    """Verify the URI __get_pydantic_core_schema__ hook and its inheritance."""
+
+    def test_file_param_roundtrips(self, tmp_path):
+        p = tmp_path / "x.txt"
+        p.touch()
+        out = run_validate({"x": str(p)}, {"x": make_schema("File")}, check_inputs_exist=True)
+        assert out["x"] == str(p)
+
+    def test_type_adapter_validates_file_from_string(self):
+        adapter = pydantic.TypeAdapter(File)
+        out = adapter.validate_python("some/path")
+        assert type(out) is File
+        assert isinstance(out, URI)
+        assert str(out) == "some/path"
+
+    def test_type_adapter_directory_subclass_preserved(self):
+        """Hook inheritance: Directory schema constructs Directory, not File or URI."""
+        out = pydantic.TypeAdapter(Directory).validate_python("some/dir")
+        assert type(out) is Directory
+
+    def test_type_adapter_list_of_files(self):
+        out = pydantic.TypeAdapter(List[File]).validate_python(["a", "b"])
+        assert all(type(f) is File for f in out)
+        assert [str(f) for f in out] == ["a", "b"]
+
+    def test_type_adapter_serializes_file_as_str(self):
+        adapter = pydantic.TypeAdapter(File)
+        f = File("/tmp/x")
+        assert adapter.dump_python(f) == str(f)
+
+    def test_validation_error_loc_handles_list_indices(self):
+        """v2 ValidationError loc tuples can contain int indices for list
+        elements. Our error unpacking must handle that without crashing."""
+        with pytest.raises(ParameterValidationError) as exc_info:
+            run_validate({"xs": ["1", "bad", "3"]}, {"xs": make_schema("List[int]")})
+        assert "xs" in str(exc_info.value)
+
+
 # Re-export type imports so linters don't complain they're unused.
-_ = (Any, Dict, List, Optional, Tuple, Union, Directory, File)
+_ = (Any, Dict, List, Optional, Tuple, Union, Directory, File, URI)

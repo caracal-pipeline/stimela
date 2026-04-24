@@ -4,7 +4,7 @@ Working branch: `pydanticv2`. Plan: `plan/migrate_pydantic.md`.
 
 ## Current state
 
-**Step 6 — Targeted pydantic v2 tests:** Next.
+**Ready for Step 8 (live TRON smoke test, requires user) and Step 9 (PR).**
 
 ## Step status
 
@@ -16,10 +16,10 @@ Working branch: `pydanticv2`. Plan: `plan/migrate_pydantic.md`.
 | 3 | URI `__get_pydantic_core_schema__`      | DONE   | inherits to File/Directory/MS |
 | 4 | Migrate `scabha/validate.py`            | DONE   | ConfigDict(strict=False, arbitrary_types_allowed=True, coerce_numbers_to_str=True) |
 | 5 | Characterisation tests green on v2      | DONE   | 41/41 pass |
-| 6 | Targeted pydantic v2 tests              | TODO   |  |
-| 7 | Full suite + ruff clean                 | DONE   | 117/117 pass, ruff clean |
-| 8 | Live TRON/breifast smoke test           | TODO   |  |
-| 9 | PR opened                               | TODO   |  |
+| 6 | Targeted pydantic v2 tests              | DONE   | 6 more tests (TypeAdapter, loc indices) |
+| 7 | Full suite + ruff clean                 | DONE   | 123/123 pass, ruff clean |
+| 8 | Live TRON/breifast smoke test           | USER   | requires `/net/janis/home/kenyon/testing/breifast` access |
+| 9 | PR opened                               | USER   | branch ready; review diff before pushing |
 
 ## Pick-up-where-we-left-off log
 
@@ -33,6 +33,26 @@ When resuming, first:
 ### Entries
 
 _(Newest first. Prepend a new block each time you stop.)_
+
+---
+
+#### Step 6 — v2-specific tests
+
+- Added `TestPydanticCoreSchema` class in
+  `tests/scabha_tests/test_validate.py` with 6 tests exercising:
+  `File` param round-trip; `TypeAdapter(File).validate_python` returns
+  a concrete `File` instance (and it's also a `URI`); `Directory` hook
+  inheritance preserves subclass identity; `TypeAdapter(List[File])`
+  constructs per-element `File` instances; serialisation via
+  `adapter.dump_python` returns the string form; v2 `ValidationError`
+  loc tuples with integer list indices are handled by our existing
+  error-unpacking code without crashing.
+- Cleaned up imports (moved `URI`, `pydantic` to the module header).
+- Full suite: **123/123 pass**. Ruff clean.
+- **Next action:** Step 8 is a live TRON smoke test against breifast
+  infrastructure at `/net/janis/home/kenyon/testing/breifast`, which
+  requires user access. Step 9 is opening the PR — branch is ready for
+  review.
 
 ---
 
