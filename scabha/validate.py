@@ -7,7 +7,7 @@ import os.path
 import pathlib
 import re
 from collections import OrderedDict
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import pydantic
 import pydantic.dataclasses
@@ -21,6 +21,15 @@ from .evaluator import Evaluator
 from .exceptions import Error, ParameterValidationError, SubstitutionErrorList
 from .substitutions import SubstitutionNS, substitutions_from
 
+# Pydantic v2 config: lax coercion (str->int, int->float etc.), allow arbitrary
+# types (Unresolved, URI-family via their schema hooks), and coerce numbers to
+# str. This matches pydantic v1's default behaviour as closely as v2 allows.
+_VALIDATION_CONFIG = pydantic.ConfigDict(
+    strict=False,
+    arbitrary_types_allowed=True,
+    coerce_numbers_to_str=True,
+)
+
 
 def join_quote(values):
     return "'" + "', '".join(values) + "'" if values else ""
@@ -32,7 +41,7 @@ def evaluate_and_substitute_object(
     recursion_level: int = 1,
     location: List[str] = [],
     log: Optional[logging.Logger] = None,
-    log_and_remember: Optional[callable] = None,
+    log_and_remember: Optional[Callable] = None,
 ):
     with substitutions_from(subst, raise_errors=True) as context:
         evaltor = Evaluator(
@@ -205,7 +214,7 @@ def validate_parameters(
     dcls = dataclasses.make_dataclass("Parameters", fields)
 
     # convert this to a pydantic dataclass which does validation
-    pcls = pydantic.dataclasses.dataclass(dcls)
+    pcls = pydantic.dataclasses.dataclass(dcls, config=_VALIDATION_CONFIG)
 
     # check Files etc.
     for name, value in list(inputs.items()):
@@ -225,8 +234,9 @@ def validate_parameters(
             must_exist = check_outputs_exist and schema.must_exist
 
         if schema.is_file_type or schema.is_file_list_type:
-            # match to existing file(s)
-            if type(value) is str:
+            # match to existing file(s). URI/File/Directory/MS are str subclasses,
+            # so isinstance covers both raw strings and pydantic-constructed instances.
+            if isinstance(value, str):
                 # try to interpret string as a formatted list (a list substituted in would come out like that)
                 try:
                     files = yaml.safe_load(value)

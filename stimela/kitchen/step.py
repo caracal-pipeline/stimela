@@ -623,7 +623,7 @@ class Step:
                             else:
                                 continue
                             for filename in values:
-                                if type(filename) is str and os.path.exists(filename):
+                                if isinstance(filename, str) and os.path.exists(filename):
                                     mtime = os.path.getmtime(filename)
                                     if mtime > max_mtime:
                                         max_mtime = mtime
@@ -660,7 +660,8 @@ class Step:
                         messages = []
                         # ok, we have a list of files to check
                         for num, value in enumerate(filenames):
-                            if type(value) is not str:  # skip funny values that aren't strings
+                            # URI/File/Directory/MS are str subclasses; accept them.
+                            if not isinstance(value, str):  # skip funny values that aren't strings
                                 continue
                             # form up label for messages
                             label = f"{name}[{num}]" if schema.is_file_list_type else name
@@ -706,7 +707,7 @@ class Step:
                     for name, schema in self.outputs.items():
                         if name in params and schema.path_policies.remove_if_exists and schema.is_file_type:
                             path = params[name]
-                            if type(path) is str and os.path.exists(path):
+                            if isinstance(path, str) and os.path.exists(path):
                                 if os.path.isdir(path) and not os.path.islink(path):
                                     shutil.rmtree(path)
                                 else:

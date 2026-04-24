@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, List, Union, get_args, get_origin
 
 import uritools
+from pydantic_core import core_schema
 from typeguard import (
     TypeCheckerCallable,
     TypeCheckError,
@@ -115,6 +116,16 @@ class URI(str):
 
     def __repr__(self):
         return self.full_uri
+
+    @classmethod
+    def __get_pydantic_core_schema__(cls, source_type, handler):
+        # Accept any str, then construct the concrete URI subclass from it.
+        # Inherited as-is by File, Directory, MS - `cls` binds to the subclass.
+        return core_schema.no_info_after_validator_function(
+            cls,
+            core_schema.str_schema(),
+            serialization=core_schema.plain_serializer_function_ser_schema(str),
+        )
 
 
 class File(URI):
