@@ -159,6 +159,37 @@ class TestContainers:
         assert out["x"] == {"a": 1}
 
 
+class TestNestedDtypes:
+    """Deeply nested Union / List / Tuple from real-world schemas (see PR #540 discussion).
+
+    Pins that pydantic v2 recursively coerces through arbitrary nesting and
+    that the two Union branches discriminate on tuple length correctly.
+    """
+
+    NESTED = (
+        "Union["
+        "List[Tuple[Union[int, float], Union[int, float], Union[int, float]]], "
+        "List[Tuple[Union[int, float], Union[int, float]]]"
+        "]"
+    )
+
+    def test_nested_3d_all_int(self):
+        out = run_validate({"b": [[1, 2, 3], [4, 5, 6]]}, {"b": make_schema(self.NESTED)})
+        assert out["b"] == [(1, 2, 3), (4, 5, 6)]
+
+    def test_nested_2d_mixed_int_float(self):
+        out = run_validate({"b": [[1, 2.5], [3.0, 4]]}, {"b": make_schema(self.NESTED)})
+        assert out["b"] == [(1, 2.5), (3.0, 4)]
+
+    def test_nested_coerces_str_to_numeric_deep(self):
+        out = run_validate({"b": [["1", 2, 3]]}, {"b": make_schema(self.NESTED)})
+        assert out["b"] == [(1, 2, 3)]
+
+    def test_nested_rejects_4d_basis(self):
+        with pytest.raises(ParameterValidationError):
+            run_validate({"b": [[1, 2, 3, 4]]}, {"b": make_schema(self.NESTED)})
+
+
 # --- File / Directory / URI -------------------------------------------------
 
 
@@ -172,6 +203,9 @@ class TestFileTypes:
             check_inputs_exist=True,
         )
         assert out["x"] == str(p)
+        # pydantic's URI core-schema hook constructs the concrete subclass.
+        # Asserting exact type catches regressions to plain str.
+        assert type(out["x"]) is File
 
     def test_file_missing_raises_when_must_exist(self, tmp_path):
         with pytest.raises(ParameterValidationError):
@@ -192,6 +226,7 @@ class TestFileTypes:
             check_inputs_exist=True,
         )
         assert out["x"] == [str(p1), str(p2)]
+        assert all(type(elem) is File for elem in out["x"])
 
     def test_directory_type(self, tmp_path):
         out = run_validate(
@@ -200,6 +235,7 @@ class TestFileTypes:
             check_inputs_exist=True,
         )
         assert out["x"] == str(tmp_path)
+        assert type(out["x"]) is Directory
 
 
 # --- Unresolved / UNSET sentinels -------------------------------------------
