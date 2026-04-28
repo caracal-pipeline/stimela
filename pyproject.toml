@@ -14,11 +14,11 @@ dependencies = [
     "munch>=2.5.0,<3",
     "python-benedict>=0.34.1,<0.35",
     "networkx>=3.0.0",
-    "scabha @ /home/sphemakh/work/softdev/scabha" # Rremove when divorce is complete
+    "scabha @ git+https://github.com/caracal-pipeline/scabha.git@main" # Remove when divorce is complete
 ]
 
 [tool.hatch.metadata]
-allow-direct-references = true
+allow-direct-references = true # Remove when divorce is complete
 
 
 [project.scripts]
