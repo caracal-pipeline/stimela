@@ -1,5 +1,0 @@
-test:
-  a:
-    dtype: List[int]
-    default: [1,2]
-    

@@ -10,7 +10,7 @@ from typing import Any, Dict, Optional
 from omegaconf import OmegaConf
 
 import stimela
-from scabha.cab_utils import CAB_OUTPUT_PREFIX
+from stimela.utils.cab_utils import CAB_OUTPUT_PREFIX
 from scabha.dataclass_utils import merge_dataclass_instances
 from scabha.exceptions import SubstitutionError
 from scabha.substitutions import substitutions_from
@@ -300,7 +300,7 @@ import sys, json
             name for name, schema in cab.outputs.items() if not schema.is_named_output and not schema.implicit
         ]
         if pass_outputs:
-            post_command_str += "from scabha.cab_utils import yield_output\n"
+            post_command_str += "from stimela.utils.cab_utils import yield_output\n"
             if self.output_vars:
                 for name in pass_outputs:
                     var_name = name.replace("-", "_").replace(".", "__")

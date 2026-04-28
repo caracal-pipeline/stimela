@@ -47,7 +47,7 @@ cabs:
 
   test_callable4:
     command: |
-      from scabha.cab_utils import yield_output
+      from stimela.utils.cab_utils import yield_output
       print("a is {current.a} and b is {current.b}")
       yield_output(x={current.a}-2)
       yield_output(y=str({current.a}) + str("{current.b}"))
