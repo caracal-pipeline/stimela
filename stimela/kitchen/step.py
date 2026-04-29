@@ -318,7 +318,7 @@ class Step:
             self.cargo.apply_dynamic_schemas(params, subst)
             # will prevalidate again below based on these updated schemas
         # validate cab or recipe
-        params = self.validated_params = self.cargo.prevalidate(params, subst, root=root)
+        params = self.validated_params = self.cargo.prevalidate(params, subst, backend=backend, root=root)
         # add missing outputs
         for name, schema in self.cargo.outputs.items():
             if name not in params and schema.required and not schema.is_named_output:
