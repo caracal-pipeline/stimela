@@ -18,9 +18,10 @@ from stimela.backends import resolve_image_name
 from stimela.exceptions import CabValidationError
 from stimela.kitchen import wranglers
 from stimela.kitchen.cab import Cab
-from stimela.utils.cab_utils import CAB_OUTPUT_PREFIX
 
 from . import _BaseFlavour, _CallableFlavour
+
+CAB_OUTPUT_PREFIX = "### YIELDING CAB OUTPUT ## "
 
 
 def form_python_function_call(function: str, cab: Cab, params: Dict[str, Any]):
@@ -299,8 +300,8 @@ import sys, json
         pass_outputs = [
             name for name, schema in cab.outputs.items() if not schema.is_named_output and not schema.implicit
         ]
-        if pass_outputs:
-            post_command_str += "from stimela.utils.cab_utils import yield_output\n"
+        if pass_outputs and self.output_vars:
+            post_command_str += "def yield_output(**kw):\n" + f"  print('{CAB_OUTPUT_PREFIX}' + json.dumps(kw))\n"
             if self.output_vars:
                 for name in pass_outputs:
                     var_name = name.replace("-", "_").replace(".", "__")
