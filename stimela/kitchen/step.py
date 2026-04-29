@@ -9,16 +9,16 @@ from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+import scabha.exceptions
 from omegaconf import DictConfig, ListConfig, OmegaConf
 from omegaconf.errors import OmegaConfBaseException
 from rich.markup import escape
-
-import scabha.exceptions
-import stimela
 from scabha.basetypes import UNSET, Placeholder, SkippedOutput
 from scabha.exceptions import AbortError, SubstitutionError, SubstitutionErrorList
 from scabha.substitutions import SubstitutionNS
 from scabha.validate import Unresolved, evaluate_and_substitute_object, join_quote
+
+import stimela
 from stimela import log_exception, stimelogging, task_stats
 from stimela.backends import StimelaBackendSchema, runner
 from stimela.config import EmptyDictDefault, EmptyListDefault

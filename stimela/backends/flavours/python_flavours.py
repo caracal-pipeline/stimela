@@ -8,17 +8,17 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 from omegaconf import OmegaConf
-
-import stimela
-from stimela.utils.cab_utils import CAB_OUTPUT_PREFIX
 from scabha.dataclass_utils import merge_dataclass_instances
 from scabha.exceptions import SubstitutionError
 from scabha.substitutions import substitutions_from
+
+import stimela
 from stimela import CONFIG
 from stimela.backends import resolve_image_name
 from stimela.exceptions import CabValidationError
 from stimela.kitchen import wranglers
 from stimela.kitchen.cab import Cab
+from stimela.utils.cab_utils import CAB_OUTPUT_PREFIX
 
 from . import _BaseFlavour, _CallableFlavour
 

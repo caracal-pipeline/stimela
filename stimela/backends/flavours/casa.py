@@ -3,10 +3,11 @@ import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-import stimela
 from scabha.basetypes import EmptyListDefault
 from scabha.exceptions import SubstitutionError
 from scabha.substitutions import substitutions_from
+
+import stimela
 from stimela.kitchen import wranglers
 from stimela.kitchen.cab import Cab
 

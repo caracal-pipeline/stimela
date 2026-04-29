@@ -6,9 +6,9 @@ import click
 from rich import print as rich_print
 from rich.table import Table
 from rich.tree import Tree
+from scabha.cargo import ParameterCategory
 
 import stimela
-from scabha.cargo import ParameterCategory
 from stimela import log_exception, logger
 from stimela.exceptions import CabValidationError, RecipeValidationError
 from stimela.kitchen.cab import Cab

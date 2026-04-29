@@ -11,11 +11,11 @@ import rich.markup
 import yaml
 from omegaconf import MISSING, DictConfig, OmegaConf
 from omegaconf.errors import OmegaConfBaseException
-
 from scabha.basetypes import EmptyClassDefault, EmptyDictDefault, EmptyListDefault
 from scabha.cargo import Cargo, ListOrString, Parameter, ParameterCategory, ParameterPolicies
 from scabha.exceptions import SchemaError
 from scabha.substitutions import substitutions_from
+
 from stimela.backends import StimelaBackendSchema, flavours
 from stimela.exceptions import CabValidationError, StimelaBaseImageError, StimelaCabRuntimeError
 

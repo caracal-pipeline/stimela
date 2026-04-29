@@ -11,11 +11,11 @@ from typing import Any, Dict, List, Optional
 import psutil
 from omegaconf.errors import OmegaConfBaseException
 from omegaconf.omegaconf import OmegaConf
+from scabha import configuratt
+from scabha.basetypes import EmptyClassDefault, EmptyDictDefault, EmptyListDefault
 from yaml.error import YAMLError
 
 import stimela
-from scabha import configuratt
-from scabha.basetypes import EmptyClassDefault, EmptyDictDefault, EmptyListDefault
 from stimela import log_exception
 from stimela.backends import StimelaBackendOptions
 from stimela.exceptions import ConfigError

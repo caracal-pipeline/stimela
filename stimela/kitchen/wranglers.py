@@ -5,8 +5,8 @@ from typing import Optional, Union
 
 import yaml
 from omegaconf import ListConfig
-
 from scabha.cargo import ListOrString
+
 from stimela.exceptions import CabValidationError, StimelaCabOutputError, StimelaCabRuntimeError
 from stimela.stimelogging import FunkyMessage
 

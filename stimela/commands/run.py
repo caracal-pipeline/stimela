@@ -15,15 +15,15 @@ import click
 import yaml
 from benedict import benedict
 from omegaconf.omegaconf import DictConfig, OmegaConf, OmegaConfBaseException
-
-import stimela
-import stimela.backends
-import stimela.config
 from scabha import configuratt
 from scabha.basetypes import UNSET
 from scabha.configuratt.common import IMPLICIT_EXTENSIONS
 from scabha.exceptions import ScabhaBaseException
 from scabha.substitutions import SubstitutionNS
+
+import stimela
+import stimela.backends
+import stimela.config
 from stimela import log_exception, logger, stimelogging, task_stats
 from stimela.config import ConfigExceptionTypes
 from stimela.display.display import display
