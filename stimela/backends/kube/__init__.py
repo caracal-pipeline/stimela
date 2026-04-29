@@ -12,9 +12,9 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 from omegaconf import OmegaConf
+from scabha.basetypes import DictDefault, EmptyClassDefault, EmptyDictDefault, EmptyListDefault, ListDefault
 
 import stimela
-from scabha.basetypes import DictDefault, EmptyClassDefault, EmptyDictDefault, EmptyListDefault, ListDefault
 from stimela.exceptions import BackendError
 
 session_id = secrets.token_hex(8)

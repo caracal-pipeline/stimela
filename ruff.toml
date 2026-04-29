@@ -7,3 +7,7 @@ extend-select = [
     "E501",  # Line length
     "I"      # isort - sort imports
 ]
+
+[lint.isort]
+# scabha is now a separate package, treat it as third-party
+known-third-party = ["scabha"]
