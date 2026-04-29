@@ -17,7 +17,8 @@ dependencies = [
     "omegaconf~=2.1",
     "python-benedict>=0.34.1,<0.35",
     "rich>=13.7.0,<14",
-    "scabha @ git+https://github.com/caracal-pipeline/scabha.git@93b61c1" # Remove when divorce is complete
+    "scabha @ git+https://github.com/caracal-pipeline/scabha.git@93b61c1", # Remove when divorce is complete
+    "psutil>=5.9,<7"
 ]
 
 [tool.hatch.metadata]
