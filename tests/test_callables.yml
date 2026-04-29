@@ -6,7 +6,7 @@ opts:
 
 cabs:
   test_callable:
-    command: stimela_tests.test_callables.callable_function
+    command: tests.test_callables.callable_function
     flavour: 
       kind: python
     inputs:
@@ -16,7 +16,7 @@ cabs:
         dtype: str
 
   test_callable2:
-    command: stimela_tests.test_callables.callable_function
+    command: tests.test_callables.callable_function
     flavour: 
       kind: python
       output: x
@@ -30,7 +30,7 @@ cabs:
         dtype: int
 
   test_callable3:
-    command: stimela_tests.test_callables.callable_function_dict
+    command: tests.test_callables.callable_function_dict
     flavour: 
       kind: python
       output_dict: true

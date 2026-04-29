@@ -31,7 +31,7 @@ cabs:
         required: true
         policies:
           repeat: list
-    dynamic_schema: stimela_tests.example_dynschema.cubical_schema
+    dynamic_schema: tests.example_dynschema.cubical_schema
 
   wsclean:
     image: null
@@ -69,7 +69,7 @@ cabs:
         required: true
 
   test_callable:
-    command: stimela_tests.test_recipe.callable_function
+    command: tests.test_recipe.callable_function
     flavour:
       kind: python
       pre_commands:
