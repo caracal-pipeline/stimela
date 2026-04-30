@@ -56,6 +56,7 @@ class StimelaDisableSkipOptions(object):
 @dataclass
 class StimelaOptions(object):
     backend: StimelaBackendOptions = EmptyClassDefault(StimelaBackendOptions)
+    backend_varieties: Dict[str, Dict] = EmptyDictDefault()
     log: StimelaLogConfig = EmptyClassDefault(StimelaLogConfig)
     ## list of paths to search with _include
     include: List[str] = EmptyListDefault()
