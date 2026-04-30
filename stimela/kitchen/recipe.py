@@ -13,12 +13,12 @@ from typing import Any, Dict, Optional, Tuple, Union, get_origin
 import networkx as nx
 import rich.table
 from omegaconf import DictConfig, ListConfig, OmegaConf
-
-import stimela
 from scabha.basetypes import UNSET, Placeholder
 from scabha.cargo import Cargo, Parameter, ParameterCategory
 from scabha.substitutions import SubstitutionNS
 from scabha.validate import Unresolved, evaluate_and_substitute, evaluate_and_substitute_object
+
+import stimela
 from stimela import backends, log_exception, stimelogging, task_stats
 from stimela.backends import StimelaBackendSchema
 from stimela.config import EmptyDictDefault

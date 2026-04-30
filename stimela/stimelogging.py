@@ -17,7 +17,6 @@ from rich.padding import Padding
 from rich.pretty import Pretty
 from rich.syntax import Syntax
 from rich.tree import Tree
-
 from scabha.exceptions import FormattedTraceback, ScabhaBaseException
 from scabha.substitutions import SubstitutionNS, forgiving_substitutions_from
 

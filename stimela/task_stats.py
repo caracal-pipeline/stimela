@@ -10,8 +10,8 @@ from typing import Callable, List, Optional, OrderedDict, Union
 from omegaconf import OmegaConf
 from rich.table import Table
 from rich.text import Text
-
 from scabha.basetypes import EmptyListDefault
+
 from stimela import stimelogging
 from stimela.display.display import display, rich_console
 from stimela.monitoring import REPORTERS

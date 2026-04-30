@@ -4,9 +4,9 @@ from typing import Any, Dict, Optional
 
 from omegaconf import DictConfig, OmegaConf
 from omegaconf.errors import OmegaConfBaseException
+from scabha.exceptions import ScabhaBaseException
 
 import stimela
-from scabha.exceptions import ScabhaBaseException
 from stimela.exceptions import CabValidationError
 
 

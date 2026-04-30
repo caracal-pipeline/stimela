@@ -9,16 +9,16 @@ from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+import scabha.exceptions
 from omegaconf import DictConfig, ListConfig, OmegaConf
 from omegaconf.errors import OmegaConfBaseException
 from rich.markup import escape
-
-import scabha.exceptions
-import stimela
 from scabha.basetypes import UNSET, Placeholder, SkippedOutput
 from scabha.exceptions import AbortError, SubstitutionError, SubstitutionErrorList
 from scabha.substitutions import SubstitutionNS
 from scabha.validate import Unresolved, evaluate_and_substitute_object, join_quote
+
+import stimela
 from stimela import log_exception, stimelogging, task_stats
 from stimela.backends import StimelaBackendSchema, runner
 from stimela.config import EmptyDictDefault, EmptyListDefault
@@ -318,7 +318,7 @@ class Step:
             self.cargo.apply_dynamic_schemas(params, subst)
             # will prevalidate again below based on these updated schemas
         # validate cab or recipe
-        params = self.validated_params = self.cargo.prevalidate(params, subst, root=root)
+        params = self.validated_params = self.cargo.prevalidate(params, subst, backend=backend, root=root)
         # add missing outputs
         for name, schema in self.cargo.outputs.items():
             if name not in params and schema.required and not schema.is_named_output:
@@ -623,7 +623,7 @@ class Step:
                             else:
                                 continue
                             for filename in values:
-                                if type(filename) is str and os.path.exists(filename):
+                                if isinstance(filename, str) and os.path.exists(filename):
                                     mtime = os.path.getmtime(filename)
                                     if mtime > max_mtime:
                                         max_mtime = mtime
@@ -660,7 +660,8 @@ class Step:
                         messages = []
                         # ok, we have a list of files to check
                         for num, value in enumerate(filenames):
-                            if type(value) is not str:  # skip funny values that aren't strings
+                            # URI/File/Directory/MS are str subclasses; accept them.
+                            if not isinstance(value, str):  # skip funny values that aren't strings
                                 continue
                             # form up label for messages
                             label = f"{name}[{num}]" if schema.is_file_list_type else name
@@ -706,7 +707,7 @@ class Step:
                     for name, schema in self.outputs.items():
                         if name in params and schema.path_policies.remove_if_exists and schema.is_file_type:
                             path = params[name]
-                            if type(path) is str and os.path.exists(path):
+                            if isinstance(path, str) and os.path.exists(path):
                                 if os.path.isdir(path) and not os.path.islink(path):
                                     shutil.rmtree(path)
                                 else:

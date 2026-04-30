@@ -12,9 +12,9 @@ from tempfile import mkdtemp
 from typing import Any, Dict, Optional, Union
 
 from omegaconf import OmegaConf
+from scabha.basetypes import EmptyDictDefault
 
 import stimela
-from scabha.basetypes import EmptyDictDefault
 from stimela.exceptions import BackendError
 from stimela.utils.xrun_asyncio import xrun
 

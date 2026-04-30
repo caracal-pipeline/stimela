@@ -11,11 +11,11 @@ import rich.markup
 import yaml
 from omegaconf import MISSING, DictConfig, OmegaConf
 from omegaconf.errors import OmegaConfBaseException
-
 from scabha.basetypes import EmptyClassDefault, EmptyDictDefault, EmptyListDefault
 from scabha.cargo import Cargo, ListOrString, Parameter, ParameterCategory, ParameterPolicies
 from scabha.exceptions import SchemaError
 from scabha.substitutions import substitutions_from
+
 from stimela.backends import StimelaBackendSchema, flavours
 from stimela.exceptions import CabValidationError, StimelaBaseImageError, StimelaCabRuntimeError
 
@@ -281,13 +281,14 @@ class Cab(Cargo):
             if schema.dtype == "bool" and not value and get_policy(schema, "explicit_false") is None:
                 return None
 
-            is_list = hasattr(value, "__iter__") and type(value) is not str
+            # isinstance covers URI/File/Directory/MS (all str subclasses)
+            is_list = hasattr(value, "__iter__") and not isinstance(value, str)
             format_policy = get_policy(schema, "format")
             format_list_policy = get_policy(schema, "format_list")
             format_scalar_policy = get_policy(schema, "format_list_scalar")
             split_policy = get_policy(schema, "split")
 
-            if type(value) is str and split_policy:
+            if isinstance(value, str) and split_policy:
                 value = value.split(split_policy or None)
                 is_list = True
 
