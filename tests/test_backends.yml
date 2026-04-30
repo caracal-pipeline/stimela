@@ -59,6 +59,8 @@ opts:
       select: singularity
 
 test_recipe:
+  backend:
+    variety: lightweight
   steps:
     a: 
       cab: echo
