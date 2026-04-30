@@ -1,19 +1,18 @@
 import copy
 import logging
-import os.path
 from dataclasses import dataclass
 from typing import Any, Dict
 
 import pytest
-
-import stimela_tests
 from scabha.basetypes import File
 from scabha.schema_utils import paramfile_loader
+
 from stimela.backends import StimelaBackendSchema, runner
 from stimela.exceptions import BackendError
 from stimela.kitchen.cab import Cab
 
-testdir = os.path.abspath(os.path.dirname(stimela_tests.__file__))
+from . import testdir
+
 recipe_file = File(f"{testdir}/test_recipe.yml")
 
 

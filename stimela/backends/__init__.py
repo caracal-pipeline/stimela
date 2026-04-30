@@ -4,9 +4,9 @@ from enum import Enum
 from typing import Any, Dict, Optional
 
 from omegaconf import ListConfig, OmegaConf
+from scabha.basetypes import EmptyClassDefault, EmptyDictDefault
 
 import stimela
-from scabha.basetypes import EmptyClassDefault, EmptyDictDefault
 from stimela.exceptions import BackendError, BackendSpecificationError
 from stimela.stimelogging import log_exception
 

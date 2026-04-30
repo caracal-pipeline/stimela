@@ -5,8 +5,8 @@ from shutil import which
 from typing import Any, Dict, List, Optional
 
 from omegaconf import OmegaConf
-
 from scabha.basetypes import EmptyDictDefault
+
 from stimela.exceptions import BackendError
 
 # path to default srun binary

@@ -4,9 +4,10 @@ import os.path
 import resource
 from typing import Any, Dict, Optional
 
+from scabha.substitutions import substitutions_from
+
 import stimela
 import stimela.kitchen
-from scabha.substitutions import substitutions_from
 from stimela.exceptions import BackendSpecificationError, StimelaProcessRuntimeError
 from stimela.utils.xrun_asyncio import xrun
 
