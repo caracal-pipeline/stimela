@@ -88,13 +88,13 @@ The ``path`` setting then overrides all other ``image`` attributes.
 
 
 Tweaking backend settings, all the way down
--------------------------------------------
+--------------------------------------------
 
 Backends have different settings that can be set under the corresponding ``opts.backend`` section. These are described in detail under :ref:`backend settings<backend_reference>`. 
 
 Stimela allows for mixing-and-matching of backends within a recipe. This is not something that would be useful (or indeed encouraged) in a stable production workflow, but it can be a valuable development and experimentation tool.
 
-Crucially, backend settings can be tweaked on a per-recipe, per-cab and per-step basis, respetively. Recipes, cabs and steps all recognize an optional ``backend`` section for this purpose. Before a step is executed, Stimela will take the global backend settings (``opts.backend``), merge in the current recipe backend settings, merge in the cab backend settings, and then merge in the step backend settings, if any. The resulting merged setting are then applied to the step being executed.
+Crucially, backend settings can be tweaked on a per-recipe, per-cab and per-step basis, respectively. Recipes, cabs and steps all recognize an optional ``backend`` section for this purpose. Before a step is executed, Stimela will take the global backend settings (``opts.backend``), merge in the current recipe backend settings, merge in the cab backend settings, and then merge in the step backend settings, if any. The resulting merged setting are then applied to the step being executed.
 
 A typical use case (as well as a suggested best practice) for this would be as follows. Let's say you have a recipe defined in ``recipe.yml``. Ideally, this should not specify any backend settings at all -- a recipe file should define only the logical sequence of steps in the workflow, not the specific means of executing them. You are free to switch backends by simply specifying a command-line option to ``stimela run``. A typical user would run everything via the Singularity backend -- the most hassle-free route.
 
@@ -145,10 +145,46 @@ Another use case for this is tweaking Slurm settings. Different steps in the wor
                             cpus-per-task: 64
 
 
+Custom backend varieties
+-------------------------
 
+Expanding on the above, it can be useful to define groups of backend settings that can be easily reused. For example, in a Slurm setting you may want to define backend settings for e.g. "cheap" steps (low memory/low CPU), "expensive" steps (high memory/high CPU), and "lightweight" steps (e.g. housekeeping python code which can be run natively on the login node). We start by defining a set of custom backend varieties::
 
+    opts:
+        # these are the default backend settings
+        backend:
+            select: signularity
+            slurm:
+                enable: true
+                srun_opts:             
+                    mem: 64G
+                    cpus-per-task: 4
+        # and these are the user-defined varieties. Section names are arbitrary
+        backend_varieties:
+            # high CPU/RAM jobs
+            expensive:
+                slurm:
+                    srun_opts:
+                        mem: 256G
+                        cpus-per-task: 32
+            # small jobs
+            cheap:
+                slurm:
+                    srun_opts:
+                        mem: 8G
+                        cpus-per-task: 1
+            # light housekeeping jobs -- bypass slurm and singularity entirely
+            lightweight:
+                select: native
+                slurm:
+                    enable: false
 
+To select a backend variety for a particular cab or step, we then only need to specify::
 
+    backend:
+        variety: lightweight
+
+within that cab or step definition. The precise logic is as follows: global backend settings are merged with recipe-level settings, then with cab-level settings, then with step-level settings. If the result has a ``variety`` field, that variety is looked up under ``opts.backend_varieties``, and any additional settings from there are merged in to make the final set of backend settings applied to the step.
 
 
 

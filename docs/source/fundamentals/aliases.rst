@@ -97,8 +97,8 @@ The step label of the alias target may contain "*" and "?" wildcards that will b
 
     calibration-recipe:
         aliases:
-            ms: [*.ms]
-            imaging-weight: [image-*.weight]
+            ms: ["*.ms"]
+            imaging-weight: ["image-*.weight"]
 
 This tells Stimela that the recipe's ``ms`` input is an alias for the ``ms`` input of all steps (all steps that have an ``ms`` input, to be more precise), and that the ``imaging-weight`` input is an alias for the ``weight`` input of all steps whose label matches ``image-*``. Another option, the ()-form, matches all steps that invoke a particular cab::
 

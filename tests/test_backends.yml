@@ -3,6 +3,8 @@ cabs:
   sleep:
     command: sleep # just a dummy for now 
     image: wsclean
+    backend:
+      variety: lightweight
     inputs:
       seconds:
         dtype: int
@@ -12,6 +14,28 @@ cabs:
   echo:
     command: echo # just a dummy for now 
     image: wsclean
+    backend:
+      variety: lightweight
+    inputs:
+      arg:
+        dtype: str
+        required: true
+        policies:
+          positional: true
+  echo2:
+    command: echo # just a dummy for now 
+    backend:
+      variety: broken
+    inputs:
+      arg:
+        dtype: str
+        required: true
+        policies:
+          positional: true
+  echo3:
+    command: echo 
+    image:
+      name: deliberately-unknown
     inputs:
       arg:
         dtype: str
@@ -26,6 +50,13 @@ opts:
     symlink: logs
   backend:
     select: singularity
+  backend_varieties:
+    lightweight:
+      select: native
+    broken:
+      select: broken
+    full:
+      select: singularity
 
 test_recipe:
   steps:
@@ -35,8 +66,38 @@ test_recipe:
         arg: x
     b:
       cab: sleep
-      backend:
-        singularity:
-          rebuild: true
       params:
-        seconds: 5
+        seconds: 1
+
+test_recipe2:
+  steps:
+    a: 
+      cab: echo2
+      params:
+        arg: x
+    b:
+      cab: sleep
+      params:
+        seconds: 1
+      backend:
+        variety: broken
+
+test_recipe3:
+  steps:
+    a: 
+      cab: echo
+      params:
+        arg: x
+    b:
+      cab: sleep
+      params:
+        seconds: 1
+      backend:
+        variety: broken
+
+test_recipe4:  
+  steps:
+    a: 
+      cab: echo3
+      params:
+        arg: x
