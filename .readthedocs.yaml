@@ -12,7 +12,6 @@ build:
     post_install:
       - pip install .
       - pip install --group docs
-
 # Build documentation in the docs/ directory with Sphinx
 sphinx:
   configuration: docs/source/conf.py
