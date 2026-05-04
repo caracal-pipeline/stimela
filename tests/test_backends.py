@@ -20,7 +20,7 @@ def test_backend_varieties():
     assert retcode != 0
     assert verify_output(output, "unable to select a backend")
 
-    print("===== expecting an error (bad singularoty image) =====")
+    print("===== expecting an error (bad singularity image) =====")
     retcode, output = run("stimela -v -b native run test_backends.yml test_recipe4")
     print(output)
     assert retcode != 0

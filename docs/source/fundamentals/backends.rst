@@ -153,7 +153,7 @@ Expanding on the above, it can be useful to define groups of backend settings th
     opts:
         # these are the default backend settings
         backend:
-            select: signularity
+            select: singularity
             slurm:
                 enable: true
                 srun_opts:             

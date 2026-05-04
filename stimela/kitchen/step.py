@@ -68,7 +68,7 @@ def apply_backend_varieties(backend_opts: DictConfig):
     """
     variety = getattr(backend_opts, "variety", None)
     if variety is not None:
-        variety_opts = getattr(stimela.CONFIG.opts.backend_varieties, variety, None)
+        variety_opts = stimela.CONFIG.opts.backend_varieties.get(variety)
         if variety_opts is None:
             raise KeyError(f"backend variety '{variety}' is not defined")
         backend_opts = OmegaConf.merge(backend_opts, variety_opts)
