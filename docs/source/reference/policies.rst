@@ -32,7 +32,7 @@ The ``policies`` section can contain one or more of the following attributes (se
 
 * ``skip_implicits: true`` causes the parameter to be omitted if it is :ref:`implicit <implicit_params>`.
 
-* ``disable_substitutions: true`` disables :ref:`substitutions and formula evaluations <subst>`` on the parameter.
+* ``disable_substitutions: true`` disables :ref:`substitutions and formula evaluations <subst>` on the parameter.
 
 * ``explicit_true: value`` causes true-valued boolean parameters to be passed as ``--option value``. If not given, they are simply passed as ``--option``.
 

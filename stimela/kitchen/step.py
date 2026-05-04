@@ -60,6 +60,21 @@ def resolve_dotted_reference(key, base, current, context):
     return section, varname
 
 
+def apply_backend_varieties(backend_opts: DictConfig):
+    """Helper function: if backend_opts.variety is defined,
+    look it up in opts.backend_varieties, and apply settings from there. Returns
+    (potentially modified) backend_opts DictConfig.
+    Raises a KeyError if the variety is not defined
+    """
+    variety = getattr(backend_opts, "variety", None)
+    if variety is not None:
+        variety_opts = stimela.CONFIG.opts.backend_varieties.get(variety)
+        if variety_opts is None:
+            raise KeyError(f"backend variety '{variety}' is not defined")
+        backend_opts = OmegaConf.merge(backend_opts, variety_opts)
+    return backend_opts
+
+
 OUTPUTS_EXISTS = "exist"
 OUTPUTS_FRESH = "fresh"
 
@@ -303,9 +318,10 @@ class Step:
                     self.params[name] = value
 
             # check for valid backend
-            backend_opts = OmegaConf.to_object(
-                OmegaConf.merge(StimelaBackendSchema, backend or {}, self.cargo.backend or {}, self.backend or {})
+            backend_opts = apply_backend_varieties(
+                OmegaConf.merge(backend or {}, self.cargo.backend or {}, self.backend or {})
             )
+            backend_opts = OmegaConf.to_object(OmegaConf.merge(StimelaBackendSchema, backend_opts))
             runner.validate_backend_settings(backend_opts, log, cab=self.cargo if isinstance(self.cargo, Cab) else None)
 
     def prevalidate(self, subst: SubstitutionNS, root=False, backend=None):
@@ -388,6 +404,7 @@ class Step:
             # validate backend settings and call the build function
             try:
                 backend_opts = OmegaConf.merge(self.config.opts.backend, backend)
+                backend_opts = apply_backend_varieties(backend_opts)
                 if getattr(backend_opts, "verbose", 0):
                     opts_yaml = OmegaConf.to_yaml(backend_opts)
                     log_rich_payload(self.log, "effective backend settings are", opts_yaml, syntax="yaml")
@@ -442,7 +459,7 @@ class Step:
     def run(
         self,
         subst: SubstitutionNS,
-        backend: Optional[Dict] = None,
+        backend: Optional[DictConfig] = None,
         is_outer_step: bool = False,
         parent_log: Optional[logging.Logger] = None,
     ) -> Dict[str, Any]:
@@ -474,6 +491,7 @@ class Step:
         # validate backend settings
         try:
             backend_opts = OmegaConf.merge(self.config.opts.backend, backend)
+            backend_opts = apply_backend_varieties(backend_opts)
             backend_opts = evaluate_and_substitute_object(
                 backend_opts, subst, recursion_level=-1, location=[self.fqname, "backend"], log=self.log
             )

@@ -52,6 +52,9 @@ class StimelaBackendOptions(object):
     # should be Union[str, List[str]], but OmegaConf doesn't support it, so handle in __post_init__ for now
     select: Any = "singularity,native"
 
+    # selects a backend variety
+    variety: Optional[str] = None
+
     singularity: Optional[SingularityBackendOptions] = EmptyClassDefault(SingularityBackendOptions)
     kube: Optional[KubeBackendOptions] = EmptyClassDefault(KubeBackendOptions)
     native: Optional[NativeBackendOptions] = EmptyClassDefault(NativeBackendOptions)

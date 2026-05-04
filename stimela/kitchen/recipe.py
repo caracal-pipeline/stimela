@@ -39,7 +39,7 @@ from stimela.kitchen.run_state import RunConstraints
 from stimela.stimelogging import log_rich_payload, rich_console
 
 from .cab import Cab
-from .step import Step
+from .step import Step, apply_backend_varieties
 
 
 class DeferredAlias(Unresolved):
@@ -1266,6 +1266,7 @@ class Recipe(Cargo):
         if not backends.initialized:
             try:
                 backend_opts = OmegaConf.merge(stimela.CONFIG.opts.backend, backend)
+                backend_opts = apply_backend_varieties(backend_opts)
                 backend_opts = evaluate_and_substitute_object(
                     backend_opts, subst, recursion_level=-1, location=[self.fqname, "backend"], log=self.log
                 )
@@ -1331,6 +1332,7 @@ class Recipe(Cargo):
             # This chooses the display based on the backend config at the recipe level - step
             # level overrides are ignored.
             backend_opts = OmegaConf.merge(stimela.CONFIG.opts.backend, backend)
+            backend_opts = apply_backend_varieties(backend_opts)
             backend_opts = OmegaConf.to_object(backend_opts)
             # TODO(JSKenyon): For now, we default to a minimal display (e.g. the slurm display)
             # for the kube backend when scattering. This is consistent with the behaviour prior
