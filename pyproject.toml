@@ -17,7 +17,7 @@ dependencies = [
     "omegaconf~=2.1",
     "python-benedict>=0.34.1,<0.35",
     "rich>=13.7.0,<14",
-    "scabha @ git+https://github.com/caracal-pipeline/scabha.git@93b61c1", # Remove when divorce is complete
+    "scabha>=2.2.0rc0",
     "psutil>=5.9,<7"
 ]
 
