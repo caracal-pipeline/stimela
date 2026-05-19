@@ -6,7 +6,7 @@ authors = [
     { name = "Oleg Smirnov and RATT", email = "osmirnov@gmail.com" },
     { name = "Sphesihle Makhathini", email = "sphemakh@gmail.com" },
 ]
-requires-python = ">=3.9,<3.14"
+requires-python = ">=3.9,<=3.14"
 readme = "README.rst"
 license = "GPL-2.0-only"
 license-files = ["LICENSE"]
