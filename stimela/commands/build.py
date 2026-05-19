@@ -91,6 +91,14 @@ from .run import run
     is_flag=True,
     help="""Enables the slurm backend wrapper (shortcut for -C backend.slurm.enable=True)""",
 )
+@click.option(
+    "-pf",
+    "--parameter-file",
+    metavar="filename.yml",
+    multiple=True,
+    help="""Use parameter values from the sepcified parameter file. These have lower precedence than
+              PARAM=VALUE specified on the CLI.""",
+)
 @click.argument("what", metavar="filename.yml ... [recipe name] [PARAM=VALUE] ...", nargs=-1, required=True)
 def build(
     what: str,
@@ -105,6 +113,7 @@ def build(
     enable_steps: List[str] = [],
     enable_singularity=False,
     enable_slurm=False,
+    parameter_file: List[str] = [],
 ):
     return run.callback(
         what,
@@ -120,4 +129,5 @@ def build(
         build_skips=all_steps,
         enable_singularity=enable_singularity,
         enable_slurm=enable_slurm,
+        parameter_file=parameter_file,
     )
