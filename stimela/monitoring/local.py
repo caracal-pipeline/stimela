@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Dict
 
 import psutil
 
@@ -20,6 +21,46 @@ def update_children():
 
     for pid in dropped_pids:
         del _child_processes[pid]
+
+
+def get_shared_memory_usage(pid: int, shm_segments_info: Dict[str, int]):
+    """
+    Getting shared memory usage of multiple processes without duplication
+    is tricky under Linux. This is an attempt to fix that.
+
+
+    Args:
+        pid: pid of the process to check
+        shm_segments_info: mutable dictionary of already counted segments
+
+    Returns:
+        Tuple of (total_unique_shared_mb, shared_segments_info)
+    """
+
+    try:
+        total_shmem_size = 0
+        # Read /proc/<pid>/maps
+        maps_path = f"/proc/{pid}/maps"
+        with open(maps_path, "r") as f:
+            # iterate on every referenced mem segment
+            for line in f:
+                # Look for shared memory segments
+                if "shm" in line or "/SYSV" in line or "/dev/shm" in line:
+                    parts = line.split()
+                    if len(parts) >= 6:
+                        addr_range = parts[0]
+                        inode = parts[4]
+
+                        # Extract size from address range
+                        start, end = addr_range.split("-")
+                        size_bytes = int(end, 16) - int(start, 16)
+
+                        if inode != "0" and inode not in shm_segments_info:
+                            shm_segments_info[inode] = True
+                            total_shmem_size += size_bytes
+    except (FileNotFoundError, PermissionError):
+        pass
+    return total_shmem_size, shm_segments_info
 
 
 @dataclass
@@ -65,11 +106,13 @@ def local_reporter(now, task_info):
     else:
         processes = []  # Don't bother with cpu and mem for stimela itself.
 
+    dict_shmem_segments = {}
     # CPU and memory
     for p in processes:
         try:
             local_stats.cpu += p.cpu_percent()
-            local_stats.mem_used += p.memory_info().rss
+            shmem_size, dict_shmem_segments = get_shared_memory_usage(p.pid, dict_shmem_segments)
+            local_stats.mem_used += p.memory_info().rss - p.memory_info().shared + shmem_size
         except psutil.NoSuchProcess:
             pass  # Process ended before we could gather its stats.
 
