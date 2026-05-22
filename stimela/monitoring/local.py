@@ -23,11 +23,11 @@ def update_children():
         del _child_processes[pid]
 
 
-def get_shared_memory_usage(pid: int, shm_segments_info: Dict[str, int]):
-    """
+def get_shared_memory_usage(pid: int, shm_segments_info: Dict[int, bool]):
+    """Get shared memory usage of a process without duplication.
+
     Getting shared memory usage of multiple processes without duplication
     is tricky under Linux. This is an attempt to fix that.
-
 
     Args:
         pid: pid of the process to check
