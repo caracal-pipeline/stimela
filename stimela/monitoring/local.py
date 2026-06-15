@@ -22,6 +22,38 @@ def update_children():
         del _child_processes[pid]
 
 
+def _proc_memory(p: psutil.Process) -> int:
+    """Return a process's memory contribution in bytes, free of cross-process double-counting.
+
+    Uses Proportional Set Size (PSS) where available: each shared page is divided by the
+    number of processes mapping it, so summing PSS over a set of processes counts memory
+    shared within that set (libraries, /dev/shm, SysV segments) exactly once without any
+    manual bookkeeping. Note that the property only holds across the measured set: pages
+    also mapped by processes outside it (e.g. the excluded parent Stimela process) are
+    under-attributed, so the total may slightly undercount. Falls back to RSS on platforms
+    or kernels that don't expose smaps (e.g. non-Linux), where it over-counts shared pages
+    but is the best figure available.
+
+    Args:
+        p: The process to measure.
+
+    Returns:
+        Memory contribution in bytes, or 0 if the process cannot be read.
+    """
+    try:
+        # memory_full_info() reads /proc/<pid>/smaps_rollup on Linux; the kernel pre-aggregates
+        # it, so this is a single cheap file read per process.
+        return p.memory_full_info().pss
+    except (AttributeError, NotImplementedError, psutil.AccessDenied):
+        # pss is unavailable off Linux (or for processes we cannot read); rss is the closest
+        # cross-platform fallback.
+        try:
+            return p.memory_info().rss
+        except (psutil.AccessDenied, psutil.NoSuchProcess):
+            # We cannot read this process at all; contribute nothing rather than break monitoring.
+            return 0
+
+
 @dataclass
 class LocalReport:
     cpu: float = 0
@@ -69,7 +101,7 @@ def local_reporter(now, task_info):
     for p in processes:
         try:
             local_stats.cpu += p.cpu_percent()
-            local_stats.mem_used += p.memory_info().rss
+            local_stats.mem_used += _proc_memory(p)
         except psutil.NoSuchProcess:
             pass  # Process ended before we could gather its stats.
 
