@@ -73,7 +73,7 @@ def DefaultDirs():
 
 
 _CONFIG_BASENAME = "stimela.conf"
-_STIMELA_CONFDIR = os.path.os.path.expanduser("~/.stimela")
+_STIMELA_CONFDIR = os.path.expanduser("~/.stimela")
 
 # check for cultcargo module
 try:

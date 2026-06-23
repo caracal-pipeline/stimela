@@ -17,7 +17,7 @@ dependencies = [
     "omegaconf~=2.1",
     "python-benedict>=0.34.1,<0.35",
     "rich>=13.7.0,<14",
-    "scabha>=2.2.0rc0",
+    "scabha>=2.2.0rc1",
     "psutil>=5.9,<7"
 ]
 

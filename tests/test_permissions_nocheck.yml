@@ -1,0 +1,21 @@
+cabs:
+  echo-cab-nocheck:
+    command: echo
+    inputs:
+      ms-in:
+        dtype: MS
+        writable: true
+        path_policies:
+          check_permissions: false
+
+recipe:
+  name: "test writable permissions nocheck"
+  info: "test check_permissions opt-out"
+  inputs:
+    ms-in:
+      dtype: MS
+  steps:
+    step1:
+      cab: echo-cab-nocheck
+      params:
+        ms-in: =recipe.ms-in

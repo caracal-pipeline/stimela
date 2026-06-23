@@ -1,5 +1,6 @@
 import os
 import re
+import stat
 import subprocess
 
 import pytest
@@ -156,4 +157,41 @@ def test_scatter():
 
     print("===== expecting no errors now =====")
     retcode = os.system("stimela -v -b native exec test_scatter.yml nested_loop")
+    assert retcode == 0
+
+
+def _run_stderr(command):
+    """Runs command, captures stderr+stdout, returns tuple of exit code, output"""
+    import shlex
+
+    print(f"running: {command}")
+    result = subprocess.run(shlex.split(command), capture_output=True, text=True)
+    return result.returncode, result.stderr or result.stdout
+
+
+def test_permission_check(tmp_path):
+    """Test that writable inputs with insufficient file permissions are caught before execution."""
+    # create a read-only directory (simulating a read-only MS)
+    ro_dir = tmp_path / "readonly.ms"
+    ro_dir.mkdir()
+    os.chmod(ro_dir, stat.S_IRUSR | stat.S_IXUSR | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
+
+    recipe_path = os.path.join(os.path.dirname(__file__), "test_permissions.yml")
+
+    print("===== expecting error for read-only writable input =====")
+    retcode, output = _run_stderr(f"stimela exec {recipe_path} ms-in={ro_dir}")
+    assert retcode != 0
+    assert "not writable" in output
+
+    # make it writable, should succeed
+    os.chmod(ro_dir, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
+    print("===== expecting success with writable directory =====")
+    retcode, output = _run_stderr(f"stimela exec {recipe_path} ms-in={ro_dir}")
+    assert retcode == 0
+
+    # test check_permissions: false opt-out using nocheck recipe
+    recipe_nocheck_path = os.path.join(os.path.dirname(__file__), "test_permissions_nocheck.yml")
+    os.chmod(ro_dir, stat.S_IRUSR | stat.S_IXUSR | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
+    print("===== expecting success with check_permissions opt-out =====")
+    retcode, output = _run_stderr(f"stimela exec {recipe_nocheck_path} ms-in={ro_dir}")
     assert retcode == 0
