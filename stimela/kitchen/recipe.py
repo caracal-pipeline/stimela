@@ -340,7 +340,8 @@ class Recipe(Cargo):
                 self.inputs_outputs[key].default = UNSET
             else:
                 self.defaults[key] = value
-        # assigning to a substep? Invoke nested assignment
+        # assigning to a substep? Invoke nested assignment (and return, as the
+        # step handles its own override tracking)
         elif nesting is not None and nesting in self.steps:
             return self.steps[nesting].assign_value(subkey, value, override=override)
         # assigning to config?
@@ -356,6 +357,11 @@ class Recipe(Cargo):
             whose.update_log_options(**{subkey: value})
             if whose is self and subst is not None and "recipe" in subst:
                 subst.recipe.log[subkey] = value
+        elif override:
+            # in override mode (i.e. from CLI or parameter file), reject unknown variables
+            raise AssignmentError(
+                f"'{key}' is not a known input, output, step, or config variable of recipe '{self.fqname}'"
+            )
         # in override mode, assign to assign dict for future processing
         if override:
             if value is not UNSET:
