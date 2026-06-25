@@ -153,11 +153,20 @@ def test_unknown_parameter():
     """Test that unknown parameters are rejected (issue #530)"""
     print("===== expecting an error for unknown parameter 'nonexistent' =====")
     retcode, output = run("stimela -v -b native exec test_aliasing.yml a=1 nonexistent=bar")
-    assert retcode != 0
+    assert retcode == 1
     assert verify_output(output, "unknown parameter")
 
-    print("===== valid parameters should still work =====")
+    print("===== expecting an error for unknown step parameter 's3.nonexistent' =====")
+    retcode, output = run("stimela -v -b native exec test_aliasing.yml a=1 s3.nonexistent=bar")
+    assert retcode == 1
+    assert verify_output(output, "unknown parameter")
+
+    print("===== valid step parameters should work =====")
     retcode, output = run("stimela -v -b native exec test_aliasing.yml a=1 s3.a=1 s4.a=1 e=e f=f")
+    assert retcode == 0
+
+    print("===== valid recipe assign key should work =====")
+    retcode, output = run("stimela -v -b native exec test_aliasing.yml a=1 s3.a=1 s4.a=1 e=e f=f nested.bar=yyy")
     assert retcode == 0
 
 
