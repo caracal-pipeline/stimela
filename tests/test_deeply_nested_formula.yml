@@ -1,0 +1,33 @@
+cabs:
+  echo:
+    command: echo
+    inputs:
+      msg:
+        dtype: str
+        required: true
+        policies:
+          positional: true
+
+recipe:
+  steps:
+    echo-1:
+      cab: echo
+      params:
+        msg: "deeply nested skip evaluated successfully"
+      skip: =IF(
+          true,
+          false,
+          IF(
+            true,
+            true,
+            IF(
+              true,
+              IF(
+                true,
+                true,
+                false
+              ),
+              false
+            )
+          )
+        )
