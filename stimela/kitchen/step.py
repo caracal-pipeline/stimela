@@ -78,6 +78,123 @@ def apply_backend_varieties(backend_opts: DictConfig):
 OUTPUTS_EXISTS = "exist"
 OUTPUTS_FRESH = "fresh"
 
+# Sentinel values for skip_if_outputs modes
+_SKIP_MODES = {OUTPUTS_EXISTS, OUTPUTS_FRESH}
+
+
+def _check_output_existence(params, outputs_schema):
+    """Check which file-type outputs exist.
+
+    Returns a dict mapping output parameter names to booleans indicating
+    whether all file(s) for that output exist.
+    """
+    result = {}
+    for name, schema in outputs_schema.items():
+        if name not in params:
+            continue
+        if schema.is_file_type:
+            value = params[name]
+            if isinstance(value, str):
+                result[name] = os.path.exists(value)
+            else:
+                result[name] = False
+        elif schema.is_file_list_type:
+            filenames = params[name]
+            if not filenames:
+                result[name] = not schema.must_exist
+            else:
+                result[name] = all(isinstance(f, str) and os.path.exists(f) for f in filenames)
+    return result
+
+
+def _check_output_freshness(params, inputs_schema, outputs_schema):
+    """Check which file-type outputs are fresh relative to inputs.
+
+    Returns a dict mapping output parameter names to booleans indicating
+    whether the output is fresh (newer than all inputs).
+    """
+    # Find the most recent input modification time
+    max_mtime = 0
+    for name, value in params.items():
+        schema = {**inputs_schema, **outputs_schema}.get(name)
+        if schema is None or not schema.is_input or schema.skip_freshness_checks:
+            continue
+        if schema.is_file_type:
+            values = [value]
+        elif schema.is_file_list_type:
+            values = value
+        else:
+            continue
+        for filename in values:
+            if isinstance(filename, str) and os.path.exists(filename):
+                mtime = os.path.getmtime(filename)
+                if mtime > max_mtime:
+                    max_mtime = mtime
+
+    result = {}
+    for name, schema in outputs_schema.items():
+        if name not in params:
+            continue
+        if schema.is_file_type:
+            value = params[name]
+            if isinstance(value, str) and os.path.exists(value):
+                if max_mtime == 0 or schema.skip_freshness_checks:
+                    result[name] = True
+                else:
+                    result[name] = os.path.getmtime(value) >= max_mtime
+            else:
+                result[name] = False
+        elif schema.is_file_list_type:
+            filenames = params[name]
+            if not filenames:
+                result[name] = not schema.must_exist
+            else:
+                all_fresh = True
+                for f in filenames:
+                    if isinstance(f, str) and os.path.exists(f):
+                        if max_mtime and not schema.skip_freshness_checks:
+                            if os.path.getmtime(f) < max_mtime:
+                                all_fresh = False
+                                break
+                    elif schema.must_exist is not False:
+                        all_fresh = False
+                        break
+                result[name] = all_fresh
+    return result
+
+
+def _remove_outputs_on_error(params, outputs_schema, log):
+    """Remove output files/directories that have remove_on_error set in metadata.
+
+    This is called when a step fails, to clean up partial outputs (e.g. zarr directories).
+    Set ``metadata: {remove_on_error: true}`` on an output parameter to enable this.
+    """
+    for name, schema in outputs_schema.items():
+        if name not in params:
+            continue
+        if not schema.metadata.get("remove_on_error"):
+            continue
+        if not (schema.is_file_type or schema.is_file_list_type):
+            continue
+
+        if schema.is_file_type:
+            filenames = [params[name]]
+        else:
+            filenames = params[name]
+
+        for path in filenames:
+            if not isinstance(path, str) or not os.path.exists(path):
+                continue
+            try:
+                if os.path.isdir(path) and not os.path.islink(path):
+                    shutil.rmtree(path)
+                    log.warning(f"removed partial output directory '{path}' (remove_on_error)")
+                else:
+                    os.unlink(path)
+                    log.warning(f"removed partial output file '{path}' (remove_on_error)")
+            except OSError as exc:
+                log.error(f"failed to remove '{path}' on error: {exc}")
+
 
 @dataclass
 class Step:
@@ -126,8 +243,13 @@ class Step:
         self.validated_params = None
         # parameters protected from assignment (because they've been set on the command line, presumably)
         self._assignment_overrides = set()
-        if self.skip_if_outputs and self.skip_if_outputs not in (OUTPUTS_EXISTS, OUTPUTS_FRESH):
-            raise StepValidationError(f"step '{self.name}': invalid 'skip_if_outputs={self.skip_if_outputs}' setting")
+        # skip_if_outputs can be "exist", "fresh", or a formula expression
+        # Formulas can reference outputs_exist.X and outputs_fresh.X namespaces
+        if self.skip_if_outputs and self.skip_if_outputs not in _SKIP_MODES:
+            # Treat as a conditional expression -- will be evaluated at runtime
+            self._skip_if_outputs_expr = True
+        else:
+            self._skip_if_outputs_expr = False
         # the "skip" attribute is reevaluated at runtime since it may contain substitutions, but if it's set to a bool
         # constant, self._skip will be preset already
         # validate skip attribute
@@ -618,16 +740,43 @@ class Step:
             elif backend_runner.is_remote_fs:
                 parent_log_info(f"ignoring skip_if_outputs: {skip_if_outputs} because backend has remote filesystem")
                 skip_if_outputs = None
-            # don't check if force-disabled
-            elif (skip_if_outputs == OUTPUTS_EXISTS and stimela.CONFIG.opts.disable_skips.exist) or (
-                skip_if_outputs == OUTPUTS_FRESH and stimela.CONFIG.opts.disable_skips.fresh
-            ):
-                parent_log_info(f"ignoring skip_if_outputs: {skip_if_outputs} because it has been force-disabled")
-                skip_if_outputs = None
+            # don't check if force-disabled (only for legacy "exist"/"fresh" modes)
+            elif not self._skip_if_outputs_expr:
+                if (skip_if_outputs == OUTPUTS_EXISTS and stimela.CONFIG.opts.disable_skips.exist) or (
+                    skip_if_outputs == OUTPUTS_FRESH and stimela.CONFIG.opts.disable_skips.fresh
+                ):
+                    parent_log_info(f"ignoring skip_if_outputs: {skip_if_outputs} because it has been force-disabled")
+                    skip_if_outputs = None
 
-            ## if skip on fresh outputs is in effect, find mtime of most recent input
-            if skip_if_outputs:
-                # max_mtime will remain 0 if we're not echecking for freshness, or if there are no file-type inputs
+            ## Handle skip_if_outputs expression mode (issue #491)
+            if skip_if_outputs and self._skip_if_outputs_expr:
+                parent_log_info(f"evaluating skip_if_outputs expression: {skip_if_outputs}")
+                # Build outputs_exist and outputs_fresh namespace dicts
+                outputs_exist = _check_output_existence(params, self.outputs)
+                outputs_fresh = _check_output_freshness(params, self.inputs, self.outputs)
+                for name, val in outputs_exist.items():
+                    parent_log_info(f"  outputs_exist.{name} = {val}")
+                for name, val in outputs_fresh.items():
+                    parent_log_info(f"  outputs_fresh.{name} = {val}")
+                # Create a copy of subst with the extra namespaces
+                skip_subst = subst.copy() if subst is not None else SubstitutionNS()
+                skip_subst._add_("outputs_exist", outputs_exist, nosubst=True)
+                skip_subst._add_("outputs_fresh", outputs_fresh, nosubst=True)
+                # Evaluate the expression
+                skip_result = evaluate_and_substitute_object(
+                    skip_if_outputs, skip_subst, location=[self.fqname, "skip_if_outputs"], log=self.log
+                )
+                if skip_result is UNSET or isinstance(skip_result, Unresolved):
+                    self.log.debug(f"skip_if_outputs expression returned unresolved: {skip_result}")
+                elif skip_result:
+                    parent_log_info("skip_if_outputs expression evaluated to True, skipping this step")
+                    skip = True
+                else:
+                    parent_log_info("skip_if_outputs expression evaluated to False, proceeding")
+
+            ## Legacy skip_if_outputs mode: "exist" or "fresh"
+            elif skip_if_outputs:
+                # max_mtime will remain 0 if we're not checking for freshness, or if there are no file-type inputs
                 max_mtime, max_mtime_path = 0, None
                 if skip_if_outputs == OUTPUTS_FRESH:
                     parent_log_info("checking if file-type outputs of step are fresh")
@@ -674,7 +823,8 @@ class Step:
                                     continue
                         else:
                             continue  # go on to next parameter
-                        # collect messages rather than logging them directly, to avoid log diarrhea for long file lists
+                        # collect messages rather than logging them directly, to avoid log diarrhea for long file
+                        # lists
                         messages = []
                         # ok, we have a list of files to check
                         for num, value in enumerate(filenames):
@@ -731,21 +881,27 @@ class Step:
                                 else:
                                     os.unlink(path)
 
-                if type(self.cargo) is Recipe:
-                    self.cargo._run(params, subst, backend=backend)
-                elif type(self.cargo) is Cab:
-                    display.set_display_style(backend_opts.current_wrapper or backend_opts.current_backend)
-                    cabstat = backend_runner.run(
-                        self.cargo, params=params, log=self.log, subst=subst, fqname=self.fqname
-                    )
-                    # check for runstate
-                    if cabstat.success is False:
-                        raise StimelaCabRuntimeError(f"error running cab '{self.cargo.name}'", cabstat.errors)
-                    for msg in cabstat.warnings:
-                        self.log.warning(f"cab '{self.cargo.name}': {msg}")
-                    params.update(**cabstat.outputs)
-                else:
-                    raise RuntimeError("step '{self.name}': unknown cargo type")
+                try:
+                    if type(self.cargo) is Recipe:
+                        self.cargo._run(params, subst, backend=backend)
+                    elif type(self.cargo) is Cab:
+                        display.set_display_style(backend_opts.current_wrapper or backend_opts.current_backend)
+                        cabstat = backend_runner.run(
+                            self.cargo, params=params, log=self.log, subst=subst, fqname=self.fqname
+                        )
+                        # check for runstate
+                        if cabstat.success is False:
+                            raise StimelaCabRuntimeError(f"error running cab '{self.cargo.name}'", cabstat.errors)
+                        for msg in cabstat.warnings:
+                            self.log.warning(f"cab '{self.cargo.name}': {msg}")
+                        params.update(**cabstat.outputs)
+                    else:
+                        raise RuntimeError("step '{self.name}': unknown cargo type")
+                except Exception:
+                    # On error, remove outputs marked with remove_on_error (issue #290)
+                    if not backend_runner.is_remote_fs:
+                        _remove_outputs_on_error(params, self.outputs, self.log)
+                    raise
             else:
                 if self._skip is None and subst is not None:
                     parent_log_info("skipping step based on conditonal settings")

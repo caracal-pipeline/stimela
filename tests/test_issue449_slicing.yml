@@ -1,0 +1,37 @@
+cabs:
+  echo-list:
+    command: echo
+    inputs:
+      message:
+        dtype: List[str]
+        policies:
+          positional: true
+          repeat: list
+
+recipe:
+  name: test-slicing
+  inputs:
+    mylist:
+      dtype: List[str]
+      default: [a, b, c, d, e]
+    n:
+      dtype: int
+      default: 3
+  steps:
+    # Use SLICE to get first n elements
+    echo-first-n:
+      cab: echo-list
+      params:
+        message: =SLICE(recipe.mylist, recipe.n)
+
+    # Use SLICE with start and stop
+    echo-mid:
+      cab: echo-list
+      params:
+        message: =SLICE(recipe.mylist, 1, 4)
+
+    # Use SLICE with UNSET for omitted start
+    echo-to-end:
+      cab: echo-list
+      params:
+        message: =SLICE(recipe.mylist, 2, UNSET)
