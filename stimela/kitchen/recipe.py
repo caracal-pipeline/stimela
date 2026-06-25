@@ -340,6 +340,9 @@ class Recipe(Cargo):
                 self.inputs_outputs[key].default = UNSET
             else:
                 self.defaults[key] = value
+                # propagate value to step aliases if recipe is finalized
+                if self._alias_map is not None:
+                    self._update_aliases(key, value)
         # assigning to a substep? Invoke nested assignment
         elif nesting is not None and nesting in self.steps:
             return self.steps[nesting].assign_value(subkey, value, override=override)

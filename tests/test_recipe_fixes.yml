@@ -109,8 +109,7 @@ test-317-assign-alias-propagation:
   inputs:
     my-input:
       dtype: str
-  aliases:
-    my-input: [s1.b]
+      aliases: [s1.b]
   assign:
     my-input: assigned_value
   steps:

@@ -79,9 +79,18 @@ def test_460_alias_step_collision_message():
 # --- Issue #307: recipe summary_message ---
 
 
+def test_317_assign_propagates_to_alias():
+    """A recipe input set via assign should propagate its value to step aliases."""
+    retcode, output = run("stimela -v -b native exec test_recipe_fixes.yml test-317-assign-alias-propagation")
+    print(output)
+    assert retcode == 0
+    # The assigned value should appear in the step's command line
+    assert verify_output(output, "b=assigned_value")
+
+
 def test_307_summary_message():
     """A recipe with summary_message should print it after successful execution."""
-    retcode, output = run("stimela -v -b native run test_recipe_fixes.yml test-307-summary-message")
+    retcode, output = run("stimela -v -b native run test_recipe_fixes_307.yml test-307-summary-message")
     print(output)
     assert retcode == 0
     assert verify_output(output, "Recipe completed with a=success")
@@ -89,6 +98,6 @@ def test_307_summary_message():
 
 def test_307_no_summary_message():
     """A recipe without summary_message should run without issues."""
-    retcode, output = run("stimela -v -b native run test_recipe_fixes.yml test-307-no-summary")
+    retcode, output = run("stimela -v -b native run test_recipe_fixes_307.yml test-307-no-summary")
     print(output)
     assert retcode == 0
