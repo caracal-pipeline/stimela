@@ -733,6 +733,13 @@ class Step:
 
                 # check for file-like inputs/outputs that don't have appropriate filesystem permissions
                 if not backend_runner.is_remote_fs:
+
+                    def _check_writable(fspath):
+                        """Returns True if fspath is writable. For directories, requires
+                        both W_OK and X_OK (search permission needed to create/modify entries)."""
+                        mode = os.W_OK | os.X_OK if os.path.isdir(fspath) else os.W_OK
+                        return os.access(fspath, mode)
+
                     for name, schema in self.cargo.inputs.items():
                         if name in params and schema.writable and schema.path_policies.check_permissions:
                             paths = get_filelikes(schema._dtype, params[name])
@@ -741,22 +748,25 @@ class Step:
                                 if uri.remote:
                                     continue
                                 fspath = uri.path
-                                if os.path.exists(fspath) and not os.access(fspath, os.W_OK):
+                                if os.path.exists(fspath) and not _check_writable(fspath):
                                     raise StepValidationError(
                                         f"step '{self.name}': input '{name}' is not writable at '{fspath}'",
                                         log=self.log,
                                     )
                     for name, schema in self.cargo.outputs.items():
-                        if name in params and schema.is_file_type and schema.path_policies.check_permissions:
+                        if (
+                            name in params
+                            and (schema.is_file_type or schema.is_file_list_type)
+                            and schema.path_policies.check_permissions
+                        ):
                             paths = get_filelikes(schema._dtype, params[name])
                             for path in paths:
                                 uri = URI(path)
                                 if uri.remote:
                                     continue
                                 fspath = uri.path
-                                # for outputs, what matters for writability is the parent directory
                                 if os.path.exists(fspath):
-                                    if not os.access(fspath, os.W_OK):
+                                    if not _check_writable(fspath):
                                         raise StepValidationError(
                                             f"step '{self.name}': output '{name}' is not writable at '{fspath}'",
                                             log=self.log,
@@ -764,7 +774,7 @@ class Step:
                                 else:
                                     parent = os.path.dirname(fspath)
                                     realparent = os.path.dirname(os.path.abspath(os.path.realpath(fspath)))
-                                    if realparent and not os.access(realparent, os.W_OK):
+                                    if realparent and not _check_writable(realparent):
                                         raise StepValidationError(
                                             f"step '{self.name}': output '{name}' parent directory is not "
                                             f"writable: '{parent}'",
