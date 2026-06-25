@@ -1,0 +1,58 @@
+cabs:
+  touch:
+    command: touch
+    inputs:
+      conditional-file:
+        dtype: File
+        must_exist: false
+        policies:
+          skip: true  # not passed to command
+    outputs:
+      file:
+        dtype: File
+        policies:
+          positional: true
+  touch-two:
+    command: touch
+    outputs:
+      file1:
+        dtype: File
+        policies:
+          positional: true
+      file2:
+        dtype: File
+        policies:
+          positional: true
+
+recipe:
+  name: test-skip-conditionals
+  steps:
+    # Legacy mode: skip if output exists
+    touch1:
+      cab: touch
+      params:
+        file: test_skip_cond1.tmp
+      skip_if_outputs: exist
+
+    # Expression mode: skip if output exists (using outputs_exist namespace)
+    touch2:
+      cab: touch
+      params:
+        file: test_skip_cond2.tmp
+      skip_if_outputs: =outputs_exist.file
+
+    # Expression mode: skip if output is fresh
+    touch3:
+      cab: touch
+      params:
+        conditional-file: test_skip_cond_input.tmp
+        file: test_skip_cond3.tmp
+      skip_if_outputs: =outputs_fresh.file
+
+    # Expression mode with AND: skip only if BOTH outputs exist
+    touch4:
+      cab: touch-two
+      params:
+        file1: test_skip_cond4.tmp
+        file2: test_skip_cond4b.tmp
+      skip_if_outputs: =outputs_exist.file1 and outputs_exist.file2

@@ -29,3 +29,9 @@ Path(LOG_HOME).mkdir(exist_ok=True)
 LOG_FILE = "{0:s}/stimela_logfile.json".format(LOG_HOME)
 
 from .stimelogging import logger, log_exception  # noqa
+
+# Apply evaluator patches (adds SLICE function, etc.)
+from .evaluator_patches import apply_patches as _apply_evaluator_patches  # noqa: E402
+
+_apply_evaluator_patches()
+del _apply_evaluator_patches
