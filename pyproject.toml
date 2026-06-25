@@ -21,9 +21,6 @@ dependencies = [
     "psutil>=5.9,<7"
 ]
 
-[tool.hatch.metadata]
-allow-direct-references = true # Remove when divorce is complete
-
 
 [project.scripts]
 stimela = "stimela.main:cli"
