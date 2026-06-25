@@ -20,9 +20,9 @@ def test_backend_varieties():
     assert retcode != 0
     assert verify_output(output, "unable to select a backend")
 
-    print("===== expecting an error (bad singularity image) =====")
+    print("===== expecting an error (bad container image) =====")
     retcode, output = run("stimela -v -b native run test_backends.yml test_recipe4")
     print(output)
     assert retcode != 0
-    # not verifying output here -- can fail due to bad image, or due to missing singularity
+    # not verifying output here -- can fail due to bad image, or due to missing apptainer/singularity
     # (the latter I suppose will happen in gh actions)

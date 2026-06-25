@@ -28,7 +28,7 @@ requires_container_image = True
 
 
 @dataclass
-class SingularityBackendOptions(object):
+class ApptainerBackendOptions(object):
     @dataclass
     class BindDir(object):
         host: Optional[str] = None  # host path, default uses label, or else "empty" for tmpdir or "shm" for shm tmpdir
@@ -38,12 +38,12 @@ class SingularityBackendOptions(object):
         conditional: Union[bool, str] = True  # bind conditionally (will be formula-evaluated)
 
     enable: bool = True
-    image_dir: str = os.path.expanduser("~/.singularity")
+    image_dir: str = os.path.expanduser("~/.apptainer")
     auto_build: bool = True
     rebuild: bool = False
     executable: Optional[str] = None
     remote_only: bool = (
-        False  # if True, won't look for singularity on local system -- useful in combination with slurm wrapper
+        False  # if True, won't look for apptainer on local system -- useful in combination with slurm wrapper
     )
 
     contain: bool = True  # if True, runs with --contain
@@ -62,7 +62,11 @@ class SingularityBackendOptions(object):
     ephemeral: Dict[str, str] = EmptyDictDefault()
 
 
-SingularityBackendSchema = OmegaConf.structured(SingularityBackendOptions)
+# Deprecated alias for backwards compatibility
+SingularityBackendOptions = ApptainerBackendOptions
+
+ApptainerBackendSchema = OmegaConf.structured(ApptainerBackendOptions)
+SingularityBackendSchema = ApptainerBackendSchema
 
 STATUS = VERSION = BINARY = None
 
@@ -85,13 +89,14 @@ class CustomTemporaryDirectory(object):
             shutil.rmtree(self.name)
 
 
-def is_available(opts: Optional[SingularityBackendOptions] = None):
+def is_available(opts: Optional[ApptainerBackendOptions] = None):
     global STATUS, VERSION, BINARY
     if STATUS is None:
         if opts and opts.remote_only:
             STATUS = VERSION = "remote"
         else:
-            BINARY = (opts and opts.executable) or which("singularity")
+            # Look for apptainer first, then fall back to singularity
+            BINARY = (opts and opts.executable) or which("apptainer") or which("singularity")
             if BINARY:
                 __version_string = subprocess.check_output([BINARY, "--version"]).decode("utf8")
                 STATUS = VERSION = __version_string.strip().split()[-1]
@@ -114,6 +119,20 @@ def init(backend: "stimela.backend.StimelaBackendOptions", log: logging.Logger):
     pass
 
 
+def _get_opts(backend: "stimela.backend.StimelaBackendOptions") -> ApptainerBackendOptions:
+    """Returns the apptainer/singularity backend options from the backend object.
+
+    Checks for 'apptainer' first, then falls back to 'singularity' for backwards compatibility.
+    """
+    opts = getattr(backend, "apptainer", None)
+    if opts is not None:
+        return opts
+    opts = getattr(backend, "singularity", None)
+    if opts is not None:
+        return opts
+    raise BackendError("neither 'apptainer' nor 'singularity' backend options found")
+
+
 def get_image_info(cab: "stimela.kitchen.cab.Cab", backend: "stimela.backend.StimelaBackendOptions"):
     """returns image name/path corresponding to cab
 
@@ -122,7 +141,7 @@ def get_image_info(cab: "stimela.kitchen.cab.Cab", backend: "stimela.backend.Sti
         backend (stimela.backend.StimelaBackendOptions): _description_
 
     Returns:
-        name, path, enable_update: tuple of docker image name, path to singularity image on disk, and
+        name, path, enable_update: tuple of docker image name, path to apptainer/singularity image on disk, and
             enable-updates flag
     """
 
@@ -140,7 +159,8 @@ def get_image_info(cab: "stimela.kitchen.cab.Cab", backend: "stimela.backend.Sti
 
     # convert to filename
     simg_name = image_name.replace("/", "-") + ".simg"
-    simg_path = os.path.join(backend.singularity.image_dir, simg_name)
+    opts = _get_opts(backend)
+    simg_path = os.path.join(opts.image_dir, simg_name)
 
     return image_name, simg_path
 
@@ -159,44 +179,45 @@ def build(
     rebuild: if True, rebuild all images regardless of backend settings
 
     Returns:
-        str: path to corresponding singularity image
+        str: path to corresponding apptainer/singularity image
     """
+    opts = _get_opts(backend)
 
     # ensure image directory exists
-    if os.path.exists(backend.singularity.image_dir):
-        if not os.path.isdir(backend.singularity.image_dir):
-            raise BackendError(f"invalid singularity image directory {backend.singularity.image_dir}")
+    if os.path.exists(opts.image_dir):
+        if not os.path.isdir(opts.image_dir):
+            raise BackendError(f"invalid image directory {opts.image_dir}")
     else:
         try:
-            pathlib.Path(backend.singularity.image_dir).mkdir(parents=True)
+            pathlib.Path(opts.image_dir).mkdir(parents=True)
         except OSError as exc:
-            raise BackendError(f"failed to create singularity image directory {backend.singularity.image_dir}: {exc}")
+            raise BackendError(f"failed to create image directory {opts.image_dir}: {exc}")
 
     image_name, simg_path = get_image_info(cab, backend)
 
     # this is True if we're allowed to build missing images
-    build = build or rebuild or backend.singularity.auto_build
+    build = build or rebuild or opts.auto_build
     # this is True if we're asked to force-rebuild images
-    rebuild = rebuild or backend.singularity.rebuild
+    rebuild = rebuild or opts.rebuild
 
     cached_image_exists = os.path.exists(simg_path)
 
     # no image? Better have builds enabled then
     if not cached_image_exists:
-        log.info(f"singularity image {simg_path} does not exist")
+        log.info(f"container image {simg_path} does not exist")
         if not build:
-            raise BackendError("no image, and singularity build options not enabled")
+            raise BackendError("no image, and build options not enabled")
     # else we have an image
     # if rebuild is enabled, delete it
     elif rebuild:
         if simg_path in _rebuilt_images:
-            log.info(f"singularity image {simg_path} was rebuilt earlier")
+            log.info(f"container image {simg_path} was rebuilt earlier")
         else:
-            log.info(f"singularity image {simg_path} exists but a rebuild was specified")
+            log.info(f"container image {simg_path} exists but a rebuild was specified")
             os.unlink(simg_path)
             cached_image_exists = False
     else:
-        log.info(f"singularity image {simg_path} exists")
+        log.info(f"container image {simg_path} exists")
 
     ## OMS: taking this out for now, need some better auto-update logic, let's come back to it later
     ## Please retain the code for now
@@ -271,17 +292,17 @@ def build(
             shell=False,
             log=log,
             return_errcode=True,
-            command_name="(singularity build)",
+            command_name="(apptainer build)",
             gentle_ctrl_c=True,
             log_command=" ".join(log_args),
             log_result=True,
         )
 
         if retcode:
-            raise BackendError(f"singularity build returns {retcode}")
+            raise BackendError(f"apptainer build returns {retcode}")
 
         if not os.path.exists(simg_path):
-            raise BackendError("singularity build did not return an error code, but the image did not appear")
+            raise BackendError("apptainer build did not return an error code, but the image did not appear")
 
         _rebuilt_images.add(simg_path)
 
@@ -310,19 +331,20 @@ def run(
     from .utils import resolve_required_mounts
 
     native.update_rlimits(backend.rlimits, log)
+    opts = _get_opts(backend)
 
     # get path to image, rebuilding if backend options allow this
     simg_path = build(cab, backend=backend, log=log, build=False, wrapper=wrapper)
 
     # build up command line
     cwd = os.getcwd()
-    args = [backend.singularity.executable or BINARY, "exec", "--pwd", cwd]
-    if backend.singularity.containall:
+    args = [opts.executable or BINARY, "exec", "--pwd", cwd]
+    if opts.containall:
         args.append("--containall")
-    elif backend.singularity.contain:
+    elif opts.contain:
         args.append("--contain")
-    if backend.singularity.env:
-        args += ["--env", ",".join([f"{k}={v}" for k, v in backend.singularity.env.items()])]
+    if opts.env:
+        args += ["--env", ",".join([f"{k}={v}" for k, v in opts.env.items()])]
 
     # initial set of mounts has cwd as read-write
     mounts = {cwd: True}
@@ -330,14 +352,14 @@ def run(
     container_to_host_path = {}
 
     # get dict of ephemeral base directories
-    ephem_classes = backend.singularity.ephemeral
+    ephem_classes = opts.ephemeral
     if not ephem_classes:
         ephem_classes["tmp"] = "/tmp"
     ephem_binds = {}
 
     with ExitStack() as exit_stack:
         # add extra binds
-        for label, bind in backend.singularity.bind_dirs.items():
+        for label, bind in opts.bind_dirs.items():
             # skip if conditional is False
             if not bind.conditional:
                 log.info(f"bind_dirs.{label}: skipping based on conditional == {bind.conditional}")
@@ -366,7 +388,7 @@ def run(
                     ephem_class = bind.host.split(":", 1)[1]
                     if ephem_class not in ephem_classes:
                         raise BackendError(
-                            f"bind_dirs.{label}: class '{ephem_class}' not present in 'singularity.ephemeral' section"
+                            f"bind_dirs.{label}: class '{ephem_class}' not present in 'apptainer.ephemeral' section"
                         )
                     else:
                         ephem_target = ephem_classes[ephem_class]
@@ -378,7 +400,7 @@ def run(
                     ephem_binds[src] = ephem_target
                     src = f"::{src}::"
                 else:
-                    tmpdir = CustomTemporaryDirectory(clean_up=backend.singularity.clean_tmp, dir=ephem_target)
+                    tmpdir = CustomTemporaryDirectory(clean_up=opts.clean_tmp, dir=ephem_target)
                     src = exit_stack.enter_context(tmpdir)
                     log.info(f"bind_dirs.{label}: using temporary directory {src}")
                 container_to_host_path[target] = src
@@ -422,14 +444,14 @@ def run(
         # make list of mounts
         mounts = [(source_to_container_path.get(src, src), src, rw) for src, rw in mounts.items()]
         # add implicit /tmp mount
-        if backend.singularity.bind_tmp:
+        if opts.bind_tmp:
             for target, _, _ in mounts:
                 if target == "/tmp":
                     log.info("/tmp directory already bound, not adding an explicit binding")
                     break
             else:
-                if type(backend.singularity.bind_tmp) is str:
-                    tmp_class = backend.singularity.bind_tmp
+                if type(opts.bind_tmp) is str:
+                    tmp_class = opts.bind_tmp
                 else:
                     tmp_class = "tmp"
                 tmp_target = ephem_classes.get(tmp_class, None)
@@ -440,7 +462,7 @@ def run(
                     ephem_binds[src] = tmp_target
                     mounts.append(("/tmp", f"::{src}::", True))
                 else:
-                    tmpdir = CustomTemporaryDirectory(clean_up=backend.singularity.clean_tmp, dir=tmp_target)
+                    tmpdir = CustomTemporaryDirectory(clean_up=opts.clean_tmp, dir=tmp_target)
                     tmpdir_name = exit_stack.enter_context(tmpdir)
                     mounts.append(("/tmp", tmpdir_name, True))
 

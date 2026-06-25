@@ -15,11 +15,11 @@ def make_parser(subparsers):
 
     add(
         "-s",
-        "--singularity",
+        "--apptainer",
         action="store_true",
         help=(
-            "Pull base images using singularity. Images will be pulled into the directory specified by the enviroment "
-            "varaible, STIMELA_PULLFOLDER. $PWD by default"
+            "Pull base images using apptainer. Images will be pulled into the directory specified by the enviroment "
+            "variable, STIMELA_PULLFOLDER. $PWD by default"
         ),
     )
 
