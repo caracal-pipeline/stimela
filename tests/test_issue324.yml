@@ -1,0 +1,42 @@
+cabs:
+  echo:
+    command: echo
+    inputs:
+      msg:
+        dtype: str
+        default: "hello"
+    outputs:
+      temp-dir:
+        dtype: Directory
+        skip_freshness_checks: true
+        mkdir: true
+        must_exist: false
+        required: false
+
+  echo_required:
+    command: echo
+    inputs:
+      msg:
+        dtype: str
+        default: "hello"
+    outputs:
+      temp-dir:
+        dtype: Directory
+        skip_freshness_checks: true
+        mkdir: true
+        must_exist: false
+        required: true
+
+test_nonrequired_output:
+  steps:
+    s1:
+      cab: echo
+      params:
+        msg: "test message"
+
+test_required_output:
+  steps:
+    s1:
+      cab: echo_required
+      params:
+        msg: "test message"

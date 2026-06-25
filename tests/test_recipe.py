@@ -149,6 +149,22 @@ def test_issue527_3():
     assert verify_output(output, "invalid inputs")
 
 
+def test_issue324_nonrequired_output():
+    """Test that non-required Directory outputs don't cause errors when unresolved (issue #324)"""
+    print("===== expecting no errors for non-required output =====")
+    retcode, output = run("stimela -v -b native run test_issue324.yml test_nonrequired_output")
+    print(output)
+    assert retcode == 0, f"Non-required output should not cause an error, but got retcode={retcode}"
+
+
+def test_issue324_required_output():
+    """Test that required Directory outputs still cause errors when unresolved (issue #324)"""
+    print("===== expecting an error for required output =====")
+    retcode, output = run("stimela -v -b native run test_issue324.yml test_required_output")
+    print(output)
+    assert retcode != 0, "Required output should cause an error when unresolved"
+
+
 def test_scatter():
     print("===== expecting no errors now =====")
     retcode = os.system("stimela -v -b native exec test_scatter.yml basic_loop")

@@ -592,11 +592,11 @@ class Step:
                         subst._add_("root", subst.current)
 
             ## check for (a) invalid params (b) unresolved inputs
-            # (c) unresolved outputs of File/MS/Directory type
+            # (c) unresolved required outputs of File/MS/Directory type
             invalid = self.invalid_params
             for name in self.unresolved_params:
                 schema = self.cargo.inputs_outputs[name]
-                if schema.is_input or schema.is_named_output:
+                if schema.is_input or (schema.is_named_output and schema.required):
                     invalid.append(name)
             if invalid:
                 if skip:
