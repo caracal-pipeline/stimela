@@ -157,7 +157,7 @@ def test_issue364_braces_substitution():
     substitution, the value is stringified and must be parsed back correctly.
     """
     print("===== {}-substitution with List[Tuple[float,float]] =====")
-    retcode, output = run(r"stimela -v -b native run test_issue364.yml test_braces kernel=\[\[30,120\],\[90,360\]\]")
+    retcode, output = run("stimela -v -b native run test_issue364.yml test_braces 'kernel=[[30,120],[90,360]]'")
     print(output)
     assert retcode == 0
     assert verify_output(output, "recipe 'test_braces' executed successfully")
@@ -166,7 +166,7 @@ def test_issue364_braces_substitution():
 def test_issue364_equals_substitution():
     """Control test: =recipe.param syntax should also work with complex types."""
     print("===== =substitution with List[Tuple[float,float]] =====")
-    retcode, output = run(r"stimela -v -b native run test_issue364.yml test_equals kernel=\[\[30,120\],\[90,360\]\]")
+    retcode, output = run("stimela -v -b native run test_issue364.yml test_equals 'kernel=[[30,120],[90,360]]'")
     print(output)
     assert retcode == 0
     assert verify_output(output, "recipe 'test_equals' executed successfully")

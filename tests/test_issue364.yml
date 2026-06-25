@@ -19,7 +19,7 @@ cabs:
         info: "Kernel sizes as tuples"
         dtype: List[Tuple[float,float]]
         required: false
-        default: [1,1]
+        default: [[1.0, 1.0]]
       bounds:
         dtype: List[int]
         info: "Index bounds"
@@ -33,7 +33,7 @@ test_braces:
       info: "Kernel sizes as tuples"
       dtype: List[Tuple[float,float]]
       required: false
-      default: [1,1]
+      default: [[1.0, 1.0]]
     bounds:
       dtype: List[int]
       info: "Index bounds"
@@ -54,7 +54,7 @@ test_equals:
       info: "Kernel sizes as tuples"
       dtype: List[Tuple[float,float]]
       required: false
-      default: [1,1]
+      default: [[1.0, 1.0]]
     bounds:
       dtype: List[int]
       info: "Index bounds"
