@@ -165,4 +165,4 @@ def test_issue324():
     retcode, output = run("stimela -v -b native exec test_issue324.yml recipe")
     assert retcode == 0
     print(output)
-    assert verify_output(output, "recipe .recipe. executed successfully")
+    assert verify_output(output, "recipe 'recipe' executed successfully")
