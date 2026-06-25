@@ -149,6 +149,34 @@ def test_issue527_3():
     assert verify_output(output, "invalid inputs")
 
 
+def test_issue530_unknown_cli_params():
+    """Test that unknown CLI parameters are rejected (issue #530)"""
+    print("===== expecting an error for unknown recipe-level parameter =====")
+    retcode, output = run("stimela -v -b native exec test_issue530.yml nonexistent_param=bad")
+    assert retcode != 0
+    print(output)
+    assert verify_output(output, "does not refer to a known parameter")
+
+    print("===== expecting an error for unknown step-level parameter =====")
+    retcode, output = run("stimela -v -b native exec test_issue530.yml echo-1.nonexistent_param=bad")
+    assert retcode != 0
+    print(output)
+
+    print("===== expecting an error for assignment to a nonexistent step =====")
+    retcode, output = run("stimela -v -b native exec test_issue530.yml nonexistent_step.param=bad")
+    assert retcode != 0
+    print(output)
+    assert verify_output(output, "does not refer to a known parameter")
+
+    print("===== expecting success with valid parameters only =====")
+    retcode, output = run("stimela -v -b native exec test_issue530.yml greeting=world")
+    assert retcode == 0
+
+    print("===== expecting success with no extra parameters =====")
+    retcode, output = run("stimela -v -b native exec test_issue530.yml")
+    assert retcode == 0
+
+
 def test_scatter():
     print("===== expecting no errors now =====")
     retcode = os.system("stimela -v -b native exec test_scatter.yml basic_loop")

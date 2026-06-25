@@ -1,0 +1,21 @@
+cabs:
+  echo:
+    command: echo
+    inputs:
+      msg:
+        dtype: str
+        required: true
+        policies:
+          positional: true
+
+recipe:
+  inputs:
+    greeting:
+      dtype: str
+      default: hello
+
+  steps:
+    echo-1:
+      cab: echo
+      params:
+        msg: =recipe.greeting

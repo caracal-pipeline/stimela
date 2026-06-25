@@ -356,6 +356,11 @@ class Recipe(Cargo):
             whose.update_log_options(**{subkey: value})
             if whose is self and subst is not None and "recipe" in subst:
                 subst.recipe.log[subkey] = value
+        elif override:
+            # In override mode (CLI parameters), unknown keys are an error.
+            # In non-override mode (recipe assign blocks), unknown keys are
+            # arbitrary recipe-level variables already handled by _do_assignments.
+            raise AssignmentError(f"{self.fqname}: '{key}' does not refer to a known parameter, step, or setting")
         # in override mode, assign to assign dict for future processing
         if override:
             if value is not UNSET:
