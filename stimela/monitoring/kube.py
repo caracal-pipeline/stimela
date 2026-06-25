@@ -21,4 +21,9 @@ class KubeReport:
 
     @property
     def profiling_results(self):
-        return {"k8s_cores": self.total_cores, "k8s_mem": self.total_memory}
+        results = {}
+        if self.total_cores is not None:
+            results["k8s_cores"] = self.total_cores
+        if self.total_memory is not None:
+            results["k8s_mem"] = self.total_memory
+        return results
