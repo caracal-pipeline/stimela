@@ -45,6 +45,20 @@ cabs:
       y: 
         dtype: str
 
+  test_callable_implicit_output:
+    command: tests.test_callables.callable_function
+    flavour:
+      kind: python
+      # output is NOT specified -- should be implicitly selected since there's only one
+    inputs:
+      a:
+        dtype: int
+      b:
+        dtype: str
+    outputs:
+      x:
+        dtype: int
+
   test_callable4:
     command: |
       print("a is {current.a} and b is {current.b}")
@@ -111,3 +125,8 @@ test_callables:
       params:
         a: =previous.x
         b: =previous.y
+    s6_implicit:
+      cab: test_callable_implicit_output
+      params:
+        a: 7
+        b: "baz"
