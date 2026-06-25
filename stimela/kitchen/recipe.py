@@ -575,6 +575,20 @@ class Recipe(Cargo):
             else:
                 # get recipe's original schema for the parameter
                 io = self.inputs if input_schema else self.outputs
+                # check for input/output direction mismatch: if the alias name was explicitly declared
+                # in the recipe's inputs or outputs, it must match the step parameter's direction
+                if input_schema and alias_name in self.outputs:
+                    raise RecipeValidationError(
+                        f"recipe '{self.name}': output '{alias_name}' is aliased to step input "
+                        f"'{step_label}.{step_param_name}'. Output aliases must refer to step outputs.",
+                        log=self.log,
+                    )
+                if output_schema and alias_name in self.inputs:
+                    raise RecipeValidationError(
+                        f"recipe '{self.name}': input '{alias_name}' is aliased to step output "
+                        f"'{step_label}.{step_param_name}'. Input aliases must refer to step inputs.",
+                        log=self.log,
+                    )
                 # if we have a schema defined for the alias, some params must be inherited from it
                 orig_schema = io.get(alias_name)
                 self._orig_alias_schema[alias_name] = orig_schema
