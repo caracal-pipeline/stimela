@@ -525,7 +525,19 @@ def run(
     subst._add_("info", info)
     subst._add_("self", info)
     subst._add_("config", stimela.CONFIG, nosubst=True)
-    subst._add_("current", SubstitutionNS(**params))
+    try:
+        subst._add_("current", SubstitutionNS(**params))
+    except TypeError as exc:
+        log_exception(
+            RecipeValidationError(
+                f"conflicting parameter assignments: {exc}. "
+                f"This typically happens when one assignment sets a parameter to a scalar value "
+                f"(e.g. 'foo=null') while another tries to use it as a namespace prefix "
+                f"(e.g. 'foo.bar=value'). "
+                f"Please check your parameter assignments for conflicts."
+            )
+        )
+        sys.exit(1)
 
     # are we running a standalone cab?
     if cab_name is not None:
@@ -589,6 +601,15 @@ def run(
                 recipe.assign_value(key, value, override=True)
             except ScabhaBaseException as exc:
                 log_exception(exc)
+                sys.exit(1)
+            except (TypeError, KeyError) as exc:
+                log_exception(
+                    RecipeValidationError(
+                        f"error assigning '{key}={value}': {exc}. "
+                        f"Check that '{key}' refers to a valid parameter or step, "
+                        f"and that intermediate dotted components are sections rather than scalar values."
+                    )
+                )
                 sys.exit(1)
 
         # create subst namespace for outer step
