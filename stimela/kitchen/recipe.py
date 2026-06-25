@@ -96,6 +96,9 @@ class Recipe(Cargo):
     # make recipe a for_loop-gather (i.e. parallel for loop)
     for_loop: Optional[ForLoopClause] = None
 
+    # optional message to display after a successful run (supports {}-substitutions)
+    summary_message: Optional[str] = None
+
     def __post_init__(self):
         Cargo.__post_init__(self)
         # flatten aliases and assignments
@@ -1473,6 +1476,21 @@ class Recipe(Cargo):
         subst.current = subst.recipe
 
         self.log.info(f"recipe '{self.name}' executed successfully")
+
+        # evaluate and print summary_message if defined
+        if self.summary_message:
+            try:
+                message = evaluate_and_substitute_object(
+                    self.summary_message,
+                    subst,
+                    recursion_level=-1,
+                    location=[self.fqname, "summary_message"],
+                    log=self.log,
+                )
+                self.log.info(f"summary: {message}")
+            except Exception as exc:
+                self.log.warning(f"error evaluating summary_message: {exc}")
+
         return OrderedDict((name, value) for name, value in params.items() if name in self.outputs)
 
     def to_dag(self, graph: Optional[nx.DiGraph] = None, parent: Optional[str] = None) -> nx.DiGraph:

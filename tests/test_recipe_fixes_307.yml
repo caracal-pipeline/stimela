@@ -1,0 +1,39 @@
+## Test recipes for issue #307 - summary_message
+
+cabs:
+  echo:
+    image: null
+    command: echo
+    policies:
+      skip_implicits: false
+      key_value: true
+    inputs:
+      a:
+        dtype: str
+        required: true
+    outputs:
+      out:
+        dtype: File
+        implicit: "{current.a}"
+        must_exist: false
+
+## Issue #307: recipe summary_message
+test-307-summary-message:
+  name: "test-307-summary-message"
+  summary_message: "Recipe completed with a={recipe.a_val}"
+  assign:
+    a_val: success
+  steps:
+    s1:
+      cab: echo
+      params:
+        a: hello
+
+## Issue #307: recipe summary_message with no message (should work fine)
+test-307-no-summary:
+  name: "test-307-no-summary"
+  steps:
+    s1:
+      cab: echo
+      params:
+        a: hello
