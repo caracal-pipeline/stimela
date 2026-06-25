@@ -264,6 +264,7 @@ class TestIntegration:
         """Load stimela config if not already loaded."""
         if stimela.CONFIG is None:
             from stimela.config import load_config
+
             load_config(extra_configs=[])
 
     def test_cab_proxy_with_echo(self):
