@@ -149,6 +149,15 @@ def test_issue527_3():
     assert verify_output(output, "invalid inputs")
 
 
+def test_forloop_step_assign():
+    """Test that for-loop variables can be used in step-level assignments.
+    Regression test for https://github.com/caracal-pipeline/stimela/issues/282
+    """
+    print("===== expecting no errors: for-loop var used in step assign =====")
+    retcode, output = run("stimela -v -b native exec test_forloop_assign.yml forloop_step_assign")
+    assert retcode == 0, f"For-loop step-level assignment failed: {output}"
+
+
 def test_scatter():
     print("===== expecting no errors now =====")
     retcode = os.system("stimela -v -b native exec test_scatter.yml basic_loop")

@@ -827,9 +827,15 @@ class Recipe(Cargo):
             self.log, self.logopts, nesting=self.nesting, subst=subst, location=[self.fqname]
         )
 
-        # add for-loop variable to inputs, if expected there
-        if self.for_loop is not None and self.for_loop.var in self.inputs:
-            params[self.for_loop.var] = Placeholder(self.for_loop.var)
+        # add for-loop variable as a placeholder during prevalidation
+        if self.for_loop is not None:
+            placeholder = Placeholder(self.for_loop.var)
+            # add to inputs if expected there
+            if self.for_loop.var in self.inputs:
+                params[self.for_loop.var] = placeholder
+            # always add to subst namespace so step-level assignments
+            # referencing =recipe.<var> can resolve during prevalidation
+            subst.recipe._add_(self.for_loop.var, placeholder)
 
         # prevalidate our own parameters. This substitutes in defaults and does {}-substitutions
         # we call this twice, potentially, so define as a function

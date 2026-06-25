@@ -1,0 +1,35 @@
+## Test for issue #282: For-loops and step-level assignments fail prevalidation
+## When a for-loop variable is used inside a step-level assignment, prevalidation
+## should not fail because the loop variable is UNSET at prevalidation time.
+
+cabs:
+  echo_cab:
+    command: echo
+    inputs:
+      msg:
+        dtype: str
+        required: true
+      num:
+        dtype: int
+        default: 0
+
+forloop_step_assign:
+  name: "forloop_step_assign"
+
+  for_loop:
+    var: nnodes
+    over: [1,2,3]
+
+  steps:
+    echo1:
+      cab: echo_cab
+      assign:
+        num: =recipe.nnodes
+      params:
+        msg: "hello"
+
+opts:
+  log:
+    dir: test-logs/logs-{config.run.datetime}
+    nest: 3
+    symlink: logs
