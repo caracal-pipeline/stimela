@@ -857,6 +857,11 @@ class Recipe(Cargo):
         # our own parameters are prevalidated against the outer substitution context;
         # step parameters are prevalidated against our own subst
         subst_outer = subst.copy()
+        # scrub the parent recipe's 'recipe' namespace from subst_outer to prevent
+        # sub-recipe inputs/outputs from accidentally accessing parent variables
+        # via {recipe.xxx} (see #433). The correct namespace for sub-recipes is 'current'.
+        if "recipe" in subst_outer:
+            del subst_outer["recipe"]
         self._update_subst_namespace(subst)
 
         # update assignments

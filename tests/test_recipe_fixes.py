@@ -87,6 +87,16 @@ def test_317_assign_propagates_to_alias():
     assert verify_output(output, "b=assigned_value")
 
 
+def test_433_subrecipe_namespace_scrubbed():
+    """Sub-recipe defaults should not resolve parent recipe namespace during prevalidation."""
+    retcode, output = run("stimela -v -b native exec test_recipe_fixes.yml test-433-subrecipe-namespace")
+    print(output)
+    # The sub-recipe input x defaults to {recipe.parent_var}. During prevalidation,
+    # the parent recipe's namespace should be scrubbed, so the default should be
+    # Unresolved (not resolved to the parent's value).
+    assert verify_output(output, "Unresolved.*recipe.parent_var.*invalid key")
+
+
 def test_307_summary_message():
     """A recipe with summary_message should print it after successful execution."""
     retcode, output = run("stimela -v -b native run test_recipe_fixes_307.yml test-307-summary-message")
