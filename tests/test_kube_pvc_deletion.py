@@ -54,6 +54,7 @@ def test_delete_pvc_not_found_is_graceful(mock_refresh, mock_get_api):
 
     mock_info.assert_any_call("PVC 'test-pvc' not found, it may have already been deleted")
     mock_error.assert_not_called()
+    assert "test-pvc" not in active_pvcs, "PVC should be removed from active_pvcs after 404"
 
 
 @patch("stimela.backends.kube.infrastructure.get_kube_api")

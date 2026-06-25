@@ -353,6 +353,8 @@ def delete_pvcs(
                 body = json.loads(exc.body)
                 if body.get("reason") == "NotFound":
                     log.info(f"PVC '{pvc.name}' not found, it may have already been deleted")
+                    pvc.status = "Deleted"
+                    active_pvcs.pop(pvc.name, None)
                 else:
                     log_exception(
                         BackendError(f"k8s API error while deleting PVC '{pvc.name}'", (exc, body)),
