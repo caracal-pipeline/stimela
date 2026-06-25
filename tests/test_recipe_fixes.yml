@@ -1,6 +1,22 @@
 ## Test recipes for recipe.py fixes
 
 cabs:
+  sleep460:
+    flavour: python-code
+    command: |
+      import time
+      time.sleep(0)
+    inputs:
+      foo:
+        dtype: str
+      bar:
+        dtype: str
+    outputs:
+      baz:
+        dtype: File
+        default: =IFSET(current.bar, STRIPEXT(current.bar))
+        must_exist: false
+
   echo:
     image: null
     command: echo
@@ -72,15 +88,16 @@ test-362-assign-to-input:
         a: hello
 
 ## Issue #460: alias shares name with step input - improved error message
+## This uses a separate cab with a formula default to reproduce the issue
 test-460-alias-step-collision:
   name: "test-460-alias-step-collision"
   outputs:
     bar:
       aliases:
-        - s1.baz
+        - sleep-1.baz
   steps:
-    s1:
-      cab: echo
+    sleep-1:
+      cab: sleep460
       params:
         foo: foo
 

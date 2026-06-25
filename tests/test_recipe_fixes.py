@@ -68,13 +68,11 @@ def test_362_assign_to_input_deprecated():
 
 
 def test_460_alias_step_collision_message():
-    """When an alias shares a name with a step input, the error should be clear."""
+    """When an alias shares a name with a step input, a warning should explain the collision."""
     retcode, output = run("stimela -v -b native exec test_recipe_fixes.yml test-460-alias-step-collision")
     print(output)
-    # The recipe may or may not error, but if it does the message should mention
-    # the collision between alias name and step parameter name
-    if retcode != 0:
-        assert verify_output(output, "alias.*bar.*conflicts.*step.*input|bar.*same name")
+    # Should produce a warning about the alias name colliding with a step parameter
+    assert verify_output(output, "alias.*bar.*same name.*step.*input.*sleep-1.bar")
 
 
 # --- Issue #307: recipe summary_message ---

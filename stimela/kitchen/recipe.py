@@ -654,6 +654,18 @@ class Recipe(Cargo):
             if schema.required and not have_step_param and (orig_schema is None or orig_schema.required is None):
                 alias_schema.required = True
 
+            # warn if the alias name collides with another parameter of the same step
+            # (this can cause confusing substitution errors, see #460)
+            if alias_name != step_param_name and alias_name in step.inputs_outputs:
+                colliding_io = "input" if alias_name in step.inputs else "output"
+                self.log.warning(
+                    f"recipe '{self.name}': alias '{alias_name}' (pointing to "
+                    f"'{step_label}.{step_param_name}') has the same name as a step "
+                    f"{colliding_io} '{step_label}.{alias_name}'. This may cause "
+                    f"confusing substitution errors if the step uses '{{current.{alias_name}}}' "
+                    f"in formulas. Consider renaming the alias."
+                )
+
             self._alias_map[step_label, step_param_name] = alias_name, orig_schema
             self._alias_list.setdefault(alias_name, []).append(Recipe.AliasInfo(step_label, step, step_param_name, io))
 
