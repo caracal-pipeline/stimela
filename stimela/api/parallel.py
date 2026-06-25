@@ -46,20 +46,20 @@ class ParallelContext:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if exc_type is not None:
-            self._executor.shutdown(wait=False, cancel_futures=True)
-            return False
+        try:
+            if exc_type is not None:
+                return False
 
-        self._results = []
-        for label, future in self._futures:
-            try:
-                self._results.append(future.result())
-            except Exception as exc:
-                log = logging.getLogger("stimela.parallel")
-                log.error(f"parallel step '{label}' failed: {exc}")
-                raise
-
-        self._executor.shutdown(wait=True)
+            self._results = []
+            for label, future in self._futures:
+                try:
+                    self._results.append(future.result())
+                except Exception as exc:
+                    log = logging.getLogger("stimela.parallel")
+                    log.error(f"parallel step '{label}' failed: {exc}")
+                    raise
+        finally:
+            self._executor.shutdown(wait=True)
         return False
 
     def run(self, cab_proxy: "CabProxy", **params: Any) -> None:

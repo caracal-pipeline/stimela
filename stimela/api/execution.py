@@ -7,13 +7,14 @@ command construction, and backend dispatch is reused.
 
 from __future__ import annotations
 
+import contextvars
 import logging
 import os
 from collections import OrderedDict
 from typing import Any
 
 from omegaconf import DictConfig, OmegaConf
-from scabha.basetypes import UNSET
+from scabha.basetypes import UNSET, Unresolved
 from scabha.substitutions import SubstitutionNS
 
 import stimela
@@ -23,7 +24,10 @@ from stimela.backends import StimelaBackendSchema, runner
 from stimela.exceptions import BackendError, StepValidationError, StimelaCabRuntimeError
 from stimela.kitchen.cab import Cab, get_cab_schema
 
-_recipe_context_stack: list["RecipeContext"] = []
+# Thread-safe context stack using ContextVar so parallel() doesn't corrupt state
+_recipe_context_var: contextvars.ContextVar[list[RecipeContext]] = contextvars.ContextVar(
+    "recipe_context_stack", default=[]
+)
 
 
 class RecipeContext:
@@ -41,15 +45,22 @@ class RecipeContext:
 
 
 def get_current_context() -> RecipeContext | None:
-    return _recipe_context_stack[-1] if _recipe_context_stack else None
+    stack = _recipe_context_var.get()
+    return stack[-1] if stack else None
 
 
 def push_context(ctx: RecipeContext):
-    _recipe_context_stack.append(ctx)
+    stack = _recipe_context_var.get()
+    _recipe_context_var.set([*stack, ctx])
 
 
 def pop_context() -> RecipeContext | None:
-    return _recipe_context_stack.pop() if _recipe_context_stack else None
+    stack = _recipe_context_var.get()
+    if not stack:
+        return None
+    ctx = stack[-1]
+    _recipe_context_var.set(stack[:-1])
+    return ctx
 
 
 def _ensure_config():
@@ -161,6 +172,10 @@ def run_cab_proxy(
     """Execute a cab via the Python API.
 
     This bridges CabProxy.__call__() to existing Stimela execution machinery.
+
+    Note: ``tags`` is accepted for API completeness but tag-based step
+    filtering is only meaningful when running via the CLI (``stimela exec
+    --tags ...``). In direct Python calls, use ``if``/``else`` instead.
     """
     _ensure_config()
 
@@ -202,10 +217,9 @@ def run_cab_proxy(
 
     log.info(f"running {cab_name}")
 
-    wrapper_or_backend = (
-        backend_opts.get("current_wrapper") or backend_opts.get("current_backend", "native")
-        if isinstance(backend_opts, dict)
-        else getattr(backend_opts, "current_wrapper", None) or getattr(backend_opts, "current_backend", "native")
+    # backend_opts is a StimelaBackendOptions dataclass after to_object()
+    wrapper_or_backend = getattr(backend_opts, "current_wrapper", None) or getattr(
+        backend_opts, "current_backend", "native"
     )
 
     with task_stats.declare_subtask(cab_name, wrapper_or_backend):
@@ -229,11 +243,12 @@ def run_cab_proxy(
     except Exception:
         output_params = validated_params
 
+    # Filter out both UNSET sentinel and Unresolved instances
     outputs = {}
     for name in cab.outputs:
         if name in output_params:
             value = output_params[name]
-            if not isinstance(value, UNSET):
+            if value is not UNSET and not isinstance(value, Unresolved):
                 outputs[name] = value
 
     log.info(f"{cab_name} completed")

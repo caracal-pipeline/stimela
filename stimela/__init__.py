@@ -30,7 +30,7 @@ LOG_FILE = "{0:s}/stimela_logfile.json".format(LOG_HOME)
 
 from .stimelogging import logger, log_exception  # noqa
 
-# Stimela3 Python API — available as stimela.recipe, stimela.run, etc.
+# Stimela3 Python API — available as stimela.recipe, stimela.cab, stimela.parallel, etc.
 from .api import Choices, Info, Out, Param, ResultNamespace, RunResult, cab, parallel, recipe  # noqa
 from .api.cab_proxy import CabProxy  # noqa
 

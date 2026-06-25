@@ -53,5 +53,5 @@ def recipe(func: Callable | None = None, *, backend: str | None = None):
         def my_recipe(ms: str): ...
     """
     if func is not None:
-        return RecipeWrapper(func)
+        return RecipeWrapper(func, backend=backend)
     return lambda f: RecipeWrapper(f, backend=backend)

@@ -47,6 +47,7 @@ def cab(
             is_output = ann.get("is_output", False)
             info = ann.get("info", "")
             choices = ann.get("choices")
+            param_config = ann.get("param")
             param_type = ann.get("type", Any)
 
             schema: dict[str, Any] = {}
@@ -62,6 +63,14 @@ def cab(
 
             if param.default is not inspect.Parameter.empty:
                 schema["default"] = param.default
+
+            if param_config is not None:
+                if param_config.cli_name:
+                    schema["nom_de_guerre"] = param_config.cli_name
+                if param_config.metavar:
+                    schema["metavar"] = param_config.metavar
+                if param_config.abbreviation:
+                    schema["abbreviation"] = param_config.abbreviation
 
             if is_output:
                 outputs[param_name] = schema
