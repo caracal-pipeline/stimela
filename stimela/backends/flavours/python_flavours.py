@@ -1,4 +1,5 @@
 import base64
+import itertools
 import json
 import logging
 import os.path
@@ -24,11 +25,46 @@ from . import _BaseFlavour, _CallableFlavour
 CAB_OUTPUT_PREFIX = "### YIELDING CAB OUTPUT ## "
 
 
+def _abbreviate_repr(value, max_str_len=80, max_collection_items=5):
+    """Return an abbreviated repr of a value for display purposes.
+
+    Truncates strings longer than max_str_len and collections with more
+    than max_collection_items elements. Only affects display output, not
+    the actual values passed to functions.
+    """
+    if isinstance(value, str):
+        if len(value) > max_str_len:
+            return repr(value[:max_str_len] + "...")
+    elif isinstance(value, (list, tuple)):
+        bracket_open = "[" if isinstance(value, list) else "("
+        bracket_close = "]" if isinstance(value, list) else ")"
+        if len(value) > max_collection_items:
+            abbreviated = (_abbreviate_repr(v, max_str_len, max_collection_items) for v in value[:max_collection_items])
+            items = ", ".join(abbreviated)
+            return f"{bracket_open}{items}, ...{len(value) - max_collection_items} more{bracket_close}"
+        else:
+            items = ", ".join(_abbreviate_repr(v, max_str_len, max_collection_items) for v in value)
+            return f"{bracket_open}{items}{bracket_close}"
+    elif isinstance(value, dict):
+        if len(value) > max_collection_items:
+            items = ", ".join(
+                f"{repr(k)}: {_abbreviate_repr(v, max_str_len, max_collection_items)}"
+                for k, v in itertools.islice(value.items(), max_collection_items)
+            )
+            return "{" + f"{items}, ...{len(value) - max_collection_items} more" + "}"
+        else:
+            items = ", ".join(
+                f"{repr(k)}: {_abbreviate_repr(v, max_str_len, max_collection_items)}" for k, v in value.items()
+            )
+            return "{" + items + "}"
+    return repr(value)
+
+
 def form_python_function_call(function: str, cab: Cab, params: Dict[str, Any]):
     """
-    Helper. Converts a function name and a list of parameters into a string
-    representation of a Python function call that can be parsed by the interpreter.
-    Uses the cab schema info and policies to decide which parametets to include.
+    Helper. Converts a function name and a list of parameters into an abbreviated
+    string representation of a Python function call for display/logging only.
+    Uses the cab schema info and policies to decide which parameters to include.
 
     Args:
         function (str) function name
@@ -40,7 +76,7 @@ def form_python_function_call(function: str, cab: Cab, params: Dict[str, Any]):
     """
     arguments = []
     for key, value in cab.filter_input_params(params).items():
-        arguments.append(f"{key}={repr(value)}")
+        arguments.append(f"{key}={_abbreviate_repr(value)}")
     return f"{function}({', '.join(arguments)})"
 
 
@@ -54,7 +90,7 @@ def format_dict_as_function_call(func_name: Optional[str], d: Dict[str, Any], in
         comma = ""
     pad = " " * indent
     for k, v in d.items():
-        lines.append(f"{pad}{k}={repr(v)}{comma}")
+        lines.append(f"{pad}{k}={_abbreviate_repr(v)}{comma}")
     # strip trailing comma
     if func_name:
         lines[-1] = lines[-1][:-1] + ")"
