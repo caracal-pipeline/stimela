@@ -119,6 +119,9 @@ class Cab(Cargo):
     # default parameter conversion policies
     policies: ParameterPolicies = EmptyClassDefault(ParameterPolicies)
 
+    # directory of the YAML file that defined this cab (for resolving relative paths)
+    yaml_dir: Optional[str] = None
+
     def __post_init__(self):
         # Intercept (path/file.py)function syntax for dynamic_schema before
         # Cargo.__post_init__ tries to resolve it via importlib.import_module.
@@ -135,9 +138,9 @@ class Cab(Cargo):
         if file_based_dynschema is not None:
             self.dynamic_schema = file_based_dynschema
             try:
-                self._dyn_schema = resolve_callable(file_based_dynschema)
+                self._dyn_schema = resolve_callable(file_based_dynschema, yaml_dir=self.yaml_dir)
             except Exception as exc:
-                raise CabValidationError(f"can't load dynamic schema '{file_based_dynschema}': {exc}")
+                raise CabValidationError(f"can't load dynamic schema '{file_based_dynschema}': {exc}") from exc
             # make backup copy of original inputs/outputs (same as Cargo does)
             self._original_inputs_outputs = self.inputs.copy(), self.outputs.copy()
 

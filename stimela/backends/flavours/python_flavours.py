@@ -151,7 +151,7 @@ class PythonCallableFlavour(_CallableFlavour):
         file_callable = parse_file_callable(command)
         if file_callable:
             py_file_path, py_function = file_callable
-            py_file_path = resolve_file_path(py_file_path)
+            py_file_path = resolve_file_path(py_file_path, yaml_dir=getattr(cab, "yaml_dir", None))
             py_module = None
         elif "." in command:
             py_module, py_function = command.rsplit(".", 1)
@@ -199,7 +199,7 @@ class PythonCallableFlavour(_CallableFlavour):
         # generate import code based on syntax
         if py_file_path:
             import_code = f"""import importlib.util as _ilu
-_spec = _ilu.spec_from_file_location("{py_function}_module", "{py_file_path}")
+_spec = _ilu.spec_from_file_location("{py_function}_module", {repr(py_file_path)})
 _mod = _ilu.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 {py_function} = getattr(_mod, "{py_function}")"""
