@@ -1,0 +1,9 @@
+2026-06-25 14:41:43 STIMELA.demo_recipe.s4 DEBUG: validating inputs ['info', 'self', 'config', 'current', 'steps', 'previous', 'recipe', 'root', 'parent']
+2026-06-25 14:41:43 STIMELA.demo_recipe.s4 DEBUG: validating outputs
+2026-06-25 14:41:43 STIMELA.demo_recipe.s4 DEBUG: ### validated outputs
+2026-06-25 14:41:43 STIMELA.demo_recipe.s4 DEBUG: cab echo:
+2026-06-25 14:41:43 STIMELA.demo_recipe.s4 DEBUG:   out = 2
+2026-06-25 14:41:43 STIMELA.demo_recipe.s4 DEBUG:   out2 = out2
+2026-06-25 14:41:43 STIMELA.demo_recipe.s4 DEBUG:   out3.x = 
+2026-06-25 14:41:43 STIMELA.demo_recipe.s4 DEBUG:   out3.y = 
+2026-06-25 14:41:43 STIMELA.demo_recipe.s4 DEBUG:   a = ???

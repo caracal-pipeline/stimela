@@ -2,6 +2,11 @@
 
 Uses PEP 593 ``Annotated`` to attach metadata to recipe and cab parameters:
 
+.. note:: ``from __future__ import annotations`` is intentionally omitted here
+   because ``extract_annotations()`` needs ``get_type_hints(include_extras=True)``
+   to evaluate annotations eagerly. Adding future annotations would make all
+   hints strings, breaking extraction in functions that don't opt in.
+
 - ``Info("description")`` — parameter documentation
 - ``Out`` — marks a parameter as an output (default is input)
 - ``Choices["a", "b"]`` — restricts parameter to enumerated values
@@ -11,7 +16,7 @@ Uses PEP 593 ``Annotated`` to attach metadata to recipe and cab parameters:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, get_args, get_origin, get_type_hints
+from typing import Any, Optional, get_args, get_origin, get_type_hints
 
 
 class _OutputMarker:
@@ -54,9 +59,9 @@ class Param:
         abbreviation: Short CLI flag (e.g. ``-n``).
     """
 
-    cli_name: str | None = None
-    metavar: str | None = None
-    abbreviation: str | None = None
+    cli_name: Optional[str] = None
+    metavar: Optional[str] = None
+    abbreviation: Optional[str] = None
 
 
 class _ChoicesMeta(type):

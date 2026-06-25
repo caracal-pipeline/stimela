@@ -1,0 +1,22 @@
+2026-06-25 14:41:42 STIMELA.recipe.s3 DEBUG: validating inputs ['info', 'self', 'config', 'current', 'steps', 'previous', 'recipe', 'root', 'parent']
+2026-06-25 14:41:42 STIMELA.recipe.s3 INFO: ### validated inputs
+2026-06-25 14:41:42 STIMELA.recipe.s3 INFO: cab echo:
+2026-06-25 14:41:42 STIMELA.recipe.s3 INFO:   a = 1
+2026-06-25 14:41:42 STIMELA.recipe.s3 INFO:   c = 2
+2026-06-25 14:41:42 STIMELA.recipe.s3 INFO:   d = d_is_implicit
+2026-06-25 14:41:42 STIMELA.recipe.s3 INFO:   f = f
+2026-06-25 14:41:42 STIMELA.recipe.s3 INFO:   out2 = out2
+2026-06-25 14:41:42 STIMELA.recipe.s3 DEBUG: command is echo
+2026-06-25 14:41:42 STIMELA.recipe.s3 DEBUG: command line is echo --a=1 --c=2 --d=d_is_implicit --f=f --out=1 --out2=out2
+2026-06-25 14:41:42 STIMELA.recipe.s3 INFO: ---INVOKING---
+2026-06-25 14:41:42 STIMELA.recipe.s3 INFO: echo --a=1 --c=2 --d=d_is_implicit --f=f --out=1 --out2=out2
+
+2026-06-25 14:41:42 STIMELA.recipe.s3 DEBUG: full command line is echo --a=1 --c=2 --d=d_is_implicit --f=f --out=1 --out2=out2
+# --a=1 --c=2 --d=d_is_implicit --f=f --out=1 --out2=out2
+2026-06-25 14:41:42 STIMELA.recipe.s3 INFO: echo returns exit code 0 after 0:00:00
+2026-06-25 14:41:42 STIMELA.recipe.s3 DEBUG: validating outputs
+2026-06-25 14:41:42 STIMELA.recipe.s3 DEBUG: ### validated outputs
+2026-06-25 14:41:42 STIMELA.recipe.s3 DEBUG: cab echo:
+2026-06-25 14:41:42 STIMELA.recipe.s3 DEBUG:   out = 1
+2026-06-25 14:41:42 STIMELA.recipe.s3 DEBUG:   out2 = out2
+2026-06-25 14:41:42 STIMELA.recipe.s3 DEBUG:   a = ???

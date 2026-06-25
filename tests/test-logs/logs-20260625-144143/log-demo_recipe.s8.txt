@@ -1,0 +1,17 @@
+2026-06-25 14:41:43 STIMELA.demo_recipe.s8 DEBUG: prevalidating recipe
+2026-06-25 14:41:43 STIMELA.demo_recipe.s8 DEBUG: recipe pre-validated
+2026-06-25 14:41:43 STIMELA.demo_recipe.s8 DEBUG: example nested recipe 2: 0 missing, 0 invalid and 0 unresolved parameters
+2026-06-25 14:41:43 STIMELA.demo_recipe.s8 INFO: selecting recipe steps for (sub)recipe: [bold green]example nested recipe 2[/bold green]
+2026-06-25 14:41:43 STIMELA.demo_recipe.s8 INFO: the following recipe steps have been enabled:
+2026-06-25 14:41:43 STIMELA.demo_recipe.s8 INFO:     [bold green]ss1 ss2[/bold green]
+2026-06-25 14:41:44 STIMELA.demo_recipe.s8 DEBUG: validating inputs ['info', 'self', 'config', 'current', 'steps', 'previous', 'recipe', 'root', 'parent']
+2026-06-25 14:41:44 STIMELA.demo_recipe.s8 INFO: ### validated inputs
+2026-06-25 14:41:44 STIMELA.demo_recipe.s8 INFO: recipe 'example nested recipe 2':
+2026-06-25 14:41:44 STIMELA.demo_recipe.s8 INFO:   a = demo_recipe.s8
+2026-06-25 14:41:44 STIMELA.demo_recipe.s8 INFO: running recipe 'example nested recipe 2'
+2026-06-25 14:41:44 STIMELA.demo_recipe.s8 INFO: processing step 'ss1'
+2026-06-25 14:41:44 STIMELA.demo_recipe.s8 INFO: processing step 'ss2'
+2026-06-25 14:41:44 STIMELA.demo_recipe.s8 INFO: recipe 'example nested recipe 2' executed successfully
+2026-06-25 14:41:44 STIMELA.demo_recipe.s8 DEBUG: validating outputs
+2026-06-25 14:41:44 STIMELA.demo_recipe.s8 DEBUG: ### validated outputs
+2026-06-25 14:41:44 STIMELA.demo_recipe.s8 DEBUG: recipe 'example nested recipe 2':

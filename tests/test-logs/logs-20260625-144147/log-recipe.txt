@@ -1,0 +1,37 @@
+2026-06-25 14:41:47 STIMELA.recipe DEBUG: default params assignment: selfcal.image_name=bar
+2026-06-25 14:41:47 STIMELA.recipe DEBUG: default params assignment: msname=foo
+2026-06-25 14:41:47 STIMELA.recipe DEBUG: default params assignment: elem-xyz=x
+2026-06-25 14:41:47 STIMELA.recipe DEBUG: default params assignment: elemlist-xyz=['x', 'y']
+2026-06-25 14:41:47 STIMELA.recipe DEBUG: prevalidating recipe
+2026-06-25 14:41:47 STIMELA.recipe DEBUG: recipe pre-validated
+2026-06-25 14:41:47 STIMELA.recipe DEBUG: demo recipe: 0 missing, 0 invalid and 0 unresolved parameters
+2026-06-25 14:41:47 STIMELA.recipe INFO: selecting recipe steps for (sub)recipe: [bold green]demo recipe[/bold green]
+2026-06-25 14:41:47 STIMELA.recipe INFO: the following recipe steps have been enabled:
+2026-06-25 14:41:47 STIMELA.recipe INFO:     [bold green]test_callable makems selfcal[/bold green]
+2026-06-25 14:41:47 STIMELA.recipe DEBUG: validating inputs ['info', 'self', 'config', 'current', 'steps', 'previous', 'recipe', 'root']
+2026-06-25 14:41:47 STIMELA.recipe INFO: ### validated inputs
+2026-06-25 14:41:47 STIMELA.recipe INFO: recipe 'demo recipe':
+2026-06-25 14:41:47 STIMELA.recipe INFO:   band = L
+2026-06-25 14:41:47 STIMELA.recipe INFO:   elem-xyz = x
+2026-06-25 14:41:47 STIMELA.recipe INFO:   elemlist-xyz = ['x', 'y']
+2026-06-25 14:41:47 STIMELA.recipe INFO:   elemlist_xyz = deliberate use of _ vs - to check validate() avoiding this situation
+2026-06-25 14:41:47 STIMELA.recipe INFO:   continue = deliberate use of Python keyword to make sure validate() doesn't barf
+2026-06-25 14:41:47 STIMELA.recipe INFO:   with = deliberate use of Python keyword to make sure validate() doesn't barf
+2026-06-25 14:41:47 STIMELA.recipe INFO:   recipe-file = test_recipe.yml
+2026-06-25 14:41:47 STIMELA.recipe INFO:   recipe-file-2 = test_recipe_notexists.yml
+2026-06-25 14:41:47 STIMELA.recipe INFO:   recipe-dirs = \[file:/Users/gijsm/Github/caracal-pipeline/stimela/.claude/worktrees/stimela3-api/tests, file:/Users/gijsm/Github/caracal-pipeline/stimela/.claude/worktrees/stimela3-api, file:/Users/gijsm]
+2026-06-25 14:41:47 STIMELA.recipe INFO:   recipe-uri = test_recipe.yml
+2026-06-25 14:41:47 STIMELA.recipe INFO:   recipe-uri-2 = \[file:/Users/gijsm/Github/caracal-pipeline/stimela/.claude/worktrees/stimela3-api/tests/test_recipe.yml, s3://some.s3.path]
+2026-06-25 14:41:47 STIMELA.recipe INFO:   msname = foo
+2026-06-25 14:41:47 STIMELA.recipe INFO:   telescope = kat-7
+2026-06-25 14:41:47 STIMELA.recipe INFO:   selfcal.image_name = bar
+2026-06-25 14:41:47 STIMELA.recipe INFO:   selfcal.image.size = 1024
+2026-06-25 14:41:47 STIMELA.recipe INFO:   output-dir = tmp/tmp
+2026-06-25 14:41:47 STIMELA.recipe INFO:   output-uri = tmp/tmp
+2026-06-25 14:41:47 STIMELA.recipe INFO: running recipe 'demo recipe'
+2026-06-25 14:41:47 STIMELA.recipe INFO: processing step 'test_callable'
+2026-06-25 14:41:47 STIMELA.recipe INFO: processing step 'makems'
+2026-06-25 14:41:47 STIMELA.recipe INFO: processing step 'selfcal'
+2026-06-25 14:41:48 STIMELA.recipe INFO: saved full profiling stats to test-logs/logs-20260625-144147/stimela.stats.full
+2026-06-25 14:41:48 STIMELA.recipe INFO: saved summary to test-logs/logs-20260625-144147/stimela.stats.summary.txt
+2026-06-25 14:41:48 STIMELA.recipe INFO: last log directory was [bold green]test-logs/logs-20260625-144147[/bold green]

@@ -1,0 +1,131 @@
+2026-06-25 14:41:47 STIMELA DEBUG: config dependency /Users/gijsm/Github/caracal-pipeline/stimela/.claude/worktrees/stimela3-api/stimela, version: 2.2.0rc1, mtime: Thu Jun 25 14:40:49 2026, mtime_str: Thu Jun 25 14:40:49 2026, git: {'branch': 'worktree-stimela3-api                         a9e0907 Merge pull request #558 from caracal-pipeline/issue-557', 'describe': 'tags/v2.2.0rc1-0-ga9e0907b18e3616d', 'remotes': ['origin\tgit@github.com:caracal-pipeline/stimela.git (fetch)', 'origin\tgit@github.com:caracal-pipeline/stimela.git (push)']}
+2026-06-25 14:41:47 STIMELA DEBUG: config dependency /Users/gijsm/Github/caracal-pipeline/stimela/.claude/worktrees/stimela3-api/stimela/config.py, origin: /Users/gijsm/Github/caracal-pipeline/stimela/.claude/worktrees/stimela3-api/stimela
+2026-06-25 14:41:47 STIMELA DEBUG: config dependency /Users/gijsm/Github/caracal-pipeline/stimela/.claude/worktrees/stimela3-api/.venv/lib/python3.11/site-packages/scabha/configuratt/__init__.py, origin: /Users/gijsm/Github/caracal-pipeline/stimela/.claude/worktrees/stimela3-api/stimela
+2026-06-25 14:41:47 STIMELA DEBUG: config dependency /Users/gijsm/Github/caracal-pipeline/stimela/.claude/worktrees/agent-a22341aca4d92fa17/.venv/lib/python3.11/site-packages/scabha/configuratt/cache.py, version: None, mtime: Thu Jun 25 10:45:45 2026, mtime_str: Thu Jun 25 10:45:45 2026, md5hash: 50cca93a72bf927d17ec4cf5ab00a35e, git: {'branch': 'issue-513                             a9e0907 Merge pull request #558 from caracal-pipeline/issue-557', 'describe': 'tags/v2.2.0rc1-0-ga9e0907b18e3616d', 'remotes': ['origin\tgit@github.com:caracal-pipeline/stimela.git (fetch)', 'origin\tgit@github.com:caracal-pipeline/stimela.git (push)']}
+2026-06-25 14:41:47 STIMELA DEBUG: config dependency /Users/gijsm/Github/caracal-pipeline/stimela/.claude/worktrees/stimela3-api/stimela/stimela.conf, mtime: Thu Jun 25 14:37:23 2026, mtime_str: Thu Jun 25 14:37:23 2026, md5hash: 99ac77bd8e4560df44a2b573caebb124, git: {'branch': 'worktree-stimela3-api                         a9e0907 Merge pull request #558 from caracal-pipeline/issue-557', 'describe': 'tags/v2.2.0rc1-0-ga9e0907b18e3616d', 'remotes': ['origin\tgit@github.com:caracal-pipeline/stimela.git (fetch)', 'origin\tgit@github.com:caracal-pipeline/stimela.git (push)']}
+2026-06-25 14:41:47 STIMELA DEBUG: config dependency /Users/gijsm/Github/caracal-pipeline/stimela/.claude/worktrees/stimela3-api/.venv/lib/python3.11/site-packages/scabha/configuratt/cache.py, version: None, mtime: Thu Jun 25 10:45:45 2026, mtime_str: Thu Jun 25 10:45:45 2026, md5hash: 50cca93a72bf927d17ec4cf5ab00a35e, git: {'branch': 'worktree-stimela3-api                         a9e0907 Merge pull request #558 from caracal-pipeline/issue-557', 'describe': 'tags/v2.2.0rc1-0-ga9e0907b18e3616d', 'remotes': ['origin\tgit@github.com:caracal-pipeline/stimela.git (fetch)', 'origin\tgit@github.com:caracal-pipeline/stimela.git (push)']}
+2026-06-25 14:41:47 STIMELA INFO: saving config dependencies to ./stimela.config.deps
+2026-06-25 14:41:47 STIMELA INFO: will load recipe/config file(s) test_recipe.yml
+2026-06-25 14:41:47 STIMELA INFO: found single recipe 'recipe', selecting it implicitly
+2026-06-25 14:41:47 STIMELA.recipe DEBUG: will switch to logfile test-logs/logs-20260625-144147/log-recipe.txt (previous was None)
+2026-06-25 14:41:47 STIMELA INFO: pre-validating the recipe
+2026-06-25 14:41:47 STIMELA INFO: recipe logs will be saved under test-logs/logs-20260625-144147
+2026-06-25 14:41:47 STIMELA INFO: saved recipe dependencies to test-logs/logs-20260625-144147/stimela.recipe.deps
+2026-06-25 14:41:47 STIMELA DEBUG: ---------- prevalidated step follows ----------
+2026-06-25 14:41:47 STIMELA DEBUG: recipe 'demo recipe':
+2026-06-25 14:41:47 STIMELA DEBUG:   band = L
+2026-06-25 14:41:47 STIMELA DEBUG:   elem-xyz = x
+2026-06-25 14:41:47 STIMELA DEBUG:   elemlist-xyz = ['x', 'y']
+2026-06-25 14:41:47 STIMELA DEBUG:   elemlist_xyz = deliberate use of _ vs - to check validate() avoiding this situation
+2026-06-25 14:41:47 STIMELA DEBUG:   continue = deliberate use of Python keyword to make sure validate() doesn't barf
+2026-06-25 14:41:47 STIMELA DEBUG:   with = deliberate use of Python keyword to make sure validate() doesn't barf
+2026-06-25 14:41:47 STIMELA DEBUG:   recipe-file = test_recipe.yml
+2026-06-25 14:41:47 STIMELA DEBUG:   recipe-file-2 = test_recipe_notexists.yml
+2026-06-25 14:41:47 STIMELA DEBUG:   recipe-dirs = [file:/Users/gijsm/Github/caracal-pipeline/stimela/.claude/worktrees/stimela3-api/tests, file:/Users/gijsm/Github/caracal-pipeline/stimela/.claude/worktrees/stimela3-api, file:/Users/gijsm]
+2026-06-25 14:41:47 STIMELA DEBUG:   recipe-uri = test_recipe.yml
+2026-06-25 14:41:47 STIMELA DEBUG:   recipe-uri-2 = [file:/Users/gijsm/Github/caracal-pipeline/stimela/.claude/worktrees/stimela3-api/tests/test_recipe.yml, s3://some.s3.path]
+2026-06-25 14:41:47 STIMELA DEBUG:   msname = foo
+2026-06-25 14:41:47 STIMELA DEBUG:   telescope = kat-7
+2026-06-25 14:41:47 STIMELA DEBUG:   selfcal.image_name = bar
+2026-06-25 14:41:47 STIMELA DEBUG:   selfcal.image.size = 1024
+2026-06-25 14:41:47 STIMELA DEBUG:   output-dir = tmp/tmp
+2026-06-25 14:41:47 STIMELA DEBUG:   output-uri = tmp/tmp
+2026-06-25 14:41:47 STIMELA DEBUG:   makems.dtime = ???
+2026-06-25 14:41:47 STIMELA DEBUG:   selfcal.calibrate.B.t_int = ???
+2026-06-25 14:41:47 STIMELA DEBUG:   selfcal.calibrate.G.t_int = ???
+2026-06-25 14:41:47 STIMELA DEBUG:   selfcal.image.dummy = ???
+2026-06-25 14:41:47 STIMELA DEBUG:   steps:
+2026-06-25 14:41:47 STIMELA DEBUG:     test_callable: cab tests:
+2026-06-25 14:41:47 STIMELA DEBUG:       a = 1
+2026-06-25 14:41:47 STIMELA DEBUG:       b = ???
+2026-06-25 14:41:47 STIMELA DEBUG:     makems: cab echo:
+2026-06-25 14:41:47 STIMELA DEBUG:       msname = foo
+2026-06-25 14:41:47 STIMELA DEBUG:       tel = kat-7
+2026-06-25 14:41:47 STIMELA DEBUG:       synthesis = 0.128
+2026-06-25 14:41:47 STIMELA DEBUG:       ms = foo
+2026-06-25 14:41:47 STIMELA DEBUG:       dtime = ???
+2026-06-25 14:41:47 STIMELA DEBUG:     selfcal: recipe 'demo selfcal':
+2026-06-25 14:41:47 STIMELA DEBUG:       scale = 30asec
+2026-06-25 14:41:47 STIMELA DEBUG:       band_name = band1-L
+2026-06-25 14:41:47 STIMELA DEBUG:       ms = foo
+2026-06-25 14:41:47 STIMELA DEBUG:       image_name = bar
+2026-06-25 14:41:47 STIMELA DEBUG:       image.size = 1024
+2026-06-25 14:41:47 STIMELA DEBUG:       calibrate.B.t_int = ???
+2026-06-25 14:41:47 STIMELA DEBUG:       calibrate.G.t_int = ???
+2026-06-25 14:41:47 STIMELA DEBUG:       image.dummy = ???
+2026-06-25 14:41:47 STIMELA DEBUG:       steps:
+2026-06-25 14:41:47 STIMELA DEBUG:         calibrate: cab echo:
+2026-06-25 14:41:47 STIMELA DEBUG:           ms = foo
+2026-06-25 14:41:47 STIMELA DEBUG:           jones = ['B', 'G']
+2026-06-25 14:41:47 STIMELA DEBUG:           B.f_int = 1
+2026-06-25 14:41:47 STIMELA DEBUG:           G.f_int = 1
+2026-06-25 14:41:47 STIMELA DEBUG:           B.t_int = ???
+2026-06-25 14:41:47 STIMELA DEBUG:           G.t_int = ???
+2026-06-25 14:41:47 STIMELA DEBUG:         image: cab echo:
+2026-06-25 14:41:47 STIMELA DEBUG:           ms = foo
+2026-06-25 14:41:47 STIMELA DEBUG:           prefix = bar
+2026-06-25 14:41:47 STIMELA DEBUG:           scale = 30asec
+2026-06-25 14:41:47 STIMELA DEBUG:           size = 1024
+2026-06-25 14:41:47 STIMELA DEBUG:           dummy2 = band1-L
+2026-06-25 14:41:47 STIMELA DEBUG:           restored = foo
+2026-06-25 14:41:47 STIMELA DEBUG:           dirty = foo
+2026-06-25 14:41:47 STIMELA DEBUG:           dummy = ???
+2026-06-25 14:41:47 STIMELA DEBUG:         evaluate: cab binary:
+2026-06-25 14:41:47 STIMELA DEBUG:           image = foo
+2026-06-25 14:41:47 STIMELA DEBUG:           dirty = foo
+2026-06-25 14:41:48 STIMELA ERROR: run failed after 0:00:00
+2026-06-25 14:41:48 STIMELA DEBUG: Traceback (most recent call last):
+2026-06-25 14:41:48 STIMELA DEBUG:   File "/Users/gijsm/Github/caracal-pipeline/stimela/.claude/worktrees/stimela3-api/stimela/commands/run.py", line 681, in run
+2026-06-25 14:41:48 STIMELA DEBUG:     outputs = outer_step.run(is_outer_step=True, subst=subst)
+2026-06-25 14:41:48 STIMELA DEBUG:               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-06-25 14:41:48 STIMELA DEBUG:   File "/Users/gijsm/Github/caracal-pipeline/stimela/.claude/worktrees/stimela3-api/stimela/kitchen/step.py", line 735, in run
+2026-06-25 14:41:48 STIMELA DEBUG:     self.cargo._run(params, subst, backend=backend)
+2026-06-25 14:41:48 STIMELA DEBUG:   File "/Users/gijsm/Github/caracal-pipeline/stimela/.claude/worktrees/stimela3-api/stimela/kitchen/recipe.py", line 1417, in _run
+2026-06-25 14:41:48 STIMELA DEBUG:     _, _, _, final_iter_outputs, _, _, _, _count, iter_elements = self._iterate_loop_worker(
+2026-06-25 14:41:48 STIMELA DEBUG:                                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-06-25 14:41:48 STIMELA DEBUG:   File "/Users/gijsm/Github/caracal-pipeline/stimela/.claude/worktrees/stimela3-api/stimela/kitchen/recipe.py", line 1172, in _iterate_loop_worker
+2026-06-25 14:41:48 STIMELA DEBUG:     step_params = step.run(backend=backend_settings, subst=subst.copy(), parent_log=self.log)
+2026-06-25 14:41:48 STIMELA DEBUG:                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-06-25 14:41:48 STIMELA DEBUG:   File "/Users/gijsm/Github/caracal-pipeline/stimela/.claude/worktrees/stimela3-api/stimela/kitchen/step.py", line 735, in run
+2026-06-25 14:41:48 STIMELA DEBUG:     self.cargo._run(params, subst, backend=backend)
+2026-06-25 14:41:48 STIMELA DEBUG:   File "/Users/gijsm/Github/caracal-pipeline/stimela/.claude/worktrees/stimela3-api/stimela/kitchen/recipe.py", line 1417, in _run
+2026-06-25 14:41:48 STIMELA DEBUG:     _, _, _, final_iter_outputs, _, _, _, _count, iter_elements = self._iterate_loop_worker(
+2026-06-25 14:41:48 STIMELA DEBUG:                                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-06-25 14:41:48 STIMELA DEBUG:   File "/Users/gijsm/Github/caracal-pipeline/stimela/.claude/worktrees/stimela3-api/stimela/kitchen/recipe.py", line 1172, in _iterate_loop_worker
+2026-06-25 14:41:48 STIMELA DEBUG:     step_params = step.run(backend=backend_settings, subst=subst.copy(), parent_log=self.log)
+2026-06-25 14:41:48 STIMELA DEBUG:                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-06-25 14:41:48 STIMELA DEBUG:   File "/Users/gijsm/Github/caracal-pipeline/stimela/.claude/worktrees/stimela3-api/stimela/kitchen/step.py", line 738, in run
+2026-06-25 14:41:48 STIMELA DEBUG:     cabstat = backend_runner.run(
+2026-06-25 14:41:48 STIMELA DEBUG:               ^^^^^^^^^^^^^^^^^^^
+2026-06-25 14:41:48 STIMELA DEBUG:   File "/Users/gijsm/Github/caracal-pipeline/stimela/.claude/worktrees/stimela3-api/stimela/backends/runner.py", line 34, in run
+2026-06-25 14:41:48 STIMELA DEBUG:     return self.backend.run(
+2026-06-25 14:41:48 STIMELA DEBUG:            ^^^^^^^^^^^^^^^^^
+2026-06-25 14:41:48 STIMELA DEBUG:   File "/Users/gijsm/Github/caracal-pipeline/stimela/.claude/worktrees/stimela3-api/stimela/backends/native/run_native.py", line 102, in run
+2026-06-25 14:41:48 STIMELA DEBUG:     retcode = xrun(
+2026-06-25 14:41:48 STIMELA DEBUG:               ^^^^^
+2026-06-25 14:41:48 STIMELA DEBUG:   File "/Users/gijsm/Github/caracal-pipeline/stimela/.claude/worktrees/stimela3-api/stimela/utils/xrun_asyncio.py", line 118, in xrun
+2026-06-25 14:41:48 STIMELA DEBUG:     proc = loop.run_until_complete(
+2026-06-25 14:41:48 STIMELA DEBUG:            ^^^^^^^^^^^^^^^^^^^^^^^^
+2026-06-25 14:41:48 STIMELA DEBUG:   File "/opt/homebrew/Cellar/python@3.11/3.11.15_1/Frameworks/Python.framework/Versions/3.11/lib/python3.11/asyncio/base_events.py", line 654, in run_until_complete
+2026-06-25 14:41:48 STIMELA DEBUG:     return future.result()
+2026-06-25 14:41:48 STIMELA DEBUG:            ^^^^^^^^^^^^^^^
+2026-06-25 14:41:48 STIMELA DEBUG:   File "/opt/homebrew/Cellar/python@3.11/3.11.15_1/Frameworks/Python.framework/Versions/3.11/lib/python3.11/asyncio/subprocess.py", line 223, in create_subprocess_exec
+2026-06-25 14:41:48 STIMELA DEBUG:     transport, protocol = await loop.subprocess_exec(
+2026-06-25 14:41:48 STIMELA DEBUG:                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-06-25 14:41:48 STIMELA DEBUG:   File "/opt/homebrew/Cellar/python@3.11/3.11.15_1/Frameworks/Python.framework/Versions/3.11/lib/python3.11/asyncio/base_events.py", line 1708, in subprocess_exec
+2026-06-25 14:41:48 STIMELA DEBUG:     transport = await self._make_subprocess_transport(
+2026-06-25 14:41:48 STIMELA DEBUG:                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-06-25 14:41:48 STIMELA DEBUG:   File "/opt/homebrew/Cellar/python@3.11/3.11.15_1/Frameworks/Python.framework/Versions/3.11/lib/python3.11/asyncio/unix_events.py", line 207, in _make_subprocess_transport
+2026-06-25 14:41:48 STIMELA DEBUG:     transp = _UnixSubprocessTransport(self, protocol, args, shell,
+2026-06-25 14:41:48 STIMELA DEBUG:              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-06-25 14:41:48 STIMELA DEBUG:   File "/opt/homebrew/Cellar/python@3.11/3.11.15_1/Frameworks/Python.framework/Versions/3.11/lib/python3.11/asyncio/base_subprocess.py", line 36, in __init__
+2026-06-25 14:41:48 STIMELA DEBUG:     self._start(args=args, shell=shell, stdin=stdin, stdout=stdout,
+2026-06-25 14:41:48 STIMELA DEBUG:   File "/opt/homebrew/Cellar/python@3.11/3.11.15_1/Frameworks/Python.framework/Versions/3.11/lib/python3.11/asyncio/unix_events.py", line 818, in _start
+2026-06-25 14:41:48 STIMELA DEBUG:     self._proc = subprocess.Popen(
+2026-06-25 14:41:48 STIMELA DEBUG:                  ^^^^^^^^^^^^^^^^^
+2026-06-25 14:41:48 STIMELA DEBUG:   File "/opt/homebrew/Cellar/python@3.11/3.11.15_1/Frameworks/Python.framework/Versions/3.11/lib/python3.11/subprocess.py", line 1026, in __init__
+2026-06-25 14:41:48 STIMELA DEBUG:     self._execute_child(args, executable, preexec_fn, close_fds,
+2026-06-25 14:41:48 STIMELA DEBUG:   File "/opt/homebrew/Cellar/python@3.11/3.11.15_1/Frameworks/Python.framework/Versions/3.11/lib/python3.11/subprocess.py", line 1955, in _execute_child
+2026-06-25 14:41:48 STIMELA DEBUG:     raise child_exception_type(errno_num, err_msg, err_filename)
+2026-06-25 14:41:48 STIMELA DEBUG: FileNotFoundError: [Errno 2] No such file or directory: '/bin/true'
+2026-06-25 14:41:48 STIMELA DEBUG: 

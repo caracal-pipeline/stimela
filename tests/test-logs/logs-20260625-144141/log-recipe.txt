@@ -1,0 +1,40 @@
+2026-06-25 14:41:42 STIMELA.recipe DEBUG: default params assignment: a=1
+2026-06-25 14:41:42 STIMELA.recipe DEBUG: default params assignment: s3.a=1
+2026-06-25 14:41:42 STIMELA.recipe DEBUG: default params assignment: s4.a=1
+2026-06-25 14:41:42 STIMELA.recipe DEBUG: default params assignment: e=e
+2026-06-25 14:41:42 STIMELA.recipe DEBUG: default params assignment: f=f
+2026-06-25 14:41:42 STIMELA.recipe DEBUG: prevalidating recipe
+2026-06-25 14:41:42 STIMELA.recipe DEBUG: recipe pre-validated
+2026-06-25 14:41:42 STIMELA.recipe DEBUG: alias test recipe: 0 missing, 0 invalid and 1 unresolved parameters
+2026-06-25 14:41:42 STIMELA.recipe INFO: selecting recipe steps for (sub)recipe: [bold green]alias test recipe[/bold green]
+2026-06-25 14:41:42 STIMELA.recipe INFO: the following recipe steps have been enabled:
+2026-06-25 14:41:42 STIMELA.recipe INFO:     [bold green]s1 s2 s3 s4 s5[/bold green]
+2026-06-25 14:41:42 STIMELA.recipe DEBUG: validating inputs ['info', 'self', 'config', 'current', 'steps', 'previous', 'recipe', 'root']
+2026-06-25 14:41:42 STIMELA.recipe INFO: ### validated inputs
+2026-06-25 14:41:42 STIMELA.recipe INFO: recipe 'alias test recipe':
+2026-06-25 14:41:42 STIMELA.recipe INFO:   a = 1
+2026-06-25 14:41:42 STIMELA.recipe INFO:   b = 1
+2026-06-25 14:41:42 STIMELA.recipe INFO:   e = e
+2026-06-25 14:41:42 STIMELA.recipe INFO:   f = f
+2026-06-25 14:41:42 STIMELA.recipe INFO:   s3.a = 1
+2026-06-25 14:41:42 STIMELA.recipe INFO:   s4.a = 1
+2026-06-25 14:41:42 STIMELA.recipe INFO:   out2 = out2
+2026-06-25 14:41:42 STIMELA.recipe INFO:   foo = xxx
+2026-06-25 14:41:42 STIMELA.recipe INFO: running recipe 'alias test recipe'
+2026-06-25 14:41:42 STIMELA.recipe INFO: processing step 's1'
+2026-06-25 14:41:42 STIMELA.recipe INFO: processing step 's2'
+2026-06-25 14:41:42 STIMELA.recipe INFO: processing step 's3'
+2026-06-25 14:41:42 STIMELA.recipe INFO: processing step 's4'
+2026-06-25 14:41:42 STIMELA.recipe INFO: processing step 's5'
+2026-06-25 14:41:42 STIMELA.recipe INFO: recipe 'alias test recipe' executed successfully
+2026-06-25 14:41:42 STIMELA.recipe DEBUG: validating outputs
+2026-06-25 14:41:42 STIMELA.recipe DEBUG: ### validated outputs
+2026-06-25 14:41:42 STIMELA.recipe DEBUG: recipe 'alias test recipe':
+2026-06-25 14:41:42 STIMELA.recipe DEBUG:   out = 1
+2026-06-25 14:41:42 STIMELA.recipe DEBUG:   out2 = out2
+2026-06-25 14:41:42 STIMELA.recipe DEBUG: run successful after 0:00:00, outputs follow:
+2026-06-25 14:41:42 STIMELA.recipe DEBUG:   out2: out2
+2026-06-25 14:41:42 STIMELA.recipe DEBUG:   out: 1
+2026-06-25 14:41:42 STIMELA.recipe INFO: saved full profiling stats to test-logs/logs-20260625-144141/stimela.stats.full
+2026-06-25 14:41:42 STIMELA.recipe INFO: saved summary to test-logs/logs-20260625-144141/stimela.stats.summary.txt
+2026-06-25 14:41:42 STIMELA.recipe INFO: last log directory was [bold green]test-logs/logs-20260625-144141[/bold green]

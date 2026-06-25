@@ -1,0 +1,20 @@
+2026-06-25 14:41:47 STIMELA.recipe.selfcal.calibrate DEBUG: validating inputs ['info', 'self', 'config', 'current', 'steps', 'previous', 'recipe', 'root', 'parent']
+2026-06-25 14:41:47 STIMELA.recipe.selfcal.calibrate INFO: ### validated inputs
+2026-06-25 14:41:47 STIMELA.recipe.selfcal.calibrate INFO: cab echo:
+2026-06-25 14:41:47 STIMELA.recipe.selfcal.calibrate INFO:   ms = foo
+2026-06-25 14:41:47 STIMELA.recipe.selfcal.calibrate INFO:   jones = ['B', 'G']
+2026-06-25 14:41:47 STIMELA.recipe.selfcal.calibrate INFO:   B.f_int = 1
+2026-06-25 14:41:47 STIMELA.recipe.selfcal.calibrate INFO:   G.f_int = 1
+2026-06-25 14:41:47 STIMELA.recipe.selfcal.calibrate DEBUG: command is echo
+2026-06-25 14:41:47 STIMELA.recipe.selfcal.calibrate DEBUG: command line is echo --data-ms foo --jones B G --B.f_int 1 --G.f_int 1
+2026-06-25 14:41:47 STIMELA.recipe.selfcal.calibrate INFO: ---INVOKING---
+2026-06-25 14:41:47 STIMELA.recipe.selfcal.calibrate INFO: echo --data-ms foo --jones B G --B.f_int 1 --G.f_int 1
+
+2026-06-25 14:41:47 STIMELA.recipe.selfcal.calibrate DEBUG: full command line is echo --data-ms foo --jones B G --B.f_int 1 --G.f_int 1
+# --data-ms foo --jones B G --B.f_int 1 --G.f_int 1
+2026-06-25 14:41:47 STIMELA.recipe.selfcal.calibrate INFO: echo returns exit code 0 after 0:00:00
+2026-06-25 14:41:47 STIMELA.recipe.selfcal.calibrate DEBUG: validating outputs
+2026-06-25 14:41:47 STIMELA.recipe.selfcal.calibrate DEBUG: ### validated outputs
+2026-06-25 14:41:47 STIMELA.recipe.selfcal.calibrate DEBUG: cab echo:
+2026-06-25 14:41:47 STIMELA.recipe.selfcal.calibrate DEBUG:   ms = ???
+2026-06-25 14:41:47 STIMELA.recipe.selfcal.calibrate DEBUG:   jones = ???

@@ -1,0 +1,3 @@
+2026-06-25 14:41:40 STIMELA.recipe.s5 DEBUG: prevalidating recipe
+2026-06-25 14:41:40 STIMELA.recipe.s5 DEBUG: recipe pre-validated
+2026-06-25 14:41:40 STIMELA.recipe.s5 DEBUG: alias sub-recipe: 0 missing, 0 invalid and 0 unresolved parameters

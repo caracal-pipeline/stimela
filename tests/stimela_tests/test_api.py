@@ -16,17 +16,6 @@ from stimela.api.cab_proxy import CabProxy
 from stimela.api.execution import RecipeContext, get_current_context, pop_context, push_context
 from stimela.api.parallel import ParallelContext, parallel
 
-
-def _make_choices_func(choices_type):
-    """Build a function with Choices annotation at runtime to avoid F821."""
-    ns = {"Annotated": Annotated, "choices_type": choices_type, "Info": Info}
-    exec(
-        "def my_func(band: Annotated[choices_type, Info('band')] = 'L'): pass",
-        ns,
-    )
-    return ns["my_func"]
-
-
 # --- Annotation tests ---
 
 
@@ -72,8 +61,13 @@ class TestAnnotations:
         assert annotations["dir_out"]["info"] == "output directory"
 
     def test_extract_choices(self):
-        choices_type = Choices["L", "UHF"]
-        my_func = _make_choices_func(choices_type)
+        choices = Choices["L", "UHF"]
+
+        def my_func(
+            band: Annotated[str, choices, Info("band")] = "L",
+        ):
+            pass
+
         annotations = extract_annotations(my_func)
         assert annotations["band"]["choices"] == ("L", "UHF")
 

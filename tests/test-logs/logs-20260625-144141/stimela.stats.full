@@ -1,0 +1,104 @@
+recipe:
+  elapsed: 0.556358
+  avg:
+    num_samples: 1.0
+  peak:
+    num_samples: 1
+  total:
+    read_count: 0
+    read_gb: 0.0
+    read_ms: 0
+    write_count: 3
+    write_gb: 4.57763671875e-05
+    write_ms: 3
+recipe.s1:
+  elapsed: 0.04708
+  avg:
+    num_samples: 1.0
+  peak:
+    num_samples: 1
+  total:
+    read_count: 0
+    read_gb: 0.0
+    read_ms: 0
+    write_count: 1
+    write_gb: 1.52587890625e-05
+    write_ms: 1
+recipe.s2:
+  elapsed: 0.044129
+  avg:
+    num_samples: 1.0
+  peak:
+    num_samples: 1
+  total:
+    read_count: 0
+    read_gb: 0.0
+    read_ms: 0
+    write_count: 0
+    write_gb: 0.0
+    write_ms: 0
+recipe.s3:
+  elapsed: 0.047075
+  avg:
+    num_samples: 1.0
+  peak:
+    num_samples: 1
+  total:
+    read_count: 0
+    read_gb: 0.0
+    read_ms: 0
+    write_count: 0
+    write_gb: 0.0
+    write_ms: 0
+recipe.s4:
+  elapsed: 0.045252
+  avg:
+    num_samples: 1.0
+  peak:
+    num_samples: 1
+  total:
+    read_count: 0
+    read_gb: 0.0
+    read_ms: 0
+    write_count: 0
+    write_gb: 0.0
+    write_ms: 0
+recipe.s5:
+  elapsed: 0.165242
+  avg:
+    num_samples: 1.0
+  peak:
+    num_samples: 1
+  total:
+    read_count: 0
+    read_gb: 0.0
+    read_ms: 0
+    write_count: 0
+    write_gb: 0.0
+    write_ms: 0
+recipe.s5.ss1:
+  elapsed: 0.043337
+  avg:
+    num_samples: 1.0
+  peak:
+    num_samples: 1
+  total:
+    read_count: 0
+    read_gb: 0.0
+    read_ms: 0
+    write_count: 0
+    write_gb: 0.0
+    write_ms: 0
+recipe.s5.ss2:
+  elapsed: 0.04337
+  avg:
+    num_samples: 1.0
+  peak:
+    num_samples: 1
+  total:
+    read_count: 0
+    read_gb: 0.0
+    read_ms: 0
+    write_count: 0
+    write_gb: 0.0
+    write_ms: 0

@@ -1,0 +1,25 @@
+2026-06-25 14:41:43 STIMELA.demo_recipe.s1 DEBUG: validating inputs ['info', 'self', 'config', 'current', 'steps', 'previous', 'recipe', 'root', 'parent']
+2026-06-25 14:41:43 STIMELA.demo_recipe.s1 INFO: ### validated inputs
+2026-06-25 14:41:43 STIMELA.demo_recipe.s1 INFO: cab echo:
+2026-06-25 14:41:43 STIMELA.demo_recipe.s1 INFO:   a = 0
+2026-06-25 14:41:43 STIMELA.demo_recipe.s1 INFO:   b = 1
+2026-06-25 14:41:43 STIMELA.demo_recipe.s1 INFO:   c = 2
+2026-06-25 14:41:43 STIMELA.demo_recipe.s1 INFO:   d = d_is_implicit
+2026-06-25 14:41:43 STIMELA.demo_recipe.s1 INFO:   h.h1 = x
+2026-06-25 14:41:43 STIMELA.demo_recipe.s1 INFO:   out2 = out2
+2026-06-25 14:41:43 STIMELA.demo_recipe.s1 DEBUG: command is echo
+2026-06-25 14:41:43 STIMELA.demo_recipe.s1 DEBUG: command line is echo --a=0 --b=1 --c=2 --d=d_is_implicit --h.h1=x --out=0 --out2=out2
+2026-06-25 14:41:43 STIMELA.demo_recipe.s1 INFO: ---INVOKING---
+2026-06-25 14:41:43 STIMELA.demo_recipe.s1 INFO: echo --a=0 --b=1 --c=2 --d=d_is_implicit --h.h1=x --out=0 --out2=out2
+
+2026-06-25 14:41:43 STIMELA.demo_recipe.s1 DEBUG: full command line is echo --a=0 --b=1 --c=2 --d=d_is_implicit --h.h1=x --out=0 --out2=out2
+# --a=0 --b=1 --c=2 --d=d_is_implicit --h.h1=x --out=0 --out2=out2
+2026-06-25 14:41:43 STIMELA.demo_recipe.s1 INFO: echo returns exit code 0 after 0:00:00
+2026-06-25 14:41:43 STIMELA.demo_recipe.s1 DEBUG: validating outputs
+2026-06-25 14:41:43 STIMELA.demo_recipe.s1 DEBUG: ### validated outputs
+2026-06-25 14:41:43 STIMELA.demo_recipe.s1 DEBUG: cab echo:
+2026-06-25 14:41:43 STIMELA.demo_recipe.s1 DEBUG:   out = 0
+2026-06-25 14:41:43 STIMELA.demo_recipe.s1 DEBUG:   out2 = out2
+2026-06-25 14:41:43 STIMELA.demo_recipe.s1 DEBUG:   out3.x = 
+2026-06-25 14:41:43 STIMELA.demo_recipe.s1 DEBUG:   out3.y = 
+2026-06-25 14:41:43 STIMELA.demo_recipe.s1 DEBUG:   a = ???
