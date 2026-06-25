@@ -20,6 +20,7 @@ from stimela.backends import StimelaBackendSchema, flavours
 from stimela.exceptions import CabValidationError, StimelaBaseImageError, StimelaCabRuntimeError
 
 from . import wranglers
+from .utils import parse_file_callable, resolve_callable
 
 ParameterPassingMechanism = Enum("ParameterPassingMechanism", "args yaml", module=__name__)
 
@@ -119,7 +120,27 @@ class Cab(Cargo):
     policies: ParameterPolicies = EmptyClassDefault(ParameterPolicies)
 
     def __post_init__(self):
+        # Intercept (path/file.py)function syntax for dynamic_schema before
+        # Cargo.__post_init__ tries to resolve it via importlib.import_module.
+        # We temporarily set dynamic_schema to None so the parent skips its
+        # resolution, then handle it ourselves afterward.
+        file_based_dynschema = None
+        if self.dynamic_schema is not None and parse_file_callable(self.dynamic_schema):
+            file_based_dynschema = self.dynamic_schema
+            self.dynamic_schema = None
+
         Cargo.__post_init__(self)
+
+        # Now resolve file-based dynamic schema if needed
+        if file_based_dynschema is not None:
+            self.dynamic_schema = file_based_dynschema
+            try:
+                self._dyn_schema = resolve_callable(file_based_dynschema)
+            except Exception as exc:
+                raise CabValidationError(f"can't load dynamic schema '{file_based_dynschema}': {exc}")
+            # make backup copy of original inputs/outputs (same as Cargo does)
+            self._original_inputs_outputs = self.inputs.copy(), self.outputs.copy()
+
         for param in self.inputs.keys():
             if param in self.outputs:
                 raise CabValidationError(f"cab {self.name}: parameter '{param}' appears in both inputs and outputs")
