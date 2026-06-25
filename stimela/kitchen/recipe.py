@@ -96,6 +96,9 @@ class Recipe(Cargo):
     # make recipe a for_loop-gather (i.e. parallel for loop)
     for_loop: Optional[ForLoopClause] = None
 
+    # optional message to display after a successful run (supports {}-substitutions)
+    summary_message: Optional[str] = None
+
     def __post_init__(self):
         Cargo.__post_init__(self)
         # flatten aliases and assignments
@@ -340,6 +343,9 @@ class Recipe(Cargo):
                 self.inputs_outputs[key].default = UNSET
             else:
                 self.defaults[key] = value
+                # propagate value to step aliases if recipe is finalized
+                if self._alias_map is not None:
+                    self._update_aliases(key, value)
         # assigning to a substep? Invoke nested assignment
         elif nesting is not None and nesting in self.steps:
             return self.steps[nesting].assign_value(subkey, value, override=override)
@@ -575,6 +581,20 @@ class Recipe(Cargo):
             else:
                 # get recipe's original schema for the parameter
                 io = self.inputs if input_schema else self.outputs
+                # check for input/output direction mismatch: if the alias name was explicitly declared
+                # in the recipe's inputs or outputs, it must match the step parameter's direction
+                if input_schema and alias_name in self.outputs:
+                    raise RecipeValidationError(
+                        f"recipe '{self.name}': output '{alias_name}' is aliased to step input "
+                        f"'{step_label}.{step_param_name}'. Output aliases must refer to step outputs.",
+                        log=self.log,
+                    )
+                if output_schema and alias_name in self.inputs:
+                    raise RecipeValidationError(
+                        f"recipe '{self.name}': input '{alias_name}' is aliased to step output "
+                        f"'{step_label}.{step_param_name}'. Input aliases must refer to step inputs.",
+                        log=self.log,
+                    )
                 # if we have a schema defined for the alias, some params must be inherited from it
                 orig_schema = io.get(alias_name)
                 self._orig_alias_schema[alias_name] = orig_schema
@@ -637,6 +657,18 @@ class Recipe(Cargo):
             if schema.required and not have_step_param and (orig_schema is None or orig_schema.required is None):
                 alias_schema.required = True
 
+            # warn if the alias name collides with another parameter of the same step
+            # (this can cause confusing substitution errors, see #460)
+            if alias_name != step_param_name and alias_name in step.inputs_outputs:
+                colliding_io = "input" if alias_name in step.inputs else "output"
+                self.log.warning(
+                    f"recipe '{self.name}': alias '{alias_name}' (pointing to "
+                    f"'{step_label}.{step_param_name}') has the same name as a step "
+                    f"{colliding_io} '{step_label}.{alias_name}'. This may cause "
+                    f"confusing substitution errors if the step uses '{{current.{alias_name}}}' "
+                    f"in formulas. Consider renaming the alias."
+                )
+
             self._alias_map[step_label, step_param_name] = alias_name, orig_schema
             self._alias_list.setdefault(alias_name, []).append(Recipe.AliasInfo(step_label, step, step_param_name, io))
 
@@ -663,6 +695,16 @@ class Recipe(Cargo):
 
             # call Cargo's finalize method
             super().finalize(config, log=log, fqname=fqname, nesting=nesting)
+
+            # warn about inputs being assigned to via the assign section
+            for key in self.assign:
+                if key in self.inputs:
+                    self.log.warning(
+                        f"recipe '{self.name}': assign section sets input '{key}'. "
+                        f"Assigning to inputs via 'assign' is deprecated and may be "
+                        f"removed in a future version. Use the 'defaults' section or "
+                        f"pass the value via the command line instead."
+                    )
 
             # finalize steps
             for label, step in self.steps.items():
@@ -818,6 +860,11 @@ class Recipe(Cargo):
         # our own parameters are prevalidated against the outer substitution context;
         # step parameters are prevalidated against our own subst
         subst_outer = subst.copy()
+        # scrub the parent recipe's 'recipe' namespace from subst_outer to prevent
+        # sub-recipe inputs/outputs from accidentally accessing parent variables
+        # via {recipe.xxx} (see #433). The correct namespace for sub-recipes is 'current'.
+        if "recipe" in subst_outer:
+            del subst_outer["recipe"]
         self._update_subst_namespace(subst)
 
         # update assignments
@@ -1429,6 +1476,21 @@ class Recipe(Cargo):
         subst.current = subst.recipe
 
         self.log.info(f"recipe '{self.name}' executed successfully")
+
+        # evaluate and print summary_message if defined
+        if self.summary_message:
+            try:
+                message = evaluate_and_substitute_object(
+                    self.summary_message,
+                    subst,
+                    recursion_level=-1,
+                    location=[self.fqname, "summary_message"],
+                    log=self.log,
+                )
+                self.log.info(f"summary: {message}")
+            except Exception as exc:
+                self.log.warning(f"error evaluating summary_message: {exc}")
+
         return OrderedDict((name, value) for name, value in params.items() if name in self.outputs)
 
     def to_dag(self, graph: Optional[nx.DiGraph] = None, parent: Optional[str] = None) -> nx.DiGraph:

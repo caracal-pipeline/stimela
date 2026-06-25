@@ -1,0 +1,136 @@
+## Test recipes for recipe.py fixes
+
+cabs:
+  sleep460:
+    flavour: python-code
+    command: |
+      import time
+      time.sleep(0)
+    inputs:
+      foo:
+        dtype: str
+      bar:
+        dtype: str
+    outputs:
+      baz:
+        dtype: File
+        default: =IFSET(current.bar, STRIPEXT(current.bar))
+        must_exist: false
+
+  echo:
+    image: null
+    command: echo
+    policies:
+      skip_implicits: false
+      key_value: true
+    inputs:
+      a:
+        dtype: str
+        required: true
+      b:
+        dtype: str
+      c:
+        dtype: str
+      foo:
+        dtype: str
+      bar:
+        dtype: str
+    outputs:
+      out:
+        dtype: File
+        implicit: "{current.a}"
+        must_exist: false
+      baz:
+        dtype: File
+        must_exist: false
+        default: baz_value
+
+## Issue #349: input aliased to step output should error
+test-349-input-to-output:
+  name: "test-349-input-to-output"
+  inputs:
+    my-input:
+      dtype: File
+      aliases: [s1.out]
+      default: foo
+  steps:
+    s1:
+      cab: echo
+      params:
+        a: hello
+
+## Issue #349: output aliased to step input should error
+test-349-output-to-input:
+  name: "test-349-output-to-input"
+  outputs:
+    my-output:
+      dtype: str
+      aliases: [s1.b]
+  steps:
+    s1:
+      cab: echo
+      params:
+        a: hello
+
+## Issue #362: assign to an input should be prohibited
+test-362-assign-to-input:
+  name: "test-362-assign-to-input"
+  inputs:
+    my-param:
+      dtype: str
+      default: original
+  assign:
+    my-param: overridden
+  steps:
+    s1:
+      cab: echo
+      params:
+        a: hello
+
+## Issue #460: alias shares name with step input - improved error message
+## This uses a separate cab with a formula default to reproduce the issue
+test-460-alias-step-collision:
+  name: "test-460-alias-step-collision"
+  outputs:
+    bar:
+      aliases:
+        - sleep-1.baz
+  steps:
+    sleep-1:
+      cab: sleep460
+      params:
+        foo: foo
+
+## Issue #433: sub-recipe accessing parent recipe namespace
+test-433-subrecipe-namespace:
+  name: "test-433-subrecipe-namespace"
+  assign:
+    parent_var: parent_value
+  steps:
+    sub:
+      recipe:
+        name: "sub-recipe"
+        inputs:
+          x:
+            dtype: str
+            default: "{recipe.parent_var}"
+        steps:
+          ss1:
+            cab: echo
+            params:
+              a: hello
+
+## Issue #317: recipe input via assign not propagated to step aliases
+test-317-assign-alias-propagation:
+  name: "test-317-assign-alias-propagation"
+  inputs:
+    my-input:
+      dtype: str
+      aliases: [s1.b]
+  assign:
+    my-input: assigned_value
+  steps:
+    s1:
+      cab: echo
+      params:
+        a: hello
