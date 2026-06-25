@@ -54,6 +54,18 @@ class StimelaDisableSkipOptions(object):
 
 
 @dataclass
+class StimelaCacheOptions(object):
+    """Options for the persistent output cache (see issue #369)."""
+
+    # Whether caching of non-file outputs is enabled
+    enabled: bool = False
+    # Directory for the cache database file
+    dir: str = "."
+    # Database filename (without extension; dbm appends its own)
+    name: str = ".stimela-cache"
+
+
+@dataclass
 class StimelaOptions(object):
     backend: StimelaBackendOptions = EmptyClassDefault(StimelaBackendOptions)
     backend_varieties: Dict[str, Dict] = EmptyDictDefault()
@@ -66,6 +78,8 @@ class StimelaOptions(object):
     profile: StimelaProfilingOptions = EmptyClassDefault(StimelaProfilingOptions)
     ## Disables skip_if_outputs checks
     disable_skips: StimelaDisableSkipOptions = EmptyClassDefault(StimelaDisableSkipOptions)
+    ## Output cache options
+    cache: StimelaCacheOptions = EmptyClassDefault(StimelaCacheOptions)
 
 
 def DefaultDirs():

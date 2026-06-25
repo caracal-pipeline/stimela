@@ -1,0 +1,35 @@
+opts:
+  log:
+    dir: test-logs/logs-{config.run.datetime}
+    nest: 3
+    symlink: logs
+  cache:
+    enabled: true
+    dir: "."
+    name: ".test-stimela-cache"
+
+cabs:
+  test_callable_cached:
+    command: tests.test_cache_integration.cached_function
+    flavour:
+      kind: python
+      output_dict: true
+    inputs:
+      x:
+        dtype: int
+      y:
+        dtype: str
+    outputs:
+      result:
+        dtype: int
+      message:
+        dtype: str
+
+test_cache_recipe:
+  steps:
+    compute:
+      cab: test_callable_cached
+      cache_outputs: true
+      params:
+        x: 21
+        y: "hello"
