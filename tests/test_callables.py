@@ -18,3 +18,73 @@ def test_wrangler_replace_suppress():
     assert retcode == 0
     print(output)
     assert verify_output(output, "y = 46barbar")
+    # verify that step s6_implicit (implicit output, no flavour.output specified) produced x = 14
+    assert verify_output(output, "s6_implicit.*x = 14")
+
+
+def test_implicit_output_single():
+    """When a python callable has exactly one output and flavour.output is not set,
+    the output should be implicitly selected."""
+    from collections import OrderedDict
+    from unittest.mock import MagicMock
+
+    from scabha.cargo import Parameter
+
+    from stimela.backends.flavours import _CallableFlavour
+
+    flavour = _CallableFlavour()
+    cab = MagicMock()
+    cab.name = "test_cab"
+    cab.outputs = OrderedDict({"x": Parameter(dtype="int")})
+    flavour.finalize(cab)
+    assert flavour.output == "x"
+
+
+def test_explicit_output_still_works():
+    """When flavour.output is explicitly set, it should be used as-is."""
+    from collections import OrderedDict
+    from unittest.mock import MagicMock
+
+    from scabha.cargo import Parameter
+
+    from stimela.backends.flavours import _CallableFlavour
+
+    flavour = _CallableFlavour(output="x")
+    cab = MagicMock()
+    cab.name = "test_cab"
+    cab.outputs = OrderedDict({"x": Parameter(dtype="int"), "y": Parameter(dtype="str")})
+    flavour.finalize(cab)
+    assert flavour.output == "x"
+
+
+def test_no_implicit_output_multiple():
+    """When a python callable has multiple outputs and flavour.output is not set,
+    the output should NOT be implicitly selected (remains None)."""
+    from collections import OrderedDict
+    from unittest.mock import MagicMock
+
+    from scabha.cargo import Parameter
+
+    from stimela.backends.flavours import _CallableFlavour
+
+    flavour = _CallableFlavour()
+    cab = MagicMock()
+    cab.name = "test_cab"
+    cab.outputs = OrderedDict({"x": Parameter(dtype="int"), "y": Parameter(dtype="str")})
+    flavour.finalize(cab)
+    assert flavour.output is None
+
+
+def test_no_implicit_output_zero():
+    """When a python callable has no outputs, flavour.output should remain None."""
+    from collections import OrderedDict
+    from unittest.mock import MagicMock
+
+    from stimela.backends.flavours import _CallableFlavour
+
+    flavour = _CallableFlavour()
+    cab = MagicMock()
+    cab.name = "test_cab"
+    cab.outputs = OrderedDict()
+    flavour.finalize(cab)
+    assert flavour.output is None
