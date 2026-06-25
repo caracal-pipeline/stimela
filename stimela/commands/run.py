@@ -602,7 +602,7 @@ def run(
             except ScabhaBaseException as exc:
                 log_exception(exc)
                 sys.exit(1)
-            except (TypeError, KeyError, AttributeError) as exc:
+            except (TypeError, KeyError) as exc:
                 log_exception(
                     RecipeValidationError(
                         f"error assigning '{key}={value}': {exc}. "

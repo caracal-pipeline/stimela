@@ -189,8 +189,8 @@ def test_issue552_recipe_assign_conflict():
     retcode, output = run(
         "stimela -v -b native run test_issue552.yml recipe_with_none_assign procres.selfnoise-scaling-factor=2"
     )
-    # This actually succeeds because override protection prevents the conflict.
-    # Just verify it doesn't crash with a raw TypeError.
+    # Override protection prevents the conflict, so this should succeed.
+    assert retcode == 0, f"Expected success but got retcode {retcode}"
     print(output)
     assert "TypeError" not in output
 

@@ -336,7 +336,7 @@ class Recipe(Cargo):
                 if comps[0] not in container:
                     raise AssignmentError(f"{self.fqname}: invalid assignment {key}={value}")
                 next_container = container[comps[0]]
-                if next_container is None or not hasattr(next_container, "__getitem__"):
+                if next_container is None or not isinstance(next_container, Mapping):
                     raise AssignmentError(
                         f"{self.fqname}: can't assign '{key}={value}': '{comps[0]}' is not a nested section "
                         f"(its current value is {next_container!r}). "
