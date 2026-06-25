@@ -55,12 +55,13 @@ def test_349_output_aliased_to_step_input():
 # --- Issue #362: assign to an input should be prohibited ---
 
 
-def test_362_assign_to_input_prohibited():
-    """Having an input in the assign section should raise an error."""
+def test_362_assign_to_input_deprecated():
+    """Having an input in the assign section should produce a deprecation warning."""
     retcode, output = run("stimela -v -b native exec test_recipe_fixes.yml test-362-assign-to-input")
     print(output)
-    assert retcode != 0
-    assert verify_output(output, "assign.*input")
+    # Should succeed but produce a deprecation warning
+    assert retcode == 0
+    assert verify_output(output, "assign.*input.*deprecated")
 
 
 # --- Issue #460: improved error for alias/step name collision ---

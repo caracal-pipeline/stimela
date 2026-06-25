@@ -681,6 +681,16 @@ class Recipe(Cargo):
             # call Cargo's finalize method
             super().finalize(config, log=log, fqname=fqname, nesting=nesting)
 
+            # warn about inputs being assigned to via the assign section
+            for key in self.assign:
+                if key in self.inputs:
+                    self.log.warning(
+                        f"recipe '{self.name}': assign section sets input '{key}'. "
+                        f"Assigning to inputs via 'assign' is deprecated and may be "
+                        f"removed in a future version. Use the 'defaults' section or "
+                        f"pass the value via the command line instead."
+                    )
+
             # finalize steps
             for label, step in self.steps.items():
                 step_log = log.getChild(label)
