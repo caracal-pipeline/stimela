@@ -596,7 +596,7 @@ class Step:
             invalid = self.invalid_params
             for name in self.unresolved_params:
                 schema = self.cargo.inputs_outputs[name]
-                if schema.is_input or schema.is_named_output:
+                if (schema.is_input or schema.is_named_output) and schema.required is not False:
                     invalid.append(name)
             if invalid:
                 if skip:

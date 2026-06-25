@@ -1,0 +1,27 @@
+cabs:
+  echo:
+    command: echo
+    inputs:
+      msg:
+        dtype: str
+        required: true
+        policies:
+          positional: true
+    outputs:
+      temp-dir:
+        dtype: Directory
+        skip_freshness_checks: true
+        mkdir: true
+        must_exist: false
+        required: false
+
+recipe:
+  inputs:
+    msg:
+      dtype: str
+      default: "hello"
+  steps:
+    echo-1:
+      cab: echo
+      params:
+        msg: =recipe.msg
