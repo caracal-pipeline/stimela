@@ -1,5 +1,13 @@
 import os
+import sys
 from pathlib import Path
+
+# Increase recursion limit for pyparsing's recursive descent parser used by scabha's
+# expression evaluator. The default limit of 1000 is too low for deeply nested formulas
+# such as IF(cond, val, IF(cond, val, IF(...))). See GitHub issue #462.
+_MINIMUM_RECURSION_LIMIT = 3000
+if sys.getrecursionlimit() < _MINIMUM_RECURSION_LIMIT:
+    sys.setrecursionlimit(_MINIMUM_RECURSION_LIMIT)
 
 # -----------
 # knicked from https://github.com/python-poetry/poetry/issues/273#issuecomment-1103812336
