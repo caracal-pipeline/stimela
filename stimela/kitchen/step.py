@@ -772,12 +772,12 @@ class Step:
                                             log=self.log,
                                         )
                                 else:
-                                    parent = os.path.dirname(fspath)
                                     realparent = os.path.dirname(os.path.abspath(os.path.realpath(fspath)))
-                                    if realparent and not _check_writable(realparent):
+                                    # only check if parent exists (new subdirs are handled by mkdir_parent policy)
+                                    if realparent and os.path.exists(realparent) and not _check_writable(realparent):
                                         raise StepValidationError(
                                             f"step '{self.name}': output '{name}' parent directory is not "
-                                            f"writable: '{parent}'",
+                                            f"writable: '{realparent}'",
                                             log=self.log,
                                         )
 

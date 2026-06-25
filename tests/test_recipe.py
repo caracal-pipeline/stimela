@@ -167,7 +167,7 @@ def _run_stderr(command):
 
     print(f"running: {command}")
     result = subprocess.run(shlex.split(command), capture_output=True, text=True)
-    return result.returncode, result.stderr or result.stdout
+    return result.returncode, (result.stderr or "") + (result.stdout or "")
 
 
 @pytest.mark.skipif(
