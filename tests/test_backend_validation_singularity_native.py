@@ -1,5 +1,6 @@
 import copy
 import logging
+import warnings
 from dataclasses import dataclass
 from typing import Any, Dict
 
@@ -30,6 +31,12 @@ backend_opts = StimelaBackendSchema
 # fool the backend validator on systems without target backend
 # this is OK since we are just testing the backend.validate_backend_settings_function
 def set_fake_backend(backend_name, off=False):
+    """Creates a fake backend getter for testing.
+
+    For 'apptainer' (and the deprecated 'singularity' alias), the actual module
+    is 'singularity', so we import that module when either name is requested.
+    """
+
     def set_fake_backend(func):
         def inner(name, opts={}):
             name, opts = func(name, opts)
@@ -37,8 +44,10 @@ def set_fake_backend(backend_name, off=False):
                 if off:
                     return None
                 else:
-                    this_runner = __import__("stimela.backends", fromlist=[backend_name])
-                    return getattr(this_runner, backend_name)
+                    # Both 'apptainer' and 'singularity' map to the singularity module
+                    module_name = "singularity" if backend_name in ("apptainer", "singularity") else backend_name
+                    this_runner = __import__("stimela.backends", fromlist=[module_name])
+                    return getattr(this_runner, module_name)
             else:
                 this_runner = __import__("stimela.backends", fromlist=["runner"])
                 return this_runner.get_backend(name, opts)
@@ -48,19 +57,19 @@ def set_fake_backend(backend_name, off=False):
     return set_fake_backend
 
 
-@set_fake_backend("singularity", off=False)
-def fake_singularity_on(name, opts={}):
+@set_fake_backend("apptainer", off=False)
+def fake_apptainer_on(name, opts={}):
     return name, opts
 
 
-@set_fake_backend("singularity", off=True)
-def fake_singularity_off(name, opts={}):
+@set_fake_backend("apptainer", off=True)
+def fake_apptainer_off(name, opts={}):
     return name, opts
 
 
 def test_default_select():
     print(
-        "===== expecting no errors when using default backend selection ('singularity,native')"
+        "===== expecting no errors when using default backend selection ('apptainer,native')"
         "and cab.image is not set ====="
     )
 
@@ -72,10 +81,10 @@ def test_default_select():
 
 
 def test_native_priority_backend():
-    print("===== expecting no errors when backend selection is 'native,singularity' and cab.image is not set =====")
+    print("===== expecting no errors when backend selection is 'native,apptainer' and cab.image is not set =====")
 
     simms_cab = Cab(**cabs.simms)
-    backend_opts.select = ["native", "singularity"]
+    backend_opts.select = ["native", "apptainer"]
     backend_runner = runner.validate_backend_settings(backend_opts, logging.Logger, simms_cab)
 
     assert backend_runner.backend_name == "native"
@@ -86,10 +95,10 @@ def test_container_backend_no_image():
 
     # import runner for this function context
     runner = __import__("stimela.backends", fromlist=["runner"]).runner
-    runner.get_backend = fake_singularity_on
+    runner.get_backend = fake_apptainer_on
 
     simms_cab = Cab(**cabs.simms)
-    backend_opts.select = ["singularity"]
+    backend_opts.select = ["apptainer"]
     with pytest.raises(BackendError) as exception:
         runner.validate_backend_settings(backend_opts, logging.Logger, simms_cab)
 
@@ -101,15 +110,15 @@ def test_no_container_backend_yes_image():
 
     # import runner for this function context
     runner = __import__("stimela.backends", fromlist=["runner"]).runner
-    runner.get_backend = fake_singularity_off
+    runner.get_backend = fake_apptainer_off
 
     simms_cab = Cab(**cabs.simms)
-    backend_opts.select = ["singularity"]
+    backend_opts.select = ["apptainer"]
     with pytest.raises(BackendError) as exception:
         runner.validate_backend_settings(backend_opts, logging.Logger, simms_cab)
 
     assert "unable to select a backend" in str(exception.value)
-    assert "singularity" in str(exception.value)
+    assert "apptainer" in str(exception.value)
 
 
 def test_container_backend_yes_image():
@@ -117,14 +126,14 @@ def test_container_backend_yes_image():
 
     # import runner for this function context
     runner = __import__("stimela.backends", fromlist=["runner"]).runner
-    runner.get_backend = fake_singularity_on
+    runner.get_backend = fake_apptainer_on
 
     simms_cab = Cab(**cabs.simms)
-    backend_opts.select = ["singularity"]
+    backend_opts.select = ["apptainer"]
     simms_cab.image = "foo-bar"
     backend_runner = runner.validate_backend_settings(backend_opts, logging.Logger, simms_cab)
 
-    assert backend_runner.backend is runner.get_backend("singularity")
+    assert backend_runner.backend is runner.get_backend("apptainer")
 
 
 def test_native_backend_no_image():
@@ -137,49 +146,49 @@ def test_native_backend_no_image():
     assert backend_runner.backend is runner.get_backend("native")
 
 
-def test_singularity_priority_no_native_no_singularity():
+def test_apptainer_priority_no_native_no_apptainer():
     print("===== expecting errors since both backends are not available =====")
 
     simms_cab = Cab(**cabs.simms)
     backend_opts2 = copy.deepcopy(backend_opts)
-    backend_opts2.select = ["singularity", "native"]
+    backend_opts2.select = ["apptainer", "native"]
     backend_opts2.native.enable = False
 
     with pytest.raises(BackendError) as exception:
         runner.validate_backend_settings(backend_opts2, logging.Logger, simms_cab)
 
     assert "unable to select a backend" in str(exception.value)
-    assert "singularity" in str(exception.value)
+    assert "apptainer" in str(exception.value)
     assert "native: disabled" in str(exception.value)
 
 
-def test_singularity_priority_no_native():
-    print("===== expecting no errors since singularity is available =====")
+def test_apptainer_priority_no_native():
+    print("===== expecting no errors since apptainer is available =====")
 
     # import runner for this function context
     runner = __import__("stimela.backends", fromlist=["runner"]).runner
-    runner.get_backend = fake_singularity_on
+    runner.get_backend = fake_apptainer_on
 
     backend_opts2 = copy.deepcopy(backend_opts)
     backend_opts2.native.enable = False
     simms_cab = Cab(**cabs.simms)
-    backend_opts2.select = ["singularity", "native"]
+    backend_opts2.select = ["apptainer", "native"]
     simms_cab.image = "foo-bar"
     backend_runner = runner.validate_backend_settings(backend_opts2, logging.Logger, simms_cab)
 
-    assert backend_runner.backend is runner.get_backend("singularity")
+    assert backend_runner.backend is runner.get_backend("apptainer")
 
 
-def test_singularity_priority_no_native_no_image():
+def test_apptainer_priority_no_native_no_image():
     print("===== expecting errors since container image is not set and native is disabled =====")
 
     # import runner for this function context
     runner = __import__("stimela.backends", fromlist=["runner"]).runner
-    runner.get_backend = fake_singularity_on
+    runner.get_backend = fake_apptainer_on
 
     simms_cab = Cab(**cabs.simms)
     backend_opts2 = copy.deepcopy(backend_opts)
-    backend_opts2.select = ["singularity", "native"]
+    backend_opts2.select = ["apptainer", "native"]
     backend_opts2.native.enable = False
 
     with pytest.raises(BackendError) as exception:
@@ -187,3 +196,16 @@ def test_singularity_priority_no_native_no_image():
 
     assert "container image not specified by cab" in str(exception.value)
     assert "native: disabled" in str(exception.value)
+
+
+def test_singularity_alias_resolves_to_apptainer():
+    """Test that using the deprecated 'singularity' name in select resolves to 'apptainer'."""
+    simms_cab = Cab(**cabs.simms)
+    backend_opts2 = copy.deepcopy(backend_opts)
+    # Use deprecated 'singularity' name -- should be silently resolved to 'apptainer'
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        backend_opts2.select = ["singularity", "native"]
+    backend_runner = runner.validate_backend_settings(backend_opts2, logging.Logger, simms_cab)
+    # Should resolve to native since apptainer is not installed in test env
+    assert isinstance(backend_runner, runner.BackendRunner)

@@ -53,8 +53,10 @@ class Display:
     style_map = {
         ("native", "simple"): SimpleLocalDisplay,
         ("native", "fancy"): LocalDisplay,
-        ("singularity", "simple"): SimpleLocalDisplay,
-        ("singularity", "fancy"): LocalDisplay,
+        ("apptainer", "simple"): SimpleLocalDisplay,
+        ("apptainer", "fancy"): LocalDisplay,
+        ("singularity", "simple"): SimpleLocalDisplay,  # deprecated alias
+        ("singularity", "fancy"): LocalDisplay,  # deprecated alias
         ("kube", "simple"): SimpleKubeDisplay,
         ("kube", "fancy"): KubeDisplay,
         ("slurm", "simple"): SimpleSlurmDisplay,

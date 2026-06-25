@@ -49,14 +49,14 @@ opts:
     nest: 3
     symlink: logs
   backend:
-    select: singularity
+    select: apptainer
   backend_varieties:
     lightweight:
       select: native
     broken:
       select: broken
     full:
-      select: singularity
+      select: apptainer
 
 test_recipe:
   backend:

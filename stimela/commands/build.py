@@ -8,7 +8,7 @@ from .run import run
 @click.command(
     "build",
     help="""
-    Builds singularity images required by the recipe. Only available if the singularity backend is selected.
+    Builds container images required by the recipe. Only available if the apptainer backend is selected.
     """,
     no_args_is_help=True,
 )
@@ -79,11 +79,18 @@ from .run import run
     "-l", "--last-recipe", is_flag=True, help="""if multiple recipes are defined, selects the last one for building."""
 )
 @click.option(
+    "-A",
+    "--apptainer",
+    "enable_apptainer",
+    is_flag=True,
+    help="""Selects the apptainer backend (shortcut for -C opts.backend.select=apptainer)""",
+)
+@click.option(
     "-S",
     "--singularity",
     "enable_singularity",
     is_flag=True,
-    help="""Selects the singularity backend (shortcut for -C opts.backend.select=singularity)""",
+    help="""Deprecated: use --apptainer/-A instead. Selects the apptainer backend.""",
 )
 @click.option(
     "--slurm",
@@ -111,6 +118,7 @@ def build(
     tags: List[str] = [],
     skip_tags: List[str] = [],
     enable_steps: List[str] = [],
+    enable_apptainer=False,
     enable_singularity=False,
     enable_slurm=False,
     parameter_file: List[str] = [],
@@ -127,6 +135,7 @@ def build(
         build=True,
         rebuild=rebuild,
         build_skips=all_steps,
+        enable_apptainer=enable_apptainer,
         enable_singularity=enable_singularity,
         enable_slurm=enable_slurm,
         parameter_file=parameter_file,

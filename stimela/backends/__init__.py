@@ -1,4 +1,5 @@
 import logging
+import warnings
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, Optional
@@ -12,14 +13,42 @@ from stimela.stimelogging import log_exception
 
 from .kube import KubeBackendOptions
 from .native import NativeBackendOptions
-from .singularity import SingularityBackendOptions
+from .singularity import ApptainerBackendOptions, SingularityBackendOptions
 from .slurm import SlurmOptions
 
 ## left as memo to self
 # Backend = Enum("Backend", "docker singularity podman kubernetes native", module=__name__)
-Backend = Enum("Backend", "singularity kube native", module=__name__)
+Backend = Enum("Backend", "apptainer singularity kube native", module=__name__)
 
 SUPPORTED_BACKENDS = set(Backend.__members__)
+
+# Backend names that are deprecated aliases for other backends
+_BACKEND_ALIASES = {
+    "singularity": "apptainer",
+}
+
+
+def _resolve_backend_name(name: str, warn: bool = True) -> str:
+    """Resolves backend name, mapping deprecated aliases to their current names.
+
+    Args:
+        name: Backend name to resolve.
+        warn: If True, emit a deprecation warning for deprecated names.
+
+    Returns:
+        The resolved backend name.
+    """
+    if name in _BACKEND_ALIASES:
+        new_name = _BACKEND_ALIASES[name]
+        if warn:
+            warnings.warn(
+                f"The '{name}' backend name is deprecated and will be removed in a future release. "
+                f"Please use '{new_name}' instead.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+        return new_name
+    return name
 
 
 def get_backend(name: str, backend_opts: Optional[Dict] = None):
@@ -29,7 +58,11 @@ def get_backend(name: str, backend_opts: Optional[Dict] = None):
     """
     if name not in SUPPORTED_BACKENDS:
         return None
-    backend = __import__(f"stimela.backends.{name}", fromlist=[name])
+    # resolve deprecated backend aliases (singularity -> apptainer)
+    resolved_name = _resolve_backend_name(name, warn=False)
+    # both 'apptainer' and 'singularity' use the singularity module
+    module_name = "singularity" if resolved_name == "apptainer" else resolved_name
+    backend = __import__(f"stimela.backends.{module_name}", fromlist=[module_name])
     if backend.is_available(backend_opts):
         return backend
     return None
@@ -38,7 +71,9 @@ def get_backend(name: str, backend_opts: Optional[Dict] = None):
 def get_backend_status(name: str):
     if name not in SUPPORTED_BACKENDS:
         return "unknown backend"
-    backend = __import__(f"stimela.backends.{name}", fromlist=[name])
+    resolved_name = _resolve_backend_name(name, warn=False)
+    module_name = "singularity" if resolved_name == "apptainer" else resolved_name
+    backend = __import__(f"stimela.backends.{module_name}", fromlist=[module_name])
     return backend.get_status()
 
 
@@ -50,11 +85,12 @@ class StimelaBackendOptions(object):
     override_registries: Dict[str, str] = EmptyDictDefault()
 
     # should be Union[str, List[str]], but OmegaConf doesn't support it, so handle in __post_init__ for now
-    select: Any = "singularity,native"
+    select: Any = "apptainer,native"
 
     # selects a backend variety
     variety: Optional[str] = None
 
+    apptainer: Optional[ApptainerBackendOptions] = EmptyClassDefault(ApptainerBackendOptions)
     singularity: Optional[SingularityBackendOptions] = EmptyClassDefault(SingularityBackendOptions)
     kube: Optional[KubeBackendOptions] = EmptyClassDefault(KubeBackendOptions)
     native: Optional[NativeBackendOptions] = EmptyClassDefault(NativeBackendOptions)
@@ -77,9 +113,14 @@ class StimelaBackendOptions(object):
             self.select = list(self.select)
         else:
             raise BackendSpecificationError(f"invalid backend.select setting of type {self.select}")
+        # map deprecated 'singularity' to 'apptainer' in select list
+        self.select = [_resolve_backend_name(s) for s in self.select]
+        # if 'singularity' options are set but 'apptainer' is not, copy them over
+        if self.singularity is not None and self.apptainer is None:
+            self.apptainer = self.singularity
         # provide default options for available backends
-        if self.singularity is None and get_backend("singularity"):
-            self.singularity = SingularityBackendOptions()
+        if self.apptainer is None and get_backend("apptainer"):
+            self.apptainer = ApptainerBackendOptions()
         if self.native is None and get_backend("native"):
             self.native = NativeBackendOptions()
         if self.kube is None and get_backend("kube"):

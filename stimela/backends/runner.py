@@ -60,7 +60,7 @@ def validate_backend_settings(
     if not isinstance(backend_opts, StimelaBackendOptions):
         backend_opts = OmegaConf.to_object(backend_opts)
 
-    selected = backend_opts.select or ["singularity", "native"]
+    selected = backend_opts.select or ["apptainer", "native"]
     # select backend engine
 
     excuses = {}

@@ -5,9 +5,9 @@ _include:
 
 opts:
   backend:
-    select: singularity
-    singularity:
-      auto_build: false    # on slurm, we pre-build on the head node explitictly
+    select: apptainer
+    apptainer:
+      auto_build: false    # on slurm, we pre-build on the head node explicitly
     slurm:
       enable: true
 
