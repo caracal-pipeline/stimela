@@ -21,7 +21,7 @@ from scabha.validate import Unresolved, evaluate_and_substitute_object, join_quo
 import stimela
 from stimela import log_exception, stimelogging, task_stats
 from stimela.backends import StimelaBackendSchema, runner
-from stimela.config import EmptyDictDefault, EmptyListDefault
+from stimela.config import CONFIG_LOADED, EmptyDictDefault, EmptyListDefault
 from stimela.display.display import display
 from stimela.exceptions import (
     AssignmentError,
@@ -33,6 +33,7 @@ from stimela.exceptions import (
 from stimela.stimelogging import log_rich_payload
 
 from .cab import Cab, get_cab_schema
+from .cache import CacheConfig, OutputCache, _hash_inputs
 
 Conditional = Optional[str]
 
@@ -89,6 +90,7 @@ class Step:
     info: Optional[str] = None  # comment or info string
     skip: Optional[str] = None  # if this evaluates to True, step is skipped.
     skip_if_outputs: Optional[str] = None  # skip if outputs "exist' or "fresh"
+    cache_outputs: Optional[bool] = None  # if True, cache non-file outputs for reuse across runs
     tags: List[str] = EmptyListDefault()
 
     name: str = ""  # step's internal name
@@ -716,6 +718,41 @@ class Step:
                     parent_log_info("all required outputs are OK, skipping this step")
                     skip = True
 
+            ## check output cache for non-file outputs (issue #369)
+            has_cache_opts = hasattr(stimela.CONFIG, "opts") and hasattr(stimela.CONFIG.opts, "cache")
+            cache_enabled = (
+                not skip and self.cache_outputs is not False and has_cache_opts and stimela.CONFIG.opts.cache.enabled
+            )
+            # step-level cache_outputs=True can enable even if global is off,
+            # step-level cache_outputs=False disables
+            if not skip and self.cache_outputs is True:
+                cache_enabled = True
+
+            cached_outputs = {}
+            cache_config = None
+            input_hash = None
+            if cache_enabled:
+                cache_config = CacheConfig(
+                    enabled=True,
+                    dir=stimela.CONFIG.opts.cache.dir if has_cache_opts else ".",
+                    name=stimela.CONFIG.opts.cache.name if has_cache_opts else ".stimela-cache",
+                )
+                input_hash = _hash_inputs(params, self.cargo.inputs_outputs)
+                try:
+                    with OutputCache(cache_config, recipe_file=CONFIG_LOADED or "") as cache:
+                        cached_outputs = cache.lookup_step_outputs(
+                            self.fqname, self.name, self.cargo.outputs, input_hash
+                        )
+                except Exception as exc:
+                    self.log.debug(f"output cache lookup failed: {exc}")
+                    cached_outputs = {}
+
+                if cached_outputs:
+                    parent_log_info(
+                        f"found {len(cached_outputs)} cached non-file output(s): {', '.join(cached_outputs.keys())}"
+                    )
+                    params.update(**cached_outputs)
+
             if not skip:
                 if self.evaluate_section("preamble", subst):
                     raise StepValidationError("aborting due to above", log=self.log)
@@ -786,6 +823,14 @@ class Step:
                 if subst is not None:
                     subst.current._merge_(params)
                 self.log_summary(logging.DEBUG, "validated outputs", ignore_missing=True, outputs=True)
+
+                ## store non-file outputs in cache (issue #369)
+                if cache_enabled and not skip and cache_config is not None and input_hash is not None:
+                    try:
+                        with OutputCache(cache_config, recipe_file=CONFIG_LOADED or "") as cache:
+                            cache.store_step_outputs(self.fqname, self.name, params, self.cargo.outputs, input_hash)
+                    except Exception as exc:
+                        self.log.debug(f"failed to store outputs in cache: {exc}")
 
             if self.evaluate_section("epilogue", subst):
                 raise StepValidationError("aborting due to above", log=self.log)
