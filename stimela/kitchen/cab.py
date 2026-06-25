@@ -198,6 +198,15 @@ class Cab(Cargo):
         for name, value in params.items():
             if name in self._cab_alias_map:
                 canonical = self._cab_alias_map[name]
+                if canonical in params:
+                    deprecation_warning(
+                        f"parameter '{name}' of cab '{self.name}' is a deprecated alias "
+                        f"for '{canonical}'. Both were supplied; using the canonical "
+                        f"'{canonical}' value and ignoring '{name}'.",
+                        category="parameter_alias",
+                        log=log,
+                    )
+                    continue
                 deprecation_warning(
                     f"parameter '{name}' of cab '{self.name}' is a deprecated alias "
                     f"for '{canonical}'. Please use '{canonical}' instead.",

@@ -50,8 +50,9 @@ def deprecation_warning(
     # (e.g. test suites) can catch it with the warnings module.
     warnings.warn(message, FutureWarning, stacklevel=2)
 
-    # Log via stimelogging's accumulated-message mechanism so the warning
-    # appears both immediately and in the end-of-run summary.
+    # Log the warning immediately. The end-of-run summary is handled
+    # separately by get_deprecation_summary() in run.py, so we do not
+    # use at_end=True here to avoid double-printing.
     if log is None:
         from . import logger
 
@@ -65,7 +66,7 @@ def deprecation_warning(
         label=key,
         severity="warning",
         suppress_repeat=True,
-        at_end=True,
+        at_end=False,
     )
 
 
@@ -78,11 +79,12 @@ def get_deprecation_summary() -> list[str]:
     """Return a list of summary lines for all collected deprecation warnings."""
     lines = []
     for (category, message), info in _deprecation_registry.items():
+        escaped_msg = rich.markup.escape(message)
         count = info["count"]
         if count > 1:
-            lines.append(f"  [{category}] {message} (x{count})")
+            lines.append(f"  \\[{category}] {escaped_msg} (x{count})")
         else:
-            lines.append(f"  [{category}] {message}")
+            lines.append(f"  \\[{category}] {escaped_msg}")
     return lines
 
 
