@@ -32,6 +32,28 @@ from stimela.kitchen.recipe import Recipe, RecipeSchema, Step
 from stimela.kitchen.run_state import graph_to_constraints
 
 
+def _report_none_section_conflict(params, log):
+    """Check params dict for cases where a key is set to None and a subsequent key tries
+    to set a nested value under it. Logs a detailed warning for each conflict found.
+
+    For example, if params has {"foo.bar": None, "foo.bar.baz": 1}, the first entry
+    sets foo.bar to None, and the second tries to create a nested namespace under it,
+    which will fail with a confusing TypeError from SubstitutionNS.
+    """
+    none_keys = {k for k, v in params.items() if v is None}
+    for none_key in sorted(none_keys):
+        prefix = none_key + "."
+        conflicts = [k for k in params if k.startswith(prefix)]
+        if conflicts:
+            log.error(
+                f"parameter '{none_key}' is set to None (possibly from an empty YAML section "
+                f"in a parameter file), but the following assignments try to set nested values "
+                f"under it: {', '.join(repr(c) for c in conflicts)}. "
+                f"Either remove the empty section for '{none_key.split('.')[-1]}' from the "
+                f"parameter file, or give it explicit content (e.g. '{none_key.split('.')[-1]}: {{}}')"
+            )
+
+
 def resolve_recipe_files(filename: str, log: logging.Logger, use_manifest: bool = True):
     """
     Resolves a recipe file, which may be specified as (module)recipe.yml or module::recipe.yml, with
@@ -525,7 +547,22 @@ def run(
     subst._add_("info", info)
     subst._add_("self", info)
     subst._add_("config", stimela.CONFIG, nosubst=True)
-    subst._add_("current", SubstitutionNS(**params))
+    try:
+        subst._add_("current", SubstitutionNS(**params))
+    except TypeError as exc:
+        # This can happen when a parameter file sets a section to None (e.g. an empty YAML
+        # mapping value like "procres:" with nothing after it), and a subsequent assignment
+        # tries to set a dotted key under that section (e.g. "procres.foo=bar").
+        _report_none_section_conflict(params, log)
+        log_exception(
+            f"error processing parameter assignments: {exc}. "
+            "This typically happens when a parameter file contains an empty section "
+            "(e.g. 'section:' with no value), which sets it to None, and a subsequent "
+            "assignment tries to set a nested key under it (e.g. 'section.key=value'). "
+            "To fix this, either remove the empty section from the parameter file, or "
+            "give it an explicit value (e.g. 'section: " + "{}')."
+        )
+        sys.exit(2)
 
     # are we running a standalone cab?
     if cab_name is not None:
@@ -587,8 +624,19 @@ def run(
         for key, value in params.items():
             try:
                 recipe.assign_value(key, value, override=True)
-            except ScabhaBaseException as exc:
-                log_exception(exc)
+            except (ScabhaBaseException, TypeError) as exc:
+                if isinstance(exc, TypeError) and "not a nested namespace" in str(exc):
+                    _report_none_section_conflict(params, log)
+                    log_exception(
+                        f"error assigning {key}={value}: {exc}. "
+                        "This typically happens when a parameter file contains an empty section "
+                        "(e.g. 'section:' with no value), which sets it to None, and a subsequent "
+                        "assignment tries to set a nested key under it (e.g. 'section.key=value'). "
+                        "To fix this, either remove the empty section from the parameter file, or "
+                        "give it an explicit value (e.g. 'section: " + "{}')."
+                    )
+                else:
+                    log_exception(exc)
                 sys.exit(1)
 
         # create subst namespace for outer step

@@ -1,0 +1,9 @@
+stringy: "A string!"
+listy:
+  - "A"
+  - "list"
+  - "!"
+
+# This empty section produces a None value, which should cause a clear error
+# when a CLI assignment tries to set a nested key under it (e.g. echo-inputs.extra=foo)
+echo-inputs:

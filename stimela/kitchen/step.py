@@ -387,6 +387,18 @@ class Step:
                 self.cargo.assign_value(key, value, override=override)
             except ScabhaBaseException as exc:
                 raise AssignmentError(f"{self.name}: invalid assignment {key}={value}", exc)
+            except TypeError as exc:
+                if "not a nested namespace" in str(exc):
+                    # Provide a clearer error when a None value blocks nested assignment
+                    parts = key.split(".")
+                    raise AssignmentError(
+                        f"{self.name}: can't assign {key}={value}: {exc}. "
+                        f"This typically happens when '{parts[0]}' was set to None "
+                        f"(e.g. from an empty YAML section in a parameter file). "
+                        f"Either remove the empty section or give it explicit content "
+                        f"(e.g. '{parts[0]}: {{}}')"
+                    )
+                raise
 
     def build(self, backend=None, rebuild=False, build_skips=False, log: Optional[logging.Logger] = None):
         # skipping step? ignore the build
