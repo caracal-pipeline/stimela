@@ -113,9 +113,15 @@ class TestConfigPackages:
         """Config should have packages namespace with installed versions."""
         retcode, output = run("stimela -v -b native exec test_versioning.yml versioned_recipe msg=hello")
         assert retcode == 0
-        # The packages namespace should be available in config
-        # We can't easily check the namespace directly from CLI, but
-        # we verify the run succeeds and the config loads properly
+
+    def test_packages_populated_unit(self):
+        """Config.packages should contain stimela version after load_config."""
+        import stimela
+        from stimela.config import load_config
+
+        config = load_config()
+        assert hasattr(config, "packages")
+        assert config.packages.stimela == stimela.__version__
 
 
 # ---- Issue #306: Version specifiers on parameters ----
@@ -147,9 +153,9 @@ class TestVersionSpecifiers:
         )
         # old_feature has versions: "<2.0" and cab version is 2.0.0
         # so it should be deactivated and produce a warning or be rejected
-        # The step validator will detect it as an unknown parameter in the step
-        # since it's deactivated. This may succeed or fail depending on strict validation.
-        print(output)
+        assert retcode == 0 or verify_output(output, "not available in version|ignoring|deactivated|unknown")
+        if retcode == 0:
+            assert verify_output(output, "not available in version|ignoring|deactivated")
 
     def test_param_version_filtering_unit(self):
         """Unit test: version specifier filtering activates/deactivates correctly."""

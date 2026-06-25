@@ -106,20 +106,20 @@ def _apply_version_specifiers(inputs_outputs, cab_version_str, log=None):
         return
 
     for name, schema in inputs_outputs.items():
-        if schema.versions:
+        versions = getattr(schema, "versions", None)
+        if versions:
             try:
-                spec = SpecifierSet(schema.versions)
+                spec = SpecifierSet(versions)
             except InvalidSpecifier:
                 if log:
-                    log.warning(f"parameter '{name}': invalid version specifier '{schema.versions}'")
+                    log.warning(f"parameter '{name}': invalid version specifier '{versions}'")
                 continue
             if cab_ver not in spec:
                 schema._active = False
                 schema.required = False
                 if log:
                     log.debug(
-                        f"parameter '{name}' deactivated: cab version {cab_ver} "
-                        f"does not match specifier '{schema.versions}'"
+                        f"parameter '{name}' deactivated: cab version {cab_ver} does not match specifier '{versions}'"
                     )
             else:
                 schema._active = True

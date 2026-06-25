@@ -335,7 +335,7 @@ class Step:
                 if schema and not getattr(schema, "_active", True):
                     self.log.warning(
                         f"parameter '{name}' is not available in version {self.cargo.version} "
-                        f"of cab '{self.cargo.name}' (requires {schema.versions}), ignoring"
+                        f"of cab '{self.cargo.name}' (requires {getattr(schema, 'versions', '?')}), ignoring"
                     )
                     del params[name]
         if self.cargo.has_dynamic_schemas:
