@@ -584,14 +584,54 @@ def run(
                 log.debug(line)
             sys.exit(1)
 
+        # check for unknown parameters before applying CLI overrides
+        def _flatten_assign_keys(d, prefix=""):
+            keys = set()
+            for k, v in d.items():
+                full = f"{prefix}{k}"
+                if isinstance(v, (dict, OrderedDict, DictConfig)):
+                    keys.update(_flatten_assign_keys(v, f"{full}."))
+                else:
+                    keys.add(full)
+            return keys
+
+        assign_keys = _flatten_assign_keys(recipe.assign) if recipe.assign else set()
+        log_fields = set(recipe.logopts) if hasattr(recipe, "logopts") and recipe.logopts else set()
+        unknown_params = []
+        for key in params:
+            if key in recipe.inputs_outputs:
+                continue
+            if key in assign_keys:
+                continue
+            if "." in key:
+                prefix, subkey = key.split(".", 1)
+                if prefix == "config":
+                    continue
+                if prefix == "log" and subkey.split(".", 1)[0] in log_fields:
+                    continue
+                if prefix in recipe.steps:
+                    step = recipe.steps[prefix]
+                    if subkey in step.inputs_outputs:
+                        continue
+                    if hasattr(step.cargo, "assign") and step.cargo.assign:
+                        step_assign_keys = _flatten_assign_keys(step.cargo.assign)
+                        if subkey in step_assign_keys:
+                            continue
+            unknown_params.append(key)
+        if unknown_params:
+            log_exception(
+                RecipeValidationError(
+                    f"recipe '{recipe_name}': unknown parameter(s): {', '.join(repr(k) for k in unknown_params)}"
+                )
+            )
+            sys.exit(1)
+
         for key, value in params.items():
             try:
                 recipe.assign_value(key, value, override=True)
             except ScabhaBaseException as exc:
                 log_exception(exc)
                 sys.exit(1)
-
-        # create subst namespace for outer step
 
         # split out parameters
         params = {key: value for key, value in params.items() if key in recipe.inputs_outputs}
