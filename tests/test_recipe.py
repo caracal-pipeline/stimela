@@ -157,3 +157,22 @@ def test_scatter():
     print("===== expecting no errors now =====")
     retcode = os.system("stimela -v -b native exec test_scatter.yml nested_loop")
     assert retcode == 0
+
+
+def test_nested_assign():
+    """Test for issue #467: nested assignment dicts should be flattened into dotted keys."""
+    print("===== testing nested assign for log options =====")
+    retcode, output = run("stimela -v -b native exec test_nested_assign.yml nested_assign_log")
+    assert retcode == 0, f"nested assign for log options failed:\n{output}"
+    # check that the nested log name assignment took effect
+    assert verify_output(output, "nested-log-test")
+
+    print("===== testing flat dotted assign for log options =====")
+    retcode, output = run("stimela -v -b native exec test_nested_assign.yml flat_assign_log")
+    assert retcode == 0, f"flat dotted assign for log options failed:\n{output}"
+    assert verify_output(output, "flat-log-test")
+
+    print("===== testing nested assign with recipe variables =====")
+    retcode, output = run("stimela -v -b native exec test_nested_assign.yml nested_assign_variables")
+    assert retcode == 0, f"nested assign with recipe variables failed:\n{output}"
+    assert verify_output(output, "set-by-assign")

@@ -1,0 +1,55 @@
+## Test for issue #467: nested assignments should be flattened into dotted keys.
+
+cabs:
+  echo:
+    command: echo
+    inputs:
+      arg:
+        dtype: str
+        required: true
+        policies:
+          positional: true
+
+opts:
+  log:
+    dir: test-logs/logs-{config.run.datetime}
+    nest: 3
+    symlink: logs
+
+## Test that nested assign dicts are properly flattened
+nested_assign_log:
+  info: 'test nested assign for log options'
+  assign:
+    log:
+      name: nested-log-test
+  steps:
+    echo-1:
+      cab: echo
+      params:
+        arg: hello
+
+## Control: flat dotted assign should also work
+flat_assign_log:
+  info: 'test flat dotted assign for log options'
+  assign:
+    log.name: flat-log-test
+  steps:
+    echo-1:
+      cab: echo
+      params:
+        arg: hello
+
+## Test deeply nested assignments (more than 2 levels)
+nested_assign_variables:
+  info: 'test nested assign with recipe variables'
+  inputs:
+    myvar:
+      dtype: str
+      default: unset
+  assign:
+    myvar: set-by-assign
+  steps:
+    echo-1:
+      cab: echo
+      params:
+        arg: =recipe.myvar

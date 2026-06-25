@@ -193,11 +193,12 @@ class Recipe(Cargo):
         if not whose.assign and not whose.assign_based_on:
             return
 
-        def flatten_dict(input_dict, output_dict={}, prefix=""):
+        def flatten_dict(input_dict, prefix=""):
+            output_dict = {}
             for name, value in input_dict.items():
                 name = f"{prefix}{name}"
                 if isinstance(value, (dict, OrderedDict, DictConfig)):
-                    flatten_dict(value, output_dict=output_dict, prefix=f"{name}.")
+                    output_dict.update(flatten_dict(value, prefix=f"{name}."))
                 else:
                     output_dict[name] = value
             return output_dict
@@ -211,8 +212,8 @@ class Recipe(Cargo):
             Called repeatedly for the assign section, and for each assign_based_on entry. Substitution errors are
             ignored at this stage, a final round of re-evaluation with ignore=False is done at the end.
             """
-            # flatten assignments
-            flattened = assignments  # flatten_dict(assignments)
+            # flatten nested assignments into dotted keys (e.g. {log: {name: foo}} -> {"log.name": foo})
+            flattened = flatten_dict(assignments)
             # drop entries protected from assignment
             flattened = {name: value for name, value in flattened.items() if name not in self._protected_from_assign}
             # merge into recipe namespace
