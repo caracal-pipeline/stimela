@@ -1,5 +1,15 @@
 import os
+import sys
 from pathlib import Path
+
+# pyparsing's infix_notation uses deep recursion; nested formulas (e.g. 4+ nested IFs)
+# exceed Python's default limit of 1000. See https://github.com/caracal-pipeline/stimela/issues/462
+_MIN_RECURSION_LIMIT = 10000
+if sys.getrecursionlimit() < _MIN_RECURSION_LIMIT:
+    try:
+        sys.setrecursionlimit(_MIN_RECURSION_LIMIT)
+    except ValueError:
+        pass
 
 # -----------
 # knicked from https://github.com/python-poetry/poetry/issues/273#issuecomment-1103812336
