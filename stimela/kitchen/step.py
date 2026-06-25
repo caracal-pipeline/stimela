@@ -328,6 +328,16 @@ class Step:
         self.finalize(backend=backend)
         # apply dynamic schemas
         params = self.params
+        # check for parameters that have been deactivated by version specifiers
+        if isinstance(self.cargo, Cab):
+            for name in list(params.keys()):
+                schema = self.cargo.inputs_outputs.get(name)
+                if schema and not getattr(schema, "_active", True):
+                    self.log.warning(
+                        f"parameter '{name}' is not available in version {self.cargo.version} "
+                        f"of cab '{self.cargo.name}' (requires {getattr(schema, 'versions', '?')}), ignoring"
+                    )
+                    del params[name]
         if self.cargo.has_dynamic_schemas:
             # prevalidate in order to resolve substitutions in existing parameters
             params = self.cargo.prevalidate(params, subst, root=root)
