@@ -243,11 +243,15 @@ class Step:
         self.validated_params = None
         # parameters protected from assignment (because they've been set on the command line, presumably)
         self._assignment_overrides = set()
-        # skip_if_outputs can be "exist", "fresh", or a formula expression
-        # Formulas can reference outputs_exist.X and outputs_fresh.X namespaces
+        # skip_if_outputs can be "exist", "fresh", or a formula expression (prefixed with = or containing {})
         if self.skip_if_outputs and self.skip_if_outputs not in _SKIP_MODES:
-            # Treat as a conditional expression -- will be evaluated at runtime
-            self._skip_if_outputs_expr = True
+            if self.skip_if_outputs.startswith("=") or "{" in self.skip_if_outputs:
+                self._skip_if_outputs_expr = True
+            else:
+                raise StepValidationError(
+                    f"step '{self.name}': invalid skip_if_outputs='{self.skip_if_outputs}'. "
+                    f"Expected 'exist', 'fresh', or a formula expression (starting with '=' or containing '{{}}')"
+                )
         else:
             self._skip_if_outputs_expr = False
         # the "skip" attribute is reevaluated at runtime since it may contain substitutions, but if it's set to a bool

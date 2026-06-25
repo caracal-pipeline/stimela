@@ -12,6 +12,17 @@ cabs:
         dtype: File
         policies:
           positional: true
+  touch-two:
+    command: touch
+    outputs:
+      file1:
+        dtype: File
+        policies:
+          positional: true
+      file2:
+        dtype: File
+        policies:
+          positional: true
 
 recipe:
   name: test-skip-conditionals
@@ -40,7 +51,8 @@ recipe:
 
     # Expression mode with AND: skip only if BOTH outputs exist
     touch4:
-      cab: touch
+      cab: touch-two
       params:
-        file: test_skip_cond4.tmp
-      skip_if_outputs: =outputs_exist.file
+        file1: test_skip_cond4.tmp
+        file2: test_skip_cond4b.tmp
+      skip_if_outputs: =outputs_exist.file1 and outputs_exist.file2

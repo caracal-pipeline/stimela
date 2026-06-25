@@ -8,7 +8,11 @@ from .test_recipe import run, verify_output
 
 def test_skip_expression_outputs_exist():
     """Test skip_if_outputs with expression using outputs_exist (issue #491)."""
-    os.system("rm -f test_skip_cond[1234].tmp test_skip_cond_input.tmp")
+    os.system("rm -f test_skip_cond[1234].tmp test_skip_cond4b.tmp test_skip_cond_input.tmp")
+
+    # Create input file for freshness test (touch3 needs it to compare mtimes)
+    with open("test_skip_cond_input.tmp", "w") as f:
+        f.write("input")
 
     print("===== all files should be touched =====")
     retcode, output = run("stimela -b native run test_issue491_skip_conditionals.yml")
@@ -29,11 +33,11 @@ def test_skip_expression_outputs_exist():
     assert not verify_output(output, "---INVOKING---", "touch test_skip_cond2.tmp")
     # touch3 uses freshness check -- outputs should be fresh after first run
     assert not verify_output(output, "---INVOKING---", "touch test_skip_cond3.tmp")
-    # touch4 uses expression mode with outputs_exist
+    # touch4 uses compound AND expression with outputs_exist
     assert not verify_output(output, "---INVOKING---", "touch test_skip_cond4.tmp")
 
     print("===== cleaning up =====")
-    os.system("rm -f test_skip_cond[1234].tmp test_skip_cond_input.tmp")
+    os.system("rm -f test_skip_cond[1234].tmp test_skip_cond4b.tmp test_skip_cond_input.tmp")
 
 
 def test_check_output_existence():
