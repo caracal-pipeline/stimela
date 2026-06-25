@@ -19,7 +19,7 @@ import pickle
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
-from scabha.basetypes import UNSET, Unresolved
+from scabha.validate import Unresolved
 
 log = logging.getLogger(__name__)
 
@@ -45,9 +45,9 @@ def _cache_db_path(config: CacheConfig) -> str:
     return os.path.join(config.dir, config.name)
 
 
-def _make_key(recipe_name: str, step_label: str, output_name: str) -> str:
-    """Construct a cache key from recipe name, step label, and output name."""
-    return f"{recipe_name}::{step_label}::{output_name}"
+def _make_key(recipe_name: str, step_label: str, output_name: str, recipe_file: str = "") -> str:
+    """Construct a cache key from recipe file, recipe name, step label, and output name."""
+    return f"{recipe_file}::{recipe_name}::{step_label}::{output_name}"
 
 
 def _hash_inputs(params: Dict[str, Any], schemas: Dict[str, Any]) -> str:
@@ -64,7 +64,7 @@ def _hash_inputs(params: Dict[str, Any], schemas: Dict[str, Any]) -> str:
         if schema is None or not getattr(schema, "is_input", False):
             continue
         value = params[name]
-        if value is UNSET or isinstance(value, Unresolved):
+        if isinstance(value, Unresolved):
             continue
         # pickle the value for a canonical byte representation
         try:
@@ -97,8 +97,9 @@ class OutputCache:
             cache.close()
     """
 
-    def __init__(self, config: CacheConfig):
+    def __init__(self, config: CacheConfig, recipe_file: str = ""):
         self.config = config
+        self.recipe_file = recipe_file
         self._db = None
 
     def open(self):
@@ -123,10 +124,10 @@ class OutputCache:
         return False
 
     def _value_key(self, recipe_name: str, step_label: str, output_name: str) -> str:
-        return _make_key(recipe_name, step_label, output_name)
+        return _make_key(recipe_name, step_label, output_name, self.recipe_file)
 
     def _hash_key(self, recipe_name: str, step_label: str, output_name: str) -> str:
-        return _make_key(recipe_name, step_label, output_name) + "::__input_hash__"
+        return _make_key(recipe_name, step_label, output_name, self.recipe_file) + "::__input_hash__"
 
     def lookup(
         self,
@@ -196,7 +197,7 @@ class OutputCache:
             ]
         else:
             # remove all entries for this step
-            prefix = _make_key(recipe_name, step_label, "")
+            prefix = _make_key(recipe_name, step_label, "", self.recipe_file)
             keys_to_remove = [k for k in self._db.keys() if k.decode("utf-8").startswith(prefix)]
 
         for key in keys_to_remove:
@@ -244,5 +245,5 @@ class OutputCache:
                 continue
             if name in params:
                 value = params[name]
-                if value is not UNSET and not isinstance(value, Unresolved):
+                if not isinstance(value, Unresolved):
                     self.store(recipe_name, step_label, name, value, input_hash)

@@ -21,7 +21,7 @@ from scabha.validate import Unresolved, evaluate_and_substitute_object, join_quo
 import stimela
 from stimela import log_exception, stimelogging, task_stats
 from stimela.backends import StimelaBackendSchema, runner
-from stimela.config import EmptyDictDefault, EmptyListDefault
+from stimela.config import CONFIG_LOADED, EmptyDictDefault, EmptyListDefault
 from stimela.display.display import display
 from stimela.exceptions import (
     AssignmentError,
@@ -739,7 +739,7 @@ class Step:
                 )
                 input_hash = _hash_inputs(params, self.cargo.inputs_outputs)
                 try:
-                    with OutputCache(cache_config) as cache:
+                    with OutputCache(cache_config, recipe_file=CONFIG_LOADED or "") as cache:
                         cached_outputs = cache.lookup_step_outputs(
                             self.fqname, self.name, self.cargo.outputs, input_hash
                         )
@@ -827,7 +827,7 @@ class Step:
                 ## store non-file outputs in cache (issue #369)
                 if cache_enabled and not skip and cache_config is not None and input_hash is not None:
                     try:
-                        with OutputCache(cache_config) as cache:
+                        with OutputCache(cache_config, recipe_file=CONFIG_LOADED or "") as cache:
                             cache.store_step_outputs(self.fqname, self.name, params, self.cargo.outputs, input_hash)
                     except Exception as exc:
                         self.log.debug(f"failed to store outputs in cache: {exc}")

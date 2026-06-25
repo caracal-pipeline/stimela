@@ -160,6 +160,17 @@ class TestHashInputs:
         p2 = OrderedDict([("b", 2), ("a", 1)])
         assert _hash_inputs(p1, schemas) == _hash_inputs(p2, schemas)
 
+    def test_unset_instances_skipped(self):
+        """UNSET(name) instances should be skipped, not just the UNSET class sentinel."""
+        from scabha.basetypes import UNSET
+
+        schemas = {"a": self._make_schema(), "b": self._make_schema()}
+        h1 = _hash_inputs({"a": 1, "b": UNSET("b")}, schemas)
+        h2 = _hash_inputs({"a": 1, "b": UNSET("other")}, schemas)
+        h3 = _hash_inputs({"a": 1}, schemas)
+        assert h1 == h2, "different UNSET instances should produce the same hash"
+        assert h1 == h3, "UNSET values should be equivalent to missing params"
+
 
 class TestLookupStepOutputs:
     """Tests for the batch lookup/store of step outputs."""

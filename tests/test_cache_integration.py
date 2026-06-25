@@ -43,6 +43,8 @@ def test_cache_integration():
     assert verify_output(output, "message = hellohello")
     # should mention cached outputs were found
     assert verify_output(output, "cached non-file output")
+    # verify the number of cached outputs matches what we expect (result + message)
+    assert verify_output(output, "2 cached non-file output")
 
     # clean up
     for f in glob.glob(".test-stimela-cache*"):
