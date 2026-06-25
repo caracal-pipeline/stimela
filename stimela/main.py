@@ -8,6 +8,7 @@ from omegaconf import OmegaConf
 import stimela
 from stimela import backends, config, stimelogging
 from stimela.commands.build import build
+from stimela.commands.clean import clean
 from stimela.commands.cleanup import cleanup
 from stimela.commands.doc import doc
 from stimela.commands.run import run
@@ -162,7 +163,7 @@ def cli(
 
 
 # Add all the subcommands to the main CLI group.
-for cmd in (build, cleanup, doc, run, save_config):
+for cmd in (build, clean, cleanup, doc, run, save_config):
     cli.add_command(cmd)
 
 ## These one needs to be reimplemented, current backed auto-pulls and auto-builds:
