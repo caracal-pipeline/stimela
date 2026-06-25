@@ -56,6 +56,11 @@ def run(
 
     kube = backend.kube
 
+    if cab.management.environment:
+        merged_env = dict(cab.management.environment)
+        merged_env.update(kube.env or {})
+        kube.env = merged_env
+
     args, log_args = cab.flavour.get_arguments(cab, params, subst, check_executable=False)
 
     log.debug(f"command line is {' '.join(log_args)}")

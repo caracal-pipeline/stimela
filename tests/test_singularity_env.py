@@ -1,11 +1,12 @@
-"""Tests for singularity backend environment variable merging (issue #334).
+"""Tests for environment variable merging across backends (issue #334).
 
-Verifies that:
-- cab.management.environment vars are passed to singularity via --env
-- backend.singularity.env vars are passed via --env
-- backend.singularity.env takes precedence over cab.management.environment
-- empty env dicts produce no --env flag
+Verifies that cab.management.environment is applied to all backends:
+- singularity: merged into --env flags
+- native: merged into subprocess env
+- kube: merged into kube.env before pod/dask creation
 """
+
+import os
 
 from omegaconf import OmegaConf
 
@@ -96,3 +97,60 @@ def test_singularity_backend_options_env_via_omegaconf():
     merged = OmegaConf.merge(base, override)
 
     assert merged.env.NUMBA_CACHE_DIR == "/cache"
+
+
+# --- Native backend env tests ---
+
+
+def _build_native_env(management_env):
+    """Reproduce the native backend env merging logic from run_native.py."""
+    env = None
+    if management_env:
+        env = os.environ.copy()
+        env.update(management_env)
+    return env
+
+
+def test_native_management_env_applied():
+    """Native backend should merge cab.management.environment into subprocess env."""
+    env = _build_native_env({"MY_VAR": "hello"})
+    assert env is not None
+    assert env["MY_VAR"] == "hello"
+    assert "PATH" in env
+
+
+def test_native_no_env_returns_none():
+    """Native backend should return None env when no management env is set."""
+    assert _build_native_env({}) is None
+    assert _build_native_env(None) is None
+
+
+# --- Kube backend env tests ---
+
+
+def _build_kube_env(management_env, kube_env):
+    """Reproduce the kube backend env merging logic from run_kube.py."""
+    if management_env:
+        merged = dict(management_env)
+        merged.update(kube_env or {})
+        return merged
+    return dict(kube_env or {})
+
+
+def test_kube_management_env_merged():
+    """Kube backend should merge cab.management.environment into kube.env."""
+    result = _build_kube_env({"MGMT_VAR": "yes"}, {"KUBE_VAR": "also"})
+    assert result["MGMT_VAR"] == "yes"
+    assert result["KUBE_VAR"] == "also"
+
+
+def test_kube_backend_env_takes_precedence():
+    """Kube backend env should override cab.management.environment for same key."""
+    result = _build_kube_env({"SHARED": "from_mgmt"}, {"SHARED": "from_kube"})
+    assert result["SHARED"] == "from_kube"
+
+
+def test_kube_no_management_env():
+    """Kube backend should use only kube.env when no management env."""
+    result = _build_kube_env(None, {"KUBE_ONLY": "val"})
+    assert result == {"KUBE_ONLY": "val"}

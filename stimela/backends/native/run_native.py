@@ -1,5 +1,6 @@
 import datetime
 import logging
+import os
 import os.path
 import resource
 from typing import Any, Dict, Optional
@@ -85,14 +86,17 @@ def run(
 
     command_name = cab.flavour.command_name
 
+    env = None
+    if cab.management.environment:
+        env = os.environ.copy()
+        env.update(cab.management.environment)
+
     # run command
     start_time = datetime.datetime.now()
 
     def elapsed(since=None):
         """Returns string representing elapsed time"""
         return str(datetime.datetime.now() - (since or start_time)).split(".", 1)[0]
-
-    # log.info(f"argument lengths are {[len(a) for a in args]}")
 
     if wrapper:
         args, log_args = wrapper.wrap_run_command(args, log_args, fqname=fqname, log=log)
@@ -104,6 +108,7 @@ def run(
         args[1:],
         shell=False,
         log=log,
+        env=env,
         output_wrangler=cabstat.apply_wranglers,
         return_errcode=True,
         command_name=command_name,
