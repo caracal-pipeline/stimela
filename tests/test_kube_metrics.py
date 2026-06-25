@@ -155,3 +155,33 @@ class TestStatusReporterMetricsDisable:
             mock_custom_api.list_namespaced_custom_object.reset_mock()
             report = statrep.update()
             mock_custom_api.list_namespaced_custom_object.assert_not_called()
+
+    def test_metrics_not_disabled_on_transient_5xx(self):
+        from unittest.mock import patch
+
+        from kubernetes.client.rest import ApiException
+
+        with patch("stimela.backends.kube.kube_utils.get_kube_api") as mock_get_kube_api:
+            from stimela.backends.kube.kube_utils import StatusReporter
+
+            mock_kube_api = MagicMock()
+            mock_custom_api = MagicMock()
+            mock_get_kube_api.return_value = ("default", mock_kube_api, mock_custom_api)
+
+            mock_kube_api.list_namespaced_event.return_value = MagicMock(items=[])
+            mock_kube_api.list_namespaced_pod.return_value = MagicMock(items=[])
+            mock_custom_api.list_namespaced_custom_object.side_effect = ApiException(
+                status=503, reason="Service Unavailable"
+            )
+
+            kube = MagicMock()
+            kube.debug.log_events = False
+            log = MagicMock()
+
+            statrep = StatusReporter(podname="test-pod", log=log, kube=kube, event_handler=None)
+            assert statrep.enable_metrics is True
+
+            report = statrep.update()
+            assert statrep.enable_metrics is True
+            assert report.total_cores is None
+            assert report.total_memory is None

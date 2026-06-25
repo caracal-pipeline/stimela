@@ -241,7 +241,8 @@ class StatusReporter(object):
                     )
                 except ApiException as exc:
                     self.report_api_error("metrics.k8s.io", exc)
-                    self.enable_metrics = False
+                    if exc.status in (404, 403):
+                        self.enable_metrics = False
         except (ConnectionError, HTTPError):
             self.connected = False
             # self.log.warning(f"disconnected: {exc}")
