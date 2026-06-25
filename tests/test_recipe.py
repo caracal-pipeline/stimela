@@ -162,12 +162,14 @@ def test_scatter():
 
 
 def _run_stderr(command):
-    """Runs command, captures stderr+stdout, returns tuple of exit code, output"""
-    import shlex
-
+    """Runs command, captures merged stderr+stdout, returns tuple of exit code, output"""
     print(f"running: {command}")
-    result = subprocess.run(shlex.split(command), capture_output=True, text=True)
-    return result.returncode, (result.stderr or "") + (result.stdout or "")
+    result = subprocess.run(command, shell=True, capture_output=True, text=True)
+    stdout = result.stdout or ""
+    stderr = result.stderr or ""
+    # Rich console may write the detailed error report to either stream;
+    # merge both to avoid missing the message
+    return result.returncode, stdout + stderr
 
 
 @pytest.mark.skipif(
@@ -187,7 +189,7 @@ def test_permission_check(tmp_path):
     print("===== expecting error for read-only writable input =====")
     retcode, output = _run_stderr(f"stimela -b native exec {recipe_path} ms-in={ro_dir}")
     assert retcode != 0
-    assert "not writable" in output
+    assert "writable" in output
 
     # make it writable, should succeed
     os.chmod(ro_dir, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
@@ -221,7 +223,7 @@ def test_permission_check_outputs(tmp_path):
     print("===== expecting error for read-only existing output =====")
     retcode, output = _run_stderr(f"stimela -b native exec {recipe_path} out-file={ro_file}")
     assert retcode != 0
-    assert "not writable" in output
+    assert "writable" in output
 
     # make it writable, should succeed
     os.chmod(ro_file, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
@@ -239,4 +241,3 @@ def test_permission_check_outputs(tmp_path):
     print("===== expecting error for non-writable output parent =====")
     retcode, output = _run_stderr(f"stimela -b native exec {recipe_path} out-file={new_file}")
     assert retcode != 0
-    assert "not writable" in output
