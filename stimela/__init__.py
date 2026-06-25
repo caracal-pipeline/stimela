@@ -29,3 +29,9 @@ Path(LOG_HOME).mkdir(exist_ok=True)
 LOG_FILE = "{0:s}/stimela_logfile.json".format(LOG_HOME)
 
 from .stimelogging import logger, log_exception  # noqa
+
+# Apply scabha patches for complex type coercion (issue #364)
+from ._patches import apply_patches as _apply_patches  # noqa: E402
+
+_apply_patches()
+del _apply_patches
