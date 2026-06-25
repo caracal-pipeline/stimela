@@ -1,0 +1,37 @@
+cabs:
+  produce_file:
+    command: echo
+    inputs:
+      input_data:
+        dtype: str
+        default: "hello"
+    outputs:
+      outfile:
+        dtype: File
+        implicit: "clean_test_output.txt"
+        must_exist: false
+      outdir:
+        dtype: Directory
+        implicit: "clean_test_outdir"
+        must_exist: false
+
+  produce_ms:
+    command: echo
+    inputs:
+      name:
+        dtype: str
+        default: "test"
+    outputs:
+      ms:
+        dtype: MS
+        implicit: "clean_test.ms"
+        must_exist: false
+
+clean-recipe:
+  name: "clean test recipe"
+  info: "recipe for testing stimela clean command"
+  steps:
+    make_file:
+      cab: produce_file
+    make_ms:
+      cab: produce_ms
