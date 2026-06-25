@@ -1286,7 +1286,8 @@ class Recipe(Cargo):
         for name, schema in self.inputs.items():
             if name in params:
                 value = params[name]
-                if isinstance(value, Unresolved) and not isinstance(value, Placeholder):
+                is_unresolved = isinstance(value, Unresolved) and not isinstance(value, Placeholder)
+                if is_unresolved and schema.required is not False:
                     raise RecipeValidationError(f"recipe '{self.name}' has unresolved input '{name}'", log=self.log)
                 self._update_aliases(name, value)
             elif schema.required and (self.for_loop is None or name != self.for_loop.var):

@@ -157,3 +157,12 @@ def test_scatter():
     print("===== expecting no errors now =====")
     retcode = os.system("stimela -v -b native exec test_scatter.yml nested_loop")
     assert retcode == 0
+
+
+def test_issue324():
+    """Test that non-required outputs do not cause errors when unresolved"""
+    print("===== expecting no errors for non-required output =====")
+    retcode, output = run("stimela -v -b native exec test_issue324.yml recipe")
+    assert retcode == 0
+    print(output)
+    assert verify_output(output, "recipe 'recipe' executed successfully")
