@@ -357,7 +357,7 @@ def update_file_logger(
         # Expand path before removing non-filename characters.
         path = os.path.expanduser(path)
         # substitute non-filename characters for _
-        path = re.sub(r"[^a-zA-Z0-9_./-]", "_", path)
+        path = re.sub(r"[^a-zA-Z0-9_./+@-]", "_", path)
 
         # setup the logger
         setup_file_logger(log, path, level=logopts.level, symlink=logopts.symlink)
