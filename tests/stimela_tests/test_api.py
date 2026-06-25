@@ -4,12 +4,8 @@ Tests the core API: @stimela.recipe, cab(), RunResult, annotations,
 and parallel execution.
 """
 
-from __future__ import annotations
-
-import os
-import tempfile
 from typing import Annotated
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -19,6 +15,16 @@ from stimela.api.annotations import ChoicesType, _OutputMarker, extract_annotati
 from stimela.api.cab_proxy import CabProxy
 from stimela.api.execution import RecipeContext, get_current_context, pop_context, push_context
 from stimela.api.parallel import ParallelContext, parallel
+
+
+def _make_choices_func(choices_type):
+    """Build a function with Choices annotation at runtime to avoid F821."""
+    ns = {"Annotated": Annotated, "choices_type": choices_type, "Info": Info}
+    exec(
+        "def my_func(band: Annotated[choices_type, Info('band')] = 'L'): pass",
+        ns,
+    )
+    return ns["my_func"]
 
 
 # --- Annotation tests ---
@@ -66,11 +72,8 @@ class TestAnnotations:
         assert annotations["dir_out"]["info"] == "output directory"
 
     def test_extract_choices(self):
-        def my_func(
-            band: Annotated[Choices["L", "UHF"], Info("band")] = "L",
-        ):
-            pass
-
+        choices_type = Choices["L", "UHF"]
+        my_func = _make_choices_func(choices_type)
         annotations = extract_annotations(my_func)
         assert annotations["band"]["choices"] == ("L", "UHF")
 
@@ -225,8 +228,6 @@ class TestRecipeDecorator:
 
 class TestParallel:
     def test_basic_parallel(self):
-        results = []
-
         with parallel() as pool:
             for i in range(3):
                 pool.call(lambda x: x * 2, i)
