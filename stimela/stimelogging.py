@@ -167,6 +167,11 @@ _boring = False
 
 LOG_DIR = "."
 
+# Characters allowed in log file paths: alphanumeric, dot, underscore, slash, at-sign, plus, hyphen.
+# The '+' and '@' characters are explicitly allowed so that e.g. J2000 coordinate names
+# (like J1939+4540) are preserved in log directory/file names (see issue #513).
+_RE_LOG_SANITIZE = re.compile(r"[^a-zA-Z0-9_./@+-]")
+
 
 def is_logger_initialized():
     return _logger is not None
@@ -357,7 +362,7 @@ def update_file_logger(
         # Expand path before removing non-filename characters.
         path = os.path.expanduser(path)
         # substitute non-filename characters for _
-        path = re.sub(r"[^a-zA-Z0-9_./-]", "_", path)
+        path = _RE_LOG_SANITIZE.sub("_", path)
 
         # setup the logger
         setup_file_logger(log, path, level=logopts.level, symlink=logopts.symlink)
