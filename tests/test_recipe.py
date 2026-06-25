@@ -149,6 +149,29 @@ def test_issue527_3():
     assert verify_output(output, "invalid inputs")
 
 
+def test_issue364_braces_substitution():
+    """Test that {}-substitutions work with List[Tuple[float,float]] types.
+
+    Regression test for https://github.com/caracal-pipeline/stimela/issues/364.
+    When a parameter with a complex container dtype is passed via {recipe.param}
+    substitution, the value is stringified and must be parsed back correctly.
+    """
+    print("===== {}-substitution with List[Tuple[float,float]] =====")
+    retcode, output = run("stimela -v -b native run test_issue364.yml test_braces 'kernel=[[30,120],[90,360]]'")
+    print(output)
+    assert retcode == 0
+    assert verify_output(output, "recipe 'test_braces' executed successfully")
+
+
+def test_issue364_equals_substitution():
+    """Control test: =recipe.param syntax should also work with complex types."""
+    print("===== =substitution with List[Tuple[float,float]] =====")
+    retcode, output = run("stimela -v -b native run test_issue364.yml test_equals 'kernel=[[30,120],[90,360]]'")
+    print(output)
+    assert retcode == 0
+    assert verify_output(output, "recipe 'test_equals' executed successfully")
+
+
 def test_scatter():
     print("===== expecting no errors now =====")
     retcode = os.system("stimela -v -b native exec test_scatter.yml basic_loop")
