@@ -200,12 +200,28 @@ def test_apptainer_priority_no_native_no_image():
 
 def test_singularity_alias_resolves_to_apptainer():
     """Test that using the deprecated 'singularity' name in select resolves to 'apptainer'."""
+    from stimela.backends import StimelaBackendOptions, _resolve_backend_name
+
+    # Test the name resolution function directly
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        resolved = _resolve_backend_name("singularity")
+        assert resolved == "apptainer"
+        assert len(w) == 1
+        assert issubclass(w[0].category, DeprecationWarning)
+
+    # Test that __post_init__ resolves 'singularity' in the select list
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        opts = StimelaBackendOptions(select="singularity,native")
+    assert "apptainer" in opts.select
+    assert "singularity" not in opts.select
+
+    # Verify validate_backend_settings still works with the resolved config
     simms_cab = Cab(**cabs.simms)
     backend_opts2 = copy.deepcopy(backend_opts)
-    # Use deprecated 'singularity' name -- should be silently resolved to 'apptainer'
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
         backend_opts2.select = ["singularity", "native"]
     backend_runner = runner.validate_backend_settings(backend_opts2, logging.Logger, simms_cab)
-    # Should resolve to native since apptainer is not installed in test env
     assert isinstance(backend_runner, runner.BackendRunner)

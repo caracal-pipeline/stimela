@@ -1,6 +1,6 @@
 import logging
 import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from enum import Enum
 from typing import Any, Dict, Optional
 
@@ -115,9 +115,20 @@ class StimelaBackendOptions(object):
             raise BackendSpecificationError(f"invalid backend.select setting of type {self.select}")
         # map deprecated 'singularity' to 'apptainer' in select list
         self.select = [_resolve_backend_name(s) for s in self.select]
-        # if 'singularity' options are set but 'apptainer' is not, copy them over
-        if self.singularity is not None and self.apptainer is None:
-            self.apptainer = self.singularity
+        # if user explicitly configured 'singularity' options, migrate them to 'apptainer'
+        if self.singularity is not None:
+            _default_sing = SingularityBackendOptions()
+            has_custom_singularity = any(
+                getattr(self.singularity, f.name) != getattr(_default_sing, f.name)
+                for f in fields(SingularityBackendOptions)
+            )
+            if has_custom_singularity:
+                warnings.warn(
+                    "The 'singularity' backend config is deprecated. Please use 'apptainer' instead.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+                self.apptainer = self.singularity
         # provide default options for available backends
         if self.apptainer is None and get_backend("apptainer"):
             self.apptainer = ApptainerBackendOptions()
