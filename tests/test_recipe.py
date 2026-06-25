@@ -180,6 +180,7 @@ def test_permission_check(tmp_path):
     ro_dir = tmp_path / "readonly.ms"
     ro_dir.mkdir()
     os.chmod(ro_dir, stat.S_IRUSR | stat.S_IXUSR | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
+    assert not os.access(ro_dir, os.W_OK), f"chmod did not make {ro_dir} read-only"
 
     recipe_path = os.path.join(os.path.dirname(__file__), "test_permissions.yml")
 
@@ -197,6 +198,45 @@ def test_permission_check(tmp_path):
     # test check_permissions: false opt-out using nocheck recipe
     recipe_nocheck_path = os.path.join(os.path.dirname(__file__), "test_permissions_nocheck.yml")
     os.chmod(ro_dir, stat.S_IRUSR | stat.S_IXUSR | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
+    assert not os.access(ro_dir, os.W_OK), f"chmod did not make {ro_dir} read-only"
     print("===== expecting success with check_permissions opt-out =====")
     retcode, output = _run_stderr(f"stimela -b native exec {recipe_nocheck_path} ms-in={ro_dir}")
     assert retcode == 0
+
+
+@pytest.mark.skipif(
+    sys.platform != "linux" or os.geteuid() == 0,
+    reason="POSIX permission bits do not restrict root; chmod semantics differ on non-Linux",
+)
+def test_permission_check_outputs(tmp_path):
+    """Test that non-writable output paths are caught before execution."""
+    # create a read-only file as an existing output
+    ro_file = tmp_path / "existing_output.txt"
+    ro_file.touch()
+    os.chmod(ro_file, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+    assert not os.access(ro_file, os.W_OK), f"chmod did not make {ro_file} read-only"
+
+    recipe_path = os.path.join(os.path.dirname(__file__), "test_permissions_output.yml")
+
+    print("===== expecting error for read-only existing output =====")
+    retcode, output = _run_stderr(f"stimela -b native exec {recipe_path} out-file={ro_file}")
+    assert retcode != 0
+    assert "not writable" in output
+
+    # make it writable, should succeed
+    os.chmod(ro_file, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
+    print("===== expecting success with writable output =====")
+    retcode, output = _run_stderr(f"stimela -b native exec {recipe_path} out-file={ro_file}")
+    assert retcode == 0
+
+    # test non-writable parent directory for a new output
+    ro_parent = tmp_path / "ro_parent"
+    ro_parent.mkdir()
+    os.chmod(ro_parent, stat.S_IRUSR | stat.S_IXUSR | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
+    assert not os.access(ro_parent, os.W_OK), f"chmod did not make {ro_parent} read-only"
+
+    new_file = ro_parent / "new_output.txt"
+    print("===== expecting error for non-writable output parent =====")
+    retcode, output = _run_stderr(f"stimela -b native exec {recipe_path} out-file={new_file}")
+    assert retcode != 0
+    assert "not writable" in output
