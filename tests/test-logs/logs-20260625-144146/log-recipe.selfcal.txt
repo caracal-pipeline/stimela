@@ -1,3 +1,0 @@
-2026-06-25 14:41:46 STIMELA.recipe.selfcal DEBUG: prevalidating recipe
-2026-06-25 14:41:46 STIMELA.recipe.selfcal DEBUG: recipe pre-validated
-2026-06-25 14:41:46 STIMELA.recipe.selfcal DEBUG: demo selfcal: 0 missing, 0 invalid and 0 unresolved parameters
