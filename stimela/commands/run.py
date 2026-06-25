@@ -307,11 +307,18 @@ def load_recipe_files(filenames: List[str]):
     help="""Selects the native backend (shortcut for -C opts.backend.select=native)""",
 )
 @click.option(
+    "-A",
+    "--apptainer",
+    "enable_apptainer",
+    is_flag=True,
+    help="""Selects the apptainer backend (shortcut for -C opts.backend.select=apptainer)""",
+)
+@click.option(
     "-S",
     "--singularity",
     "enable_singularity",
     is_flag=True,
-    help="""Selects the singularity backend (shortcut for -C opts.backend.select=singularity)""",
+    help="""[Deprecated: use --apptainer] Selects the apptainer/singularity backend""",
 )
 @click.option(
     "-K",
@@ -360,6 +367,7 @@ def run(
     rebuild=False,
     build_skips=False,
     enable_native=False,
+    enable_apptainer=False,
     enable_singularity=False,
     enable_kube=False,
     enable_slurm=False,
@@ -458,9 +466,19 @@ def run(
     if enable_native:
         log.info("selecting the native backend")
         stimela.CONFIG.opts.backend.select = "native"
+    elif enable_apptainer:
+        log.info("selecting the apptainer backend")
+        stimela.CONFIG.opts.backend.select = "apptainer"
     elif enable_singularity:
-        log.info("selecting the singularity backend")
-        stimela.CONFIG.opts.backend.select = "singularity"
+        import warnings
+
+        warnings.warn(
+            "The --singularity/-S flag is deprecated. Please use --apptainer/-A instead.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        log.info("selecting the apptainer backend (via deprecated --singularity flag)")
+        stimela.CONFIG.opts.backend.select = "apptainer"
     elif enable_kube:
         log.info("selecting the kube backend")
         stimela.CONFIG.opts.backend.select = "kube"

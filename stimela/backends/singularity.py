@@ -91,7 +91,7 @@ def is_available(opts: Optional[SingularityBackendOptions] = None):
         if opts and opts.remote_only:
             STATUS = VERSION = "remote"
         else:
-            BINARY = (opts and opts.executable) or which("singularity")
+            BINARY = (opts and opts.executable) or which("apptainer") or which("singularity")
             if BINARY:
                 __version_string = subprocess.check_output([BINARY, "--version"]).decode("utf8")
                 STATUS = VERSION = __version_string.strip().split()[-1]

@@ -53,6 +53,8 @@ class Display:
     style_map = {
         ("native", "simple"): SimpleLocalDisplay,
         ("native", "fancy"): LocalDisplay,
+        ("apptainer", "simple"): SimpleLocalDisplay,
+        ("apptainer", "fancy"): LocalDisplay,
         ("singularity", "simple"): SimpleLocalDisplay,
         ("singularity", "fancy"): LocalDisplay,
         ("kube", "simple"): SimpleKubeDisplay,
