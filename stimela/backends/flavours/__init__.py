@@ -68,7 +68,7 @@ class _CallableFlavour(_BaseFlavour):
         if self.output_dict and self.output:
             raise CabValidationError(f"cab {cab.name}: can't specify both 'output_dict' and 'output'")
         if self.output and self.output not in cab.outputs:
-            raise CabValidationError(f"cab {cab.name}: flavour.outputs='{self.outputs}' is not a known output")
+            raise CabValidationError(f"cab {cab.name}: flavour.output='{self.output}' is not a known output")
         # if output is not explicitly set and output_dict is not used, implicitly
         # select the output when there is exactly one non-implicit, non-named output
         if self.output is None and not self.output_dict:
