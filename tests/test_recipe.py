@@ -149,6 +149,18 @@ def test_issue527_3():
     assert verify_output(output, "invalid inputs")
 
 
+def test_unknown_parameter():
+    """Test that unknown parameters are rejected (issue #530)"""
+    print("===== expecting an error for unknown parameter 'nonexistent' =====")
+    retcode, output = run("stimela -v -b native exec test_aliasing.yml a=1 nonexistent=bar")
+    assert retcode != 0
+    assert verify_output(output, "unknown parameter")
+
+    print("===== valid parameters should still work =====")
+    retcode, output = run("stimela -v -b native exec test_aliasing.yml a=1 s3.a=1 s4.a=1 e=e f=f")
+    assert retcode == 0
+
+
 def test_scatter():
     print("===== expecting no errors now =====")
     retcode = os.system("stimela -v -b native exec test_scatter.yml basic_loop")

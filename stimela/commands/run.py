@@ -593,6 +593,25 @@ def run(
 
         # create subst namespace for outer step
 
+        # check for unknown parameters: params that are not inputs/outputs and not
+        # valid nested assignments (step.param, config.xxx, log.xxx)
+        unknown_params = []
+        for key in params:
+            if key in recipe.inputs_outputs:
+                continue
+            if "." in key:
+                prefix = key.split(".", 1)[0]
+                if prefix in recipe.steps or prefix in ("config", "log"):
+                    continue
+            unknown_params.append(key)
+        if unknown_params:
+            log_exception(
+                RecipeValidationError(
+                    f"recipe '{recipe_name}': unknown parameter(s): {', '.join(repr(k) for k in unknown_params)}"
+                )
+            )
+            sys.exit(1)
+
         # split out parameters
         params = {key: value for key, value in params.items() if key in recipe.inputs_outputs}
 
