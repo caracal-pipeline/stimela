@@ -269,17 +269,31 @@ def clean(
             log.info(f"  {filepath} (from {step_fqname}){status}")
         return 0
 
+    # reject dangerous paths
+    _dangerous_paths = {"", ".", "..", "/"}
+
     # delete output files
     removed = 0
     for filepath, step_fqname in unique_files:
-        if os.path.isdir(filepath):
+        if filepath in _dangerous_paths or os.path.normpath(filepath) in _dangerous_paths:
+            log.warning(f"skipping dangerous path {filepath!r} (from {step_fqname})")
+            continue
+        if os.path.islink(filepath):
+            # remove symlinks directly, never follow into directories
+            try:
+                os.remove(filepath)
+                log.info(f"removed symlink {filepath} (from {step_fqname})")
+                removed += 1
+            except OSError as exc:
+                log.warning(f"failed to remove symlink {filepath}: {exc}")
+        elif os.path.isdir(filepath):
             try:
                 shutil.rmtree(filepath)
                 log.info(f"removed directory {filepath} (from {step_fqname})")
                 removed += 1
             except OSError as exc:
                 log.warning(f"failed to remove directory {filepath}: {exc}")
-        elif os.path.isfile(filepath) or os.path.islink(filepath):
+        elif os.path.isfile(filepath):
             try:
                 os.remove(filepath)
                 log.info(f"removed {filepath} (from {step_fqname})")
