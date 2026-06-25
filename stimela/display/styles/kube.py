@@ -159,26 +159,33 @@ class KubeDisplay(DisplayStyle):
 
         self.kube_connection_status.update(self.kube_connection_status_id, value=f"{report.connection_status}")
 
-        cpu_percent = report.total_cores * 100
+        if report.total_cores is not None:
+            cpu_percent = report.total_cores * 100
+            self.kube_core_usage.update(self.kube_core_usage_id, value=f"[green]{cpu_percent:2.1f}[/green]%")
+            max_cpu_percent = max(cpu_percent, self.task_maxima["kube_peak_core_usage"])
+            self.task_maxima["kube_peak_core_usage"] = max_cpu_percent
+            self.kube_peak_core_usage.update(
+                self.kube_peak_core_usage_id, value=f"[green]{max_cpu_percent:2.1f}[/green]%"
+            )
 
-        self.kube_core_usage.update(self.kube_core_usage_id, value=f"[green]{cpu_percent:2.1f}[/green]%")
+        if report.total_memory is not None:
+            self.kube_ram_usage.update(self.kube_ram_usage_id, value=f"[green]{report.total_memory}[/green]GB")
+            max_ram = max(report.total_memory, self.task_maxima["kube_peak_ram_usage"])
+            self.task_maxima["kube_peak_ram_usage"] = max_ram
+            self.kube_peak_ram_usage.update(self.kube_peak_ram_usage_id, value=f"[green]{max_ram}[/green]GB")
 
-        max_cpu_percent = max(cpu_percent, self.task_maxima["kube_peak_core_usage"])
-        self.task_maxima["kube_peak_core_usage"] = max_cpu_percent
-        self.kube_peak_core_usage.update(self.kube_peak_core_usage_id, value=f"[green]{max_cpu_percent:2.1f}[/green]%")
-
-        self.kube_ram_usage.update(self.kube_ram_usage_id, value=f"[green]{report.total_memory}[/green]GB")
-
-        max_ram = max(report.total_memory, self.task_maxima["kube_peak_ram_usage"])
-        self.task_maxima["kube_peak_ram_usage"] = max_ram
-        self.kube_peak_ram_usage.update(self.kube_peak_ram_usage_id, value=f"[green]{max_ram}[/green]GB")
-
-        self.pending_pods.update(self.pending_pods_id, value=f"[yellow]{report.pending_pods}[/yellow]")
-        self.running_pods.update(self.running_pods_id, value=f"[green]{report.running_pods}[/green]")
-        self.terminating_pods.update(self.terminating_pods_id, value=f"[blue]{report.terminating_pods}[/blue]")
-        self.successful_pods.update(self.successful_pods_id, value=f"[green]{report.successful_pods}[/green]")
-        self.failed_pods.update(self.failed_pods_id, value=f"[red]{report.failed_pods}[/red]")
-        self.stateless_pods.update(self.stateless_pods_id, value=f"[red]{report.stateless_pods}[/red]")
+        if report.pending_pods is not None:
+            self.pending_pods.update(self.pending_pods_id, value=f"[yellow]{report.pending_pods}[/yellow]")
+        if report.running_pods is not None:
+            self.running_pods.update(self.running_pods_id, value=f"[green]{report.running_pods}[/green]")
+        if report.terminating_pods is not None:
+            self.terminating_pods.update(self.terminating_pods_id, value=f"[blue]{report.terminating_pods}[/blue]")
+        if report.successful_pods is not None:
+            self.successful_pods.update(self.successful_pods_id, value=f"[green]{report.successful_pods}[/green]")
+        if report.failed_pods is not None:
+            self.failed_pods.update(self.failed_pods_id, value=f"[red]{report.failed_pods}[/red]")
+        if report.stateless_pods is not None:
+            self.stateless_pods.update(self.stateless_pods_id, value=f"[red]{report.stateless_pods}[/red]")
 
 
 class SimpleKubeDisplay(DisplayStyle):
@@ -280,10 +287,16 @@ class SimpleKubeDisplay(DisplayStyle):
             return
 
         self.kube_connection_status.update(self.kube_connection_status_id, value=f"{report.connection_status}")
-        cpu_percent = report.total_cores * 100
-        self.kube_core_usage.update(self.kube_core_usage_id, value=f"[green]{cpu_percent:2.1f}[/green]%")
-        self.kube_ram_usage.update(self.kube_ram_usage_id, value=f"[green]{report.total_memory}[/green]GB")
-        self.pending_pods.update(self.pending_pods_id, value=f"[yellow]{report.pending_pods}[/yellow]")
-        self.running_pods.update(self.running_pods_id, value=f"[cyan]{report.running_pods}[/cyan]")
-        self.successful_pods.update(self.successful_pods_id, value=f"[green]{report.successful_pods}[/green]")
-        self.failed_pods.update(self.failed_pods_id, value=f"[red]{report.failed_pods}[/red]")
+        if report.total_cores is not None:
+            cpu_percent = report.total_cores * 100
+            self.kube_core_usage.update(self.kube_core_usage_id, value=f"[green]{cpu_percent:2.1f}[/green]%")
+        if report.total_memory is not None:
+            self.kube_ram_usage.update(self.kube_ram_usage_id, value=f"[green]{report.total_memory}[/green]GB")
+        if report.pending_pods is not None:
+            self.pending_pods.update(self.pending_pods_id, value=f"[yellow]{report.pending_pods}[/yellow]")
+        if report.running_pods is not None:
+            self.running_pods.update(self.running_pods_id, value=f"[cyan]{report.running_pods}[/cyan]")
+        if report.successful_pods is not None:
+            self.successful_pods.update(self.successful_pods_id, value=f"[green]{report.successful_pods}[/green]")
+        if report.failed_pods is not None:
+            self.failed_pods.update(self.failed_pods_id, value=f"[red]{report.failed_pods}[/red]")

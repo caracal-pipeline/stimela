@@ -351,11 +351,14 @@ def delete_pvcs(
                 resp = kube_api.delete_namespaced_persistent_volume_claim(name=pvc.name, namespace=namespace)
             except ApiException as exc:
                 body = json.loads(exc.body)
-                log_exception(
-                    BackendError(f"k8s API error while deleting PVC '{pvc.name}'", (exc, body)),
-                    severity="error",
-                    log=log,
-                )
+                if exc.status == 404:
+                    log.warning(f"PVC '{pvc.name}' not found (404), it may have already been deleted")
+                else:
+                    log_exception(
+                        BackendError(f"k8s API error while deleting PVC '{pvc.name}'", (exc, body)),
+                        severity="error",
+                        log=log,
+                    )
                 continue
             log.debug(f"delete_namespaced_persistent_volume_claim({pvc.name}): {resp}")
             pvc.status = "Terminating"
