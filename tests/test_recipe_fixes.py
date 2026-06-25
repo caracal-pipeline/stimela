@@ -1,4 +1,4 @@
-"""Tests for recipe.py fixes (issues #349, #317, #362, #460, #433, #307)."""
+"""Tests for recipe.py fixes (issues #349, #317, #362, #460, #433)."""
 
 import re
 import subprocess
@@ -71,11 +71,12 @@ def test_460_alias_step_collision_message():
     """When an alias shares a name with a step input, a warning should explain the collision."""
     retcode, output = run("stimela -v -b native exec test_recipe_fixes.yml test-460-alias-step-collision")
     print(output)
-    # Should produce a warning about the alias name colliding with a step parameter
+    # Should succeed but produce a warning about the alias name colliding with a step parameter
+    assert retcode == 0
     assert verify_output(output, "alias.*bar.*same name.*step.*input.*sleep-1.bar")
 
 
-# --- Issue #307: recipe summary_message ---
+# --- Issue #317: assign propagation to aliases ---
 
 
 def test_317_assign_propagates_to_alias():
