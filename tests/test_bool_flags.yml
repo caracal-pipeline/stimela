@@ -1,0 +1,49 @@
+opts:
+  log:
+    dir: test-logs/logs-{config.run.datetime}
+    nest: 3
+    symlink: logs
+
+cabs:
+  bool_test:
+    command: echo
+    inputs:
+      # default behavior: --flag for True, omit for False
+      default-flag:
+        dtype: bool
+      # is_flag policy: same as default (--flag for True, omit for False)
+      is-flag-param:
+        dtype: bool
+        policies:
+          is_flag: true
+      # explicit_flag policy: --flag for True, --no-flag for False
+      dual-flag:
+        dtype: bool
+        policies:
+          explicit_flag: true
+      # explicit_true/explicit_false: custom values
+      explicit-param:
+        dtype: bool
+        policies:
+          explicit_true: "yes"
+          explicit_false: "no"
+
+test-bool-flags-true:
+  steps:
+    s1:
+      cab: bool_test
+      params:
+        default-flag: true
+        is-flag-param: true
+        dual-flag: true
+        explicit-param: true
+
+test-bool-flags-false:
+  steps:
+    s1:
+      cab: bool_test
+      params:
+        default-flag: false
+        is-flag-param: false
+        dual-flag: false
+        explicit-param: false

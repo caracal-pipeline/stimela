@@ -388,11 +388,18 @@ class Cab(Cargo):
                 strval = str(value) if explicit is None else str(explicit)
                 if key_value:
                     args += [f"{option}={strval}"]
-                # in option mode, use --option value for explicit settings,
-                # else give option for True and omit for False. TODO: some tools may eventually need a policy for
-                # passing --no-option for False.
+                # in option mode, use --option value for explicit settings
+                elif explicit is not None:
+                    args += [option, strval]
+                # explicit_flag policy: emit --no-<name> for False (dual-flag mode, as in clickify_parameters)
+                elif get_policy(schema, "explicit_flag"):
+                    if value:
+                        args += [option]
+                    else:
+                        args += [prefix + "no-" + (schema.nom_de_guerre or name)]
+                # default: give option for True, omit for False
                 else:
-                    args += [option, strval] if explicit is not None else ([option] if value else [])
+                    args += [option] if value else []
             else:
                 value = stringify_argument(name, value, schema, option=option)
                 if type(value) is list:
