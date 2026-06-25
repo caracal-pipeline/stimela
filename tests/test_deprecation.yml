@@ -1,0 +1,65 @@
+cabs:
+  # A normal, non-deprecated cab for reference
+  echo_cab:
+    command: echo
+    inputs:
+      message:
+        dtype: str
+        required: true
+
+  # A cab marked as deprecated (#313)
+  old_cab:
+    command: echo
+    deprecated: "Use 'echo_cab' instead."
+    inputs:
+      message:
+        dtype: str
+        required: true
+
+  # A cab with nom_de_guerre on a parameter (#444)
+  ndg_cab:
+    command: echo
+    inputs:
+      ms_name:
+        dtype: str
+        required: true
+        nom_de_guerre: ms
+
+  # A cab that uses cab-level aliases to rename a parameter (#444)
+  alias_cab:
+    command: echo
+    inputs:
+      output_column:
+        dtype: str
+        required: true
+        aliases: [out_col]
+
+opts:
+  log:
+    dir: test-logs/logs-{config.run.datetime}
+    nest: 3
+    symlink: logs
+
+test_deprecated_cab:
+  name: "test deprecated cab"
+  steps:
+    use_old:
+      cab: old_cab
+      params:
+        message: hello
+
+test_ndg_cab:
+  name: "test nom de guerre cab"
+  steps:
+    use_ndg:
+      cab: ndg_cab
+      params:
+        ms_name: test.ms
+
+test_alias_cab:
+  name: "test cab-level alias"
+  steps:
+    use_alias:
+      cab: alias_cab
+      params:
+        out_col: DATA
