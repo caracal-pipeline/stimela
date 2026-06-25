@@ -216,7 +216,15 @@ class Recipe(Cargo):
             # drop entries protected from assignment
             flattened = {name: value for name, value in flattened.items() if name not in self._protected_from_assign}
             # merge into recipe namespace
-            subst.recipe._merge_(flattened)
+            try:
+                subst.recipe._merge_(flattened)
+            except TypeError as exc:
+                raise AssignmentError(
+                    f"{whose.fqname}: error merging assignments into recipe namespace. "
+                    f"A dotted key (e.g. 'a.b.c=value') conflicts with an existing non-section value. "
+                    f"Check that intermediate keys in your assignments are not set to None or scalar values.",
+                    exc,
+                )
             # perform substitutions
             try:
                 flattened = evaluate_and_substitute(
@@ -327,7 +335,15 @@ class Recipe(Cargo):
             while len(comps) > 1:
                 if comps[0] not in container:
                     raise AssignmentError(f"{self.fqname}: invalid assignment {key}={value}")
-                container = container[comps[0]]
+                next_container = container[comps[0]]
+                if next_container is None or not hasattr(next_container, "__getitem__"):
+                    raise AssignmentError(
+                        f"{self.fqname}: can't assign '{key}={value}': '{comps[0]}' is not a nested section "
+                        f"(its current value is {next_container!r}). "
+                        f"Check your parameter assignments for typos, or ensure that '{comps[0]}' is defined as a "
+                        f"mapping/section rather than a scalar value."
+                    )
+                container = next_container
                 comps.pop(0)
             container[comps[0]] = value
 
@@ -848,7 +864,17 @@ class Recipe(Cargo):
                 errors.append(RecipeValidationError("recipe failed prevalidation", exc, tb=True))
 
             # merge again, since values may have changed
-            subst.recipe._merge_(params)
+            try:
+                subst.recipe._merge_(params)
+            except TypeError as exc:
+                errors.append(
+                    RecipeValidationError(
+                        f"error merging parameters into recipe namespace. "
+                        f"A dotted parameter name conflicts with an existing non-section value. "
+                        f"Check that intermediate keys in your parameter names are not set to None or scalar values: "
+                        f"{exc}",
+                    )
+                )
             if root:
                 subst.root = subst.recipe
             return params

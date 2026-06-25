@@ -784,7 +784,14 @@ class Step:
             if validated:
                 self.validated_params.update(**params)
                 if subst is not None:
-                    subst.current._merge_(params)
+                    try:
+                        subst.current._merge_(params)
+                    except TypeError as exc:
+                        raise StepValidationError(
+                            f"error merging parameters into namespace for step '{self.fqname}'. "
+                            f"A dotted parameter name conflicts with an existing non-section value: {exc}",
+                            log=self.log,
+                        )
                 self.log_summary(logging.DEBUG, "validated outputs", ignore_missing=True, outputs=True)
 
             if self.evaluate_section("epilogue", subst):

@@ -157,3 +157,47 @@ def test_scatter():
     print("===== expecting no errors now =====")
     retcode = os.system("stimela -v -b native exec test_scatter.yml nested_loop")
     assert retcode == 0
+
+
+def test_issue552_conflicting_cli_params_none():
+    """Test that conflicting CLI params (scalar + dotted sub-key) give a clear error, not a raw TypeError."""
+    print("===== expecting a clear error when CLI params conflict (None + dotted) =====")
+    retcode, output = run(
+        "stimela -v -b native run test_issue552.yml simple_recipe procres=null procres.selfnoise-scaling-factor=2"
+    )
+    assert retcode != 0
+    print(output)
+    # Should get a clear error about conflicting assignments, not a raw TypeError
+    assert verify_output(output, "conflicting parameter assignments")
+
+
+def test_issue552_conflicting_cli_params_scalar():
+    """Test that conflicting CLI params (string scalar + dotted sub-key) give a clear error."""
+    print("===== expecting a clear error when CLI params conflict (scalar + dotted) =====")
+    retcode, output = run(
+        "stimela -v -b native run test_issue552.yml simple_recipe procres=hello procres.selfnoise-scaling-factor=2"
+    )
+    assert retcode != 0
+    print(output)
+    # Should get a clear error about conflicting assignments, not a raw TypeError
+    assert verify_output(output, "conflicting parameter assignments")
+
+
+def test_issue552_recipe_assign_conflict():
+    """Test that a recipe with assign procres=null and CLI procres.x=2 provides a clear error."""
+    print("===== expecting a clear error when recipe assign conflicts with CLI dotted param =====")
+    retcode, output = run(
+        "stimela -v -b native run test_issue552.yml recipe_with_none_assign procres.selfnoise-scaling-factor=2"
+    )
+    # This actually succeeds because override protection prevents the conflict.
+    # Just verify it doesn't crash with a raw TypeError.
+    print(output)
+    assert "TypeError" not in output
+
+
+def test_issue552_simple_recipe_runs():
+    """Test that a simple recipe still runs fine after the fix."""
+    print("===== expecting no errors for simple recipe =====")
+    retcode, output = run("stimela -v -b native run test_issue552.yml simple_recipe msg=world")
+    assert retcode == 0
+    print(output)

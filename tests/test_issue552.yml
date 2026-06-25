@@ -1,0 +1,45 @@
+cabs:
+  echo:
+    command: echo
+    inputs:
+      message:
+        dtype: str
+        default: hello
+
+# Recipes for testing issue #552:
+# Dotted CLI parameter assignments that conflict with existing values.
+
+recipe_with_none_assign:
+  name: "issue 552 recipe"
+  info: "Recipe where assign sets procres to null"
+  assign:
+    procres: null
+  steps:
+    step1:
+      cab: echo
+      params:
+        message: "step1 says hello"
+
+recipe_with_scalar_assign:
+  name: "issue 552 scalar recipe"
+  info: "Recipe where assign sets procres to a scalar"
+  assign:
+    procres: "some_scalar_value"
+  steps:
+    step1:
+      cab: echo
+      params:
+        message: "step1 says hello"
+
+simple_recipe:
+  name: "simple recipe"
+  info: "A simple recipe for basic assignment testing"
+  inputs:
+    msg:
+      dtype: str
+      default: "hello"
+  steps:
+    step1:
+      cab: echo
+      params:
+        message: "{recipe.msg}"
