@@ -22,6 +22,7 @@ import stimela
 from stimela import log_exception, stimelogging, task_stats
 from stimela.backends import StimelaBackendSchema, runner
 from stimela.config import EmptyDictDefault, EmptyListDefault
+from stimela.deprecation import deprecation_warning
 from stimela.display.display import display
 from stimela.exceptions import (
     AssignmentError,
@@ -304,6 +305,28 @@ class Step:
             # finalize the cargo
             self.cargo.finalize(config, log=log, fqname=self.fqname, backend=backend, nesting=nesting)
 
+            # check for deprecated cab
+            cab_label = self.cab if type(self.cab) is str else self.cargo.name
+            if isinstance(self.cargo, Cab) and self.cargo.deprecated:
+                deprecation_warning(
+                    f"cab '{cab_label}' is deprecated: {self.cargo.deprecated}",
+                    category="cab",
+                    log=log,
+                )
+
+            # check for deprecated nom_de_guerre usage in parameters
+            if isinstance(self.cargo, Cab):
+                for pname, schema in self.cargo.inputs_outputs.items():
+                    if schema.nom_de_guerre:
+                        deprecation_warning(
+                            f"parameter '{pname}' of cab '{cab_label}' uses "
+                            f"'nom_de_guerre' (set to '{schema.nom_de_guerre}'). "
+                            f"Consider using the 'aliases' parameter property instead. "
+                            f"'nom_de_guerre' may be removed in a future release.",
+                            category="nom_de_guerre",
+                            log=log,
+                        )
+
             # build dictionary of defaults from cargo
             self.defaults = {
                 name: schema.default
@@ -326,6 +349,9 @@ class Step:
 
     def prevalidate(self, subst: SubstitutionNS, root=False, backend=None):
         self.finalize(backend=backend)
+        # resolve cab-level parameter aliases (deprecated name -> canonical name)
+        if isinstance(self.cargo, Cab):
+            self.params = self.cargo.resolve_cab_aliases(self.params, log=self.log)
         # apply dynamic schemas
         params = self.params
         if self.cargo.has_dynamic_schemas:

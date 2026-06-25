@@ -26,6 +26,7 @@ import stimela.backends
 import stimela.config
 from stimela import log_exception, logger, stimelogging, task_stats
 from stimela.config import ConfigExceptionTypes
+from stimela.deprecation import get_deprecation_summary, has_deprecation_warnings
 from stimela.display.display import display
 from stimela.exceptions import RecipeValidationError, StepSelectionError, StepValidationError, StimelaRuntimeError
 from stimela.kitchen.recipe import Recipe, RecipeSchema, Step
@@ -721,6 +722,11 @@ def run(
             print_depth=profile if profile is not None else stimela.CONFIG.opts.profile.print_depth,
             unroll_loops=stimela.CONFIG.opts.profile.unroll_loops,
         )
+
+    if has_deprecation_warnings():
+        stimelogging.declare_chapter("deprecation warnings")
+        for line in get_deprecation_summary():
+            outer_step.log.warning(line)
 
     if stimelogging.has_accumulated_messages():
         stimelogging.declare_chapter("accumulated warnings and errors")

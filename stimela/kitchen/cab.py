@@ -118,6 +118,10 @@ class Cab(Cargo):
     # default parameter conversion policies
     policies: ParameterPolicies = EmptyClassDefault(ParameterPolicies)
 
+    # if set, marks the cab as deprecated. The string value is a message
+    # explaining the deprecation (e.g. what to use instead).
+    deprecated: Optional[str] = None
+
     def __post_init__(self):
         Cargo.__post_init__(self)
         for param in self.inputs.keys():
@@ -161,6 +165,58 @@ class Cab(Cargo):
                 OmegaConf.merge(StimelaBackendSchema, self.backend)
             except OmegaConfBaseException as exc:
                 raise CabValidationError(f"cab {self.name}: invalid backend setting", exc)
+
+        # Build cab-level alias map.
+        # If a parameter declares aliases that match other parameter names
+        # within this cab, those aliased names are treated as deprecated
+        # names for the canonical parameter.  _cab_alias_map maps
+        # deprecated-name -> canonical-name.
+        self._cab_alias_map = {}
+        all_params = set(self.inputs_outputs.keys())
+        for name, schema in self.inputs_outputs.items():
+            if schema.aliases:
+                for alias in schema.aliases:
+                    # only consider simple names (no dots) that are NOT
+                    # already defined as their own parameters
+                    if "." not in alias and alias not in all_params:
+                        self._cab_alias_map[alias] = name
+
+    def resolve_cab_aliases(self, params, log=None):
+        """Resolve cab-level parameter aliases in the given params dict.
+
+        If a parameter was passed under a deprecated alias name, it is
+        remapped to its canonical name and a deprecation warning is issued.
+
+        Returns the (possibly modified) params dict.
+        """
+        if not self._cab_alias_map:
+            return params
+
+        from stimela.deprecation import deprecation_warning
+
+        remapped = OrderedDict()
+        for name, value in params.items():
+            if name in self._cab_alias_map:
+                canonical = self._cab_alias_map[name]
+                if canonical in params:
+                    deprecation_warning(
+                        f"parameter '{name}' of cab '{self.name}' is a deprecated alias "
+                        f"for '{canonical}'. Both were supplied; using the canonical "
+                        f"'{canonical}' value and ignoring '{name}'.",
+                        category="parameter_alias",
+                        log=log,
+                    )
+                    continue
+                deprecation_warning(
+                    f"parameter '{name}' of cab '{self.name}' is a deprecated alias "
+                    f"for '{canonical}'. Please use '{canonical}' instead.",
+                    category="parameter_alias",
+                    log=log,
+                )
+                remapped[canonical] = value
+            else:
+                remapped[name] = value
+        return remapped
 
     def summary(self, params=None, recursive=True, ignore_missing=False):
         lines = [f"cab {self.name}:"]
