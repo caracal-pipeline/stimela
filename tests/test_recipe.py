@@ -149,6 +149,42 @@ def test_issue527_3():
     assert verify_output(output, "invalid inputs")
 
 
+def test_nested_assign_vars():
+    """Test that nested assignments create proper dotted variables (issue #467)"""
+    print("===== testing nested variable assignments =====")
+    retcode, output = run("stimela -v -b native exec test_nested_assign.yml nested_assign_vars")
+    assert retcode == 0
+    print(output)
+    assert verify_output(output, "hello-world")
+
+
+def test_nested_assign_log():
+    """Test that nested log assignments are applied (issue #467)"""
+    print("===== testing nested log option assignments =====")
+    retcode, output = run("stimela -v -b native exec test_nested_assign.yml nested_assign_log")
+    assert retcode == 0
+    print(output)
+    assert verify_output(output, "custom-log-name")
+
+
+def test_nested_assign_step_log():
+    """Test that nested step-level log assignments are applied (issue #467)"""
+    print("===== testing nested step-level log assignments =====")
+    retcode, output = run("stimela -v -b native exec test_nested_assign.yml nested_assign_step")
+    assert retcode == 0
+    print(output)
+    assert verify_output(output, "step-custom-log")
+
+
+def test_nested_assign_deep():
+    """Test that deeply nested assignments work (issue #467)"""
+    print("===== testing deeply nested assignments =====")
+    retcode, output = run("stimela -v -b native exec test_nested_assign.yml nested_assign_deep")
+    assert retcode == 0
+    print(output)
+    assert verify_output(output, "deep-value")
+
+
 def test_scatter():
     print("===== expecting no errors now =====")
     retcode = os.system("stimela -v -b native exec test_scatter.yml basic_loop")

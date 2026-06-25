@@ -1,0 +1,67 @@
+cabs:
+  echo:
+    image: null
+    command: echo
+    policies:
+      skip_implicits: true
+      key_value: true
+    inputs:
+      msg:
+        dtype: str
+        required: true
+
+opts:
+  log:
+    dir: test-logs/logs-{config.run.datetime}
+    nest: 3
+    symlink: logs
+
+# Test 1: nested assign with plain variables (available via {recipe.x.y})
+nested_assign_vars:
+  name: "nested assign vars"
+  assign:
+    myvar:
+      sub1: hello
+      sub2: world
+  steps:
+    echo-1:
+      cab: echo
+      params:
+        msg: "{recipe.myvar.sub1}-{recipe.myvar.sub2}"
+
+# Test 2: nested assign for log options
+nested_assign_log:
+  name: "nested assign log"
+  assign:
+    log:
+      name: custom-log-name
+  steps:
+    echo-1:
+      cab: echo
+      params:
+        msg: "test-log-assignment"
+
+# Test 3: nested assign to step params
+nested_assign_step:
+  name: "nested assign step"
+  steps:
+    echo-1:
+      cab: echo
+      assign:
+        log:
+          name: step-custom-log
+      params:
+        msg: "test-step-nested-assign"
+
+# Test 4: deeply nested assign
+nested_assign_deep:
+  name: "nested assign deep"
+  assign:
+    deep:
+      level1:
+        level2: deep-value
+  steps:
+    echo-1:
+      cab: echo
+      params:
+        msg: "{recipe.deep.level1.level2}"
