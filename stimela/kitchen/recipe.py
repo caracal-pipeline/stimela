@@ -8,12 +8,14 @@ from collections.abc import Mapping
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from io import StringIO
-from typing import Any, Dict, Optional, Tuple, Union, get_origin
+from typing import Any, Dict, List, Optional, Tuple, Union, get_origin
 
 import networkx as nx
 import rich.table
 from omegaconf import DictConfig, ListConfig, OmegaConf
-from scabha.basetypes import UNSET, Placeholder
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
+from packaging.version import InvalidVersion, Version
+from scabha.basetypes import UNSET, EmptyListDefault, Placeholder
 from scabha.cargo import Cargo, Parameter, ParameterCategory
 from scabha.substitutions import SubstitutionNS
 from scabha.validate import Unresolved, evaluate_and_substitute, evaluate_and_substitute_object
@@ -96,6 +98,12 @@ class Recipe(Cargo):
     # make recipe a for_loop-gather (i.e. parallel for loop)
     for_loop: Optional[ForLoopClause] = None
 
+    # optional version string for the recipe
+    version: Optional[str] = None
+
+    # list of dependency version requirements (PyPI-style), e.g. ["cultcargo >= 0.1.2", "stimela >= 2.0"]
+    requires: List[str] = EmptyListDefault()
+
     def __post_init__(self):
         Cargo.__post_init__(self)
         # flatten aliases and assignments
@@ -105,6 +113,9 @@ class Recipe(Cargo):
             for name, schema in io.items():
                 if not schema:
                     raise RecipeValidationError(f"recipe '{self.name}': '{name}' does not define a valid schema")
+        # convert requires from OmegaConf to list if needed
+        if isinstance(self.requires, (ListConfig,)):
+            self.requires = list(self.requires)
         # check for repeated aliases
         for name, alias_list in self.aliases.items():
             if name in self.inputs_outputs:
@@ -150,6 +161,65 @@ class Recipe(Cargo):
         self._for_loop_values = self._for_loop_scatter = None
         # process pool used to run for-loops
         self._loop_pool = None
+
+    def _check_requirements(self, log=None):
+        """Check that all dependency requirements in the 'requires' section are met.
+
+        Each entry in self.requires is a PyPI-style requirement string like
+        "cultcargo >= 0.1.2" or "stimela >= 2.0, < 3.0".
+
+        Raises:
+            RecipeValidationError: if any requirement is not met
+        """
+        if not self.requires:
+            return
+        from importlib.metadata import PackageNotFoundError
+        from importlib.metadata import version as get_version
+
+        errors = []
+        for req_str in self.requires:
+            # parse "package_name specifier" e.g. "cultcargo >= 0.1.2, <= 0.1.3"
+            match = re.match(r"^\s*([\w][\w.-]*)\s*(.*?)\s*$", req_str)
+            if not match:
+                errors.append(f"invalid requirement string: '{req_str}'")
+                continue
+            pkg_name = match.group(1)
+            spec_str = match.group(2)
+
+            # get installed version
+            try:
+                installed_version_str = get_version(pkg_name)
+            except PackageNotFoundError:
+                errors.append(f"required package '{pkg_name}' is not installed")
+                continue
+
+            if not spec_str:
+                # no version specifier, just check that the package is installed
+                if log:
+                    log.debug(f"requirement '{req_str}': {pkg_name}=={installed_version_str} installed")
+                continue
+
+            try:
+                spec = SpecifierSet(spec_str)
+            except InvalidSpecifier:
+                errors.append(f"invalid version specifier in requirement '{req_str}'")
+                continue
+
+            try:
+                installed_ver = Version(installed_version_str)
+            except InvalidVersion:
+                errors.append(
+                    f"installed version '{installed_version_str}' of '{pkg_name}' is not a valid version string"
+                )
+                continue
+
+            if installed_ver not in spec:
+                errors.append(f"requirement '{req_str}' not met: installed version is {installed_version_str}")
+            elif log:
+                log.debug(f"requirement '{req_str}': {pkg_name}=={installed_version_str} OK")
+
+        if errors:
+            raise RecipeValidationError(f"recipe '{self.name}': {len(errors)} unmet requirement(s)", errors)
 
     def validate_assignments(self, assign, assign_based_on, location):
         # collect a list of all assignments
@@ -664,6 +734,9 @@ class Recipe(Cargo):
             # call Cargo's finalize method
             super().finalize(config, log=log, fqname=fqname, nesting=nesting)
 
+            # check requirements
+            self._check_requirements(log=log)
+
             # finalize steps
             for label, step in self.steps.items():
                 step_log = log.getChild(label)
@@ -759,6 +832,9 @@ class Recipe(Cargo):
         info.label = label
         info.label_parts = parts
         info.suffix = parts[-1] if len(parts) > 1 else ""
+        # propagate version from cab/recipe into the substitution namespace
+        if step.cargo:
+            info.version = getattr(step.cargo, "version", None) or ""
         subst.current = step.params
         subst.steps[label] = subst.current
 
@@ -791,7 +867,14 @@ class Recipe(Cargo):
     def _update_subst_namespace(self, subst: SubstitutionNS):
         """Updates subst namespace at start of prevalidate or run"""
         taskname = subst.get("self", {}).get("taskname") or self.fqname
-        info = SubstitutionNS(fqname=self.fqname, taskname=taskname, label="", label_parts=[], suffix="")
+        info = SubstitutionNS(
+            fqname=self.fqname,
+            taskname=taskname,
+            label="",
+            label_parts=[],
+            suffix="",
+            version=self.version or "",
+        )
         # nosubst=True means these sub-namespaces are not subject to {}-substitutions
         subst._add_("info", info, nosubst=True)
         subst.self = subst.info

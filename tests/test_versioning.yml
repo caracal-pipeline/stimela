@@ -1,0 +1,138 @@
+## Test cabs and recipes for versioning features
+
+cabs:
+  # A cab with an explicit version
+  versioned_echo:
+    command: echo
+    version: "2.0.0"
+    inputs:
+      msg:
+        dtype: str
+        required: true
+      # parameter available in all versions
+      common_param:
+        dtype: str
+        default: "common"
+      # parameter only available in version >= 2.0
+      new_feature:
+        dtype: str
+        default: "new"
+        versions: ">=2.0"
+      # parameter deprecated since version 2.0
+      old_feature:
+        dtype: str
+        versions: "<2.0"
+      # parameter available in version range
+      ranged_feature:
+        dtype: str
+        versions: ">=1.5,<3.0"
+        default: "ranged"
+
+  # A cab with version from image
+  image_versioned_echo:
+    command: echo
+    image:
+      name: test-image
+      version: "3.1.0-cc0.2.0"
+    inputs:
+      msg:
+        dtype: str
+        required: true
+      # Only in version >= 3.0
+      v3_feature:
+        dtype: str
+        versions: ">=3.0"
+        default: "v3"
+      # Only in version < 3.0
+      legacy_feature:
+        dtype: str
+        versions: "<3.0"
+
+  # A cab with no version (version-specifiers on params should not filter)
+  unversioned_echo:
+    command: echo
+    inputs:
+      msg:
+        dtype: str
+        required: true
+      # This has a version specifier but cab has no version, so it stays active
+      maybe_feature:
+        dtype: str
+        versions: ">=1.0"
+        default: "maybe"
+
+# Test recipe with version
+versioned_recipe:
+  name: versioned recipe
+  version: "1.0.0"
+  inputs:
+    msg:
+      dtype: str
+      required: true
+  steps:
+    echo:
+      cab: versioned_echo
+      params:
+        msg: "{recipe.msg}"
+
+# Test recipe with requirements
+recipe_with_requires:
+  name: recipe with requirements
+  requires:
+    - stimela
+    - scabha
+  inputs:
+    msg:
+      dtype: str
+      required: true
+  steps:
+    echo:
+      cab: versioned_echo
+      params:
+        msg: "{recipe.msg}"
+
+# Test recipe with version requirements that should pass
+recipe_with_version_requires:
+  name: recipe with version requires
+  requires:
+    - stimela >= 1.0
+    - scabha >= 1.0
+  inputs:
+    msg:
+      dtype: str
+      required: true
+  steps:
+    echo:
+      cab: versioned_echo
+      params:
+        msg: "{recipe.msg}"
+
+# Test recipe with unmet requirements (should fail)
+recipe_with_bad_requires:
+  name: recipe with bad requires
+  requires:
+    - stimela >= 99.0
+  inputs:
+    msg:
+      dtype: str
+      required: true
+  steps:
+    echo:
+      cab: versioned_echo
+      params:
+        msg: "{recipe.msg}"
+
+# Test recipe with missing package requirement (should fail)
+recipe_with_missing_pkg:
+  name: recipe with missing pkg
+  requires:
+    - nonexistent_package_xyz123
+  inputs:
+    msg:
+      dtype: str
+      required: true
+  steps:
+    echo:
+      cab: versioned_echo
+      params:
+        msg: "{recipe.msg}"

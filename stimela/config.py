@@ -6,6 +6,9 @@ import time
 import traceback
 from collections import OrderedDict
 from dataclasses import dataclass, field
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import distributions as get_distributions
+from importlib.metadata import version as get_pkg_version
 from typing import Any, Dict, List, Optional
 
 import psutil
@@ -188,6 +191,7 @@ def load_config(
         opts: StimelaOptions = EmptyClassDefault(StimelaOptions)
         vars: Dict[str, Any] = EmptyDictDefault()
         run: Dict[str, Any] = EmptyDictDefault()
+        packages: Dict[str, str] = EmptyDictDefault()
 
     base_configs = lib_configs = cab_configs = []
 
@@ -306,6 +310,27 @@ def load_config(
     runtime["ncpu-physical"] = psutil.cpu_count(logical=False)
 
     conf.run = OmegaConf.create(runtime)
+
+    # populate packages namespace with installed package versions
+    packages = OrderedDict()
+    # populate key packages known to stimela
+    for pkg_name in ["stimela", "scabha", "cultcargo"]:
+        try:
+            packages[pkg_name] = get_pkg_version(pkg_name)
+        except PackageNotFoundError:
+            pass
+    # also populate all installed packages (for general use in formulas)
+    try:
+        for dist in get_distributions():
+            name = dist.metadata["Name"]
+            ver = dist.metadata["Version"]
+            if name and ver:
+                # normalize name (replace hyphens with underscores for valid attribute access)
+                norm_name = name.replace("-", "_").lower()
+                packages[norm_name] = ver
+    except Exception:
+        pass  # don't fail config loading if this fails
+    conf.packages = OmegaConf.create(dict(packages))
 
     # add include paths
     if conf.opts.include:

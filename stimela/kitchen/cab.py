@@ -1,4 +1,5 @@
 import itertools
+import logging
 import os.path
 import re
 import shlex
@@ -11,6 +12,8 @@ import rich.markup
 import yaml
 from omegaconf import MISSING, DictConfig, OmegaConf
 from omegaconf.errors import OmegaConfBaseException
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
+from packaging.version import InvalidVersion, Version
 from scabha.basetypes import EmptyClassDefault, EmptyDictDefault, EmptyListDefault
 from scabha.cargo import Cargo, ListOrString, Parameter, ParameterCategory, ParameterPolicies
 from scabha.exceptions import SchemaError
@@ -72,6 +75,56 @@ class ImageInfo(object):
 ImageInfoSchema = OmegaConf.structured(ImageInfo)
 
 
+def _strip_cc_suffix(version_str: str) -> str:
+    """Strips the -ccX.Y.Z suffix from a version string, if present.
+
+    This suffix is a cult-cargo convention for tagging image versions
+    with the cult-cargo release that built them.
+    """
+    return re.sub(r"-cc\d+(\.\d+)*$", "", version_str)
+
+
+def _apply_version_specifiers(inputs_outputs, cab_version_str, log=None):
+    """Activates or deactivates parameters based on their version specifiers.
+
+    For each parameter with a 'versions' field, compares its specifier against
+    the cab version. Parameters that don't match are deactivated (marked _active=False)
+    and have their required flag cleared.
+
+    Args:
+        inputs_outputs: dict of name -> Parameter
+        cab_version_str: the version string of the cab
+        log: optional logger
+    """
+    if not cab_version_str:
+        return
+    try:
+        cab_ver = Version(cab_version_str)
+    except InvalidVersion:
+        if log:
+            log.warning(f"cab version '{cab_version_str}' is not a valid version, skipping version-based filtering")
+        return
+
+    for name, schema in inputs_outputs.items():
+        if schema.versions:
+            try:
+                spec = SpecifierSet(schema.versions)
+            except InvalidSpecifier:
+                if log:
+                    log.warning(f"parameter '{name}': invalid version specifier '{schema.versions}'")
+                continue
+            if cab_ver not in spec:
+                schema._active = False
+                schema.required = False
+                if log:
+                    log.debug(
+                        f"parameter '{name}' deactivated: cab version {cab_ver} "
+                        f"does not match specifier '{schema.versions}'"
+                    )
+            else:
+                schema._active = True
+
+
 @dataclass
 class Cab(Cargo):
     """Represents a cab i.e. an atomic task in a recipe.
@@ -89,6 +142,10 @@ class Cab(Cargo):
     # if set, the cab is run in a container, and this is the image name
     # if not set, commands are run by the native runner
     image: Optional[Any] = None
+
+    # optional version string for the cab. If not set, auto-populated from image.version
+    # (with any -ccX.Y.Z suffix stripped). Used for version-based parameter filtering.
+    version: Optional[str] = None
 
     # command to run, inside the container or natively
     # this is not split into individual arguments, but passed to sh -c as is
@@ -136,6 +193,15 @@ class Cab(Cargo):
             else:
                 raise CabValidationError(f"cab {self.name}: invalid image setting")
 
+        # auto-populate version from image.version if not explicitly set
+        if self.version is None and self.image and self.image.version:
+            version_str = self.image.version
+            if version_str != "latest":
+                self.version = _strip_cc_suffix(version_str)
+
+        # apply version specifiers to parameters
+        _apply_version_specifiers(self.inputs_outputs, self.version, log=logging.getLogger(self.name or "cab"))
+
         # setup wranglers
         self._wranglers = []
         for pattern, actions in self.management.wranglers.items():
@@ -177,6 +243,8 @@ class Cab(Cargo):
         tree.add(f"command: {self.command}")
         if self.image:
             tree.add(f"image: {self.image}")
+        if self.version:
+            tree.add(f"version: {self.version}")
         ## moved to backend.native options
         # if self.virtual_env:
         #     tree.add(f"virtual environment: {self.virtual_env}")
@@ -225,10 +293,13 @@ class Cab(Cargo):
 
     def filter_input_params(self, params: Dict[str, Any], apply_nom_de_guerre=True):
         """Filters dict of params, returning only those that should be passed to a cab
-        (i.e. inputs or named outputs, and not skipped and not implicit)
+        (i.e. inputs or named outputs, and not skipped and not implicit and not deactivated by version)
         """
         filtered_params = OrderedDict()
         for name, schema in self.inputs_outputs.items():
+            # skip parameters deactivated by version specifier
+            if not getattr(schema, "_active", True):
+                continue
             # get skip setting
             skip = self.get_schema_policy(schema, "skip")
             if skip is None and schema.implicit:
