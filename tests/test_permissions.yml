@@ -1,0 +1,19 @@
+cabs:
+  echo-cab:
+    command: echo
+    inputs:
+      ms-in:
+        dtype: MS
+        writable: true
+
+recipe:
+  name: "test writable permissions"
+  info: "test permission checking for writable inputs"
+  inputs:
+    ms-in:
+      dtype: MS
+  steps:
+    step1:
+      cab: echo-cab
+      params:
+        ms-in: =recipe.ms-in

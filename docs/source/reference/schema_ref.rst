@@ -142,6 +142,8 @@ An optional ``path_policies`` subsection (**NB: new as of Stimela 2.1**) can be 
 
 * ``path_policies.remove_if_exists: true`` removes existing output file(s) before running the cargo. Default is false.
 
+* ``path_policies.check_permissions: false`` disables the pre-execution check that verifies file-system write permissions for inputs marked ``writable: true`` and file-like outputs. Default is true. Set this to false when the cargo may not actually need write access in all operational modes.
+
 **NB: Versions prior to Stimela 2.1** defined ``access_parent_dir``, ``write_parent_dir`` and ``remove_if_exists`` properties at the top level of the schema. This usage is still permitted, but now prints a future deprecation warning.
 
 Attributed related to the command line

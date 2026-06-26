@@ -1,0 +1,18 @@
+cabs:
+  echo-output:
+    command: echo
+    outputs:
+      out-file:
+        dtype: File
+
+recipe:
+  name: "test output permissions"
+  info: "test permission checking for outputs"
+  inputs:
+    out-file:
+      dtype: File
+  steps:
+    step1:
+      cab: echo-output
+      params:
+        out-file: =recipe.out-file
