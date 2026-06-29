@@ -4,6 +4,8 @@ import stat
 import subprocess
 import sys
 
+import pytest
+
 
 def run(command):
     """Runs command, returns tuple of exit code, output"""
