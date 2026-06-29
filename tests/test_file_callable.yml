@@ -1,0 +1,55 @@
+opts:
+  log:
+    dir: test-logs/logs-{config.run.datetime}
+    nest: 3
+    symlink: logs
+
+cabs:
+  test_file_callable:
+    command: (./example_file_callable.py)file_function
+    flavour:
+      kind: python
+    inputs:
+      a:
+        dtype: int
+      b:
+        dtype: str
+
+  test_file_callable_dict:
+    command: (./example_file_callable.py)file_function_dict
+    flavour:
+      kind: python
+      output_dict: true
+    inputs:
+      a:
+        dtype: int
+      b:
+        dtype: str
+    outputs:
+      x:
+        dtype: int
+      y:
+        dtype: str
+
+  test_file_dynschema:
+    command: echo
+    inputs:
+      tags:
+        dtype: List[str]
+        required: true
+        policies:
+          repeat: list
+    dynamic_schema: (./example_file_callable.py)file_dynamic_schema
+
+test_file_callables:
+  steps:
+    s1:
+      cab: test_file_callable
+      params:
+        a: 5
+        b: "hello"
+    s2:
+      cab: test_file_callable_dict
+      params:
+        a: 7
+        b: "world"

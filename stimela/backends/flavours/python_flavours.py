@@ -18,6 +18,7 @@ from stimela.backends import resolve_image_name
 from stimela.exceptions import CabValidationError
 from stimela.kitchen import wranglers
 from stimela.kitchen.cab import Cab
+from stimela.kitchen.utils import parse_file_callable, resolve_file_path
 
 from . import _BaseFlavour, _CallableFlavour
 
@@ -146,10 +147,20 @@ class PythonCallableFlavour(_CallableFlavour):
             except Exception as exc:
                 raise SubstitutionError(f"error substituting Python callable '{cab.command}'", exc)
 
-        if "." in command:
-            py_module, py_function = cab.command.rsplit(".", 1)
+        # check for (path/file.py)function syntax
+        file_callable = parse_file_callable(command)
+        if file_callable:
+            py_file_path, py_function = file_callable
+            py_file_path = resolve_file_path(py_file_path, yaml_dir=getattr(cab, "yaml_dir", None))
+            py_module = None
+        elif "." in command:
+            py_module, py_function = command.rsplit(".", 1)
+            py_file_path = None
         else:
-            raise CabValidationError(f"cab {cab.name}: python flavour requires a command of the form module.function")
+            raise CabValidationError(
+                f"cab {cab.name}: python flavour requires a command of the form "
+                f"module.function or (path/file.py)function"
+            )
         self.command_name = py_function
 
         # convert inputs into a JSON string
@@ -165,7 +176,10 @@ class PythonCallableFlavour(_CallableFlavour):
 
         # form up command string
         if stimela.VERBOSE:
-            msg1 = f"print('## importing {py_module}.{py_function}')"
+            if py_file_path:
+                msg1 = f"print('## loading {py_function} from {py_file_path}')"
+            else:
+                msg1 = f"print('## importing {py_module}.{py_function}')"
             msg2 = (
                 f"print(f'## invoking callable {command}({{repr(_inputs)}}) "
                 f"(as click command) using external interpreter')"
@@ -182,6 +196,16 @@ class PythonCallableFlavour(_CallableFlavour):
         if self.post_commands:
             post_command_str += "\n".join(self.post_commands.values())
 
+        # generate import code based on syntax
+        if py_file_path:
+            import_code = f"""import importlib.util as _ilu
+_spec = _ilu.spec_from_file_location("{py_function}_module", {repr(py_file_path)})
+_mod = _ilu.module_from_spec(_spec)
+_spec.loader.exec_module(_mod)
+{py_function} = getattr(_mod, "{py_function}")"""
+        else:
+            import_code = f"from {py_module} import {py_function}"
+
         code = f"""
 import sys, json, zlib, base64
 _inputs = json.loads(zlib.decompress(
@@ -190,7 +214,7 @@ _inputs = json.loads(zlib.decompress(
 sys.path.append('.')
 {pre_command_str}
 {msg1}
-from {py_module} import {py_function}
+{import_code}
 try:
     from click import Command
 except ImportError:
