@@ -4,15 +4,6 @@ import stat
 import subprocess
 import sys
 
-import pytest
-
-
-# Change into directory where test_recipy.py lives
-# As suggested by https://stackoverflow.com/questions/62044541/change-pytest-working-directory-to-test-case-directory
-@pytest.fixture(autouse=True)
-def change_test_dir(request, monkeypatch):
-    monkeypatch.chdir(request.fspath.dirname)
-
 
 def callable_function(a: int, b: str):
     print(f"callable_function({a},'{b}')")

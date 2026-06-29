@@ -1,13 +1,13 @@
 opts:
   log:
-    dir: test-logs/logs-{config.run.datetime} 
+    dir: test-logs/logs-{config.run.datetime}
     nest: 3
     symlink: logs
 
 cabs:
   test_callable:
-    command: tests.test_callables.callable_function
-    flavour: 
+    command: stimela.examples.callables.callable_function
+    flavour:
       kind: python
     inputs:
       a:
@@ -16,8 +16,8 @@ cabs:
         dtype: str
 
   test_callable2:
-    command: tests.test_callables.callable_function
-    flavour: 
+    command: stimela.examples.callables.callable_function
+    flavour:
       kind: python
       output: x
     inputs:
@@ -30,8 +30,8 @@ cabs:
         dtype: int
 
   test_callable3:
-    command: tests.test_callables.callable_function_dict
-    flavour: 
+    command: stimela.examples.callables.callable_function_dict
+    flavour:
       kind: python
       output_dict: true
     inputs:
@@ -42,7 +42,7 @@ cabs:
     outputs:
       x:
         dtype: int
-      y: 
+      y:
         dtype: str
 
   test_callable4:
@@ -50,7 +50,7 @@ cabs:
       print("a is {current.a} and b is {current.b}")
       x={current.a}-2
       y=str({current.a}) + str("{current.b}")
-    flavour: 
+    flavour:
       kind: python-code
       subst: true
     inputs:
@@ -61,15 +61,15 @@ cabs:
     outputs:
       x:
         dtype: int
-      y: 
+      y:
         dtype: str
 
   test_callable5:
     command: |
       print("a is {a} and b is {b}")
       x = a - 2
-      y = str(a) + b 
-    flavour: 
+      y = str(a) + b
+    flavour:
       kind: python-code
       input_vars: true
       output_vars: true
@@ -81,12 +81,12 @@ cabs:
     outputs:
       x:
         dtype: int
-      y: 
+      y:
         dtype: str
 
 test_callables:
   steps:
-    s1: 
+    s1:
       cab: test_callable
       params:
         a: 1
