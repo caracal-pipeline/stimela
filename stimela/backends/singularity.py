@@ -321,8 +321,11 @@ def run(
         args.append("--containall")
     elif backend.singularity.contain:
         args.append("--contain")
-    if backend.singularity.env:
-        args += ["--env", ",".join([f"{k}={v}" for k, v in backend.singularity.env.items()])]
+    # Merge environment variables: cab management env + backend env (backend takes precedence)
+    env = dict(cab.management.environment or {})
+    env.update(backend.singularity.env or {})
+    if env:
+        args += ["--env", ",".join([f"{k}={v}" for k, v in env.items()])]
 
     # initial set of mounts has cwd as read-write
     mounts = {cwd: True}
