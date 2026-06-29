@@ -52,13 +52,13 @@ default-groups = [
 ]
 
 [tool.hatch.build.targets.sdist]
-include = [
-    "stimela",
+packages = [
+    "src/stimela",
 ]
 
 [tool.hatch.build.targets.wheel]
-include = [
-    "stimela",
+packages = [
+    "src/stimela",
 ]
 
 [build-system]

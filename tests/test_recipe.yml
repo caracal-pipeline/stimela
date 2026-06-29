@@ -1,7 +1,7 @@
 cabs:
   simms:
     image: null
-    command: echo 
+    command: echo
     policies:
       skip_implicits: True
     # simms
@@ -15,7 +15,7 @@ cabs:
         dtype: MS
         implicit: "{current.msname}"
         must_exist: false
-        
+
   cubical:
     command: echo
     # gocubical
@@ -31,7 +31,7 @@ cabs:
         required: true
         policies:
           repeat: list
-    dynamic_schema: tests.example_dynschema.cubical_schema
+    dynamic_schema: stimela.examples.dynamic_schema.cubical_schema
 
   wsclean:
     image: null
@@ -69,7 +69,7 @@ cabs:
         required: true
 
   test_callable:
-    command: tests.test_recipe.callable_function
+    command: stimela.examples.callables.callable_function
     flavour:
       kind: python
       pre_commands:
@@ -87,7 +87,7 @@ cabs:
         dtype: str
 opts:
   log:
-    dir: test-logs/logs-{config.run.datetime} 
+    dir: test-logs/logs-{config.run.datetime}
     nest: 3
     symlink: logs
 
@@ -137,11 +137,11 @@ recipe:
       default: [file:test_recipe.yml, s3://some.s3.path]
       must_exist: true
   outputs:
-    output-dir:    
+    output-dir:
       dtype: Directory
       mkdir: true
       default: tmp/tmp
-    output-uri:    
+    output-uri:
       dtype: URI
       mkdir: true
       default: tmp/tmp
@@ -165,7 +165,7 @@ recipe:
         test_callable.b: UHF
       DEFAULT:
 
-  steps: 
+  steps:
       test_callable:
         cab: test_callable
         params:
@@ -186,7 +186,7 @@ recipe:
               # _for:
               #     selfcal_loop: 1,2,3     # repeat three times
               steps:
-                  calibrate: 
+                  calibrate:
                       cab: cubical
                       params:
                         jones: [B,G]
@@ -211,7 +211,7 @@ recipe:
                   ms: [calibrate.ms, image.ms]
                   image_name: image.prefix
               inputs:
-                  scale: 
+                  scale:
                     dtype: Union[str, float]
                   band_name:
                     dtype: str
