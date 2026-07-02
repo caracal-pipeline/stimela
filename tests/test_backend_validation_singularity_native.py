@@ -1,6 +1,7 @@
 import copy
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict
 
 import pytest
@@ -11,8 +12,7 @@ from stimela.backends import StimelaBackendSchema, runner
 from stimela.exceptions import BackendError
 from stimela.kitchen.cab import Cab
 
-from . import testdir
-
+testdir = Path(__file__).resolve().parent  # Assumes that this file lives next to the recipe.
 recipe_file = File(f"{testdir}/test_recipe.yml")
 
 

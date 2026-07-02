@@ -1,4 +1,4 @@
-from .test_recipe import run, verify_output, change_test_dir  # noqa
+from .test_recipe import run, verify_output  # noqa
 
 
 def test_backend_varieties():
