@@ -1,0 +1,69 @@
+# Test recipe for issue #364:
+# {}-substitutions fail on List[Tuple[float,float]] types
+#
+# When a parameter with dtype List[Tuple[float,float]] is passed via
+# {}-substitution (e.g. '{recipe.kernel}'), the value is stringified and
+# then pydantic cannot parse it back. The fix in scabha/validate.py
+# parses such strings via ast.literal_eval before validation.
+
+cabs:
+  print_params:
+    flavour: python-code
+    backend:
+      select: native
+    command: |
+      print(f"kernel={kernel}")
+      print(f"bounds={bounds}")
+    inputs:
+      kernel:
+        info: "Kernel sizes as tuples"
+        dtype: List[Tuple[float,float]]
+        required: false
+        default: [[1.0, 1.0]]
+      bounds:
+        dtype: List[int]
+        info: "Index bounds"
+        default: [0,-1]
+        required: false
+
+# Test recipe using {}-substitution syntax (the buggy path from issue #364)
+test_braces:
+  inputs:
+    kernel:
+      info: "Kernel sizes as tuples"
+      dtype: List[Tuple[float,float]]
+      required: false
+      default: [[1.0, 1.0]]
+    bounds:
+      dtype: List[int]
+      info: "Index bounds"
+      default: [0,-1]
+      required: false
+
+  steps:
+    step1:
+      cab: print_params
+      params:
+        kernel: '{recipe.kernel}'
+        bounds: '{recipe.bounds}'
+
+# Test recipe using = syntax (the working path, as a control)
+test_equals:
+  inputs:
+    kernel:
+      info: "Kernel sizes as tuples"
+      dtype: List[Tuple[float,float]]
+      required: false
+      default: [[1.0, 1.0]]
+    bounds:
+      dtype: List[int]
+      info: "Index bounds"
+      default: [0,-1]
+      required: false
+
+  steps:
+    step1:
+      cab: print_params
+      params:
+        kernel: =recipe.kernel
+        bounds: =recipe.bounds
