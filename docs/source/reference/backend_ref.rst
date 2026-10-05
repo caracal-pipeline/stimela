@@ -61,6 +61,7 @@ The Singularity backend has the following settings::
             remote_only: false
             contain: true
             contain_all: false
+            clean_env: true
             bind_tmp: true
             env:
                 VAR: VALUE
@@ -81,6 +82,8 @@ Singularity works with local copies of application images (in SIF format) that c
 ``remote_only`` tells Stimela to not bother checking for a local install of Singularity. This can be useful in combination with Slurm, if the login node (or whatever node Stimela is executed on) does not support Singularity, but the compute nodes on which jobs are scheduled do.
 
 Containers are normally run with the ``--contain`` flag (see Singularity documentation: this isolates the container from the host filesystem). This is the recommended setting. You may choose for more strict isolation by setting ``containall: true`` (which runs with the ``--containall`` flag), or disable isolation altogether via ``contain: false``. (The latter is not recommended, for the sake of repeatable workflows.) 
+
+Containers are also run with the ``--cleanenv`` flag by default (this is implied by ``containall``). The container's environment is then determined by the image itself, plus the explicit ``env`` settings below, rather than being inherited from the environment of the Stimela process. This matters because that environment is not always under the user's control: resolving a ``(module)file.yml`` include imports the named Python package, and a package can mutate ``os.environ`` at import time, which would otherwise leak into every subsequent step of the run. Note that Singularity preserves proxy settings (``http_proxy`` and friends) regardless, and that variables can still be passed through explicitly via ``APPTAINERENV_``-prefixed variables, or by referencing the host environment in the ``env`` subsection, e.g. ``OMP_NUM_THREADS: '{run.env.OMP_NUM_THREADS}'``. Set ``clean_env: false`` to restore the previous behaviour of inheriting the host environment.
 
 The optional ``env`` subsection can be used to setup additional environment variables inside the container.
 
