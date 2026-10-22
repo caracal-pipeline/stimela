@@ -144,13 +144,13 @@ multiple documents from the same location, you may also structure the include st
 
     _include:
         (cultcargo):
-            wsclean.yml
-            breizorro.yml
+            - wsclean.yml
+            - breizorro.yml
         some_directory:
-            foo.yml
-            bar.yml
+            - foo.yml
+            - bar.yml
         .:
-            local.yml   # same as _include: local.yml
+            - local.yml   # same as _include: local.yml
 
 Finally, if you want to make an include optional, append ``[optional]`` to the filename::
 
