@@ -48,6 +48,10 @@ class SingularityBackendOptions(object):
 
     contain: bool = True  # if True, runs with --contain
     containall: bool = False  # if True, runs with --containall
+    # If True, runs with --cleanenv, so that the container environment is determined by the image
+    # plus the explicit 'env' settings below, and not by whatever the Stimela process happens to
+    # have inherited or had mutated into it. Implied by --containall. See caracal-pipeline/stimela#611.
+    clean_env: bool = True
     bind_tmp: Union[bool, str] = (
         True  # binds /tmp to "tmp" class if True. If string, uses specified ephemeral storage class (e.g. "ram")
     )
@@ -319,8 +323,12 @@ def run(
     args = [backend.singularity.executable or BINARY, "exec", "--pwd", cwd]
     if backend.singularity.containall:
         args.append("--containall")
-    elif backend.singularity.contain:
-        args.append("--contain")
+    else:
+        if backend.singularity.contain:
+            args.append("--contain")
+        # --containall already implies --cleanenv, so this is only needed in the other branch.
+        if backend.singularity.clean_env:
+            args.append("--cleanenv")
     if backend.singularity.env:
         args += ["--env", ",".join([f"{k}={v}" for k, v in backend.singularity.env.items()])]
 

@@ -3,9 +3,21 @@ line-length = 120
 target-version = "py310"
 
 [lint]
-extend-select = [
+# Enumerated rather than extended. Ruff's *default* rule set is not stable
+# across releases -- 0.16 grew it from 59 rules to 413 and dropped 18 others
+# (E731 and E741 among them) -- so `extend-select` made the effective
+# configuration depend on which ruff binary happened to run. Listing the rules
+# explicitly means every ruff version lints this repo identically.
+#
+# E4, E7, E9 and F reproduce ruff's pre-0.16 defaults; E501 and I were the
+# project's own additions. See https://astral.sh/blog/ruff-v0.16.0
+select = [
+    "E4",    # pycodestyle: imports
+    "E7",    # pycodestyle: statements
+    "E9",    # pycodestyle: runtime/syntax errors
+    "F",     # pyflakes
     "E501",  # Line length
-    "I"      # isort - sort imports
+    "I",     # isort - sort imports
 ]
 
 [lint.isort]
