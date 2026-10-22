@@ -20,7 +20,7 @@ dependencies = [
     "scabha>=2.2.0rc2",
     # pyparsing 3.3.3 flattens the operand of a postfix operator in infix_notation, which breaks every
     # subscript in a formula (=recipe.x[recipe.i]) in scabha's evaluator; drop once scabha handles it
-    "pyparsing>=3.0.9,!=3.3.3",
+    "pyparsing>=3.0.9,<3.3.3",
     "psutil>=5.9,<7"
 ]
 
