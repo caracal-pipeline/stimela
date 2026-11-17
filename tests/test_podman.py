@@ -66,7 +66,8 @@ def test_podman_run(fake_podman):
 
     args = runs[0]
     cwd = os.getcwd()
-    assert args[:3] == ["run", "--rm", "--pull=missing"]
+    assert args[0] == "run" and "--rm" in args
+    assert _option_values(args, "--pull") == ["missing"]
     assert "--init" in args
     assert _option_values(args, "--userns") == (["keep-id"] if os.geteuid() != 0 else [])
     assert _option_values(args, "--network") == ["host"]
@@ -76,6 +77,11 @@ def test_podman_run(fake_podman):
     # command runs via --entrypoint, followed by image and arguments
     assert _option_values(args, "--entrypoint") == ["echo"]
     assert args[-2:] == [IMAGE, "podman-says-hi"]
+
+    # conmon pidfile is given (for monitoring), in a temporary directory that is cleaned up afterwards
+    pidfiles = _option_values(args, "--conmon-pidfile")
+    assert len(pidfiles) == 1
+    assert not os.path.exists(os.path.dirname(pidfiles[0]))
 
     volumes = _option_values(args, "--volume")
     assert f"{cwd}:{cwd}:rw" in volumes
@@ -189,7 +195,62 @@ def test_podman_slurm(fake_podman, tmp_path):
     assert any(arg.startswith("::EPH") for arg in _option_values(sruns[0], "--volume"))
     for vol in _option_values(runs[0], "--volume"):
         assert "::" not in vol
+    # conmon runs on the node, so no local pidfile for monitoring
+    assert not _option_values(runs[0], "--conmon-pidfile")
+    assert _option_values(runs[0], "--pull") == ["missing"]
     assert sorted(vol.split(":")[1] for vol in _option_values(runs[0], "--volume"))[-2:] == ["/scratch", "/tmp"]
+
+
+def test_podman_repull_without_auto_pull(fake_podman):
+    # an explicit re-pull should pull a missing image even if auto_pull is disabled
+    calls, _ = fake_podman
+    retcode, output = run(
+        "stimela -v run -c opts.backend.podman.auto_pull=false -c opts.backend.podman.repull=true "
+        "test_podman.yml podman_recipe"
+    )
+    print(output)
+    assert retcode == 0
+    assert [c for c in calls() if c[0] == "pull"] == [["pull", IMAGE]]
+
+
+def test_podman_slurm_repull(fake_podman):
+    # via slurm, a re-pull is delegated to the node as --pull=newer
+    calls, _ = fake_podman
+    retcode, output = run("stimela -v run --slurm -c opts.backend.podman.repull=true test_podman.yml podman_recipe")
+    print(output)
+    assert retcode == 0
+    runs = [c for c in calls() if c[0] == "run"]
+    assert runs and all(_option_values(args, "--pull") == ["newer"] for args in runs)
+    assert not [c for c in calls() if c[0] == "pull"]
+
+
+def test_monitoring_external_pidfile(tmp_path):
+    """Processes given by a registered pidfile (and their descendants) are tracked, even if not our descendants"""
+    import subprocess
+    import time
+
+    from stimela.monitoring import local
+
+    pidfile = tmp_path / "daemon.pid"
+    # the shell exits immediately, so the sleep is reparented away from us, like podman's conmon
+    subprocess.run(["/bin/sh", "-c", f"sleep 30 >/dev/null 2>&1 & echo $! > {pidfile}"], check=True)
+    pid = int(pidfile.read_text())
+    try:
+        local.update_children()
+        assert pid not in local._child_processes
+        local.register_external_pidfile(str(pidfile))
+        local.update_children()
+        assert pid in local._child_processes
+        local.unregister_external_pidfile(str(pidfile))
+        local.update_children()
+        assert pid not in local._child_processes
+        # a missing or empty pidfile is quietly ignored
+        local.register_external_pidfile(str(tmp_path / "nonexistent.pid"))
+        local.update_children()
+        local.unregister_external_pidfile(str(tmp_path / "nonexistent.pid"))
+    finally:
+        os.kill(pid, 15)
+        time.sleep(0.1)
 
 
 def test_podman_not_installed(monkeypatch):

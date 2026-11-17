@@ -50,7 +50,7 @@ def main(argv):
     if argv[:1] == ["run"]:
         opts_with_values = {
             "--pull", "--userns", "--network", "--ipc", "--workdir", "--env", "--volume", "--entrypoint",
-            "--security-opt", "--device",
+            "--security-opt", "--device", "--conmon-pidfile",
         }  # fmt: skip
         args = argv[1:]
         pull = "missing"
@@ -74,6 +74,9 @@ def main(argv):
                 elif opt == "--env":
                     name, val = value.split("=", 1)
                     env[name] = val
+                elif opt == "--conmon-pidfile":
+                    with open(value, "w") as f:
+                        f.write(f"{os.getpid()}\n")
                 elif opt == "--volume":
                     src = value.split(":")[0]
                     if not os.path.exists(src):

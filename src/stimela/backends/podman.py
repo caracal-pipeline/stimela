@@ -22,10 +22,11 @@ from scabha.basetypes import EmptyDictDefault, EmptyListDefault
 
 import stimela
 from stimela.exceptions import BackendError
+from stimela.monitoring import local as local_monitoring
 from stimela.utils.xrun_asyncio import xrun
 
 from . import native
-from .binds import BindDir
+from .binds import BindDir, CustomTemporaryDirectory
 
 # can only execute cabs that specify a container image
 requires_container_image = True
@@ -192,10 +193,10 @@ def build(
     binary = _get_executable(backend)
     image_name = get_image_name(cab, backend)
 
-    # this is True if we're allowed to pull missing images
-    build = build or rebuild or opts.auto_pull
     # this is True if we're asked to force a re-pull
     rebuild = rebuild or opts.repull
+    # this is True if we're allowed to pull missing images (an explicit re-pull implies this)
+    build = build or rebuild or opts.auto_pull
 
     if image_name in _pulled_images:
         log.info(f"podman image {image_name} was pulled earlier in this run")
@@ -276,9 +277,16 @@ def run(
 
     # build up command line
     cwd = os.getcwd()
+    # Pull policy. Locally, build() above has already pulled (or re-pulled) the image as needed. Via a wrapper,
+    # the image comes from the remote node's store, so a re-pull is requested as "newer", which pulls if the
+    # registry has a different image than the node's cached one.
+    if opts.repull and (wrapper is not None or opts.remote_only):
+        pull_policy = "newer"
+    else:
+        pull_policy = "missing" if opts.auto_pull else "never"
     # note: scalar options use the "--opt=value" form, which podman parses unambiguously even for flags that
     # take optional values
-    args = [_get_executable(backend), "run", "--rm", f"--pull={'missing' if opts.auto_pull else 'never'}"]
+    args = [_get_executable(backend), "run", "--rm", f"--pull={pull_policy}"]
     if opts.init:
         args.append("--init")
     if opts.userns:
@@ -329,6 +337,15 @@ def run(
         args += [image_name] + list(args1[1:])
         log_args += [image_name] + list(log_args1[1:])
 
+        # Locally, have podman write the PID of conmon (which supervises the container processes) to a file, so
+        # that the monitoring code can track the workload: conmon is daemonized, and not a descendant of Stimela.
+        conmon_pidfile = None
+        if wrapper is None:
+            pidfile_dir = exit_stack.enter_context(CustomTemporaryDirectory())
+            conmon_pidfile = os.path.join(pidfile_dir, "conmon.pid")
+            args.insert(2, f"--conmon-pidfile={conmon_pidfile}")
+            log_args.insert(2, f"--conmon-pidfile={conmon_pidfile}")
+
         cabstat = cab.reset_status()
 
         command_name = f"{cab.flavour.command_name}" or None
@@ -345,18 +362,24 @@ def run(
 
         log.debug(f"command line is {' '.join(log_args)}")
 
-        retcode = xrun(
-            args[0],
-            args[1:],
-            shell=False,
-            log=log,
-            output_wrangler=cabstat.apply_wranglers,
-            return_errcode=True,
-            command_name=command_name,
-            gentle_ctrl_c=True,
-            log_command=" ".join(log_args),
-            log_result=False,
-        )
+        if conmon_pidfile:
+            local_monitoring.register_external_pidfile(conmon_pidfile)
+        try:
+            retcode = xrun(
+                args[0],
+                args[1:],
+                shell=False,
+                log=log,
+                output_wrangler=cabstat.apply_wranglers,
+                return_errcode=True,
+                command_name=command_name,
+                gentle_ctrl_c=True,
+                log_command=" ".join(log_args),
+                log_result=False,
+            )
+        finally:
+            if conmon_pidfile:
+                local_monitoring.unregister_external_pidfile(conmon_pidfile)
 
         # check if output marked it as a fail
         if cabstat.success is False:
