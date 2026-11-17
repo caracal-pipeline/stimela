@@ -4,7 +4,7 @@
 Getting started
 ###############
 
-Stimela will run with Python 3.9 through 3.12. For containerization support, you'll also need `Singularity (Apptainer) <https://apptainer.org/>`_ or `Podman <https://podman.io/>`_ installed. You can still run Stimela in "native" mode without Singularity. 
+Stimela will run with Python 3.10 through 3.13. For containerization support, you'll also need `Singularity (Apptainer) <https://apptainer.org/>`_ or `Podman <https://podman.io/>`_ installed. You can still run Stimela in "native" mode without Singularity. 
 
 If you plan to use the Slurm and Kubernetes backends, you'll also need the `Slurm scheduler <https://slurm.schedmd.com/>`_ and/or the `Python Kubernetes client <https://pypi.org/project/kubernetes/>`_.
 
