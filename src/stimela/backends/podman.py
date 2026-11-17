@@ -127,7 +127,14 @@ def init(backend: "stimela.backend.StimelaBackendOptions", log: logging.Logger):
 
 
 def _get_executable(backend: "stimela.backend.StimelaBackendOptions"):
-    return backend.podman.executable or BINARY or "podman"
+    opts = backend.podman
+    if opts.executable:
+        return opts.executable
+    # remote-only: leave it to the remote node to find podman in its own PATH (a locally detected path may not
+    # exist there)
+    if opts.remote_only:
+        return "podman"
+    return BINARY or "podman"
 
 
 def _make_tmpdir_remover(backend: "stimela.backend.StimelaBackendOptions", log: logging.Logger):
@@ -158,13 +165,33 @@ def _make_tmpdir_remover(backend: "stimela.backend.StimelaBackendOptions", log: 
     return remove
 
 
+def _remove_container(backend: "stimela.backend.StimelaBackendOptions", cidfile: str, log: logging.Logger):
+    """Force-removes the container whose ID is in cidfile, if it still exists"""
+    try:
+        with open(cidfile) as f:
+            cid = f.read().strip()
+    except OSError:
+        return  # container was never created
+    if not cid:
+        return
+    try:
+        result = subprocess.run(
+            [_get_executable(backend), "rm", "--force", "--ignore", "--time", "0", cid], capture_output=True, text=True
+        )
+    except OSError as exc:
+        log.warning(f"failed to remove podman container {cid}: {exc}")
+        return
+    if result.returncode:
+        log.warning(f"failed to remove podman container {cid}: {result.stderr.strip()}")
+    elif result.stdout.strip():
+        log.warning(f"removed leftover podman container {cid}")
+
+
 def get_image_name(cab: "stimela.kitchen.cab.Cab", backend: "stimela.backend.StimelaBackendOptions"):
     """Returns fully-qualified image name for cab"""
     # an image given only as a path (ImageInfo then fills in name from the path's basename) is a prebuilt
-    # singularity image file, which podman can't use. If a registry or version is also given, then the name is
-    # taken to be a genuine image reference (which happens to match the file name).
-    image = cab.image
-    if image and image.path and image.name == os.path.basename(image.path) and not image.registry and not image.version:
+    # singularity image file, which podman can't use. An explicitly given name is fine, even with a path.
+    if cab.image and getattr(cab.image, "name_from_path", False):
         raise BackendError(
             f"cab '{cab.name}' specifies only a prebuilt image file ({cab.image.path}), which the podman backend "
             "cannot use"
@@ -351,12 +378,16 @@ def run(
 
         # Locally, have podman write the PID of conmon (which supervises the container processes) to a file, so
         # that the monitoring code can track the workload: conmon is daemonized, and not a descendant of Stimela.
-        conmon_pidfile = None
+        # Also have it write the container ID, so that we can make sure the container is gone if the step fails
+        # or is interrupted (see below).
+        conmon_pidfile = cidfile = None
         if wrapper is None:
             pidfile_dir = exit_stack.enter_context(CustomTemporaryDirectory())
             conmon_pidfile = os.path.join(pidfile_dir, "conmon.pid")
-            args.insert(2, f"--conmon-pidfile={conmon_pidfile}")
-            log_args.insert(2, f"--conmon-pidfile={conmon_pidfile}")
+            cidfile = os.path.join(pidfile_dir, "container.id")
+            for extra_arg in f"--cidfile={cidfile}", f"--conmon-pidfile={conmon_pidfile}":
+                args.insert(2, extra_arg)
+                log_args.insert(2, extra_arg)
 
         cabstat = cab.reset_status()
 
@@ -376,6 +407,7 @@ def run(
 
         if conmon_pidfile:
             local_monitoring.register_external_pidfile(conmon_pidfile)
+        retcode = None
         try:
             retcode = xrun(
                 args[0],
@@ -392,6 +424,11 @@ def run(
         finally:
             if conmon_pidfile:
                 local_monitoring.unregister_external_pidfile(conmon_pidfile)
+            # If the step failed or was interrupted, the container may still be running: e.g. a workload that
+            # ignores SIGINT/SIGTERM survives the podman client being killed, since it runs under conmon. Remove it
+            # before the exit stack cleans up the temporary directories bound into it.
+            if retcode != 0 and cidfile:
+                _remove_container(backend, cidfile, log)
 
         # check if output marked it as a fail
         if cabstat.success is False:

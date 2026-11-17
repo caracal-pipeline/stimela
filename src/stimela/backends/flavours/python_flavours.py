@@ -125,7 +125,9 @@ class PythonCallableFlavour(_CallableFlavour):
             self._yield_output = ""
 
         default_image_info = OmegaConf.to_object(CONFIG.images["default-python"])
+        name_from_path = getattr(cab.image, "name_from_path", False)
         cab.image = merge_dataclass_instances(default_image_info, cab.image)
+        cab.image.name_from_path = name_from_path
 
     def get_image_name(self, cab: Cab, backend: "stimela.backend.StimelaBackendOptions"):
         return resolve_image_name(backend, cab.image)
@@ -246,7 +248,9 @@ class PythonCodeFlavour(_BaseFlavour):
         self.command_name = "[python]"
 
         default_image_info = OmegaConf.to_object(CONFIG.images["default-python"])
+        name_from_path = getattr(cab.image, "name_from_path", False)
         cab.image = merge_dataclass_instances(default_image_info, cab.image)
+        cab.image.name_from_path = name_from_path
 
     def get_image_name(self, cab: Cab, backend: "stimela.backend.StimelaBackendOptions"):
         return resolve_image_name(backend, cab.image)

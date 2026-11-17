@@ -50,6 +50,20 @@ cabs:
         required: true
         policies:
           positional: true
+  namepath:
+    command: echo
+    image:
+      name: fake-image
+      path: /nonexistent/fake-image
+    inputs:
+      arg:
+        dtype: str
+        required: true
+        policies:
+          positional: true
+  fail:
+    command: "false"
+    image: fake-image
   failpull:
     command: echo
     image: fail-pull-image
@@ -110,3 +124,31 @@ fullref_recipe:
       cab: fullref
       params:
         arg: fullref-ok
+
+namepath_recipe:
+  steps:
+    a:
+      cab: namepath
+      params:
+        arg: namepath-ok
+
+fail_recipe:
+  steps:
+    a:
+      cab: fail
+
+mixed_recipe:
+  steps:
+    local:
+      cab: echo
+      params:
+        arg: local-step
+    remote:
+      cab: echo
+      params:
+        arg: remote-step
+      backend:
+        slurm:
+          enable: true
+        podman:
+          remote_only: true

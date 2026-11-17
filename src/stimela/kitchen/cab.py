@@ -38,11 +38,16 @@ class ImageInfo(object):
     version: Optional[str] = None
     path: Optional[str] = None  # prebuilt image path (for some backends only)
 
+    # True if the image was given by path only, and the name was inferred from it. (A plain class attribute
+    # rather than a field, so that it does not become part of the config schema.)
+    name_from_path = False
+
     def __post_init__(self):
         if not self.name:
             if not self.path:
                 raise StimelaBaseImageError("image name or path must be specified")
             self.name = os.path.basename(self.path)
+            self.name_from_path = True
 
     @staticmethod
     def from_string(spec: str):

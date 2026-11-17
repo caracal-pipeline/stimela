@@ -302,6 +302,48 @@ def test_podman_availability(monkeypatch, tmp_path):
     assert not podman.is_available(PodmanBackendOptions())
 
 
+def test_podman_name_with_path(fake_podman):
+    # an explicit image name is usable (with the default registry and version), even if a path is also given
+    calls, _ = fake_podman
+    retcode, output = run("stimela -v run test_podman.yml namepath_recipe")
+    print(output)
+    assert retcode == 0
+    assert [c for c in calls() if c[0] == "run"][0][-2:] == [IMAGE, "namepath-ok"]
+
+
+def test_podman_failed_step_removes_container(fake_podman):
+    # a failed (or interrupted) step force-removes its container, in case the workload is still running
+    calls, add_image = fake_podman
+    add_image(IMAGE)
+    retcode, output = run("stimela -v run test_podman.yml fail_recipe")
+    print(output)
+    assert retcode != 0
+    all_calls = calls()
+    rms = [c for c in all_calls if c[0] == "rm"]
+    assert len(rms) == 1
+    assert rms[0][:-1] == ["rm", "--force", "--ignore", "--time", "0"]
+    assert rms[0][-1].startswith("fakecid")
+    # but a successful step doesn't bother
+    retcode, output = run("stimela -v run test_podman.yml podman_recipe")
+    assert retcode == 0
+    assert len([c for c in calls() if c[0] == "rm"]) == 1
+
+
+def test_podman_remote_only_executable(fake_podman, tmp_path):
+    # a remote-only step must not reuse the podman path found by an earlier local step: the node finds its own
+    calls, _ = fake_podman
+    retcode, output = run("stimela -v run test_podman.yml mixed_recipe")
+    print(output)
+    assert retcode == 0
+    assert verify_output(output, "local-step", "remote-step")
+    with open(tmp_path / "srun.jsonl") as f:
+        sruns = [json.loads(line) for line in f]
+    assert len(sruns) == 1
+    assert sruns[0][sruns[0].index("run") - 1] == "podman"
+    # whereas the local step ran the fake podman by its full path
+    assert verify_output(output, os.path.join(FAKE_BIN_PATH, "podman") + " run")
+
+
 def test_podman_not_installed(monkeypatch):
     # no podman on PATH: backend selection must fail with a clear reason
     monkeypatch.setenv("PATH", os.path.dirname(os.sys.executable) + os.pathsep + "/usr/bin:/bin")
