@@ -18,6 +18,7 @@ def dummy_reporter(now, task_info):
 REPORTERS = {
     "native": local_reporter,
     "singularity": local_reporter,
+    "podman": local_reporter,
     "slurm": slurm_reporter,
     "kube": local_reporter,  # For now - this needs testing. Slurm may be more appropriate.
     "dummy": dummy_reporter,

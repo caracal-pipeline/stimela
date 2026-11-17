@@ -10,9 +10,11 @@ Stimela recipes may be executed on a variety of backends:
 
 * The **Singularity** backend uses Singularity/Apptainer to run the step in a container (using an application image specified by the cab definition). The ``cult-cargo`` package provides an image registry for all the cabs that it bundles, which means Stimela can download the images on demand, without user intervention. This provides a zero-install experience for the user (only Stimela itself, and Singularity, needs to be available on the system), and ensures maximum reproducibility.
 
+* The **Podman** backend uses `Podman <https://podman.io/>`_ to run the step in an OCI container, using the same application images as the Singularity backend. Images are pulled on demand into Podman's own image store. This is a good choice on systems where Podman, rather than Singularity, is the container runtime of choice. See :ref:`Podman backend settings <podman_backend_reference>` for details.
+
 * The **Kubernetes** backend runs each step as a *pod* on a Kubernetes (k8s) cluster. This also uses images from the registry. This backend is a modern way to provide scalable and reproducible workflows, but typically requires more setting up on the part of the cluster administrator.
 
-* The **Slurm** backend (strictly speaking, a wrapper around the Singlarity and/or native backends) will execute the steps as jobs on a Slurm cluster.
+* The **Slurm** backend (strictly speaking, a wrapper around the Singularity, Podman and/or native backends) will execute the steps as jobs on a Slurm cluster.
 
 The current backend can be selected by setting a global Stimela config option, namely::
 
@@ -28,14 +30,14 @@ in the recipe or configuration file. Note that ``select`` may also be set to a l
                 - singularity
                 - native
 
-to select backends in order of preference (i.e. use Singularity if available, else fall back to native). Alternatively, the ``-N/--native``, ``-S/--singularity``, and ``-K/--kube`` options of the ``stimela run`` command have the same effect. The Slurm wrapper can be enabled via::
+to select backends in order of preference (i.e. use Singularity if available, else fall back to native). Alternatively, the ``-N/--native``, ``-S/--singularity``, ``-P/--podman`` and ``-K/--kube`` options of the ``stimela run`` command have the same effect. The Slurm wrapper can be enabled via::
 
     opts:
         backend:
             slurm:
                 enable: true 
 
-or by passing ``--slurm`` to ``stimela run``. Note that the Slurm wrapper only works with the native or Singularity backends.
+or by passing ``--slurm`` to ``stimela run``. Note that the Slurm wrapper only works with the native, Singularity or Podman backends.
 
 Building images
 ---------------

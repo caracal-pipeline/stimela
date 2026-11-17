@@ -1,255 +1,371 @@
+"""Podman backend: runs cabs in OCI containers via podman.
+
+Images are pulled from their registries straight into podman's local image store (no image files are kept
+by Stimela itself). The container is run with --rm, so nothing is left behind. By default the container
+shares the host's network and IPC namespaces, and (for rootless podman) runs under --userns=keep-id, so that
+files written to bound directories are owned by the invoking user. This gives behaviour as close as possible to
+the singularity backend.
+"""
+
 import datetime
-import json
+import logging
 import os
+import shutil
 import subprocess
-import tempfile
-import time
-from io import StringIO
+from contextlib import ExitStack
+from dataclasses import dataclass
+from shutil import which
+from typing import Any, Dict, List, Optional, Union
+
+from omegaconf import OmegaConf
+from scabha.basetypes import EmptyDictDefault, EmptyListDefault
 
 import stimela
-from stimela import utils
+from stimela.exceptions import BackendError
+from stimela.utils.xrun_asyncio import xrun
+
+from . import native
+from .binds import BindDir
 
 # can only execute cabs that specify a container image
 requires_container_image = True
 
 
-def is_available(opts=None):
-    return False
+@dataclass
+class PodmanBackendOptions(object):
+    BindDir = BindDir  # nested alias, for symmetry with SingularityBackendOptions
+
+    enable: bool = True
+    executable: Optional[str] = None  # path to podman binary. Default looks for "podman" in PATH.
+    remote_only: bool = (
+        False  # if True, won't look for podman on local system -- useful in combination with slurm wrapper
+    )
+    auto_pull: bool = True  # if True, pulls missing images automatically. If False, missing images are an error.
+    repull: bool = False  # if True, re-pulls images (once per run) even if present locally, to pick up updates
+
+    # --userns setting. "keep-id" maps the invoking user's UID/GID into the container, so that output files
+    # are owned by the user. Only valid for rootless podman (ignored when running as root). Null for podman's
+    # default.
+    userns: Optional[str] = "keep-id"
+    # --network setting. "host" shares the host network (as singularity does). Null for podman's default.
+    network: Optional[str] = "host"
+    # --ipc setting. "host" shares the host IPC namespace and /dev/shm (as singularity does). Podman's own default
+    # gives a 64MB /dev/shm, which is too small for many multiprocessing/dask workloads. Null for podman's default.
+    ipc: Optional[str] = "host"
+    # if True, runs with --init, so that signals are forwarded and zombie processes are reaped
+    init: bool = True
+    # HOME directory inside the container. Default is /tmp (which is a fresh temporary directory if bind_tmp is
+    # set), similar to singularity --contain. Null to leave it to podman. Ignored if env sets HOME explicitly.
+    home: Optional[str] = "/tmp"
+    # extra arguments to "podman run", e.g. ["--security-opt", "label=disable"] on SELinux systems,
+    # or ["--device", "nvidia.com/gpu=all"] for GPUs
+    run_args: List[str] = EmptyListDefault()
+
+    bind_tmp: Union[bool, str] = (
+        True  # binds /tmp to "tmp" class if True. If string, uses specified ephemeral storage class (e.g. "ram")
+    )
+    clean_tmp: bool = True  # if False, temporary directories will not be cleaned up. Useful for debugging.
+
+    # optional extra bindings
+    bind_dirs: Dict[str, BindDir] = EmptyDictDefault()
+    # extra environment variable settings
+    env: Dict[str, str] = EmptyDictDefault()
+
+    # ephemeral storage settings, e.g. {tmp: /tmp, ram: /dev/shm}
+    ephemeral: Dict[str, str] = EmptyDictDefault()
+
+
+PodmanBackendSchema = OmegaConf.structured(PodmanBackendOptions)
+
+STATUS = VERSION = BINARY = None
+
+# images pulled in this run
+_pulled_images = set()
+
+
+def is_available(opts: Optional[PodmanBackendOptions] = None):
+    global STATUS, VERSION, BINARY
+    if STATUS is None:
+        if opts and opts.remote_only:
+            STATUS = VERSION = "remote"
+        else:
+            BINARY = (opts and opts.executable) or which("podman")
+            if BINARY:
+                try:
+                    # output is "podman version X.Y.Z"
+                    __version_string = subprocess.check_output([BINARY, "--version"]).decode("utf8")
+                    STATUS = VERSION = __version_string.strip().split()[-1]
+                except (OSError, subprocess.CalledProcessError) as exc:
+                    STATUS = f"error running {BINARY} --version: {exc}"
+                    VERSION = None
+            else:
+                STATUS = "not installed"
+                VERSION = None
+    return VERSION is not None
 
 
 def get_status():
-    return "not yet implemented"
+    is_available()
+    return STATUS
 
 
 def is_remote():
     return False
 
 
-class DockerError(Exception):
+def init(backend: "stimela.backend.StimelaBackendOptions", log: logging.Logger):
     pass
 
 
-def build(image, build_path, tag=None, build_args=None, fromline=None, args=[]):
-    """build a podman image"""
+def _get_executable(backend: "stimela.backend.StimelaBackendOptions"):
+    return backend.podman.executable or BINARY or "podman"
 
-    if tag:
-        image = ":".join([image, tag])
 
-    bdir = tempfile.mkdtemp()
-    os.system("cp -r {0:s}/* {1:s}".format(build_path, bdir))
-    if build_args:
-        stdw = tempfile.NamedTemporaryFile(dir=bdir, mode="w")
-        with open("{}/Dockerfile".format(bdir)) as std:
-            dfile = std.readlines()
+def _make_tmpdir_remover(backend: "stimela.backend.StimelaBackendOptions", log: logging.Logger):
+    """Returns a function for removing temporary directories that were bound into a container.
 
-        for line in dfile:
-            if fromline and line.lower().startswith("from"):
-                stdw.write("FROM {:s}\n".format(fromline))
-            elif line.lower().startswith("cmd"):
-                for arg in build_args:
-                    stdw.write(arg + "\n")
-                stdw.write(line)
-            else:
-                stdw.write(line)
-        stdw.flush()
-        utils.xrun("podman build", args + ["--force-rm", "--no-cache", "-f", stdw.name, "-t", image, bdir])
+    With rootless podman, the container runtime can leave files owned by subordinate UIDs in a bound directory.
+    E.g. if /tmp is bound to a temporary directory, and the working directory is also under /tmp, then the
+    runtime creates the mountpoint for the latter inside the former, as the container's root user. The invoking
+    user can't remove these with plain rmtree, but can via "podman unshare". Failure to clean up is reported
+    as a warning, since it shouldn't fail an otherwise successful step.
+    """
+    binary = _get_executable(backend)
 
-        stdw.close()
+    def remove(path: str):
+        try:
+            shutil.rmtree(path)
+            return
+        except PermissionError:
+            pass
+        if os.geteuid() != 0:
+            try:
+                subprocess.run([binary, "unshare", "rm", "-rf", path], capture_output=True)
+            except OSError:
+                pass
+        if os.path.exists(path):
+            log.warning(f"failed to remove temporary directory {path}")
+
+    return remove
+
+
+def get_image_name(cab: "stimela.kitchen.cab.Cab", backend: "stimela.backend.StimelaBackendOptions"):
+    """Returns fully-qualified image name for cab"""
+    # an image given only as a path (ImageInfo then fills in name from the path's basename) is a prebuilt
+    # singularity image file, which podman can't use
+    if cab.image and cab.image.path and cab.image.name == os.path.basename(cab.image.path):
+        raise BackendError(
+            f"cab '{cab.name}' specifies only a prebuilt image file ({cab.image.path}), which the podman backend "
+            "cannot use"
+        )
+    image_name = cab.flavour.get_image_name(cab, backend)
+    if not image_name:
+        raise BackendError(f"cab '{cab.name}' does not define an image")
+    return image_name
+
+
+def image_exists(binary: str, image_name: str) -> bool:
+    """Checks if image is present in the local podman store"""
+    try:
+        return subprocess.run([binary, "image", "exists", image_name], capture_output=True).returncode == 0
+    except OSError as exc:
+        raise BackendError(f"error running {binary} image exists", exc)
+
+
+def build(
+    cab: "stimela.kitchen.cab.Cab",
+    backend: "stimela.backend.StimelaBackendOptions",
+    log: logging.Logger,
+    wrapper: Optional["stimela.backend.runner.BackendWrapper"] = None,
+    build=True,
+    rebuild=False,
+):
+    """Pulls image for cab into the podman image store, if necessary.
+
+    build: if True, pull missing images regardless of backend settings
+    rebuild: if True, re-pull images regardless of backend settings
+
+    Returns:
+        str: name of image
+    """
+    opts = backend.podman
+    binary = _get_executable(backend)
+    image_name = get_image_name(cab, backend)
+
+    # this is True if we're allowed to pull missing images
+    build = build or rebuild or opts.auto_pull
+    # this is True if we're asked to force a re-pull
+    rebuild = rebuild or opts.repull
+
+    if image_name in _pulled_images:
+        log.info(f"podman image {image_name} was pulled earlier in this run")
+        return image_name
+
+    # can we inspect the image store that the image will be used from? Not if podman lives on remote nodes only,
+    # or if the wrapper pulls remotely (each node then has its own store, and "podman run --pull" deals with it)
+    local_store = not opts.remote_only and getattr(wrapper, "build_local", True)
+
+    if local_store:
+        if image_exists(binary, image_name):
+            if not rebuild:
+                log.info(f"podman image {image_name} exists")
+                return image_name
+            log.info(f"podman image {image_name} exists but a re-pull was specified")
+        else:
+            log.info(f"podman image {image_name} does not exist")
+            if not build:
+                raise BackendError("no image, and podman auto_pull not enabled")
+    elif not build:
+        return image_name
+
+    args = log_args = [binary, "pull", image_name]
+    if wrapper:
+        args, log_args = wrapper.wrap_build_command(args, log=log)
+
+    retcode = xrun(
+        args[0],
+        args[1:],
+        shell=False,
+        log=log,
+        return_errcode=True,
+        command_name="(podman pull)",
+        gentle_ctrl_c=True,
+        log_command=" ".join(log_args),
+        log_result=True,
+    )
+
+    if retcode:
+        raise BackendError(f"podman pull returns {retcode}")
+
+    _pulled_images.add(image_name)
+
+    return image_name
+
+
+def run(
+    cab: "stimela.kitchen.cab.Cab",
+    params: Dict[str, Any],
+    fqname: str,
+    backend: "stimela.backend.StimelaBackendOptions",
+    log: logging.Logger,
+    subst: Optional[Dict[str, Any]] = None,
+    wrapper: Optional["stimela.backends.runner.BackendWrapper"] = None,
+):
+    """Runs cab contents
+
+    Args:
+        cab (Cab): cab object
+        log (logger): logger to use
+        subst (Optional[Dict[str, Any]]): Substitution dict for commands etc., if any.
+
+    Returns:
+        Any: return value (e.g. exit code) of content
+    """
+    from .utils import resolve_container_binds
+
+    opts = backend.podman
+
+    native.update_rlimits(backend.rlimits, log)
+
+    # make sure image is present (pulling if backend options allow this). When running via a wrapper,
+    # the image is used from the remote node's store, so we rely on "podman run --pull" there instead.
+    if wrapper is None and not opts.remote_only:
+        image_name = build(cab, backend=backend, log=log, build=False)
     else:
-        utils.xrun("podman build", args + ["--force-rm", "--no-cache", "-t", image, bdir])
+        image_name = get_image_name(cab, backend)
 
-    os.system("rm -rf {:s}".format(bdir))
-
-
-def pull(image, tag=None, force=False):
-    """pull a podman image"""
-    if tag:
-        image = ":".join([image, tag])
-
-    utils.xrun("podman", ["pull", "docker.io/" + image])
-
-
-def seconds_hms(seconds):
-    return str(datetime.timedelta(seconds=seconds))
-
-
-class Container(object):
-    def __init__(
-        self,
-        image,
-        name,
-        volumes=None,
-        environs=None,
-        label="",
-        logger=None,
-        shared_memory="1gb",
-        time_out=-1,
-        log_container=None,
-        workdir=None,
-        runscript=None,
-    ):
-        """
-        Python wrapper to podman engine tools for managing containers.
-        """
-
-        self.image = image
-        self.name = name
-        self.label = label
-        self.volumes = volumes or []
-        self.environs = environs or []
-        self.logger = logger
-        self.status = None
-        self.WORKDIR = workdir
-        self.RUNSCRIPT = runscript
-        self.shared_memory = shared_memory
-        self.PID = os.getpid()
-        self.uptime = "00:00:00"
-        self.time_out = time_out
-        self.cont_logger = utils.logger.StimelaLogger(log_container or stimela.LOG_FILE, jtype="podman")
-
-    def add_volume(self, host, container, perm="rw", noverify=False):
-        if os.path.exists(host) or noverify:
-            if self.logger:
-                self.logger.debug(
-                    "Mounting volume [{0}] in container [{1}] at [{2}]".format(host, self.name, container)
-                )
-            host = os.path.abspath(host)
+    # build up command line
+    cwd = os.getcwd()
+    # note: scalar options use the "--opt=value" form, which podman parses unambiguously even for flags that
+    # take optional values
+    args = [_get_executable(backend), "run", "--rm", f"--pull={'missing' if opts.auto_pull else 'never'}"]
+    if opts.init:
+        args.append("--init")
+    if opts.userns:
+        if opts.userns == "keep-id" and os.geteuid() == 0:
+            log.debug("running as root, ignoring podman.userns=keep-id (valid for rootless podman only)")
         else:
-            raise IOError("Directory {0} cannot be mounted on container: File doesn't exist".format(host))
+            args.append(f"--userns={opts.userns}")
+    if opts.network:
+        args.append(f"--network={opts.network}")
+    if opts.ipc:
+        args.append(f"--ipc={opts.ipc}")
+    args += ["--workdir", cwd]
+    if opts.home and "HOME" not in opts.env:
+        args += ["--env", f"HOME={opts.home}"]
+    for name, value in opts.env.items():
+        args += ["--env", f"{name}={value}"]
+    args += list(opts.run_args)
 
-        self.volumes.append(":".join([host, container, perm]))
-
-    def add_environ(self, key, value):
-        if self.logger:
-            self.logger.debug("Adding environ varaible [{0}={1}] in container {2}".format(key, value, self.name))
-        self.environs.append("=".join([key, value]))
-
-    def create(self, *args):
-        if self.volumes:
-            volumes = " -v " + " -v ".join(self.volumes)
-        else:
-            volumes = ""
-        if self.environs:
-            environs = environs = " -e " + " -e ".join(self.environs)
-        else:
-            environs = ""
-
-        # non-root podman users cannot allocate resources on all linux kernel setups. So minisise stress I don't
-        # allow it
-        args = list(args)
-        for rsrc in ["--memory", "--cpus", "--user"]:
-            for arg in args:
-                if arg.startswith(rsrc):
-                    args.remove(arg)
-
-        self._print("Instantiating container [{}]. The container ID is printed below.".format(self.name))
-        utils.xrun(
-            "podman create",
-            args
-            + [
-                volumes,
-                environs,
-                "--rm",
-                "-w %s" % (self.WORKDIR) if self.WORKDIR else "",
-                "--name",
-                self.name,
-                "--shm-size",
-                self.shared_memory,
-                self.image,
-                self.RUNSCRIPT or "",
-            ],
-            log=self.logger,
-        )
-
-        self.status = "created"
-
-    def info(self):
-        output = subprocess.check_output("podman inspect {}".format(self.name), shell=True).decode()
-        output_file = StringIO(output[3:-3])
-        jdict = json.load(output_file)
-        output_file.close()
-
-        return jdict
-
-    def get_log(self):
-        stdout = open(self.logfile, "w")
-        exit_status = subprocess.call("podman logs {0}".format(self.name), stdout=stdout, stderr=stdout, shell=True)
-        if exit_status != 0:
-            self.logger.warn("Could not log container: {}. Something went wrong durring execution".format(self.name))
-            output = "Task was not started."
-            stdout.write(output)
-        else:
-            output = stdout.read()
-
-        stdout.close()
-        return output
-
-    def start(self, output_wrangler=None):
-        tstart = time.time()
-        self.status = "running"
-
-        self.cont_logger.log_container(self.name)
-        self.cont_logger.write()
-        self._print(
-            "Starting container [{0:s}]. Timeout set to {1:d}. The container ID is printed below.".format(
-                self.name, self.time_out
-            )
-        )
-
-        utils.xrun(
+    with ExitStack() as exit_stack:
+        # work out bind mounts (sorted so that parent directories come first)
+        mounts, ephem_binds = resolve_container_binds(
+            opts,
             "podman",
-            ["start", "-a", self.name],
-            timeout=self.time_out,
-            kill_callback=lambda: utils.xrun("podman", ["kill", self.name]),
-            logfile=self.logfile,
-            output_wrangler=output_wrangler,
-            log=self.logger,
+            cab,
+            params,
+            exit_stack,
+            log=log,
+            wrapper=wrapper,
+            cwd=cwd,
+            remover=_make_tmpdir_remover(backend, log),
+        )
+        for dest, src, rw in mounts:
+            mode = "rw" if rw else "ro"
+            if src == dest:
+                log.info(f"binding {src} as {mode}")
+            else:
+                log.info(f"binding {src} to {dest} as {mode}")
+            args += ["--volume", f"{src}:{dest}:{mode}"]
+
+        args1, log_args1 = cab.flavour.get_arguments(cab, params, subst, check_executable=False, log=log)
+        if not args1:
+            raise BackendError(f"cab '{cab.name}' produced an empty command line")
+
+        # The cab command is run via --entrypoint, overriding any ENTRYPOINT the image may define. This mirrors
+        # "singularity exec", which runs the given command directly rather than via the image's runscript.
+        args += ["--entrypoint", args1[0]]
+        log_args = args.copy()
+        args += [image_name] + list(args1[1:])
+        log_args += [image_name] + list(log_args1[1:])
+
+        cabstat = cab.reset_status()
+
+        command_name = f"{cab.flavour.command_name}" or None
+
+        # run command
+        start_time = datetime.datetime.now()
+
+        def elapsed(since=None):
+            """Returns string representing elapsed time"""
+            return str(datetime.datetime.now() - (since or start_time)).split(".", 1)[0]
+
+        if wrapper:
+            args, log_args = wrapper.wrap_run_command(args, log_args, ephem_binds=ephem_binds, fqname=fqname, log=log)
+
+        log.debug(f"command line is {' '.join(log_args)}")
+
+        retcode = xrun(
+            args[0],
+            args[1:],
+            shell=False,
+            log=log,
+            output_wrangler=cabstat.apply_wranglers,
+            return_errcode=True,
+            command_name=command_name,
+            gentle_ctrl_c=True,
+            log_command=" ".join(log_args),
+            log_result=False,
         )
 
-        uptime = seconds_hms(time.time() - tstart)
-        self.uptime = uptime
-        self._print("Container [{0}] has executed successfully".format(self.name))
+        # check if output marked it as a fail
+        if cabstat.success is False:
+            log.error(f"declaring '{command_name}' as failed based on its output")
 
-        self._print("Runtime was {0}.".format(uptime))
-
-        self.status = "exited"
-
-    def stop(self):
-        dinfo = self.info()
-        status = dinfo["State"]["Status"]
-        killed = False
-        if status in ["running", "paused"]:
-            try:
-                utils.xrun("podman stop", [self.name])
-            except KeyboardInterrupt("Received terminate signal. Will stop and remove container first"):
-                killed = True
-        self.status = "exited"
-
-        self._print("Container {} has been stopped.".format(self.name))
-        if killed:
-            self.remove()
-            raise KeyboardInterrupt
-
-    def remove(self):
-        dinfo = self.info()
-        status = dinfo["State"]["Status"]
-        killed = False
-        if status == "exited":
-            try:
-                utils.xrun("podman rm", [self.name])
-            except KeyboardInterrupt:
-                killed = True
-            if killed:
-                raise KeyboardInterrupt
-
+        # if retcode != 0 and not explicitly marked as success, mark as failed
+        if retcode and cabstat.success is not True:
+            cabstat.declare_failure(f"{command_name} returns error code {retcode} after {elapsed()}")
         else:
-            raise DockerError("Container [{}] has not been stopped, cannot remove".format(self.name))
+            log.info(f"{command_name} returns exit code {retcode} after {elapsed()}")
 
-        self.cont_logger.remove("containers", self.name)
-        self.cont_logger.write()
-
-    def _print(self, message):
-        if self.logger:
-            self.logger.info(message)
-        else:
-            print(message)
+        return cabstat

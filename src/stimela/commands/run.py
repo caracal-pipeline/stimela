@@ -314,6 +314,13 @@ def load_recipe_files(filenames: List[str]):
     help="""Selects the singularity backend (shortcut for -C opts.backend.select=singularity)""",
 )
 @click.option(
+    "-P",
+    "--podman",
+    "enable_podman",
+    is_flag=True,
+    help="""Selects the podman backend (shortcut for -C opts.backend.select=podman)""",
+)
+@click.option(
     "-K",
     "--kube",
     "enable_kube",
@@ -361,6 +368,7 @@ def run(
     build_skips=False,
     enable_native=False,
     enable_singularity=False,
+    enable_podman=False,
     enable_kube=False,
     enable_slurm=False,
     parameter_file: List[str] = [],
@@ -461,6 +469,9 @@ def run(
     elif enable_singularity:
         log.info("selecting the singularity backend")
         stimela.CONFIG.opts.backend.select = "singularity"
+    elif enable_podman:
+        log.info("selecting the podman backend")
+        stimela.CONFIG.opts.backend.select = "podman"
     elif enable_kube:
         log.info("selecting the kube backend")
         stimela.CONFIG.opts.backend.select = "kube"

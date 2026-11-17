@@ -8,7 +8,7 @@ See :ref:`backends` for a top-level overview. Backend settings are controlled vi
 
 The ``backend`` section defined separate sub-sections per each backend, described below, and a few top-level options:
 
-* ``select``: a string or a list of strings specifying the backend(s) to use. The first available backend listed will be used (note that the native backend is always available, while Singularity and Kubernetes are contingent on the respective packages being installed). 
+* ``select``: a string or a list of strings specifying the backend(s) to use. The first available backend listed will be used (note that the native backend is always available, while Singularity, Podman and Kubernetes are contingent on the respective packages being installed). 
 
 * ``default_registry`` to use if no registry is specified in a cab's image definition.
 
@@ -26,7 +26,7 @@ The ``backend`` section defined separate sub-sections per each backend, describe
             rlimits:
                 NOFILE: 10000
     
-  See https://docs.python.org/3/library/resource.html for details: all of the symbols starting with ``RLIMIT_`` are recognized and applied. Note that rlimits only apply to the native and Singularity backends running locally -- Kubernetes and Slurm have their own resource management options. 
+  See https://docs.python.org/3/library/resource.html for details: all of the symbols starting with ``RLIMIT_`` are recognized and applied. Note that rlimits only apply to the native, Singularity and Podman backends running locally -- Kubernetes and Slurm have their own resource management options. 
 
 See also `comments in the source code <https://github.com/caracal-pipeline/stimela/blob/4344313b23cfca119e117fdf5d734334cc254bcf/stimela/backends/__init__.py#L44>`_ for more information.
 
@@ -108,11 +108,70 @@ This defines two storage classes, ``tmp`` using the ``/tmp`` filesystem, and ``r
 Finally, ``/tmp`` inside the container is bound to ephemeral storage of class ``tmp`` by default, since this a sensible mode of operation in most circumstances. This can be disabled by setting ``bind_tmp: false``. Alternatively, one may set ``bind_tmp`` to a string value to use a different storage class for ``/tmp``. 
 
 
+Podman backend settings
+----------------------------
+
+.. _podman_backend_reference:
+
+The Podman backend runs each step in an OCI container using `Podman <https://podman.io/>`_. It has the following settings::
+
+    backend:
+        podman:
+            enable: true
+            executable: PATH
+            remote_only: false
+            auto_pull: true
+            repull: false
+            userns: keep-id
+            network: host
+            ipc: host
+            init: true
+            home: /tmp
+            run_args: []
+            bind_tmp: true
+            clean_tmp: true
+            env:
+                VAR: VALUE
+            bind_dirs:
+                arbitrary_label:
+                    host: PATH
+                    target: PATH
+                    mode: rw
+                    mkdir: false
+                    conditional: ''
+            ephemeral:
+                class: /target/path
+
+The backend is available if the ``podman`` executable (or whatever is specified by the ``executable`` setting) is found in the path. Set ``enable`` to false to disable. It is selected via ``select: podman``, or the ``-P/--podman`` option of ``stimela run`` and ``stimela build``. Unlike Singularity, it is not part of the default ``select`` list, so it must be selected explicitly.
+
+Podman pulls images from the registry straight into its own image store (Stimela does not keep image files of its own). If ``auto_pull`` is set, missing images are pulled on demand; otherwise a missing image is an error. If ``repull`` is set, images are pulled anew (once per run) even if already present, which picks up updates to a tag. The ``stimela build`` command pulls the images required by a recipe in advance, and ``stimela build -r`` re-pulls them. Prebuilt Singularity image files (cabs that specify an image ``path`` only) cannot be used with this backend.
+
+Each step is run via ``podman run --rm``, so no containers are left behind. The cab's command is passed via ``--entrypoint``, overriding any ``ENTRYPOINT`` defined by the image (this mirrors ``singularity exec``). The following settings control how the container is isolated from the host. Their defaults are chosen to give behaviour as close as possible to the Singularity backend:
+
+* ``userns`` (default ``keep-id``) is passed as ``--userns``. With rootless Podman, ``keep-id`` maps your own user and group IDs into the container, so that files written to bound directories are owned by you, not by a subordinate UID. This setting is ignored when Stimela runs as root (rootful Podman does not support ``keep-id``). Set to null to use Podman's default.
+
+* ``network`` (default ``host``) and ``ipc`` (default ``host``) are passed as ``--network`` and ``--ipc``, sharing the host's network and IPC namespaces. Sharing IPC also gives the container the host's ``/dev/shm``: Podman's own default is a private 64MB ``/dev/shm``, which is too small for many multiprocessing and Dask workloads. Set either to null to use Podman's default, or to any other value Podman accepts.
+
+* ``init`` (default true) runs the container with ``--init``, so that signals (e.g. Ctrl+C) are forwarded to the application, and zombie processes are reaped.
+
+* ``home`` (default ``/tmp``) sets ``HOME`` inside the container. Since ``/tmp`` is bound to a fresh ephemeral directory by default, this gives each step an empty, writable home directory, similar to ``singularity --contain``. Set to null to leave ``HOME`` to Podman, or set ``HOME`` explicitly in ``env``.
+
+* ``run_args`` is a list of extra arguments passed to ``podman run`` verbatim. For example, ``[--security-opt, label=disable]`` is usually needed on SELinux systems (in preference to relabelling host directories with ``:z``), and ``[--device, nvidia.com/gpu=all]`` gives the container access to GPUs via CDI.
+
+The container environment is determined by the image, plus any ``env`` settings: Podman does not pass through the environment of the Stimela process.
+
+Directory bindings (``bind_dirs``, ``bind_tmp``, ``ephemeral`` and ``clean_tmp``) work exactly as for the Singularity backend, see :ref:`above <singularity_backend_reference>`. The current directory, and directories required by the cab's file- and directory-type inputs and outputs, are bound automatically.
+
+Note that with rootless Podman, the container runtime may create files owned by one of your subordinate UIDs inside an ephemeral directory. This happens when one bind target lies inside another, e.g. when the current directory is somewhere under ``/tmp``, so that its mountpoint has to be created inside the ephemeral directory bound to ``/tmp``. You cannot remove such files directly, so Stimela removes ephemeral directories via ``podman unshare rm -rf`` when a plain removal fails. (You can do the same by hand if you ever need to clean up after an interrupted run.)
+
+``remote_only`` tells Stimela to not bother checking for a local install of Podman. This can be useful in combination with Slurm, if the node Stimela runs on lacks Podman but the compute nodes have it. Note that each node normally has its own Podman image store: when the Slurm wrapper is in use, Stimela does not check or pull images locally, and instead runs ``podman run --pull missing`` (or ``--pull never``, if ``auto_pull`` is false) on the compute node.
+
+
 Slurm wrapper settings
 ----------------------------
 .. _slurm_backend_reference:
 
-Slurm is a wrapper, not a backend per se. It can be used in combination with the native and Singularity backends to schedule steps as Slurm jobs (using ``srun``). Enabling it can be as simple as setting ``enable`` to true::
+Slurm is a wrapper, not a backend per se. It can be used in combination with the native, Singularity and Podman backends to schedule steps as Slurm jobs (using ``srun``). Enabling it can be as simple as setting ``enable`` to true::
 
     backend:
         slurm:

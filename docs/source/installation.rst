@@ -4,7 +4,7 @@
 Getting started
 ###############
 
-Stimela will run with Python 3.9 through 3.12. For containerization support, you'll also need `Singularity (Apptainer) <https://apptainer.org/>`_ installed. You can still run Stimela in "native" mode without Singularity. 
+Stimela will run with Python 3.9 through 3.12. For containerization support, you'll also need `Singularity (Apptainer) <https://apptainer.org/>`_ or `Podman <https://podman.io/>`_ installed. You can still run Stimela in "native" mode without Singularity. 
 
 If you plan to use the Slurm and Kubernetes backends, you'll also need the `Slurm scheduler <https://slurm.schedmd.com/>`_ and/or the `Python Kubernetes client <https://pypi.org/project/kubernetes/>`_.
 
@@ -48,7 +48,7 @@ If you want to run just a single cab, use::
 
   $ stimela run cultcargo::wsclean ms=my.ms prefix=test size=1024 scale=1asec
 
-This will load ``wsclean.yml`` from ``cult-cargo``, and invoke the ``wsclean`` cab defined within (because the document only defines one cab in this case -- otherwise an extra cab name argument would be needed), passing it the listed parameters. Use ``run -S`` to invoke the Apptainer/Singularity backend.
+This will load ``wsclean.yml`` from ``cult-cargo``, and invoke the ``wsclean`` cab defined within (because the document only defines one cab in this case -- otherwise an extra cab name argument would be needed), passing it the listed parameters. Use ``run -S`` to invoke the Apptainer/Singularity backend, or ``run -P`` for the Podman backend.
 
 
 Getting help
