@@ -80,33 +80,41 @@ PodmanBackendSchema = OmegaConf.structured(PodmanBackendOptions)
 
 STATUS = VERSION = BINARY = None
 
+# cache of local podman detection results: executable setting -> (STATUS, VERSION, BINARY)
+_detected = {}
+
 # images pulled in this run
 _pulled_images = set()
 
 
 def is_available(opts: Optional[PodmanBackendOptions] = None):
     global STATUS, VERSION, BINARY
-    if STATUS is None:
-        if opts and opts.remote_only:
-            STATUS = VERSION = "remote"
+    # remote-only: podman is expected on the remote (e.g. Slurm) nodes only, so don't look for it locally. Not
+    # cached, since other steps may well use different settings.
+    if opts and opts.remote_only:
+        return True
+    # local detection, cached per executable setting (None meaning look in PATH)
+    executable = (opts and opts.executable) or None
+    if executable not in _detected:
+        binary = executable or which("podman")
+        if binary:
+            try:
+                # output is "podman version X.Y.Z"
+                __version_string = subprocess.check_output([binary, "--version"]).decode("utf8")
+                status = version = __version_string.strip().split()[-1]
+            except (OSError, subprocess.CalledProcessError) as exc:
+                status, version = f"error running {binary} --version: {exc}", None
         else:
-            BINARY = (opts and opts.executable) or which("podman")
-            if BINARY:
-                try:
-                    # output is "podman version X.Y.Z"
-                    __version_string = subprocess.check_output([BINARY, "--version"]).decode("utf8")
-                    STATUS = VERSION = __version_string.strip().split()[-1]
-                except (OSError, subprocess.CalledProcessError) as exc:
-                    STATUS = f"error running {BINARY} --version: {exc}"
-                    VERSION = None
-            else:
-                STATUS = "not installed"
-                VERSION = None
+            status, version = "not installed", None
+        _detected[executable] = status, version, binary
+    STATUS, VERSION, BINARY = _detected[executable]
     return VERSION is not None
 
 
 def get_status():
-    is_available()
+    # report on the most recent check, which may have used specific options
+    if STATUS is None:
+        is_available()
     return STATUS
 
 
@@ -153,8 +161,10 @@ def _make_tmpdir_remover(backend: "stimela.backend.StimelaBackendOptions", log: 
 def get_image_name(cab: "stimela.kitchen.cab.Cab", backend: "stimela.backend.StimelaBackendOptions"):
     """Returns fully-qualified image name for cab"""
     # an image given only as a path (ImageInfo then fills in name from the path's basename) is a prebuilt
-    # singularity image file, which podman can't use
-    if cab.image and cab.image.path and cab.image.name == os.path.basename(cab.image.path):
+    # singularity image file, which podman can't use. If a registry or version is also given, then the name is
+    # taken to be a genuine image reference (which happens to match the file name).
+    image = cab.image
+    if image and image.path and image.name == os.path.basename(image.path) and not image.registry and not image.version:
         raise BackendError(
             f"cab '{cab.name}' specifies only a prebuilt image file ({cab.image.path}), which the podman backend "
             "cannot use"
@@ -198,13 +208,14 @@ def build(
     # this is True if we're allowed to pull missing images (an explicit re-pull implies this)
     build = build or rebuild or opts.auto_pull
 
-    if image_name in _pulled_images:
-        log.info(f"podman image {image_name} was pulled earlier in this run")
-        return image_name
-
     # can we inspect the image store that the image will be used from? Not if podman lives on remote nodes only,
     # or if the wrapper pulls remotely (each node then has its own store, and "podman run --pull" deals with it)
     local_store = not opts.remote_only and getattr(wrapper, "build_local", True)
+
+    # only pulls into the local store are remembered: remote pulls may each land on a different node
+    if local_store and image_name in _pulled_images:
+        log.info(f"podman image {image_name} was pulled earlier in this run")
+        return image_name
 
     if local_store:
         if image_exists(binary, image_name):
@@ -238,7 +249,8 @@ def build(
     if retcode:
         raise BackendError(f"podman pull returns {retcode}")
 
-    _pulled_images.add(image_name)
+    if local_store:
+        _pulled_images.add(image_name)
 
     return image_name
 

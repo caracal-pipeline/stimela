@@ -37,6 +37,19 @@ cabs:
         required: true
         policies:
           positional: true
+  fullref:
+    command: echo
+    image:
+      registry: quay.io/stimela2
+      name: fake-image
+      version: latest
+      path: /nonexistent/fake-image
+    inputs:
+      arg:
+        dtype: str
+        required: true
+        policies:
+          positional: true
   failpull:
     command: echo
     image: fail-pull-image
@@ -90,3 +103,10 @@ failpull_recipe:
       cab: failpull
       params:
         arg: x
+
+fullref_recipe:
+  steps:
+    a:
+      cab: fullref
+      params:
+        arg: fullref-ok

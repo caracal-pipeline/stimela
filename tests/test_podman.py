@@ -253,6 +253,55 @@ def test_monitoring_external_pidfile(tmp_path):
         time.sleep(0.1)
 
 
+def test_podman_full_reference_with_path(fake_podman):
+    # a complete image reference is usable, even if the cab also gives a (singularity) image path of the same name
+    calls, _ = fake_podman
+    retcode, output = run("stimela -v run test_podman.yml fullref_recipe")
+    print(output)
+    assert retcode == 0
+    assert verify_output(output, "fullref-ok")
+    assert [c for c in calls() if c[0] == "run"][0][-2:] == [IMAGE, "fullref-ok"]
+
+
+def test_podman_remote_build_not_deduplicated(fake_podman, tmp_path):
+    # with builds going via srun, each pull may land on a different node, so none are skipped as duplicates
+    calls, _ = fake_podman
+    retcode, output = run(
+        "stimela -v build --slurm -c opts.backend.slurm.build_local=false test_podman.yml podman_recipe"
+    )
+    print(output)
+    assert retcode == 0
+    with open(tmp_path / "srun.jsonl") as f:
+        sruns = [json.loads(line) for line in f]
+    assert len(sruns) == 3
+    assert all(args[-2:] == ["pull", IMAGE] for args in sruns)
+    assert not [c for c in calls() if c[0] == "image"]
+
+
+def test_podman_availability(monkeypatch, tmp_path):
+    """Availability is checked per executable setting, and remote_only isn't spoiled by a cached local failure"""
+    from stimela.backends import podman
+    from stimela.backends.podman import PodmanBackendOptions
+
+    monkeypatch.setattr(podman, "_detected", {})
+    # a PATH with python3 (needed by the fake podman), but no podman
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    (bindir / "python3").symlink_to(os.sys.executable)
+    monkeypatch.setenv("PATH", str(bindir))
+    monkeypatch.setenv("FAKE_PODMAN_DIR", str(tmp_path))
+    assert not podman.is_available(PodmanBackendOptions())
+    assert podman.get_status() == "not installed"
+    # remote-only is available regardless
+    assert podman.is_available(PodmanBackendOptions(remote_only=True))
+    # an explicit executable is checked in its own right
+    fake = os.path.join(FAKE_BIN_PATH, "podman")
+    assert podman.is_available(PodmanBackendOptions(executable=fake))
+    assert podman.VERSION == "5.0.0-fake" and podman.BINARY == fake
+    # and the PATH lookup result is still remembered
+    assert not podman.is_available(PodmanBackendOptions())
+
+
 def test_podman_not_installed(monkeypatch):
     # no podman on PATH: backend selection must fail with a clear reason
     monkeypatch.setenv("PATH", os.path.dirname(os.sys.executable) + os.pathsep + "/usr/bin:/bin")
