@@ -5,6 +5,35 @@ import psutil
 _prev_disk_io = None, None
 _child_processes = {}
 
+# pidfiles of processes to be tracked (along with their descendants) in addition to our own descendants. Some
+# container runtimes (podman) run the workload under a daemonized monitor process (conmon) that is reparented
+# away from Stimela, so it would otherwise not be seen.
+_external_pidfiles = set()
+
+
+def register_external_pidfile(path: str):
+    """Starts tracking the process whose PID is (or will be) written to the given file, and its descendants"""
+    _external_pidfiles.add(path)
+
+
+def unregister_external_pidfile(path: str):
+    """Stops tracking the process given by register_external_pidfile()"""
+    _external_pidfiles.discard(path)
+
+
+def _external_processes():
+    """Returns list of processes given by registered pidfiles, plus their descendants"""
+    processes = []
+    for path in list(_external_pidfiles):
+        try:
+            with open(path) as f:
+                proc = psutil.Process(int(f.read().strip()))
+            processes.append(proc)
+            processes += proc.children(recursive=True)
+        except (OSError, ValueError, psutil.Error):
+            continue  # pidfile not yet written, or process gone
+    return processes
+
 
 def update_children():
     """Update the module level dictionary mapping child pid to process.
@@ -13,7 +42,7 @@ def update_children():
     These then fail to report CPU stats unless we make them block which has a large impact on
     performance.
     """
-    current_children = psutil.Process().children(recursive=True)
+    current_children = psutil.Process().children(recursive=True) + _external_processes()
     current_pids = {proc.pid for proc in current_children}
     _child_processes.update({c.pid: c for c in current_children if c.pid not in _child_processes})
     dropped_pids = {c for c in _child_processes.keys() if c not in current_pids}

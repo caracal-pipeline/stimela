@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+"""A stand-in for the podman CLI, used by test_podman.py.
+
+Logs every invocation (as a JSON list, one per line) to $FAKE_PODMAN_DIR/calls.jsonl, and emulates just enough of
+podman for the stimela podman backend:
+
+    podman --version
+    podman image exists IMAGE     -- consults $FAKE_PODMAN_DIR/images.txt
+    podman pull IMAGE             -- adds IMAGE to images.txt
+    podman run [OPTIONS] IMAGE [ARGS]
+                                  -- checks the image is present (subject to --pull), then runs the --entrypoint
+                                     command with ARGS natively, in --workdir, with --env settings applied
+"""
+
+import json
+import os
+import subprocess
+import sys
+
+state_dir = os.environ["FAKE_PODMAN_DIR"]
+images_file = os.path.join(state_dir, "images.txt")
+
+
+def images():
+    if not os.path.exists(images_file):
+        return set()
+    return set(line.strip() for line in open(images_file) if line.strip())
+
+
+def main(argv):
+    with open(os.path.join(state_dir, "calls.jsonl"), "a") as log:
+        log.write(json.dumps(argv) + "\n")
+
+    if argv == ["--version"]:
+        print("podman version 5.0.0-fake")
+        return 0
+
+    if argv[:2] == ["image", "exists"]:
+        return 0 if argv[2] in images() else 1
+
+    if argv[:1] == ["pull"]:
+        if "fail-pull" in argv[1]:
+            print(f"Error: fake pull failure for {argv[1]}", file=sys.stderr)
+            return 125
+        with open(images_file, "a") as f:
+            f.write(argv[1] + "\n")
+        print(f"pulled {argv[1]}")
+        return 0
+
+    if argv[:1] == ["rm"]:
+        return 0  # container is long gone (or never was), and --ignore is expected
+
+    if argv[:1] == ["run"]:
+        opts_with_values = {
+            "--pull", "--userns", "--network", "--ipc", "--workdir", "--env", "--volume", "--entrypoint",
+            "--security-opt", "--device", "--conmon-pidfile", "--cidfile",
+        }  # fmt: skip
+        args = argv[1:]
+        pull = "missing"
+        workdir = None
+        entrypoint = None
+        env = {}
+        while args and args[0].startswith("-"):
+            opt = args.pop(0)
+            value = None
+            if opt.startswith("--") and "=" in opt:
+                opt, value = opt.split("=", 1)
+            if opt in opts_with_values:
+                if value is None:
+                    value = args.pop(0)
+                if opt == "--pull":
+                    pull = value
+                elif opt == "--workdir":
+                    workdir = value
+                elif opt == "--entrypoint":
+                    entrypoint = value
+                elif opt == "--env":
+                    name, val = value.split("=", 1)
+                    env[name] = val
+                elif opt == "--cidfile":
+                    with open(value, "w") as f:
+                        f.write(f"fakecid{os.getpid()}")
+                elif opt == "--conmon-pidfile":
+                    with open(value, "w") as f:
+                        f.write(f"{os.getpid()}\n")
+                elif opt == "--volume":
+                    src = value.split(":")[0]
+                    if not os.path.exists(src):
+                        print(f"Error: volume source {src} does not exist", file=sys.stderr)
+                        return 125
+        image, cmd_args = args[0], args[1:]
+        if image not in images():
+            if pull == "never":
+                print(f"Error: {image}: image not known", file=sys.stderr)
+                return 125
+            with open(images_file, "a") as f:
+                f.write(image + "\n")
+        return subprocess.call([entrypoint] + cmd_args, cwd=workdir, env={**os.environ, **env})
+
+    print(f"fake podman: unsupported invocation {argv}", file=sys.stderr)
+    return 125
+
+
+sys.exit(main(sys.argv[1:]))

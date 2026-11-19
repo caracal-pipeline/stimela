@@ -8,7 +8,8 @@ from .run import run
 @click.command(
     "build",
     help="""
-    Builds singularity images required by the recipe. Only available if the singularity backend is selected.
+    Builds (singularity) or pulls (podman) images required by the recipe. Only available if a container backend
+    is selected.
     """,
     no_args_is_help=True,
 )
@@ -86,6 +87,13 @@ from .run import run
     help="""Selects the singularity backend (shortcut for -C opts.backend.select=singularity)""",
 )
 @click.option(
+    "-P",
+    "--podman",
+    "enable_podman",
+    is_flag=True,
+    help="""Selects the podman backend (shortcut for -C opts.backend.select=podman)""",
+)
+@click.option(
     "--slurm",
     "enable_slurm",
     is_flag=True,
@@ -112,6 +120,7 @@ def build(
     skip_tags: List[str] = [],
     enable_steps: List[str] = [],
     enable_singularity=False,
+    enable_podman=False,
     enable_slurm=False,
     parameter_file: List[str] = [],
 ):
@@ -128,6 +137,7 @@ def build(
         rebuild=rebuild,
         build_skips=all_steps,
         enable_singularity=enable_singularity,
+        enable_podman=enable_podman,
         enable_slurm=enable_slurm,
         parameter_file=parameter_file,
     )

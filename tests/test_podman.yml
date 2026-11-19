@@ -1,0 +1,154 @@
+cabs:
+  echo:
+    command: echo
+    image: fake-image
+    inputs:
+      arg:
+        dtype: str
+        required: true
+        policies:
+          positional: true
+  touch:
+    command: touch
+    image: fake-image
+    outputs:
+      out:
+        dtype: File
+        required: true
+        must_exist: false
+        policies:
+          positional: true
+  showenv:
+    command: printenv
+    image: fake-image
+    inputs:
+      var:
+        dtype: str
+        required: true
+        policies:
+          positional: true
+  prebuilt:
+    command: echo
+    image:
+      path: /nonexistent/prebuilt.simg
+    inputs:
+      arg:
+        dtype: str
+        required: true
+        policies:
+          positional: true
+  fullref:
+    command: echo
+    image:
+      registry: quay.io/stimela2
+      name: fake-image
+      version: latest
+      path: /nonexistent/fake-image
+    inputs:
+      arg:
+        dtype: str
+        required: true
+        policies:
+          positional: true
+  namepath:
+    command: echo
+    image:
+      name: fake-image
+      path: /nonexistent/fake-image
+    inputs:
+      arg:
+        dtype: str
+        required: true
+        policies:
+          positional: true
+  fail:
+    command: "false"
+    image: fake-image
+  failpull:
+    command: echo
+    image: fail-pull-image
+    inputs:
+      arg:
+        dtype: str
+        required: true
+        policies:
+          positional: true
+
+opts:
+  log:
+    dir: test-logs/logs-{config.run.datetime}
+    nest: 3
+    symlink: logs
+  backend:
+    select: podman
+    podman:
+      env:
+        STIMELA_PODMAN_TEST: hello-from-env
+      bind_dirs:
+        scratch:
+          host: ephemeral
+          target: /scratch
+
+podman_recipe:
+  steps:
+    a:
+      cab: echo
+      params:
+        arg: podman-says-hi
+    b:
+      cab: touch
+      params:
+        out: test-podman-touched.txt
+    c:
+      cab: showenv
+      params:
+        var: STIMELA_PODMAN_TEST
+
+prebuilt_recipe:
+  steps:
+    a:
+      cab: prebuilt
+      params:
+        arg: x
+
+failpull_recipe:
+  steps:
+    a:
+      cab: failpull
+      params:
+        arg: x
+
+fullref_recipe:
+  steps:
+    a:
+      cab: fullref
+      params:
+        arg: fullref-ok
+
+namepath_recipe:
+  steps:
+    a:
+      cab: namepath
+      params:
+        arg: namepath-ok
+
+fail_recipe:
+  steps:
+    a:
+      cab: fail
+
+mixed_recipe:
+  steps:
+    local:
+      cab: echo
+      params:
+        arg: local-step
+    remote:
+      cab: echo
+      params:
+        arg: remote-step
+      backend:
+        slurm:
+          enable: true
+        podman:
+          remote_only: true

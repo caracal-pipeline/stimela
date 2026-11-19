@@ -55,6 +55,8 @@ class Display:
         ("native", "fancy"): LocalDisplay,
         ("singularity", "simple"): SimpleLocalDisplay,
         ("singularity", "fancy"): LocalDisplay,
+        ("podman", "simple"): SimpleLocalDisplay,
+        ("podman", "fancy"): LocalDisplay,
         ("kube", "simple"): SimpleKubeDisplay,
         ("kube", "fancy"): KubeDisplay,
         ("slurm", "simple"): SimpleSlurmDisplay,

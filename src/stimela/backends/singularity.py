@@ -2,13 +2,10 @@ import datetime
 import logging
 import os
 import pathlib
-import shutil
 import subprocess
 from contextlib import ExitStack
 from dataclasses import dataclass
-from enum import Enum
 from shutil import which
-from tempfile import mkdtemp
 from typing import Any, Dict, Optional, Union
 
 from omegaconf import OmegaConf
@@ -19,9 +16,7 @@ from stimela.exceptions import BackendError
 from stimela.utils.xrun_asyncio import xrun
 
 from . import native
-
-ReadWrite = Enum("BindMode", "ro rw", module=__name__)
-
+from .binds import BindDir, CustomTemporaryDirectory, ReadWrite  # noqa: F401 (re-exported for compatibility)
 
 # can only execute cabs that specify a container image
 requires_container_image = True
@@ -29,13 +24,7 @@ requires_container_image = True
 
 @dataclass
 class SingularityBackendOptions(object):
-    @dataclass
-    class BindDir(object):
-        host: Optional[str] = None  # host path, default uses label, or else "empty" for tmpdir or "shm" for shm tmpdir
-        target: Optional[str] = None  # container path: ==host by default
-        mode: ReadWrite = "rw"
-        mkdir: bool = False  # create host directory if it doesn't exist
-        conditional: Union[bool, str] = True  # bind conditionally (will be formula-evaluated)
+    BindDir = BindDir  # nested alias kept for backwards compatibility
 
     enable: bool = True
     image_dir: str = os.path.expanduser("~/.singularity")
@@ -72,21 +61,6 @@ STATUS = VERSION = BINARY = None
 
 # images rebuilt in this run
 _rebuilt_images = set()
-
-
-class CustomTemporaryDirectory(object):
-    """Custom context manager for tempfile.mkdtemp()."""
-
-    def __init__(self, clean_up=True, dir=None):
-        self.name = mkdtemp(dir=dir)
-        self.clean_up = clean_up  # Workaround for < Python3.12
-
-    def __enter__(self):
-        return self.name
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        if self.clean_up:
-            shutil.rmtree(self.name)
 
 
 def is_available(opts: Optional[SingularityBackendOptions] = None):
@@ -311,7 +285,7 @@ def run(
     Returns:
         Any: return value (e.g. exit code) of content
     """
-    from .utils import resolve_required_mounts
+    from .utils import resolve_container_binds
 
     native.update_rlimits(backend.rlimits, log)
 
@@ -332,129 +306,12 @@ def run(
     if backend.singularity.env:
         args += ["--env", ",".join([f"{k}={v}" for k, v in backend.singularity.env.items()])]
 
-    # initial set of mounts has cwd as read-write
-    mounts = {cwd: True}
-    # dict of container paths to host paths
-    container_to_host_path = {}
-
-    # get dict of ephemeral base directories
-    ephem_classes = backend.singularity.ephemeral
-    if not ephem_classes:
-        ephem_classes["tmp"] = "/tmp"
-    ephem_binds = {}
-
     with ExitStack() as exit_stack:
-        # add extra binds
-        for label, bind in backend.singularity.bind_dirs.items():
-            # skip if conditional is False
-            if not bind.conditional:
-                log.info(f"bind_dirs.{label}: skipping based on conditional == {bind.conditional}")
-                continue
-
-            # expand ~ in paths
-            src = os.path.expanduser(bind.host).rstrip("/")
-            dest = os.path.expanduser(bind.target or src).rstrip("/")
-            rw = bind.mode == ReadWrite.rw
-
-            # handle binding of ephemeral dirs
-            if bind.host == "empty":
-                if "tmp" not in ephem_classes:
-                    raise BackendError(
-                        f"bind_dirs.{label}: deprecated 'host: empty' setting requires that a 'tmp' ephemeral storage "
-                        f"class be defined"
-                    )
-                bind.host = "ephemeral:tmp"
-            ephem_class = bind.host.startswith("ephemeral:")
-            if ephem_class or bind.host == "ephemeral":
-                if not bind.target:
-                    raise BackendError(f"bind_dirs.{label}: a target must be specified when host=ephemeral")
-                target = os.path.expanduser(bind.target)
-                # parse storage class specification, if given
-                if ephem_class:
-                    ephem_class = bind.host.split(":", 1)[1]
-                    if ephem_class not in ephem_classes:
-                        raise BackendError(
-                            f"bind_dirs.{label}: class '{ephem_class}' not present in 'singularity.ephemeral' section"
-                        )
-                    else:
-                        ephem_target = ephem_classes[ephem_class]
-                else:
-                    ephem_class, ephem_target = list(ephem_classes.items())[0]
-                # create temporary directory, or else stash ephem binding for the wrapper
-                if wrapper:
-                    src = f"EPH{len(ephem_binds)}"
-                    ephem_binds[src] = ephem_target
-                    src = f"::{src}::"
-                else:
-                    tmpdir = CustomTemporaryDirectory(clean_up=backend.singularity.clean_tmp, dir=ephem_target)
-                    src = exit_stack.enter_context(tmpdir)
-                    log.info(f"bind_dirs.{label}: using temporary directory {src}")
-                container_to_host_path[target] = src
-                mounts[src] = rw
-            # else real binding
-            else:
-                # resolve symlinks
-                if os.path.exists(src) and os.path.realpath(src) != src:
-                    src = os.path.realpath(src)
-                    log.info(f"bind_dirs.{label}: binding symlink target {src}")
-
-                # make directory if needed
-                if bind.mkdir:
-                    # I think files can be bound too, so only do this check for directories
-                    if os.path.exists(src):
-                        if not os.path.isdir(src):
-                            raise BackendError(f"bind_dirs.{label}: host path is not a directory")
-                    else:
-                        try:
-                            pathlib.Path(src).mkdir(parents=True)
-                        except Exception as exc:
-                            raise BackendError(f"bind_dirs.{label}: error creating directory {bind.host}", exc)
-                elif not os.path.exists(src):
-                    raise BackendError(f"bind_dirs.{label}: host path '{src}' does not exist")
-
-                # if already present in mounts, potentially upgrade to rw
-                mounts[src] = mounts.get(src, False) or rw
-                # if paths different, create a remapping
-                if src != dest:
-                    if dest in container_to_host_path:
-                        if container_to_host_path[dest] != src:
-                            raise BackendError(f"bind_dirs.{label}: conflicting bind paths for {dest}")
-                    else:
-                        container_to_host_path[dest] = src
-
-        # get extra required filesystem bindings from supplied parameters
-        resolve_required_mounts(mounts, params, cab.inputs, cab.outputs, remappings=container_to_host_path)
-
-        # redo mounts as a list of (container_path, source_path, rw)
-        source_to_container_path = {src: dest for dest, src in container_to_host_path.items()}
-        # make list of mounts
-        mounts = [(source_to_container_path.get(src, src), src, rw) for src, rw in mounts.items()]
-        # add implicit /tmp mount
-        if backend.singularity.bind_tmp:
-            for target, _, _ in mounts:
-                if target == "/tmp":
-                    log.info("/tmp directory already bound, not adding an explicit binding")
-                    break
-            else:
-                if type(backend.singularity.bind_tmp) is str:
-                    tmp_class = backend.singularity.bind_tmp
-                else:
-                    tmp_class = "tmp"
-                tmp_target = ephem_classes.get(tmp_class, None)
-                if tmp_target is None:
-                    raise BackendError(f"bind_tmp uses an undefined ephemeral storage class '{tmp_class}'")
-                if wrapper:
-                    src = f"EPH{len(ephem_binds)}"
-                    ephem_binds[src] = tmp_target
-                    mounts.append(("/tmp", f"::{src}::", True))
-                else:
-                    tmpdir = CustomTemporaryDirectory(clean_up=backend.singularity.clean_tmp, dir=tmp_target)
-                    tmpdir_name = exit_stack.enter_context(tmpdir)
-                    mounts.append(("/tmp", tmpdir_name, True))
-
-        # sort mount paths before iterating -- this ensures that parent directories come first
-        # (singularity doesn't like it if you specify a bind of a subdir before a bind of a parent)
-        for dest, src, rw in sorted(mounts):
+        # work out bind mounts (sorted so that parent directories come first)
+        mounts, ephem_binds = resolve_container_binds(
+            backend.singularity, "singularity", cab, params, exit_stack, log=log, wrapper=wrapper, cwd=cwd
+        )
+        for dest, src, rw in mounts:
             mode = "rw" if rw else "ro"
             if src == dest:
                 log.info(f"binding {src} as {mode}")

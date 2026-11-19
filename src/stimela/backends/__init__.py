@@ -12,12 +12,13 @@ from stimela.stimelogging import log_exception
 
 from .kube import KubeBackendOptions
 from .native import NativeBackendOptions
+from .podman import PodmanBackendOptions
 from .singularity import SingularityBackendOptions
 from .slurm import SlurmOptions
 
 ## left as memo to self
 # Backend = Enum("Backend", "docker singularity podman kubernetes native", module=__name__)
-Backend = Enum("Backend", "singularity kube native", module=__name__)
+Backend = Enum("Backend", "singularity podman kube native", module=__name__)
 
 SUPPORTED_BACKENDS = set(Backend.__members__)
 
@@ -56,6 +57,7 @@ class StimelaBackendOptions(object):
     variety: Optional[str] = None
 
     singularity: Optional[SingularityBackendOptions] = EmptyClassDefault(SingularityBackendOptions)
+    podman: Optional[PodmanBackendOptions] = EmptyClassDefault(PodmanBackendOptions)
     kube: Optional[KubeBackendOptions] = EmptyClassDefault(KubeBackendOptions)
     native: Optional[NativeBackendOptions] = EmptyClassDefault(NativeBackendOptions)
     docker: Optional[Dict] = None  # placeholder for future impl
@@ -80,6 +82,8 @@ class StimelaBackendOptions(object):
         # provide default options for available backends
         if self.singularity is None and get_backend("singularity"):
             self.singularity = SingularityBackendOptions()
+        if self.podman is None and get_backend("podman"):
+            self.podman = PodmanBackendOptions()
         if self.native is None and get_backend("native"):
             self.native = NativeBackendOptions()
         if self.kube is None and get_backend("kube"):
