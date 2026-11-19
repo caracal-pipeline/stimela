@@ -1,6 +1,7 @@
 import copy
 import fnmatch
 import logging
+import multiprocessing
 import re
 import sys
 from collections import OrderedDict
@@ -1350,7 +1351,11 @@ class Recipe(Cargo):
             # enabled in the resulting processes.
             if pause_display:
                 display.disable(reset_cursor=True)
-            with ProcessPoolExecutor(num_workers) as pool:
+            # Python 3.14 made forkserver the default start method on Linux. Its workers
+            # re-import stimela and cannot unpickle the config classes that stimela.config
+            # creates at run time, so keep fork, the default up to 3.13.
+            mp_context = multiprocessing.get_context("fork") if sys.platform.startswith("linux") else None
+            with ProcessPoolExecutor(num_workers, mp_context=mp_context) as pool:
                 # submit each iterant to pool
                 futures = []
                 for args in loop_worker_args:

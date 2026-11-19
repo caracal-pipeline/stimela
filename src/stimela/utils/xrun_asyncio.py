@@ -113,7 +113,12 @@ def xrun(
             """Returns string representing elapsed time"""
             return str(datetime.datetime.now() - start_time).split(".", 1)[0]
 
-        loop = asyncio.get_event_loop()
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            # Python 3.14 no longer creates a loop implicitly, and other threads never had one
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
 
         proc = loop.run_until_complete(
             asyncio.create_subprocess_exec(
@@ -133,7 +138,7 @@ def xrun(
             for task in cancellables:
                 task.cancel()
 
-        reporter = asyncio.Task(task_stats.run_process_status_update())
+        reporter = loop.create_task(task_stats.run_process_status_update())
         ctrl_c_caught = job_interrupted = False  # noqa: F841 - Keep for now.
         try:
             job = asyncio.gather(
